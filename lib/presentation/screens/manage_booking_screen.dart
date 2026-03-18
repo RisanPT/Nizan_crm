@@ -21,7 +21,8 @@ class ManageBookingScreen extends HookConsumerWidget {
     final isTablet = ResponsiveBuilder.isTablet(context);
 
     // Look up the booking from the provider by id
-    final allBookings = ref.watch(bookingProvider);
+    final asyncBookings = ref.watch(bookingProvider);
+    final allBookings = asyncBookings.value ?? [];
     final Booking? booking = allBookings.cast<Booking?>().firstWhere(
       (b) => b?.id == bookingId,
       orElse: () => null,

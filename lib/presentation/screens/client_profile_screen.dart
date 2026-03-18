@@ -1,26 +1,215 @@
 import 'package:flutter/material.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/providers/booking_provider.dart';
+import '../../models/customer.dart';
+import '../../services/customer_service.dart';
 
-class ClientProfileScreen extends StatelessWidget {
-  final String clientName;
+class ClientProfileScreen extends HookConsumerWidget {
+  final String clientId;
 
-  const ClientProfileScreen({
-    super.key,
-    required this.clientName,
-  });
+  const ClientProfileScreen({super.key, required this.clientId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isDesktop = ResponsiveBuilder.isDesktop(context);
+    final isMobile = ResponsiveBuilder.isMobile(context);
 
-    // Decode URI name if passed via URL
-    final name = Uri.decodeComponent(clientName);
+    // ── Load Customer from provider ─────────────────────────────────────────
+    final asyncCustomers = ref.watch(customersProvider);
+    final customer = asyncCustomers.value?.cast<Customer?>().firstWhere(
+          (c) => c?.id == clientId,
+          orElse: () => null,
+        );
 
+    // ── Load bookings for this customer ─────────────────────────────────────
+    final asyncBookings = ref.watch(bookingProvider);
+    final bookings = asyncBookings.value
+            ?.where((b) => b.customerName == customer?.name)
+            .toList() ??
+        [];
+
+    // ── Edit dialog state ───────────────────────────────────────────────────
+    Future<void> showEditDialog(Customer current) async {
+      final nameCtrl = TextEditingController(text: current.name);
+      final phoneCtrl = TextEditingController(text: current.phone ?? '');
+      final emailCtrl = TextEditingController(
+          text: current.email.contains('@placeholder') ? '' : current.email);
+      String selectedStatus = current.status;
+      const statuses = ['Active', 'Inactive', 'Prospect'];
+
+      await showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) => AlertDialog(
+            title: const Text('Edit Client'),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full Name'),
+                  ),
+                  16.h,
+                  TextField(
+                    controller: phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(labelText: 'Phone'),
+                  ),
+                  16.h,
+                  TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                  ),
+                  16.h,
+                  DropdownButtonFormField<String>(
+                    value: selectedStatus,
+                    items: statuses
+                        .map((s) =>
+                            DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (v) => setState(() => selectedStatus = v!),
+                    decoration: const InputDecoration(labelText: 'Status'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  try {
+                    final updated = Customer(
+                      id: current.id,
+                      name: nameCtrl.text.trim().isEmpty
+                          ? current.name
+                          : nameCtrl.text.trim(),
+                      email: emailCtrl.text.trim().isEmpty
+                          ? current.email
+                          : emailCtrl.text.trim(),
+                      phone: phoneCtrl.text.trim().isEmpty
+                          ? current.phone
+                          : phoneCtrl.text.trim(),
+                      status: selectedStatus,
+                    );
+                    await ref
+                        .read(customerServiceProvider)
+                        .updateCustomer(current.id!, updated);
+                    ref.invalidate(customersProvider);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Client updated successfully.'),
+                          backgroundColor: Color(0xFF10B981),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to update: $e')),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Future<void> confirmDelete(Customer current) async {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Client'),
+          content: Text(
+              'Are you sure you want to permanently delete ${current.name}? This cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        try {
+          await ref.read(customerServiceProvider).deleteCustomer(current.id!);
+          ref.invalidate(customersProvider);
+          if (context.mounted) context.go('/clients');
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to delete: $e')),
+            );
+          }
+        }
+      }
+    }
+
+    // ── Loading / Error / Not-found states ──────────────────────────────────
+    if (asyncCustomers.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (asyncCustomers.hasError || customer == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.person_off, size: 64, color: crmColors.border),
+            24.h,
+            Text('Client not found.',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(color: crmColors.textSecondary)),
+            16.h,
+            ElevatedButton.icon(
+              onPressed: () => context.go('/clients'),
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('Back to Clients'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Status badge colour ─────────────────────────────────────────────────
+    Color statusColor;
+    switch (customer.status) {
+      case 'Active':
+        statusColor = crmColors.success;
+        break;
+      case 'Inactive':
+        statusColor = crmColors.warning;
+        break;
+      default:
+        statusColor = crmColors.textSecondary;
+    }
+
+    final displayEmail =
+        customer.email.contains('@placeholder') ? '—' : customer.email;
+
+    // ── Left column (profile card) ──────────────────────────────────────────
     final leftColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -29,66 +218,54 @@ class ClientProfileScreen extends StatelessWidget {
             padding: 24.p,
             child: Column(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 48,
-                  child: Icon(Icons.person, size: 48),
+                  backgroundColor: crmColors.primary.withOpacity(0.12),
+                  child: Text(
+                    customer.name.isNotEmpty
+                        ? customer.name[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.bold,
+                        color: crmColors.primary),
+                  ),
                 ),
                 16.h,
-                Text(name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                4.h,
-                Text('Client since March 2021', style: TextStyle(color: crmColors.textSecondary)),
-                16.h,
+                Text(customer.name,
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                8.h,
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: crmColors.secondary,
+                    color: statusColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '2,450 Loyalty Points',
-                    style: TextStyle(fontWeight: FontWeight.bold, color: crmColors.primary),
+                    customer.status,
+                    style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
                   ),
                 ),
                 24.h,
                 const Divider(),
                 16.h,
-                _buildInfoRow(context, Icons.phone, 'PHONE', '+1 (555) 123-4567'),
+                _buildInfoRow(context, Icons.phone, 'PHONE',
+                    customer.phone?.isEmpty == true || customer.phone == null
+                        ? '—'
+                        : customer.phone!),
                 16.h,
-                _buildInfoRow(context, Icons.email, 'EMAIL', 'emma.w@example.com'),
-                16.h,
-                _buildInfoRow(context, Icons.location_on, 'ADDRESS', '123 Luxury Ave, Apt 4B\nNew York, NY 10012'),
-                16.h,
-                _buildInfoRow(context, Icons.cake, 'BIRTHDAY', 'April 15, 1995'),
-              ],
-            ),
-          ),
-        ),
-        16.h,
-        Card(
-          child: Padding(
-            padding: 24.p,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Client Notes', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    Icon(Icons.edit_note, color: crmColors.textSecondary),
-                  ],
-                ),
-                16.h,
-                Container(
-                  padding: 16.p,
-                  decoration: BoxDecoration(
-                    color: crmColors.background,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Prefers organic hair products. Allergic to certain synthetic fragrances. Likes a quiet environment during massages. Usually books morning appointments.',
-                    style: TextStyle(color: crmColors.textSecondary, height: 1.5),
-                  ),
-                ),
+                _buildInfoRow(context, Icons.email, 'EMAIL', displayEmail),
+                if (customer.company != null &&
+                    customer.company!.isNotEmpty) ...[
+                  16.h,
+                  _buildInfoRow(
+                      context, Icons.business, 'COMPANY', customer.company!),
+                ],
               ],
             ),
           ),
@@ -96,6 +273,7 @@ class ClientProfileScreen extends StatelessWidget {
       ],
     );
 
+    // ── Right column (bookings) ─────────────────────────────────────────────
     final rightColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -108,32 +286,39 @@ class ClientProfileScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Appointments', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    TextButton(onPressed: () {}, child: const Text('View All')),
+                    Text('Booking History',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text('${bookings.length} total',
+                        style: TextStyle(
+                            color: crmColors.textSecondary, fontSize: 13)),
                   ],
                 ),
                 16.h,
-                _buildAppointmentCard(context, 'NOV', '15', 'Bridal Makeup Trial', '10:00 AM - 11:30 AM', 'Upcoming', isUpcoming: true),
-                12.h,
-                _buildAppointmentCard(context, 'OCT', '12', 'Luxury Spa Pedicure', '3:00 PM - 4:00 PM', 'Completed', isUpcoming: false),
-                12.h,
-                _buildAppointmentCard(context, 'SEP', '05', 'Balayage & Blowout', '1:00 PM - 4:00 PM', 'Completed', isUpcoming: false),
-              ],
-            ),
-          ),
-        ),
-        16.h,
-        Card(
-          child: Padding(
-            padding: 24.p,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Service History Timeline', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                24.h,
-                _buildTimelineItem(context, 'Haircut & Styling', 'Aug 22, 2023', 'Trimmed 2 inches, added face-framing layers. Used hydrating serum.', 'Stylist: Sarah Jenkins', isFirst: true),
-                _buildTimelineItem(context, 'Deep Tissue Massage', 'Jul 10, 2023', '60-minute session. Focused on upper back and shoulders as requested.', 'Therapist: Michael Chen'),
-                _buildTimelineItem(context, 'Hydrating Facial', 'May 04, 2023', 'Used rose-water infused products. Skin responded well, no redness.', 'Esthetician: Amanda Lopez', isLast: true),
+                if (asyncBookings.isLoading)
+                  const CircularProgressIndicator()
+                else if (bookings.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text('No bookings found for this client.',
+                        style: TextStyle(color: crmColors.textSecondary)),
+                  )
+                else
+                  ...bookings.map((b) {
+                    final date = b.bookingDate.toString().split(' ')[0];
+                    return _buildAppointmentCard(
+                      context,
+                      date.substring(5, 7), // MM
+                      date.substring(8, 10), // DD
+                      b.service,
+                      '${_fmtTime(b.serviceStart)} — ${_fmtTime(b.serviceEnd)}',
+                      b.serviceEnd.isBefore(DateTime.now())
+                          ? 'Completed'
+                          : 'Upcoming',
+                      isUpcoming:
+                          b.serviceEnd.isAfter(DateTime.now()),
+                    );
+                  }),
               ],
             ),
           ),
@@ -145,41 +330,85 @@ class ClientProfileScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ─────────────────────────────────────────────────────
           Row(
             children: [
-              IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.go('/clients')),
+              IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => context.go('/clients')),
               12.w,
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Client Profile', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                    Text('View and manage details for $name.', style: theme.textTheme.bodyMedium?.copyWith(color: crmColors.textSecondary)),
+                    Text('Client Profile',
+                        style: theme.textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Text('View and manage details for ${customer.name}.',
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: crmColors.textSecondary)),
                   ],
                 ),
               ),
-              if (!ResponsiveBuilder.isMobile(context)) ...[
-                OutlinedButton(onPressed: () {}, child: const Text('Edit Profile')),
-                16.w,
-                ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(backgroundColor: crmColors.primary, foregroundColor: Colors.white),
-                  child: const Text('Book Appointment'),
+              if (!isMobile) ...[
+                OutlinedButton.icon(
+                  onPressed: () => showEditDialog(customer),
+                  icon: const Icon(Icons.edit, size: 16),
+                  label: const Text('Edit Profile'),
                 ),
-              ]
+                16.w,
+                OutlinedButton.icon(
+                  onPressed: () => confirmDelete(customer),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text('Delete'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.red,
+                    side: const BorderSide(color: Colors.red),
+                  ),
+                ),
+                16.w,
+                ElevatedButton.icon(
+                  onPressed: () => context.go('/booking/add'),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: crmColors.primary,
+                      foregroundColor: Colors.white),
+                  icon: const Icon(Icons.calendar_today, size: 16),
+                  label: const Text('Book Appointment'),
+                ),
+              ],
             ],
           ),
-          if (ResponsiveBuilder.isMobile(context)) ...[
+          if (isMobile) ...[
             16.h,
             Row(
               children: [
-                Expanded(child: OutlinedButton(onPressed: () {}, child: const Text('Edit Profile'))),
-                16.w,
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => showEditDialog(customer),
+                    icon: const Icon(Icons.edit, size: 16),
+                    label: const Text('Edit'),
+                  ),
+                ),
+                12.w,
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => confirmDelete(customer),
+                    icon: const Icon(Icons.delete_outline, size: 16),
+                    label: const Text('Delete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ),
+                12.w,
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(backgroundColor: crmColors.primary, foregroundColor: Colors.white),
-                    child: const Text('Book Appointment'),
+                    onPressed: () => context.go('/booking/add'),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: crmColors.primary,
+                        foregroundColor: Colors.white),
+                    child: const Text('Book'),
                   ),
                 ),
               ],
@@ -196,19 +425,21 @@ class ClientProfileScreen extends StatelessWidget {
               ],
             )
           else
-            Column(
-              children: [
-                leftColumn,
-                16.h,
-                rightColumn,
-              ],
-            ),
+            Column(children: [leftColumn, 16.h, rightColumn]),
         ],
       ),
     );
   }
 
-  Widget _buildInfoRow(BuildContext context, IconData icon, String label, String value) {
+  String _fmtTime(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $ampm';
+  }
+
+  Widget _buildInfoRow(
+      BuildContext context, IconData icon, String label, String value) {
     final crmColors = context.crmColors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,9 +450,16 @@ class ClientProfileScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: crmColors.textSecondary, letterSpacing: 1.2)),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: crmColors.textSecondary,
+                      letterSpacing: 1.2)),
               4.h,
-              Text(value, style: TextStyle(fontWeight: FontWeight.w500, color: crmColors.textPrimary)),
+              Text(value,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500, color: crmColors.textPrimary)),
             ],
           ),
         ),
@@ -229,111 +467,78 @@ class ClientProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildAppointmentCard(BuildContext context, String month, String day, String title, String time, String status, {bool isUpcoming = false}) {
+  Widget _buildAppointmentCard(
+    BuildContext context,
+    String month,
+    String day,
+    String title,
+    String time,
+    String status, {
+    bool isUpcoming = false,
+  }) {
     final crmColors = context.crmColors;
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: crmColors.border),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: 16.p,
-        child: Row(
-          children: [
-            Column(
-              children: [
-                Text(month, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: crmColors.textSecondary)),
-                Text(day, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: crmColors.primary)),
-              ],
-            ),
-            16.w,
-            Container(width: 1, height: 40, color: crmColors.border),
-            16.w,
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  Text(time, style: TextStyle(color: crmColors.textSecondary, fontSize: 13)),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: isUpcoming ? crmColors.warning.withOpacity(0.1) : crmColors.success.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: isUpcoming ? crmColors.warning : crmColors.success,
-                ),
-              ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: crmColors.border),
+          borderRadius: BorderRadius.circular(12),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTimelineItem(BuildContext context, String title, String date, String desc, String staff, {bool isFirst = false, bool isLast = false}) {
-    final crmColors = context.crmColors;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: 24,
-            child: Column(
-              children: [
-                Container(
-                  width: 2,
-                  height: 16,
-                  color: isFirst ? Colors.transparent : crmColors.border,
-                ),
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: isFirst ? crmColors.primary : crmColors.border,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: isLast ? Colors.transparent : crmColors.border,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          16.w,
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 32.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: 16.p,
+          child: Row(
+            children: [
+              Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(date, style: TextStyle(color: crmColors.textSecondary, fontSize: 13)),
-                    ],
-                  ),
-                  8.h,
-                  Text(desc, style: TextStyle(color: crmColors.textSecondary)),
-                  8.h,
-                  Text(staff, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                  Text(month,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary)),
+                  Text(day,
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.primary)),
                 ],
               ),
-            ),
+              16.w,
+              Container(width: 1, height: 40, color: crmColors.border),
+              16.w,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(time,
+                        style: TextStyle(
+                            color: crmColors.textSecondary, fontSize: 13)),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isUpcoming
+                      ? crmColors.warning.withOpacity(0.1)
+                      : crmColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isUpcoming ? crmColors.warning : crmColors.success,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

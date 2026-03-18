@@ -44,7 +44,8 @@ class CalendarScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
 
     // All bookings from provider
-    final allBookings = ref.watch(bookingProvider);
+    final asyncBookings = ref.watch(bookingProvider);
+    final allBookings = asyncBookings.value ?? [];
 
     // Current week anchor: Monday of the current week
     final now = DateTime.now();
@@ -613,8 +614,11 @@ class CalendarScreen extends HookConsumerWidget {
     double blockHeight = 80,
   }) {
     final crmColors = context.crmColors;
+    // Subtract padding (6*2=12) to get usable inner height
+    final innerHeight = blockHeight - 12;
     return Container(
       width: double.infinity,
+      height: blockHeight,
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: bgColor,
@@ -625,45 +629,51 @@ class CalendarScreen extends HookConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-            maxLines: blockHeight > 70 ? 2 : 1,
-          ),
-          if (blockHeight >= 55) ...[
-            2.h,
-            Text(
-              time,
-              style: TextStyle(fontSize: 10, color: crmColors.textSecondary),
+          Flexible(
+            child: Text(
+              title,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
               overflow: TextOverflow.ellipsis,
+              maxLines: innerHeight > 60 ? 2 : 1,
+            ),
+          ),
+          if (innerHeight >= 45) ...[
+            2.h,
+            Flexible(
+              child: Text(
+                time,
+                style: TextStyle(fontSize: 10, color: crmColors.textSecondary),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
-          if (patient.isNotEmpty && blockHeight >= 70) ...[
+          if (patient.isNotEmpty && innerHeight >= 60) ...[
             4.h,
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 8,
-                  backgroundColor: crmColors.primary.withValues(alpha: 0.15),
-                  child: Text(
-                    patient[0],
-                    style: TextStyle(fontSize: 8, color: crmColors.primary),
-                  ),
-                ),
-                4.w,
-                Expanded(
-                  child: Text(
-                    patient,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: crmColors.textSecondary,
-                      fontWeight: FontWeight.w500,
+            Flexible(
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 8,
+                    backgroundColor: crmColors.primary.withValues(alpha: 0.15),
+                    child: Text(
+                      patient[0],
+                      style: TextStyle(fontSize: 8, color: crmColors.primary),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-              ],
+                  4.w,
+                  Expanded(
+                    child: Text(
+                      patient,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: crmColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],

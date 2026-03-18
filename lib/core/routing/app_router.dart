@@ -4,13 +4,14 @@ import 'package:go_router/go_router.dart';
 import '../../presentation/common_widgets/main_layout.dart';
 import '../../presentation/screens/dashboard_screen.dart';
 import '../../presentation/screens/clients_directory_screen.dart';
-import '../../presentation/screens/add_client_screen.dart';
+
 import '../../presentation/screens/client_profile_screen.dart';
 import '../../presentation/screens/calendar_screen.dart';
 import '../../presentation/screens/staff_management_screen.dart';
 import '../../presentation/screens/services_management_screen.dart';
 import '../../presentation/screens/add_booking_screen.dart';
 import '../../presentation/screens/manage_booking_screen.dart';
+import '../../presentation/screens/add_service_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -28,14 +29,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           String title = 'Nizan Makeovers';
           if (state.uri.path == '/') {
             title = 'Dashboard Overview';
-          } else if (state.uri.path == '/clients')
+          } else if (state.uri.path == '/clients') {
             title = 'Clients Directory';
-          else if (state.uri.path == '/calendar')
+          } else if (state.uri.path == '/calendar') {
             title = 'Calendar Scheduler';
-          else if (state.uri.path == '/services')
+          } else if (state.uri.path == '/services') {
             title = 'Services Management';
-          else if (state.uri.path == '/staff')
+          } else if (state.uri.path == '/staff') {
             title = 'Staff Management';
+          }
 
           return MainLayout(title: title, child: child);
         },
@@ -49,15 +51,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/clients',
             builder: (context, state) => const ClientsDirectoryScreen(),
           ),
-          GoRoute(
-            path: '/clients/add',
-            builder: (context, state) => const AddClientScreen(),
-          ),
+
           GoRoute(
             path: '/client/:id',
             builder: (context, state) {
-              final id = state.pathParameters['id'] ?? 'Unknown';
-              return ClientProfileScreen(clientName: id);
+              final id = state.pathParameters['id'] ?? '';
+              return ClientProfileScreen(clientId: id);
             },
           ),
           GoRoute(
@@ -67,6 +66,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/services',
             builder: (context, state) => const ServicesManagementScreen(),
+          ),
+          GoRoute(
+            path: '/services/add',
+            builder: (context, state) => const AddServiceScreen(),
           ),
           GoRoute(
             path: '/staff',

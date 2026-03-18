@@ -1,29 +1,56 @@
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'dart:async';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../services/booking_service.dart';
 import '../models/booking.dart';
 
-// ---------------------------------------------------------------------------
-// Notifier — starts empty; bookings are added by the user at runtime
-// ---------------------------------------------------------------------------
-class BookingNotifier extends Notifier<List<Booking>> {
-  @override
-  List<Booking> build() => [];
+part 'booking_provider.g.dart';
 
-  void addBooking(Booking booking) {
-    state = [...state, booking];
+@riverpod
+class BookingNotifier extends _$BookingNotifier {
+  @override
+  FutureOr<List<Booking>> build() async {
+    return _fetchBookings();
   }
 
-  void removeBooking(String id) {
-    state = state.where((b) => b.id != id).toList();
+  Future<List<Booking>> _fetchBookings() async {
+    final service = ref.watch(bookingServiceProvider);
+    return service.getBookings();
+  }
+
+  Future<void> addBooking(Booking booking) async {
+    final service = ref.read(bookingServiceProvider);
+    
+    // Optimistic update
+    final previousState = state;
+    state = AsyncData([...(state.value ?? []), booking]);
+
+    try {
+      await service.createBooking(booking);
+      // Wait to re-fetch to ensure sync with backend, or just keep optimistic state
+      ref.invalidateSelf();
+    } catch (err, stack) {
+      state = previousState; // Rollback
+      state = AsyncError(err, stack);
+    }
+  }
+
+  Future<void> removeBooking(String id) async {
+    final service = ref.read(bookingServiceProvider);
+
+    // Optimistic update
+    final previousState = state;
+    state = AsyncData((state.value ?? []).where((b) => b.id != id).toList());
+
+    try {
+      await service.deleteBooking(id);
+    } catch (err, stack) {
+      state = previousState; // Rollback
+      state = AsyncError(err, stack);
+    }
   }
 
   List<Booking> bookingsForDate(DateTime date) {
-    return state.where((b) => b.isOnDate(date)).toList();
+    return (state.value ?? []).where((b) => b.isOnDate(date)).toList();
   }
 }
 
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
-final bookingProvider = NotifierProvider<BookingNotifier, List<Booking>>(
-  BookingNotifier.new,
-);

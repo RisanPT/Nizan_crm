@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
@@ -68,37 +69,61 @@ class ServicesManagementScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Services Management', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
-                  Text('Manage your salon and beauty services, pricing, and durations.', style: TextStyle(color: crmColors.textSecondary)),
+                  Text(
+                    'Services Management',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Manage your salon and beauty services, pricing, and durations.',
+                    style: TextStyle(color: crmColors.textSecondary),
+                  ),
                 ],
               ),
             ),
             if (!isMobile) ...[
-              OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_list, size: 18), label: const Text('Filter')),
+              OutlinedButton.icon(
+                onPressed: () {},
+                icon: const Icon(Icons.filter_list, size: 18),
+                label: const Text('Filter'),
+              ),
               16.w,
               ElevatedButton.icon(
-                onPressed: () {},
+                onPressed: () => context.go('/services/add'),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Service'),
-                style: ElevatedButton.styleFrom(backgroundColor: crmColors.primary, foregroundColor: Colors.white),
-              )
-            ]
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: crmColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
           ],
         ),
         if (isMobile) ...[
           16.h,
           Row(
             children: [
-              Expanded(child: OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.filter_list, size: 18), label: const Text('Filter'))),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.filter_list, size: 18),
+                  label: const Text('Filter'),
+                ),
+              ),
               16.w,
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {},
+                  onPressed: () => context.go('/services/add'),
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Service'),
-                  style: ElevatedButton.styleFrom(backgroundColor: crmColors.primary, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: crmColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
-              )
+              ),
             ],
           ),
         ],
@@ -142,9 +167,21 @@ class ServicesManagementScreen extends StatelessWidget {
                   top: 12,
                   left: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(4)),
-                    child: Text(service['category']!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      service['category']!,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -158,18 +195,41 @@ class ServicesManagementScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(service['title']!, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    service['title']!,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.schedule, size: 14, color: crmColors.textSecondary),
+                          Icon(
+                            Icons.schedule,
+                            size: 14,
+                            color: crmColors.textSecondary,
+                          ),
                           4.w,
-                          Text(service['duration']!, style: TextStyle(fontSize: 13, color: crmColors.textSecondary)),
+                          Text(
+                            service['duration']!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: crmColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
-                      Text(service['price']!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(
+                        service['price']!,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                     ],
                   ),
                   const Divider(height: 1),
@@ -180,13 +240,17 @@ class ServicesManagementScreen extends StatelessWidget {
                         onPressed: () {},
                         icon: const Icon(Icons.edit_outlined, size: 16),
                         label: const Text('Edit'),
-                        style: TextButton.styleFrom(foregroundColor: crmColors.textPrimary),
+                        style: TextButton.styleFrom(
+                          foregroundColor: crmColors.textPrimary,
+                        ),
                       ),
                       TextButton.icon(
                         onPressed: () {},
                         icon: const Icon(Icons.delete_outline, size: 16),
                         label: const Text('Delete'),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red.shade300),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.red.shade300,
+                        ),
                       ),
                     ],
                   ),

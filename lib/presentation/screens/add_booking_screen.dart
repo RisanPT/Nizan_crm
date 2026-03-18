@@ -7,6 +7,8 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
+import '../../models/customer.dart';
+import '../../services/customer_service.dart';
 
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
@@ -18,6 +20,7 @@ class AddBookingScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
+    TextEditingController? autoCompleteNameCtrl; 
     final nameCtrl = useTextEditingController();
     final emailCtrl = useTextEditingController();
     final phoneCtrl = useTextEditingController();
@@ -132,9 +135,11 @@ class AddBookingScreen extends HookConsumerWidget {
         orElse: () => packages.first,
       );
 
+      final actualName = autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
+
       final booking = Booking(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        customerName: nameCtrl.text.trim(),
+        customerName: actualName,
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
         service: pkg['name'] as String,
@@ -147,6 +152,10 @@ class AddBookingScreen extends HookConsumerWidget {
       );
 
       ref.read(bookingProvider.notifier).addBooking(booking);
+
+      // Invalidate the customers list so the new customer (auto-created
+      // on the backend during booking) appears in the Clients Directory.
+      ref.invalidate(customersProvider);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -191,10 +200,46 @@ class AddBookingScreen extends HookConsumerWidget {
                             style: theme.textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold)),
                         16.h,
-                        TextFormField(
-                          controller: nameCtrl,
-                          decoration: _inputDeco('Full Name', crmColors),
-                          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                        Consumer(
+                          builder: (context, ref, child) {
+                            final asyncCustomers = ref.watch(customersProvider);
+                            final customersList = asyncCustomers.value ?? [];
+
+                            return Autocomplete<Customer>(
+                              optionsBuilder: (TextEditingValue textEditingValue) {
+                                if (textEditingValue.text.isEmpty) {
+                                  return const Iterable<Customer>.empty();
+                                }
+                                return customersList.where((c) =>
+                                    c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                              },
+                              displayStringForOption: (Customer option) => option.name,
+                              onSelected: (Customer selection) {
+                                phoneCtrl.text = selection.phone ?? '';
+                                emailCtrl.text = selection.email;
+                              },
+                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                                autoCompleteNameCtrl = controller;
+                                return TextFormField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  decoration: _inputDeco('Full Name', crmColors).copyWith(
+                                    suffixIcon: asyncCustomers.isLoading
+                                        ? const SizedBox(
+                                            width: 16, height: 16,
+                                            child: Padding(
+                                              padding: EdgeInsets.all(14),
+                                              child: CircularProgressIndicator(strokeWidth: 2),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                  onFieldSubmitted: (v) => onFieldSubmitted(),
+                                );
+                              },
+                            );
+                          },
                         ),
                         16.h,
                         Row(
