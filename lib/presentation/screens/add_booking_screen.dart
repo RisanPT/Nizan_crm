@@ -7,8 +7,13 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
+import '../../core/utils/booking_print_service.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
+import '../../services/package_service.dart';
+import '../../services/region_service.dart';
+import '../../core/models/service_package.dart';
+import '../../core/models/service_region.dart';
 
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
@@ -18,41 +23,82 @@ class AddBookingScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
+    final asyncPackages = ref.watch(packagesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final packages = _uniquePackages(asyncPackages.value ?? const []);
+    final regions = _uniqueRegions(asyncRegions.value ?? const []);
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
-    TextEditingController? autoCompleteNameCtrl; 
+    TextEditingController? autoCompleteNameCtrl;
     final nameCtrl = useTextEditingController();
     final emailCtrl = useTextEditingController();
     final phoneCtrl = useTextEditingController();
 
     final selectedRegion = useState<String?>('');
-    final selectedPackageId = useState<String?>('1');
+    final selectedPackageId = useState<String?>(null);
     final bookingDate = useState<DateTime?>(null);
     final startTime = useState<TimeOfDay>(const TimeOfDay(hour: 9, minute: 0));
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
-    final totalPrice = useState<double>(18500.0);
-    final advanceAmount = useState<double>(5000.0);
-
-    const regions = [
-      {'id': '1', 'name': 'Downtown Studio'},
-      {'id': '2', 'name': 'Westside Salon'},
-      {'id': '3', 'name': 'East End Branch'},
-    ];
-
-    const packages = [
-      {'id': '1', 'name': 'Bridal Makeover Package',  'price': 18500.0, 'advance': 5000.0},
-      {'id': '2', 'name': 'Premium Hair Styling',     'price': 8200.0,  'advance': 2000.0},
-      {'id': '3', 'name': 'Luxury Spa Facial',        'price': 6500.0,  'advance': 1500.0},
-    ];
+    final totalPrice = useState<double>(0);
+    final advanceAmount = useState<double>(0);
 
     void recalculate() {
-      final pkg = packages.firstWhere(
-        (p) => p['id'] == selectedPackageId.value,
-        orElse: () => packages.first,
+      if (packages.isEmpty) {
+        totalPrice.value = 0;
+        advanceAmount.value = 0;
+        return;
+      }
+
+      dynamic selectedPackage;
+      for (final package in packages) {
+        if (package.id == selectedPackageId.value) {
+          selectedPackage = package;
+          break;
+        }
+      }
+      selectedPackage ??= packages.first;
+
+      totalPrice.value = selectedPackage.effectivePriceForRegion(
+        selectedRegion.value,
       );
-      totalPrice.value = pkg['price'] as double;
-      advanceAmount.value = pkg['advance'] as double;
+      advanceAmount.value = selectedPackage.advanceAmount;
     }
+
+    final validPackageId =
+        packages.any((package) => package.id == selectedPackageId.value)
+        ? selectedPackageId.value
+        : null;
+    final validRegionId =
+        selectedRegion.value == '' ||
+            regions.any((region) => region.id == selectedRegion.value)
+        ? selectedRegion.value
+        : '';
+    final packageDropdownKey = ValueKey(
+      'package-${validPackageId ?? 'none'}-${packages.map((p) => p.id).join(',')}',
+    );
+    final regionDropdownKey = ValueKey(
+      'region-${validRegionId ?? 'none'}-${regions.map((r) => r.id).join(',')}',
+    );
+
+    useEffect(() {
+      if (packages.isNotEmpty &&
+          (selectedPackageId.value == null ||
+              selectedPackageId.value!.isEmpty ||
+              !packages.any(
+                (package) => package.id == selectedPackageId.value,
+              ))) {
+        selectedPackageId.value = packages.first.id;
+      }
+
+      if (selectedRegion.value == null ||
+          (selectedRegion.value!.isNotEmpty &&
+              !regions.any((region) => region.id == selectedRegion.value))) {
+        selectedRegion.value = '';
+      }
+
+      recalculate();
+      return null;
+    }, [packages, regions, selectedPackageId.value, selectedRegion.value]);
 
     Future<void> pickDate() async {
       final picked = await showDatePicker(
@@ -108,7 +154,47 @@ class AddBookingScreen extends HookConsumerWidget {
       return '$h:$m $ampm';
     }
 
-    void submitBooking() {
+    Future<void> showPrintDialog(Booking booking) async {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Booking Saved'),
+          content: const Text('Choose which PDF you want to print.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('skip'),
+              child: const Text('Later'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop('client'),
+              icon: const Icon(Icons.receipt_long, size: 18),
+              label: const Text('Client PDF'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop('artist'),
+              icon: const Icon(Icons.badge_outlined, size: 18),
+              label: const Text('Artist PDF'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == 'client') {
+        await printBookingDetails(booking, variant: BookingPrintVariant.client);
+      } else if (action == 'artist') {
+        await printBookingDetails(
+          booking,
+          variant: BookingPrintVariant.artist,
+          relatedArtistBookings: const [],
+        );
+      }
+
+      if (context.mounted) {
+        context.go('/calendar');
+      }
+    }
+
+    Future<void> submitBooking() async {
       if (!formKey.currentState!.validate()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please fill all required fields.')),
@@ -123,27 +209,55 @@ class AddBookingScreen extends HookConsumerWidget {
       }
 
       final d = bookingDate.value!;
-      final sStart = DateTime(d.year, d.month, d.day, startTime.value.hour, startTime.value.minute);
-      final sEnd = DateTime(d.year, d.month, d.day, endTime.value.hour, endTime.value.minute);
+      dynamic selectedPackage;
+      for (final package in packages) {
+        if (package.id == selectedPackageId.value) {
+          selectedPackage = package;
+          break;
+        }
+      }
+      if (selectedPackage == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a package.')),
+        );
+        return;
+      }
 
-      final regionName = selectedRegion.value != null && selectedRegion.value!.isNotEmpty
-          ? regions.firstWhere((r) => r['id'] == selectedRegion.value)['name'] as String
-          : '';
-
-      final pkg = packages.firstWhere(
-        (p) => p['id'] == selectedPackageId.value,
-        orElse: () => packages.first,
+      final sStart = DateTime(
+        d.year,
+        d.month,
+        d.day,
+        startTime.value.hour,
+        startTime.value.minute,
+      );
+      final sEnd = DateTime(
+        d.year,
+        d.month,
+        d.day,
+        endTime.value.hour,
+        endTime.value.minute,
       );
 
-      final actualName = autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
+      dynamic selectedRegionModel;
+      for (final region in regions) {
+        if (region.id == selectedRegion.value) {
+          selectedRegionModel = region;
+          break;
+        }
+      }
+
+      final actualName =
+          autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
 
       final booking = Booking(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
+        packageId: selectedPackage.id,
+        regionId: selectedRegionModel?.id ?? '',
         customerName: actualName,
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
-        service: pkg['name'] as String,
-        region: regionName,
+        service: selectedPackage.name,
+        region: selectedRegionModel?.name ?? '',
         bookingDate: d,
         serviceStart: sStart,
         serviceEnd: sEnd,
@@ -151,19 +265,17 @@ class AddBookingScreen extends HookConsumerWidget {
         advanceAmount: advanceAmount.value,
       );
 
-      ref.read(bookingProvider.notifier).addBooking(booking);
+      final savedBooking = await ref
+          .read(bookingProvider.notifier)
+          .addBooking(booking);
 
       // Invalidate the customers list so the new customer (auto-created
       // on the backend during booking) appears in the Clients Directory.
       ref.invalidate(customersProvider);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Booking saved! View it on the calendar.'),
-          backgroundColor: Color(0xFF10B981),
-        ),
-      );
-      context.go('/calendar');
+      if (context.mounted) {
+        await showPrintDialog(savedBooking);
+      }
     }
 
     return SingleChildScrollView(
@@ -172,10 +284,17 @@ class AddBookingScreen extends HookConsumerWidget {
         children: [
           Row(
             children: [
-              IconButton(onPressed: () => context.pop(), icon: const Icon(Icons.arrow_back)),
+              IconButton(
+                onPressed: () => context.pop(),
+                icon: const Icon(Icons.arrow_back),
+              ),
               8.w,
-              Text('Create New Booking',
-                  style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                'Create New Booking',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           24.h,
@@ -196,9 +315,12 @@ class AddBookingScreen extends HookConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // ── Customer Details ──────────────────────────────
-                        Text('Customer Details',
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        Text(
+                          'Customer Details',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         16.h,
                         Consumer(
                           builder: (context, ref, child) {
@@ -206,38 +328,62 @@ class AddBookingScreen extends HookConsumerWidget {
                             final customersList = asyncCustomers.value ?? [];
 
                             return Autocomplete<Customer>(
-                              optionsBuilder: (TextEditingValue textEditingValue) {
-                                if (textEditingValue.text.isEmpty) {
-                                  return const Iterable<Customer>.empty();
-                                }
-                                return customersList.where((c) =>
-                                    c.name.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                              },
-                              displayStringForOption: (Customer option) => option.name,
+                              optionsBuilder:
+                                  (TextEditingValue textEditingValue) {
+                                    if (textEditingValue.text.isEmpty) {
+                                      return const Iterable<Customer>.empty();
+                                    }
+                                    return customersList.where(
+                                      (c) => c.name.toLowerCase().contains(
+                                        textEditingValue.text.toLowerCase(),
+                                      ),
+                                    );
+                                  },
+                              displayStringForOption: (Customer option) =>
+                                  option.name,
                               onSelected: (Customer selection) {
                                 phoneCtrl.text = selection.phone ?? '';
                                 emailCtrl.text = selection.email;
                               },
-                              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                                autoCompleteNameCtrl = controller;
-                                return TextFormField(
-                                  controller: controller,
-                                  focusNode: focusNode,
-                                  decoration: _inputDeco('Full Name', crmColors).copyWith(
-                                    suffixIcon: asyncCustomers.isLoading
-                                        ? const SizedBox(
-                                            width: 16, height: 16,
-                                            child: Padding(
-                                              padding: EdgeInsets.all(14),
-                                              child: CircularProgressIndicator(strokeWidth: 2),
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                                  onFieldSubmitted: (v) => onFieldSubmitted(),
-                                );
-                              },
+                              fieldViewBuilder:
+                                  (
+                                    context,
+                                    controller,
+                                    focusNode,
+                                    onFieldSubmitted,
+                                  ) {
+                                    autoCompleteNameCtrl = controller;
+                                    return TextFormField(
+                                      controller: controller,
+                                      focusNode: focusNode,
+                                      decoration:
+                                          _inputDeco(
+                                            'Full Name',
+                                            crmColors,
+                                          ).copyWith(
+                                            suffixIcon: asyncCustomers.isLoading
+                                                ? const SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child: Padding(
+                                                      padding: EdgeInsets.all(
+                                                        14,
+                                                      ),
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                    ),
+                                                  )
+                                                : null,
+                                          ),
+                                      validator: (v) => (v == null || v.isEmpty)
+                                          ? 'Required'
+                                          : null,
+                                      onFieldSubmitted: (v) =>
+                                          onFieldSubmitted(),
+                                    );
+                                  },
                             );
                           },
                         ),
@@ -248,8 +394,13 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: TextFormField(
                                 controller: phoneCtrl,
                                 keyboardType: TextInputType.phone,
-                                decoration: _inputDeco('Phone Number', crmColors),
-                                validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                decoration: _inputDeco(
+                                  'Phone Number',
+                                  crmColors,
+                                ),
+                                validator: (v) => (v == null || v.isEmpty)
+                                    ? 'Required'
+                                    : null,
                               ),
                             ),
                             16.w,
@@ -257,7 +408,10 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: TextFormField(
                                 controller: emailCtrl,
                                 keyboardType: TextInputType.emailAddress,
-                                decoration: _inputDeco('Email (Optional)', crmColors),
+                                decoration: _inputDeco(
+                                  'Email (Optional)',
+                                  crmColors,
+                                ),
                               ),
                             ),
                           ],
@@ -266,42 +420,99 @@ class AddBookingScreen extends HookConsumerWidget {
                         const Divider(),
                         16.h,
                         // ── Booking Details ───────────────────────────────
-                        Text('Booking Details',
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        Text(
+                          'Booking Details',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         16.h,
+                        if (asyncPackages.isLoading || asyncRegions.isLoading)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              children: [
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                12.w,
+                                Text(
+                                  'Loading packages and regions...',
+                                  style: TextStyle(
+                                    color: crmColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (asyncPackages.hasError || asyncRegions.hasError)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Text(
+                              'Failed to load package setup. Check backend packages and regions.',
+                              style: TextStyle(color: crmColors.warning),
+                            ),
+                          ),
                         Row(
                           children: [
                             // Region
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: selectedRegion.value,
+                                key: regionDropdownKey,
+                                initialValue: validRegionId,
                                 items: [
-                                  const DropdownMenuItem(value: '', child: Text('Default (Base Price)')),
-                                  ...regions.map((r) => DropdownMenuItem(
-                                      value: r['id'] as String,
-                                      child: Text(r['name'] as String))),
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('Default (Base Price)'),
+                                  ),
+                                  ...regions.map(
+                                    (r) => DropdownMenuItem(
+                                      value: r.id,
+                                      child: Text(r.name),
+                                    ),
+                                  ),
                                 ],
-                                onChanged: (val) => selectedRegion.value = val,
-                                decoration: _inputDeco('Select Region', crmColors),
+                                onChanged: regions.isEmpty
+                                    ? null
+                                    : (val) {
+                                        selectedRegion.value = val;
+                                        recalculate();
+                                      },
+                                decoration: _inputDeco(
+                                  'Select Region',
+                                  crmColors,
+                                ),
                               ),
                             ),
                             16.w,
                             // Package
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: selectedPackageId.value,
+                                key: packageDropdownKey,
+                                initialValue: validPackageId,
                                 items: packages
-                                    .map((p) => DropdownMenuItem(
-                                        value: p['id'] as String,
-                                        child: Text('${p['name']} (₹${p['price']})')))
+                                    .map(
+                                      (p) => DropdownMenuItem(
+                                        value: p.id,
+                                        child: Text(
+                                          '${p.name} (₹${p.price.toStringAsFixed(0)})',
+                                        ),
+                                      ),
+                                    )
                                     .toList(),
-                                onChanged: (val) {
-                                  selectedPackageId.value = val;
-                                  recalculate();
-                                },
+                                onChanged: packages.isEmpty
+                                    ? null
+                                    : (val) {
+                                        selectedPackageId.value = val;
+                                        recalculate();
+                                      },
                                 decoration: _inputDeco('Package', crmColors),
-                                validator: (v) => v == null ? 'Required' : null,
+                                validator: (v) =>
+                                    v == null || v.isEmpty ? 'Required' : null,
                               ),
                             ),
                           ],
@@ -316,15 +527,23 @@ class AddBookingScreen extends HookConsumerWidget {
                                 onTap: pickDate,
                                 borderRadius: BorderRadius.circular(8),
                                 child: InputDecorator(
-                                  decoration: _inputDeco('Appointment Date', crmColors),
+                                  decoration: _inputDeco(
+                                    'Appointment Date',
+                                    crmColors,
+                                  ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.calendar_today,
-                                          size: 16, color: crmColors.textSecondary),
+                                      Icon(
+                                        Icons.calendar_today,
+                                        size: 16,
+                                        color: crmColors.textSecondary,
+                                      ),
                                       8.w,
                                       Text(
                                         bookingDate.value != null
-                                            ? bookingDate.value!.toString().split(' ')[0]
+                                            ? bookingDate.value!
+                                                  .toString()
+                                                  .split(' ')[0]
                                             : 'Select date…',
                                         style: TextStyle(
                                           color: bookingDate.value != null
@@ -344,11 +563,17 @@ class AddBookingScreen extends HookConsumerWidget {
                                 onTap: pickStartTime,
                                 borderRadius: BorderRadius.circular(8),
                                 child: InputDecorator(
-                                  decoration: _inputDeco('Start Time', crmColors),
+                                  decoration: _inputDeco(
+                                    'Start Time',
+                                    crmColors,
+                                  ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.schedule,
-                                          size: 16, color: crmColors.textSecondary),
+                                      Icon(
+                                        Icons.schedule,
+                                        size: 16,
+                                        color: crmColors.textSecondary,
+                                      ),
                                       8.w,
                                       Text(fmtTime(startTime.value)),
                                     ],
@@ -366,8 +591,11 @@ class AddBookingScreen extends HookConsumerWidget {
                                   decoration: _inputDeco('End Time', crmColors),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.schedule_outlined,
-                                          size: 16, color: crmColors.textSecondary),
+                                      Icon(
+                                        Icons.schedule_outlined,
+                                        size: 16,
+                                        color: crmColors.textSecondary,
+                                      ),
                                       8.w,
                                       Text(fmtTime(endTime.value)),
                                     ],
@@ -384,7 +612,8 @@ class AddBookingScreen extends HookConsumerWidget {
                             Expanded(
                               child: _summaryBox(
                                 label: 'TOTAL AMOUNT',
-                                value: '₹ ${totalPrice.value.toStringAsFixed(0)}',
+                                value:
+                                    '₹ ${totalPrice.value.toStringAsFixed(0)}',
                                 border: crmColors.border,
                                 valueColor: crmColors.textPrimary,
                               ),
@@ -393,9 +622,10 @@ class AddBookingScreen extends HookConsumerWidget {
                             Expanded(
                               child: _summaryBox(
                                 label: 'ADVANCE (FIXED)',
-                                value: '₹ ${advanceAmount.value.toStringAsFixed(0)}',
+                                value:
+                                    '₹ ${advanceAmount.value.toStringAsFixed(0)}',
                                 border: crmColors.border,
-                                valueColor: const Color(0xFFD97706),
+                                valueColor: crmColors.accent,
                               ),
                             ),
                             16.w,
@@ -403,15 +633,22 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: ElevatedButton(
                                 onPressed: submitBooking,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFD97706),
+                                  backgroundColor: crmColors.primary,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 24),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 24,
+                                  ),
                                   shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8)),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                 ),
-                                child: const Text('Create Booking',
-                                    style: TextStyle(
-                                        fontSize: 16, fontWeight: FontWeight.bold)),
+                                child: const Text(
+                                  'Create Booking',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -433,20 +670,25 @@ class AddBookingScreen extends HookConsumerWidget {
     return InputDecoration(
       labelText: label,
       labelStyle: TextStyle(color: crmColors.textSecondary, fontSize: 14),
-      floatingLabelStyle:
-          TextStyle(color: crmColors.primary, fontWeight: FontWeight.bold),
+      floatingLabelStyle: TextStyle(
+        color: crmColors.primary,
+        fontWeight: FontWeight.bold,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: crmColors.border)),
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: crmColors.border),
+      ),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: crmColors.border)),
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: crmColors.border),
+      ),
       focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: crmColors.primary, width: 2)),
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: crmColors.primary, width: 2),
+      ),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: crmColors.surface,
     );
   }
 
@@ -466,18 +708,52 @@ class AddBookingScreen extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey.shade500,
-                  letterSpacing: 1.1)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+              letterSpacing: 1.1,
+            ),
+          ),
           4.h,
-          Text(value,
-              style: TextStyle(
-                  fontSize: 22, fontWeight: FontWeight.bold, color: valueColor)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+List<ServicePackage> _uniquePackages(List<ServicePackage> packages) {
+  final seen = <String>{};
+  final unique = <ServicePackage>[];
+
+  for (final package in packages) {
+    if (package.id.isEmpty || seen.contains(package.id)) continue;
+    seen.add(package.id);
+    unique.add(package);
+  }
+
+  return unique;
+}
+
+List<ServiceRegion> _uniqueRegions(List<ServiceRegion> regions) {
+  final seen = <String>{};
+  final unique = <ServiceRegion>[];
+
+  for (final region in regions) {
+    if (region.id.isEmpty || seen.contains(region.id)) continue;
+    seen.add(region.id);
+    unique.add(region);
+  }
+
+  return unique;
 }

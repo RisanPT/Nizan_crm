@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../core/models/booking.dart';
+import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
 
@@ -93,6 +97,8 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       const _RevenueChartCard(),
                       24.h,
+                      const _PendingBookingRequestsCard(),
+                      24.h,
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -112,6 +118,8 @@ class DashboardScreen extends StatelessWidget {
             Column(
               children: [
                 const _RevenueChartCard(),
+                24.h,
+                const _PendingBookingRequestsCard(),
                 24.h,
                 const _UpcomingBookingsCard(),
                 24.h,
@@ -178,7 +186,7 @@ class _StatCard extends StatelessWidget {
                   Container(
                     padding: 8.p,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: crmColors.secondary,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(icon, size: 20, color: crmColors.textPrimary),
@@ -250,6 +258,7 @@ class _RevenueChartCard extends StatelessWidget {
               width: double.infinity,
               decoration: BoxDecoration(
                 color: context.crmColors.background,
+                border: Border.all(color: context.crmColors.border),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Center(
@@ -270,6 +279,7 @@ class _UpcomingBookingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
     return Card(
       child: Padding(
         padding: 20.p,
@@ -288,86 +298,71 @@ class _UpcomingBookingsCard extends StatelessWidget {
                   ),
                 ),
                 TextButton(
-                  onPressed: () {},
+                  onPressed: () => context.go('/calendar'),
                   child: const Text('View Calendar'),
                 ),
               ],
             ),
             16.h,
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: 4,
-              separatorBuilder: (context, index) => const Divider(),
-              itemBuilder: (context, index) {
-                final bookings = [
-                  {
-                    'name': 'Emma Watson',
-                    'service': 'Bridal Makeover',
-                    'time': '10:00 AM',
-                    'status': 'CONFIRMED',
-                  },
-                  {
-                    'name': 'Sarah Jenkins',
-                    'service': 'Luxury Facial',
-                    'time': '11:30 AM',
-                    'status': 'PENDING',
-                  },
-                  {
-                    'name': 'Chloe Kim',
-                    'service': 'Hair Styling',
-                    'time': '1:00 PM',
-                    'status': 'CONFIRMED',
-                  },
-                  {
-                    'name': 'Maria Garcia',
-                    'service': 'Manicure & Pedicure',
-                    'time': '2:45 PM',
-                    'status': 'CONFIRMED',
-                  },
-                ];
-                final b = bookings[index];
-                final isConfirmed = b['status'] == 'CONFIRMED';
-                final crmColors = context.crmColors;
+            Consumer(
+              builder: (context, ref, child) {
+                final asyncBookings = ref.watch(bookingProvider);
 
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(
-                    b['name']!,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                return asyncBookings.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-                  subtitle: Text(b['service']!),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        b['time']!,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      4.h,
-                      Container(
-                        padding: 4.px,
-                        decoration: BoxDecoration(
-                          color: isConfirmed
-                              ? crmColors.success.withOpacity(0.1)
-                              : crmColors.warning.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          b['status']!,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: isConfirmed
-                                ? crmColors.success
-                                : crmColors.warning,
-                          ),
-                        ),
-                      ),
-                    ],
+                  error: (error, stack) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Failed to load appointments.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
                   ),
+                  data: (bookings) {
+                    final now = DateTime.now();
+                    final upcomingBookings = [...bookings]
+                      ..retainWhere(
+                        (booking) => !booking.serviceStart.isBefore(now),
+                      )
+                      ..sort(
+                        (a, b) => a.serviceStart.compareTo(b.serviceStart),
+                      );
+
+                    if (upcomingBookings.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.event_available,
+                              size: 40,
+                              color: crmColors.border,
+                            ),
+                            12.h,
+                            Text(
+                              'No upcoming appointments.',
+                              style: TextStyle(color: crmColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final visibleBookings = upcomingBookings.take(5).toList();
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: visibleBookings.length,
+                      separatorBuilder: (context, index) => const Divider(),
+                      itemBuilder: (context, index) {
+                        final booking = visibleBookings[index];
+                        return _UpcomingBookingTile(booking: booking);
+                      },
+                    );
+                  },
                 );
               },
             ),
@@ -375,6 +370,206 @@ class _UpcomingBookingsCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _PendingBookingRequestsCard extends ConsumerWidget {
+  const _PendingBookingRequestsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crmColors = context.crmColors;
+    final asyncBookings = ref.watch(bookingProvider);
+
+    return Card(
+      child: Padding(
+        padding: 20.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Pending Booking Requests',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.go('/booking/requests'),
+                  child: const Text('Open Requests'),
+                ),
+              ],
+            ),
+            16.h,
+            asyncBookings.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (error, stack) => Text(
+                'Failed to load booking requests.',
+                style: TextStyle(color: crmColors.textSecondary),
+              ),
+              data: (bookings) {
+                final pendingBookings = bookings
+                    .where((booking) => booking.status.toLowerCase() == 'pending')
+                    .toList()
+                  ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+
+                if (pendingBookings.isEmpty) {
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: crmColors.background,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: crmColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.mark_email_read_outlined,
+                          color: crmColors.textSecondary,
+                          size: 34,
+                        ),
+                        10.h,
+                        Text(
+                          'No pending booking requests right now.',
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final visibleBookings = pendingBookings.take(4).toList();
+
+                return ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: visibleBookings.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (context, index) {
+                    final booking = visibleBookings[index];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: crmColors.secondary,
+                        child: Text(
+                          booking.initials,
+                          style: TextStyle(
+                            color: crmColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        booking.customerName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        '${booking.service} • ${_UpcomingBookingTile._formatDate(booking.serviceStart)} • ${_UpcomingBookingTile._formatTime(booking.serviceStart)}',
+                      ),
+                      trailing: FilledButton.tonal(
+                        onPressed: () => context.go('/booking/requests'),
+                        child: const Text('Review'),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _UpcomingBookingTile extends StatelessWidget {
+  final Booking booking;
+
+  const _UpcomingBookingTile({required this.booking});
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: () => context.push('/booking/manage/${booking.id}'),
+      leading: CircleAvatar(
+        backgroundColor: crmColors.secondary,
+        child: Text(
+          booking.initials,
+          style: TextStyle(
+            color: crmColors.primary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      title: Text(
+        booking.customerName,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(booking.service),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            _formatTime(booking.serviceStart),
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          4.h,
+          Container(
+            padding: 4.px,
+            decoration: BoxDecoration(
+              color: crmColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              _formatDate(booking.serviceStart),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: crmColors.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime dateTime) {
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
+  static String _formatDate(DateTime dateTime) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${dateTime.day} ${months[dateTime.month - 1]}';
   }
 }
 
@@ -447,7 +642,7 @@ class _PopularServicesCard extends StatelessWidget {
       leading: Container(
         padding: 8.p,
         decoration: BoxDecoration(
-          color: crmColors.background,
+          color: crmColors.secondary,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(icon, color: crmColors.textPrimary),
@@ -465,7 +660,6 @@ class _TopStaffCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: const Color.fromARGB(255, 218, 214, 214),
       child: Padding(
         padding: 20.p,
         child: Column(

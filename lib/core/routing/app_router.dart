@@ -12,6 +12,9 @@ import '../../presentation/screens/services_management_screen.dart';
 import '../../presentation/screens/add_booking_screen.dart';
 import '../../presentation/screens/manage_booking_screen.dart';
 import '../../presentation/screens/add_service_screen.dart';
+import '../../presentation/screens/regions_management_screen.dart';
+import '../../presentation/screens/addon_services_management_screen.dart';
+import '../../presentation/screens/booking_requests_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -35,8 +38,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Calendar Scheduler';
           } else if (state.uri.path == '/services') {
             title = 'Services Management';
+          } else if (state.uri.path == '/services/regions') {
+            title = 'Service Regions';
+          } else if (state.uri.path == '/services/addons') {
+            title = 'Add-on Services';
           } else if (state.uri.path == '/staff') {
             title = 'Staff Management';
+          } else if (state.uri.path == '/booking/requests') {
+            title = 'Booking Requests';
           }
 
           return MainLayout(title: title, child: child);
@@ -72,12 +81,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AddServiceScreen(),
           ),
           GoRoute(
+            path: '/services/regions',
+            builder: (context, state) => const RegionsManagementScreen(),
+          ),
+          GoRoute(
+            path: '/services/addons',
+            builder: (context, state) => const AddonServicesManagementScreen(),
+          ),
+          GoRoute(
             path: '/staff',
             builder: (context, state) => const StaffManagementScreen(),
           ),
           GoRoute(
             path: '/booking/add',
             builder: (context, state) => const AddBookingScreen(),
+          ),
+          GoRoute(
+            path: '/booking/requests',
+            builder: (context, state) => const BookingRequestsScreen(),
           ),
           GoRoute(
             path: '/booking/manage/:id',

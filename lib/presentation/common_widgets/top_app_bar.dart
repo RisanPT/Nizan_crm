@@ -6,10 +6,7 @@ import '../../core/utils/responsive_builder.dart';
 class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
 
-  const TopAppBar({
-    super.key,
-    required this.title,
-  });
+  const TopAppBar({super.key, required this.title});
 
   @override
   Size get preferredSize => const Size.fromHeight(70);
@@ -23,19 +20,30 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
     // If mobile, we use standard AppBar so `Scaffold` provides the drawer hamburger icon automatically
     if (isMobile) {
       return AppBar(
-        title: Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        title: Text(
+          title,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: crmColors.surface,
         actions: [
-          IconButton(icon: const Icon(Icons.notifications_none), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.notifications_none),
+            onPressed: () {},
+          ),
           Padding(
             padding: 8.px,
-            child: const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 20)),
+            child: const CircleAvatar(
+              radius: 16,
+              child: Icon(Icons.person, size: 20),
+            ),
           ),
         ],
       );
     }
 
-    // For Tablet/Desktop: 
+    // For Tablet/Desktop:
     return Container(
       height: 70,
       padding: 16.px,
@@ -62,7 +70,7 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
                           prefixIcon: const Icon(Icons.search, size: 20),
                           contentPadding: EdgeInsets.zero,
                           filled: true,
-                          fillColor: crmColors.background,
+                          fillColor: crmColors.input,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                             borderSide: BorderSide.none,
@@ -79,24 +87,37 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
           // Actions
           Stack(
             children: [
-              IconButton(icon: const Icon(Icons.notifications_none), onPressed: () {}),
+              IconButton(
+                icon: const Icon(Icons.notifications_none),
+                onPressed: () {},
+              ),
               Positioned(
                 right: 8,
                 top: 8,
                 child: Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: Colors.red,
+                    color: crmColors.destructive,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                  child: const Text('3', style: TextStyle(color: Colors.white, fontSize: 10), textAlign: TextAlign.center),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: const Text(
+                    '3',
+                    style: TextStyle(color: Colors.white, fontSize: 10),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-              )
+              ),
             ],
           ),
           8.w,
-          IconButton(icon: const Icon(Icons.calendar_month_outlined), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.calendar_month_outlined),
+            onPressed: () {},
+          ),
           if (!ResponsiveBuilder.isMobile(context)) ...[
             16.w,
             ElevatedButton.icon(
@@ -106,26 +127,42 @@ class TopAppBar extends StatelessWidget implements PreferredSizeWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: crmColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
           16.w,
           Row(
             children: [
-              const CircleAvatar(radius: 18, child: Icon(Icons.person, size: 24)),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: crmColors.secondary,
+                child: Icon(Icons.person, size: 24, color: crmColors.primary),
+              ),
               12.w,
               if (ResponsiveBuilder.isDesktop(context))
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('Jessica Davis', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    Text('Manager', style: theme.textTheme.bodySmall?.copyWith(color: crmColors.textSecondary)),
+                    Text(
+                      'Jessica Davis',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Manager',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: crmColors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
             ],
-          )
+          ),
         ],
       ),
     );

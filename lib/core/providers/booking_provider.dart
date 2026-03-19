@@ -17,20 +17,50 @@ class BookingNotifier extends _$BookingNotifier {
     return service.getBookings();
   }
 
-  Future<void> addBooking(Booking booking) async {
+  Future<Booking> addBooking(Booking booking) async {
     final service = ref.read(bookingServiceProvider);
-    
+
     // Optimistic update
     final previousState = state;
     state = AsyncData([...(state.value ?? []), booking]);
 
     try {
-      await service.createBooking(booking);
-      // Wait to re-fetch to ensure sync with backend, or just keep optimistic state
+      final createdBooking = await service.createBooking(booking);
+      state = AsyncData([
+        for (final existing in state.value ?? [])
+          if (existing.id == booking.id) createdBooking else existing,
+      ]);
       ref.invalidateSelf();
+      return createdBooking;
     } catch (err, stack) {
       state = previousState; // Rollback
       state = AsyncError(err, stack);
+      rethrow;
+    }
+  }
+
+  Future<Booking> updateBooking(Booking booking) async {
+    final service = ref.read(bookingServiceProvider);
+    final previousState = state;
+    final currentBookings = state.value ?? [];
+
+    state = AsyncData([
+      for (final existing in currentBookings)
+        if (existing.id == booking.id) booking else existing,
+    ]);
+
+    try {
+      final updatedBooking = await service.updateBooking(booking);
+      state = AsyncData([
+        for (final existing in state.value ?? [])
+          if (existing.id == updatedBooking.id) updatedBooking else existing,
+      ]);
+      ref.invalidateSelf();
+      return updatedBooking;
+    } catch (err, stack) {
+      state = previousState;
+      state = AsyncError(err, stack);
+      rethrow;
     }
   }
 
@@ -53,4 +83,3 @@ class BookingNotifier extends _$BookingNotifier {
     return (state.value ?? []).where((b) => b.isOnDate(date)).toList();
   }
 }
-

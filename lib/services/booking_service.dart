@@ -19,7 +19,9 @@ class BookingService {
     try {
       final response = await _dio.get('/bookings');
       final data = response.data as List;
-      return data.map((e) => Booking.fromJson(e as Map<String, dynamic>)).toList();
+      return data
+          .map((e) => Booking.fromJson(e as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
       throw Exception('Failed to load bookings: ${e.message}');
     }
@@ -27,13 +29,22 @@ class BookingService {
 
   Future<Booking> createBooking(Booking booking) async {
     try {
-      final response = await _dio.post(
-        '/bookings',
+      final response = await _dio.post('/bookings', data: booking.toJson());
+      return Booking.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception('Failed to create booking: ${e.message}');
+    }
+  }
+
+  Future<Booking> updateBooking(Booking booking) async {
+    try {
+      final response = await _dio.put(
+        '/bookings/${booking.id}',
         data: booking.toJson(),
       );
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw Exception('Failed to create booking: ${e.message}');
+      throw Exception('Failed to update booking: ${e.message}');
     }
   }
 

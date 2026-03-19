@@ -29,13 +29,15 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                   children: [
                     Text(
                       'Clients Directory',
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       'Clients are created automatically when you add a booking.',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: crmColors.textSecondary),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: crmColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -47,7 +49,7 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                   icon: const Icon(Icons.download, size: 18),
                   label: const Text('Export'),
                 ),
-              ]
+              ],
             ],
           ),
           if (isMobile) ...[
@@ -62,10 +64,11 @@ class ClientsDirectoryScreen extends ConsumerWidget {
 
           // ── Table card ───────────────────────────────────────────────────
           Card(
-            color: Colors.white,
+            color: crmColors.surface,
             surfaceTintColor: Colors.transparent,
             shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12)),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: 24.p,
               child: Column(
@@ -103,7 +106,7 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                           icon: const Icon(Icons.sort, size: 18),
                           label: const Text('Sort: Newest'),
                         ),
-                      ]
+                      ],
                     ],
                   ),
                   if (isMobile) ...[
@@ -137,65 +140,86 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                       child: Row(
                         children: [
                           Expanded(
-                              flex: 2,
-                              child: Text('CLIENT',
-                                  style: TextStyle(
-                                      color: crmColors.textSecondary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12))),
+                            flex: 2,
+                            child: Text(
+                              'CLIENT',
+                              style: TextStyle(
+                                color: crmColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              flex: 2,
-                              child: Text('CONTACT INFO',
-                                  style: TextStyle(
-                                      color: crmColors.textSecondary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12))),
+                            flex: 2,
+                            child: Text(
+                              'CONTACT INFO',
+                              style: TextStyle(
+                                color: crmColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                              flex: 1,
-                              child: Text('STATUS',
-                                  style: TextStyle(
-                                      color: crmColors.textSecondary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12))),
+                            flex: 1,
+                            child: Text(
+                              'STATUS',
+                              style: TextStyle(
+                                color: crmColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                           SizedBox(
-                              width: 80,
-                              child: Text('ACTIONS',
-                                  style: TextStyle(
-                                      color: crmColors.textSecondary,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12))),
+                            width: 80,
+                            child: Text(
+                              'ACTIONS',
+                              style: TextStyle(
+                                color: crmColors.textSecondary,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   const Divider(),
 
                   // Data from provider
-                  ref.watch(customersProvider).when(
+                  ref
+                      .watch(customersProvider)
+                      .when(
                         data: (customers) {
                           if (customers.isEmpty) {
                             return Padding(
                               padding: const EdgeInsets.all(32.0),
                               child: Column(
                                 children: [
-                                  Icon(Icons.person_search,
-                                      size: 48, color: crmColors.border),
+                                  Icon(
+                                    Icons.person_search,
+                                    size: 48,
+                                    color: crmColors.border,
+                                  ),
                                   16.h,
                                   Text(
                                     'No clients yet.\nCreate a booking to auto-register a client.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
-                                        color: crmColors.textSecondary),
+                                      color: crmColors.textSecondary,
+                                    ),
                                   ),
                                   16.h,
                                   ElevatedButton.icon(
-                                    onPressed: () =>
-                                        context.go('/booking/add'),
+                                    onPressed: () => context.go('/booking/add'),
                                     icon: const Icon(Icons.add),
-                                    label:
-                                        const Text('Create First Booking'),
+                                    label: const Text('Create First Booking'),
                                     style: ElevatedButton.styleFrom(
-                                        backgroundColor: crmColors.primary,
-                                        foregroundColor: Colors.white),
+                                      backgroundColor: crmColors.primary,
+                                      foregroundColor: Colors.white,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -203,23 +227,24 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                           }
                           return Column(
                             children: customers
-                                .map((c) => Column(
-                                      children: [
-                                        _buildClientRow(
-                                          context,
-                                          ref,
-                                          id: c.id ?? '',
-                                          name: c.name,
-                                          tag: c.status,
-                                          phone: c.phone ?? 'N/A',
-                                          email: c.email
-                                                  .contains('@placeholder')
-                                              ? '—'
-                                              : c.email,
-                                        ),
-                                        const Divider(),
-                                      ],
-                                    ))
+                                .map(
+                                  (c) => Column(
+                                    children: [
+                                      _buildClientRow(
+                                        context,
+                                        ref,
+                                        id: c.id ?? '',
+                                        name: c.name,
+                                        tag: c.status,
+                                        phone: c.phone ?? 'N/A',
+                                        email: c.email.contains('@placeholder')
+                                            ? '—'
+                                            : c.email,
+                                      ),
+                                      const Divider(),
+                                    ],
+                                  ),
+                                )
                                 .toList(),
                           );
                         },
@@ -229,15 +254,16 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                         ),
                         error: (error, stack) => Padding(
                           padding: const EdgeInsets.all(32.0),
-                          child: Text('Error: $error',
-                              style:
-                                  TextStyle(color: crmColors.warning)),
+                          child: Text(
+                            'Error: $error',
+                            style: TextStyle(color: crmColors.warning),
+                          ),
                         ),
                       ),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -260,17 +286,21 @@ class ClientsDirectoryScreen extends ConsumerWidget {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Delete Client'),
-          content:
-              Text('Remove $name from the directory? This cannot be undone.'),
+          content: Text(
+            'Remove $name from the directory? This cannot be undone.',
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Delete',
-                  style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Delete',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -281,9 +311,9 @@ class ClientsDirectoryScreen extends ConsumerWidget {
           ref.invalidate(customersProvider);
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to delete: $e')),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
           }
         }
       }
@@ -310,12 +340,13 @@ class ClientsDirectoryScreen extends ConsumerWidget {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: crmColors.primary.withOpacity(0.12),
+                  backgroundColor: crmColors.primary.withValues(alpha: 0.12),
                   child: Text(
                     name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: crmColors.primary),
+                      fontWeight: FontWeight.bold,
+                      color: crmColors.primary,
+                    ),
                   ),
                 ),
                 12.w,
@@ -323,14 +354,21 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(tag,
-                          style: TextStyle(
-                              color: tagColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        tag,
+                        style: TextStyle(
+                          color: tagColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -342,31 +380,41 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                   },
                   itemBuilder: (_) => [
                     const PopupMenuItem(
-                        value: 'view', child: Text('View Profile')),
+                      value: 'view',
+                      child: Text('View Profile'),
+                    ),
                     const PopupMenuItem(
-                        value: 'delete',
-                        child: Text('Delete',
-                            style: TextStyle(color: Colors.red))),
+                      value: 'delete',
+                      child: Text(
+                        'Delete',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
             12.h,
-            Row(children: [
-              Icon(Icons.phone, size: 14, color: crmColors.textSecondary),
-              8.w,
-              Text(phone,
-                  style: TextStyle(color: crmColors.textSecondary)),
-            ]),
+            Row(
+              children: [
+                Icon(Icons.phone, size: 14, color: crmColors.textSecondary),
+                8.w,
+                Text(phone, style: TextStyle(color: crmColors.textSecondary)),
+              ],
+            ),
             4.h,
-            Row(children: [
-              Icon(Icons.email, size: 14, color: crmColors.textSecondary),
-              8.w,
-              Expanded(
-                  child: Text(email,
-                      style:
-                          TextStyle(color: crmColors.textSecondary))),
-            ]),
+            Row(
+              children: [
+                Icon(Icons.email, size: 14, color: crmColors.textSecondary),
+                8.w,
+                Expanded(
+                  child: Text(
+                    email,
+                    style: TextStyle(color: crmColors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
             12.h,
             SizedBox(
               width: double.infinity,
@@ -374,7 +422,7 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                 onPressed: () => context.go('/client/$id'),
                 child: const Text('View Profile'),
               ),
-            )
+            ),
           ],
         ),
       );
@@ -391,12 +439,13 @@ class ClientsDirectoryScreen extends ConsumerWidget {
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: crmColors.primary.withOpacity(0.12),
+                    backgroundColor: crmColors.primary.withValues(alpha: 0.12),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : '?',
                       style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: crmColors.primary),
+                        fontWeight: FontWeight.bold,
+                        color: crmColors.primary,
+                      ),
                     ),
                   ),
                   12.w,
@@ -404,22 +453,31 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
                         Container(
                           margin: const EdgeInsets.only(top: 4),
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: tagColor.withOpacity(0.1),
+                            color: tagColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text(tag,
-                              style: TextStyle(
-                                  color: tagColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600)),
+                          child: Text(
+                            tag,
+                            style: TextStyle(
+                              color: tagColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -432,42 +490,57 @@ class ClientsDirectoryScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Icon(Icons.phone,
-                        size: 14, color: crmColors.textSecondary),
-                    8.w,
-                    Text(phone,
-                        style:
-                            TextStyle(color: crmColors.textSecondary)),
-                  ]),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.phone,
+                        size: 14,
+                        color: crmColors.textSecondary,
+                      ),
+                      8.w,
+                      Text(
+                        phone,
+                        style: TextStyle(color: crmColors.textSecondary),
+                      ),
+                    ],
+                  ),
                   4.h,
-                  Row(children: [
-                    Icon(Icons.email,
-                        size: 14, color: crmColors.textSecondary),
-                    8.w,
-                    Expanded(
-                        child: Text(email,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: crmColors.textSecondary))),
-                  ]),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.email,
+                        size: 14,
+                        color: crmColors.textSecondary,
+                      ),
+                      8.w,
+                      Expanded(
+                        child: Text(
+                          email,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
             Expanded(
               flex: 1,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: tagColor.withOpacity(0.1),
+                  color: tagColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(tag,
-                    style: TextStyle(
-                        color: tagColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold)),
+                child: Text(
+                  tag,
+                  style: TextStyle(
+                    color: tagColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
             SizedBox(
@@ -476,22 +549,31 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.person_outline,
-                        color: crmColors.primary, size: 20),
+                    icon: Icon(
+                      Icons.person_outline,
+                      color: crmColors.primary,
+                      size: 20,
+                    ),
                     tooltip: 'View Profile',
                     onPressed: () => context.go('/client/$id'),
                   ),
                   PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz,
-                        color: crmColors.textSecondary, size: 20),
+                    icon: Icon(
+                      Icons.more_horiz,
+                      color: crmColors.textSecondary,
+                      size: 20,
+                    ),
                     onSelected: (val) {
                       if (val == 'delete') deleteClient();
                     },
                     itemBuilder: (_) => [
                       const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Delete',
-                              style: TextStyle(color: Colors.red))),
+                        value: 'delete',
+                        child: Text(
+                          'Delete',
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
                     ],
                   ),
                 ],

@@ -21,7 +21,7 @@ class Sidebar extends StatelessWidget {
 
     return Container(
       width: width,
-      color: crmColors.primary,
+      color: crmColors.sidebar,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -129,6 +129,7 @@ class Sidebar extends StatelessWidget {
   }
 
   Widget _buildLogo(BuildContext context, {required bool isCollapsed}) {
+    final crmColors = context.crmColors;
     return Padding(
       padding: 16.px,
       child: Row(
@@ -139,7 +140,7 @@ class Sidebar extends StatelessWidget {
           Container(
             padding: 8.p,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: crmColors.surface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Image.asset(
@@ -155,7 +156,7 @@ class Sidebar extends StatelessWidget {
               child: Text(
                 'Nizan\nMakeovers',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.white,
+                  color: crmColors.sidebarForeground,
                   fontWeight: FontWeight.bold,
                   height: 1.2,
                 ),
@@ -172,15 +173,20 @@ class Sidebar extends StatelessWidget {
     required bool isCollapsed,
     required ThemeData theme,
   }) {
+    final crmColors = theme.extension<CrmTheme>()!;
     if (isCollapsed) {
-      return const Center(child: Divider(color: Colors.white24));
+      return Center(
+        child: Divider(
+          color: crmColors.sidebarForeground.withValues(alpha: 0.16),
+        ),
+      );
     }
     return Padding(
       padding: 8.px,
       child: Text(
         title,
         style: theme.textTheme.labelSmall?.copyWith(
-          color: Colors.white54,
+          color: crmColors.sidebarForeground.withValues(alpha: 0.54),
           fontWeight: FontWeight.w600,
           letterSpacing: 1.2,
         ),
@@ -211,7 +217,9 @@ class _SidebarItem extends StatelessWidget {
     return Container(
       margin: 4.py,
       decoration: BoxDecoration(
-        color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
+        color: isSelected
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: InkWell(
@@ -226,7 +234,9 @@ class _SidebarItem extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                color: isSelected ? Colors.white : Colors.white70,
+                color: isSelected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.70),
                 size: 22,
               ),
               if (!isCollapsed) ...[
@@ -235,7 +245,9 @@ class _SidebarItem extends StatelessWidget {
                   child: Text(
                     title,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isSelected ? Colors.white : Colors.white70,
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.70),
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.normal,

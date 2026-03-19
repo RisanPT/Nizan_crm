@@ -4,9 +4,16 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
+import '../../core/models/service_region.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/models/addon_service.dart';
+import '../../core/models/employee.dart';
+import '../../services/addon_service_service.dart';
+import '../../services/employee_service.dart';
+import '../../services/region_service.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
@@ -23,6 +30,20 @@ class ManageBookingScreen extends HookConsumerWidget {
     // Look up the booking from the provider by id
     final asyncBookings = ref.watch(bookingProvider);
     final allBookings = asyncBookings.value ?? [];
+    final asyncEmployees = ref.watch(employeesProvider);
+    final asyncAddonServices = ref.watch(addonServicesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final availableStaff = (asyncEmployees.value ?? const <Employee>[])
+        .where((employee) => employee.status.toLowerCase() == 'active')
+        .toList();
+    final availableDrivers = availableStaff
+        .where((employee) => employee.artistRole == 'driver')
+        .toList();
+    final availableAddonServices =
+        (asyncAddonServices.value ?? const <AddonService>[])
+            .where((service) => service.status.toLowerCase() == 'active')
+            .toList();
+    final availableRegions = asyncRegions.value ?? const <ServiceRegion>[];
     final Booking? booking = allBookings.cast<Booking?>().firstWhere(
       (b) => b?.id == bookingId,
       orElse: () => null,
@@ -32,10 +53,17 @@ class ManageBookingScreen extends HookConsumerWidget {
     final statusState = useState(booking?.id != null ? 'confirmed' : 'pending');
     final checklistCompleted = useState(false);
     final contentRequired = useState(false);
-    final assignments = useState<List<Map<String, dynamic>>>([]);
+    final assignments = useState<List<BookingAssignment>>([]);
+    final showAllTodayWorks = useState(false);
+    final addons = useState<List<BookingAddon>>([]);
+    final discountType = useState<String>(booking?.discountType ?? 'inr');
+    final selectedRegionId = useState<String>(booking?.regionId ?? '');
+    final selectedDriverId = useState<String>(booking?.driverId ?? '');
 
     // Controllers pre-filled from real booking data
-    final nameCtrl = useTextEditingController(text: booking?.customerName ?? '');
+    final nameCtrl = useTextEditingController(
+      text: booking?.customerName ?? '',
+    );
     final phoneCtrl = useTextEditingController(text: booking?.phone ?? '');
     final emailCtrl = useTextEditingController(text: booking?.email ?? '');
     final bookingDateCtrl = useTextEditingController(
@@ -53,33 +81,244 @@ class ManageBookingScreen extends HookConsumerWidget {
     final advanceCtrl = useTextEditingController(
       text: booking?.advanceAmount.toStringAsFixed(0) ?? '',
     );
+    final discountCtrl = useTextEditingController(
+      text:
+          ((booking?.discountValue ?? 0) == 0
+                  ? booking?.discountAmount ?? 0
+                  : booking?.discountValue ?? 0)
+              .toStringAsFixed(0),
+    );
+    final advanceValue = useValueListenable(advanceCtrl);
+    final discountValueListenable = useValueListenable(discountCtrl);
     final balanceCtrl = useTextEditingController(
       text: booking != null
-          ? (booking.totalPrice - booking.advanceAmount).toStringAsFixed(0)
+          ? (booking.totalPrice -
+                    booking.advanceAmount -
+                    booking.discountAmount)
+                .toStringAsFixed(0)
           : '',
     );
     final packageCtrl = useTextEditingController(text: booking?.service ?? '');
     final regionCtrl = useTextEditingController(text: booking?.region ?? '');
+    final driverCtrl = useTextEditingController(
+      text: booking?.driverName ?? '',
+    );
 
     // CRM-only fields (empty until filled by user)
     final mapUrlCtrl = useTextEditingController();
     final travelModeCtrl = useTextEditingController();
-    final driverCtrl = useTextEditingController();
     final travelTimeCtrl = useTextEditingController();
-    final pocCtrl = useTextEditingController();
+    final travelDistanceCtrl = useTextEditingController(
+      text: booking?.travelDistanceKm.toStringAsFixed(0) ?? '',
+    );
     final roomCtrl = useTextEditingController();
     final secondaryPhoneCtrl = useTextEditingController();
     final outfitCtrl = useTextEditingController();
     final captureStaffCtrl = useTextEditingController();
-    final addonCtrl = useTextEditingController();
     final staffNeedsCtrl = useTextEditingController();
     final remarksCtrl = useTextEditingController();
 
-    final availableArtists = useMemoized(() => [
-      {'id': '1', 'name': 'Aditi', 'type': 'Senior'},
-      {'id': '2', 'name': 'Sneha', 'type': 'Junior'},
-      {'id': '3', 'name': 'Priya', 'type': 'Senior'},
-    ]);
+    useEffect(
+      () {
+        if (booking != null) {
+          nameCtrl.text = booking.customerName;
+          phoneCtrl.text = booking.phone;
+          emailCtrl.text = booking.email;
+          bookingDateCtrl.text = booking.bookingDate.toString().split(' ')[0];
+          startTimeCtrl.text = _fmt(booking.serviceStart);
+          endTimeCtrl.text = _fmt(booking.serviceEnd);
+          totalAmountCtrl.text = booking.totalPrice.toStringAsFixed(0);
+          advanceCtrl.text = booking.advanceAmount.toStringAsFixed(0);
+          discountType.value = booking.discountType;
+          discountCtrl.text =
+              ((booking.discountValue == 0
+                      ? booking.discountAmount
+                      : booking.discountValue))
+                  .toStringAsFixed(0);
+          balanceCtrl.text =
+              (booking.totalPrice -
+                      booking.advanceAmount -
+                      booking.discountAmount)
+                  .toStringAsFixed(0);
+          packageCtrl.text = booking.service;
+          mapUrlCtrl.text = booking.mapUrl;
+          travelModeCtrl.text = booking.travelMode;
+          travelTimeCtrl.text = booking.travelTime;
+          travelDistanceCtrl.text = booking.travelDistanceKm == 0
+              ? ''
+              : booking.travelDistanceKm.toStringAsFixed(0);
+          roomCtrl.text = booking.requiredRoomDetail;
+          secondaryPhoneCtrl.text = booking.secondaryContact;
+          outfitCtrl.text = booking.outfitDetails;
+          captureStaffCtrl.text = booking.captureStaffDetails;
+          staffNeedsCtrl.text = booking.staffInstructions;
+          remarksCtrl.text = booking.internalRemarks;
+          contentRequired.value = booking.contentCreationRequired;
+          statusState.value = booking.status;
+          selectedRegionId.value = booking.regionId;
+          selectedDriverId.value = booking.driverId;
+        }
+        return null;
+      },
+      [
+        booking?.id,
+        booking?.customerName,
+        booking?.phone,
+        booking?.email,
+        booking?.regionId,
+        booking?.driverId,
+        booking?.status,
+        booking?.mapUrl,
+        booking?.travelMode,
+        booking?.travelTime,
+        booking?.travelDistanceKm,
+        booking?.requiredRoomDetail,
+        booking?.secondaryContact,
+        booking?.outfitDetails,
+        booking?.captureStaffDetails,
+        booking?.staffInstructions,
+        booking?.internalRemarks,
+        booking?.contentCreationRequired,
+        booking?.totalPrice,
+        booking?.advanceAmount,
+        booking?.discountAmount,
+        booking?.discountType,
+        booking?.discountValue,
+        booking?.bookingDate,
+        booking?.serviceStart,
+        booking?.serviceEnd,
+        booking?.service,
+      ],
+    );
+
+    double parseMoney(String value) => double.tryParse(value.trim()) ?? 0;
+
+    double addonTotal(List<BookingAddon> items) {
+      return items.fold<double>(
+        0,
+        (sum, addon) => sum + (addon.amount * addon.persons),
+      );
+    }
+
+    final basePackageAmount = useMemoized(() {
+      final savedAddonTotal =
+          booking?.addons.fold<double>(
+            0,
+            (sum, addon) => sum + (addon.amount * addon.persons),
+          ) ??
+          0;
+      final baseAmount = (booking?.totalPrice ?? 0) - savedAddonTotal;
+      return baseAmount < 0 ? 0.0 : baseAmount;
+    }, [booking?.id]);
+
+    double appliedDiscountAmount(double subtotal) {
+      final inputValue = parseMoney(discountCtrl.text);
+      if (discountType.value == 'percent') {
+        final percent = inputValue.clamp(0, 100);
+        return subtotal * (percent / 100);
+      }
+      return inputValue.clamp(0, subtotal);
+    }
+
+    useEffect(
+      () {
+        final subtotal = basePackageAmount + addonTotal(addons.value);
+        final discountAmount = appliedDiscountAmount(subtotal);
+        final advanceAmount = parseMoney(advanceCtrl.text);
+        final forecast = (subtotal - advanceAmount - discountAmount).clamp(
+          0,
+          double.infinity,
+        );
+        totalAmountCtrl.text = subtotal.toStringAsFixed(0);
+        balanceCtrl.text = forecast.toStringAsFixed(0);
+        return null;
+      },
+      [
+        basePackageAmount,
+        addons.value,
+        advanceValue.text,
+        discountValueListenable.text,
+        discountType.value,
+      ],
+    );
+
+    useEffect(() {
+      if (booking != null) {
+        assignments.value = List<BookingAssignment>.from(booking.assignedStaff);
+        addons.value = List<BookingAddon>.from(booking.addons);
+      }
+      return null;
+    }, [booking?.id]);
+
+    String activeArtistName() {
+      final primaryArtist = assignments.value.cast<BookingAssignment?>().firstWhere(
+            (assignment) =>
+                assignment != null &&
+                assignment.artistName.trim().isNotEmpty &&
+                assignment.roleType.toLowerCase() == 'artist',
+            orElse: () => null,
+          );
+      if (primaryArtist != null) return primaryArtist.artistName.trim();
+
+      final fallbackArtist = assignments.value.cast<BookingAssignment?>().firstWhere(
+            (assignment) =>
+                assignment != null && assignment.artistName.trim().isNotEmpty,
+            orElse: () => null,
+          );
+      return fallbackArtist?.artistName.trim() ?? '';
+    }
+
+    final currentArtistName = activeArtistName();
+    final currentBookingDate =
+        DateTime.tryParse(bookingDateCtrl.text.trim()) ??
+        booking?.bookingDate ??
+        DateTime.now();
+    final todayArtistWorks = currentArtistName.isEmpty
+        ? const <Booking>[]
+        : (() {
+            final items = allBookings.where((item) {
+              final sameDay =
+                  item.bookingDate.year == currentBookingDate.year &&
+                  item.bookingDate.month == currentBookingDate.month &&
+                  item.bookingDate.day == currentBookingDate.day;
+              final activeStatus = item.status.toLowerCase() != 'rejected' &&
+                  item.status.toLowerCase() != 'cancelled';
+              final containsArtist = item.assignedStaff.any(
+                (assignment) =>
+                    assignment.artistName.trim().toLowerCase() ==
+                    currentArtistName.toLowerCase(),
+              );
+              return sameDay && activeStatus && containsArtist;
+            }).toList();
+            items.sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+            return items;
+          })();
+
+    useEffect(() {
+      final selectedRegion = availableRegions.cast<ServiceRegion?>().firstWhere(
+        (region) => region?.id == selectedRegionId.value,
+        orElse: () => null,
+      );
+      if (selectedRegion != null) {
+        regionCtrl.text = selectedRegion.name;
+      } else if (selectedRegionId.value.isEmpty && booking != null) {
+        regionCtrl.text = booking.region;
+      }
+      return null;
+    }, [selectedRegionId.value, availableRegions, booking?.id]);
+
+    useEffect(() {
+      final selectedDriver = availableDrivers.cast<Employee?>().firstWhere(
+        (driver) => driver?.id == selectedDriverId.value,
+        orElse: () => null,
+      );
+      if (selectedDriver != null) {
+        driverCtrl.text = selectedDriver.name;
+      } else if (selectedDriverId.value.isEmpty && booking != null) {
+        driverCtrl.text = booking.driverName;
+      }
+      return null;
+    }, [selectedDriverId.value, availableDrivers, booking?.id]);
 
     if (booking == null) {
       return Center(
@@ -88,9 +327,12 @@ class ManageBookingScreen extends HookConsumerWidget {
           children: [
             Icon(Icons.search_off, size: 64, color: crmColors.border),
             24.h,
-            Text('Booking #$bookingId not found',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: crmColors.textSecondary)),
+            Text(
+              'Booking #$bookingId not found',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: crmColors.textSecondary,
+              ),
+            ),
             16.h,
             ElevatedButton.icon(
               onPressed: () => context.go('/calendar'),
@@ -99,6 +341,110 @@ class ManageBookingScreen extends HookConsumerWidget {
             ),
           ],
         ),
+      );
+    }
+
+    Future<void> showPrintDialog(Booking updatedBooking) async {
+      final action = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Booking Updated'),
+          content: const Text('Choose which PDF you want to print.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop('skip'),
+              child: const Text('Later'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop('client'),
+              icon: const Icon(Icons.receipt_long, size: 18),
+              label: const Text('Client PDF'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop('artist'),
+              icon: const Icon(Icons.badge_outlined, size: 18),
+              label: const Text('Artist PDF'),
+            ),
+          ],
+        ),
+      );
+
+      if (action == 'client') {
+        await printBookingDetails(
+          updatedBooking,
+          variant: BookingPrintVariant.client,
+        );
+      } else if (action == 'artist') {
+        await printBookingDetails(
+          updatedBooking,
+          variant: BookingPrintVariant.artist,
+          relatedArtistBookings: todayArtistWorks,
+          artistName: currentArtistName,
+        );
+      }
+
+      if (context.mounted) {
+        context.pop();
+      }
+    }
+
+    Booking buildCurrentBookingSnapshot() {
+      final parsedBookingDate =
+          DateTime.tryParse(bookingDateCtrl.text.trim()) ??
+          booking?.bookingDate ??
+          DateTime.now();
+      final normalizedAddons = _normalizedAddons(addons.value);
+      final subtotal = basePackageAmount +
+          normalizedAddons.fold<double>(
+            0,
+            (sum, addon) => sum + (addon.amount * addon.persons),
+          );
+      final rawDiscountValue = double.tryParse(discountCtrl.text.trim()) ?? 0;
+      final appliedDiscount = discountType.value == 'percent'
+          ? subtotal * (rawDiscountValue.clamp(0.0, 100.0) / 100)
+          : rawDiscountValue.clamp(0.0, subtotal);
+
+      return booking.copyWith(
+        customerName: nameCtrl.text.trim(),
+        phone: phoneCtrl.text.trim(),
+        email: emailCtrl.text.trim(),
+        regionId: selectedRegionId.value,
+        driverId: selectedDriverId.value,
+        region: regionCtrl.text.trim(),
+        driverName: driverCtrl.text.trim(),
+        status: statusState.value,
+        mapUrl: mapUrlCtrl.text.trim(),
+        travelMode: travelModeCtrl.text.trim(),
+        travelTime: travelTimeCtrl.text.trim(),
+        travelDistanceKm:
+            double.tryParse(travelDistanceCtrl.text.trim()) ??
+            booking.travelDistanceKm,
+        requiredRoomDetail: roomCtrl.text.trim(),
+        secondaryContact: secondaryPhoneCtrl.text.trim(),
+        outfitDetails: outfitCtrl.text.trim(),
+        captureStaffDetails: captureStaffCtrl.text.trim(),
+        staffInstructions: staffNeedsCtrl.text.trim(),
+        internalRemarks: remarksCtrl.text.trim(),
+        contentCreationRequired: contentRequired.value,
+        bookingDate: parsedBookingDate,
+        serviceStart: _mergeDateAndTime(
+          parsedBookingDate,
+          startTimeCtrl.text.trim(),
+          booking.serviceStart,
+        ),
+        serviceEnd: _mergeDateAndTime(
+          parsedBookingDate,
+          endTimeCtrl.text.trim(),
+          booking.serviceEnd,
+        ),
+        totalPrice: subtotal,
+        advanceAmount:
+            double.tryParse(advanceCtrl.text.trim()) ?? booking.advanceAmount,
+        discountAmount: appliedDiscount,
+        discountType: discountType.value,
+        discountValue: rawDiscountValue,
+        assignedStaff: assignments.value,
+        addons: normalizedAddons,
       );
     }
 
@@ -113,13 +459,23 @@ class ManageBookingScreen extends HookConsumerWidget {
               Row(
                 children: [
                   IconButton(
-                      onPressed: () => context.pop(),
-                      icon: const Icon(Icons.arrow_back)),
+                    onPressed: () => context.pop(),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
                   8.w,
                   Text(
                     'Manage Booking #$bookingId',
                     style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  12.w,
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await showPrintDialog(buildCurrentBookingSnapshot());
+                    },
+                    icon: const Icon(Icons.print_outlined, size: 18),
+                    label: const Text('Print'),
                   ),
                 ],
               ),
@@ -129,11 +485,23 @@ class ManageBookingScreen extends HookConsumerWidget {
                   icon: const Icon(Icons.arrow_back, size: 16),
                   label: const Text('Back to Calendar'),
                   style: TextButton.styleFrom(
-                      foregroundColor: crmColors.textSecondary),
+                    foregroundColor: crmColors.textSecondary,
+                  ),
                 ),
             ],
           ),
           24.h,
+
+          if (todayArtistWorks.length > 1) ...[
+            _buildTodayWorksSection(
+              context,
+              crmColors,
+              currentArtistName,
+              todayArtistWorks,
+              showAllTodayWorks,
+            ),
+            24.h,
+          ],
 
           Container(
             constraints: const BoxConstraints(maxWidth: 1200),
@@ -153,62 +521,110 @@ class ManageBookingScreen extends HookConsumerWidget {
                       backgroundColor: Colors.indigo,
                       foregroundColor: Colors.white,
                       textStyle: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 12),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   child: Column(
                     children: [
-                      LayoutBuilder(builder: (ctx, constraints) {
-                        final narrow = constraints.maxWidth < 600;
-                        return GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: narrow ? 1 : 5,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: narrow ? 5 : 2.5,
-                          children: [
-                            _buildDropdown(
-                              context,
-                              'STATUS',
-                              ['pending', 'confirmed', 'completed', 'cancelled'],
-                              statusState.value,
-                              (v) => statusState.value = v ?? statusState.value,
-                            ),
-                            _buildField(context, 'CUSTOMER NAME', nameCtrl),
-                            _buildField(context, 'CONTACT NUMBER', phoneCtrl,
-                                keyboardType: TextInputType.phone),
-                            _buildField(context, 'EMAIL', emailCtrl,
-                                keyboardType: TextInputType.emailAddress),
-                            _buildField(context, 'BOOKING DATE', bookingDateCtrl),
-                          ],
-                        );
-                      }),
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          final narrow = constraints.maxWidth < 600;
+                          return GridView.count(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: narrow ? 1 : 5,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: narrow ? 5 : 2.5,
+                            children: [
+                              _buildDropdown(
+                                context,
+                                'STATUS',
+                                [
+                                  'pending',
+                                  'confirmed',
+                                  'completed',
+                                  'cancelled',
+                                ],
+                                statusState.value,
+                                (v) =>
+                                    statusState.value = v ?? statusState.value,
+                              ),
+                              _buildField(context, 'CUSTOMER NAME', nameCtrl),
+                              _buildField(
+                                context,
+                                'CONTACT NUMBER',
+                                phoneCtrl,
+                                keyboardType: TextInputType.phone,
+                              ),
+                              _buildField(
+                                context,
+                                'EMAIL',
+                                emailCtrl,
+                                keyboardType: TextInputType.emailAddress,
+                              ),
+                              _buildField(
+                                context,
+                                'BOOKING DATE',
+                                bookingDateCtrl,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                       24.h,
                       const Divider(),
                       24.h,
-                      LayoutBuilder(builder: (ctx, constraints) {
-                        final narrow = constraints.maxWidth < 600;
-                        return GridView.count(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisCount: narrow ? 1 : 4,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: narrow ? 5 : 2.5,
-                          children: [
-                            _buildInfoField(context, 'PACKAGE', packageCtrl.text),
-                            _buildCurrencyField(context, 'TOTAL AMOUNT',
-                                totalAmountCtrl, crmColors),
-                            _buildCurrencyField(context, 'ADVANCE PAID',
-                                advanceCtrl, crmColors,
-                                textColor: Colors.green),
-                            _buildCurrencyField(context, 'FORECAST BALANCE',
-                                balanceCtrl, crmColors,
-                                textColor: Colors.amber),
-                          ],
-                        );
-                      }),
+                      LayoutBuilder(
+                        builder: (ctx, constraints) {
+                          final narrow = constraints.maxWidth < 600;
+                          return GridView.count(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: narrow ? 1 : 5,
+                            mainAxisSpacing: 16,
+                            crossAxisSpacing: 16,
+                            childAspectRatio: narrow ? 5 : 2.7,
+                            children: [
+                              _buildInfoField(
+                                context,
+                                'PACKAGE',
+                                packageCtrl.text,
+                              ),
+                              _buildCurrencyField(
+                                context,
+                                'TOTAL AMOUNT',
+                                totalAmountCtrl,
+                                crmColors,
+                                readOnly: true,
+                              ),
+                              _buildCurrencyField(
+                                context,
+                                'ADVANCE PAID',
+                                advanceCtrl,
+                                crmColors,
+                                textColor: Colors.green,
+                              ),
+                              _buildDiscountField(
+                                context,
+                                crmColors,
+                                discountCtrl,
+                                discountType,
+                              ),
+                              _buildCurrencyField(
+                                context,
+                                'FORECAST BALANCE',
+                                balanceCtrl,
+                                crmColors,
+                                textColor: Colors.amber,
+                                readOnly: true,
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -216,12 +632,31 @@ class ManageBookingScreen extends HookConsumerWidget {
 
                 // ── Logistics + Scheduled Dates ──────────────────────────
                 if (isMobile) ...[
-                  _buildLogistics(context, crmColors, regionCtrl, mapUrlCtrl,
-                      travelModeCtrl, driverCtrl, travelTimeCtrl, pocCtrl,
-                      roomCtrl, startTimeCtrl, endTimeCtrl),
+                  _buildLogistics(
+                    context,
+                    crmColors,
+                    asyncRegions,
+                    availableRegions,
+                    selectedRegionId,
+                    availableDrivers,
+                    selectedDriverId,
+                    regionCtrl,
+                    mapUrlCtrl,
+                    travelModeCtrl,
+                    driverCtrl,
+                    travelTimeCtrl,
+                    travelDistanceCtrl,
+                    roomCtrl,
+                    startTimeCtrl,
+                    endTimeCtrl,
+                  ),
                   24.h,
-                  _buildScheduledDates(context, crmColors, booking,
-                      secondaryPhoneCtrl),
+                  _buildScheduledDates(
+                    context,
+                    crmColors,
+                    booking,
+                    secondaryPhoneCtrl,
+                  ),
                 ] else ...[
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,15 +664,33 @@ class ManageBookingScreen extends HookConsumerWidget {
                       Expanded(
                         flex: 2,
                         child: _buildLogistics(
-                            context, crmColors, regionCtrl, mapUrlCtrl,
-                            travelModeCtrl, driverCtrl, travelTimeCtrl, pocCtrl,
-                            roomCtrl, startTimeCtrl, endTimeCtrl),
+                          context,
+                          crmColors,
+                          asyncRegions,
+                          availableRegions,
+                          selectedRegionId,
+                          availableDrivers,
+                          selectedDriverId,
+                          regionCtrl,
+                          mapUrlCtrl,
+                          travelModeCtrl,
+                          driverCtrl,
+                          travelTimeCtrl,
+                          travelDistanceCtrl,
+                          roomCtrl,
+                          startTimeCtrl,
+                          endTimeCtrl,
+                        ),
                       ),
                       24.w,
                       Expanded(
                         flex: 1,
-                        child: _buildScheduledDates(context, crmColors, booking,
-                            secondaryPhoneCtrl),
+                        child: _buildScheduledDates(
+                          context,
+                          crmColors,
+                          booking,
+                          secondaryPhoneCtrl,
+                        ),
                       ),
                     ],
                   ),
@@ -246,8 +699,13 @@ class ManageBookingScreen extends HookConsumerWidget {
 
                 // ── Artist Assignment ─────────────────────────────────────
                 _buildArtistAssignment(
-                    context, crmColors, isTablet || isMobile,
-                    assignments, availableArtists),
+                  context,
+                  crmColors,
+                  isTablet || isMobile,
+                  assignments,
+                  availableStaff,
+                  asyncEmployees,
+                ),
                 24.h,
 
                 // ── Service Specifics ─────────────────────────────────────
@@ -263,10 +721,17 @@ class ManageBookingScreen extends HookConsumerWidget {
                             flex: isMobile ? 0 : 1,
                             child: Column(
                               children: [
-                                _buildField(context, 'OUTFIT DETAILS', outfitCtrl),
+                                _buildField(
+                                  context,
+                                  'OUTFIT DETAILS',
+                                  outfitCtrl,
+                                ),
                                 16.h,
-                                _buildField(context, 'CAPTURE STAFF (PHOTO/VIDEO)',
-                                    captureStaffCtrl),
+                                _buildField(
+                                  context,
+                                  'CAPTURE STAFF (PHOTO/VIDEO)',
+                                  captureStaffCtrl,
+                                ),
                                 16.h,
                                 Container(
                                   padding: const EdgeInsets.all(12),
@@ -287,9 +752,10 @@ class ManageBookingScreen extends HookConsumerWidget {
                                         child: Text(
                                           'CONTENT CREATION REQUIRED (SOCIAL MEDIA)',
                                           style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: crmColors.textPrimary),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: crmColors.textPrimary,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -303,11 +769,19 @@ class ManageBookingScreen extends HookConsumerWidget {
                             flex: isMobile ? 0 : 1,
                             child: Column(
                               children: [
-                                _buildTextArea(context, 'PACKAGE / ADD-ON DETAILS',
-                                    addonCtrl),
+                                _buildAddonEditor(
+                                  context,
+                                  crmColors,
+                                  addons,
+                                  availableAddonServices,
+                                  asyncAddonServices,
+                                ),
                                 16.h,
-                                _buildTextArea(context,
-                                    'STAFF INSTRUCTIONS / NEEDS', staffNeedsCtrl),
+                                _buildTextArea(
+                                  context,
+                                  'STAFF INSTRUCTIONS / NEEDS',
+                                  staffNeedsCtrl,
+                                ),
                               ],
                             ),
                           ),
@@ -316,8 +790,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                       24.h,
                       const Divider(),
                       24.h,
-                      _buildTextArea(context, 'CRM INTERNAL REMARKS', remarksCtrl,
-                          hint: 'Any private notes...'),
+                      _buildTextArea(
+                        context,
+                        'CRM INTERNAL REMARKS',
+                        remarksCtrl,
+                        hint: 'Any private notes...',
+                      ),
                     ],
                   ),
                 ),
@@ -329,13 +807,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                   decoration: BoxDecoration(
                     color: crmColors.surface,
                     border: Border.all(
-                        color: Colors.amber.withValues(alpha: 0.2)),
+                      color: Colors.amber.withValues(alpha: 0.2),
+                    ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: const [
                       BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 10,
-                          offset: Offset(0, 4))
+                        color: Colors.black12,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
                     ],
                   ),
                   child: Flex(
@@ -348,8 +828,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                             scale: 1.5,
                             child: Checkbox(
                               value: checklistCompleted.value,
-                              onChanged: (v) =>
-                                  checklistCompleted.value = v!,
+                              onChanged: (v) => checklistCompleted.value = v!,
                               activeColor: Colors.green,
                             ),
                           ),
@@ -357,46 +836,70 @@ class ManageBookingScreen extends HookConsumerWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('MARK CHECKLIST COMPLETE',
-                                  style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.2)),
+                              const Text(
+                                'MARK CHECKLIST COMPLETE',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
                               Text(
                                 'Verifies all logistics and staffing for export',
                                 style: TextStyle(
-                                    fontSize: 10,
-                                    color: crmColors.textSecondary,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1.1),
+                                  fontSize: 10,
+                                  color: crmColors.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.1,
+                                ),
                               ),
                             ],
-                          )
+                          ),
                         ],
                       ),
                       if (isMobile) 24.h,
                       SizedBox(
                         width: isMobile ? double.infinity : 250,
                         child: ElevatedButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text('Changes Saved!')));
-                            context.pop();
+                          onPressed: () async {
+                            final updatedBooking = buildCurrentBookingSnapshot();
+
+                            try {
+                              final savedBooking = await ref
+                                  .read(bookingProvider.notifier)
+                                  .updateBooking(updatedBooking);
+                              if (context.mounted) {
+                                await showPrintDialog(savedBooking);
+                              }
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Failed to save changes: $error',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.amber,
                             foregroundColor: Colors.black,
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 24),
+                            padding: const EdgeInsets.symmetric(vertical: 24),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: const Text('SAVE CHANGES',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2)),
+                          child: const Text(
+                            'SAVE CHANGES',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -411,16 +914,143 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
+  Widget _buildTodayWorksSection(
+    BuildContext context,
+    CrmTheme crmColors,
+    String artistName,
+    List<Booking> bookings,
+    ValueNotifier<bool> showAll,
+  ) {
+    final visibleBookings = showAll.value ? bookings : bookings.take(3).toList();
+
+    return _SectionCard(
+      title: "Today's Works",
+      subtitle: '$artistName has ${bookings.length} booking(s) today',
+      child: Column(
+        children: [
+          ...visibleBookings.map(
+            (booking) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: InkWell(
+                onTap: () => context.go('/booking/manage/${booking.id}'),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: crmColors.background,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: crmColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 72,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: crmColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _fmt(booking.serviceStart),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: crmColors.primary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      16.w,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              booking.customerName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            4.h,
+                            Text(
+                              booking.service,
+                              style: TextStyle(
+                                color: crmColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      12.w,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: booking.status.toLowerCase() == 'confirmed'
+                              ? Colors.green.withValues(alpha: 0.12)
+                              : Colors.amber.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          booking.status.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: booking.status.toLowerCase() == 'confirmed'
+                                ? Colors.green.shade700
+                                : Colors.amber.shade800,
+                          ),
+                        ),
+                      ),
+                      12.w,
+                      Icon(
+                        Icons.chevron_right,
+                        color: crmColors.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (bookings.length > 3)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => showAll.value = !showAll.value,
+                icon: Icon(
+                  showAll.value ? Icons.expand_less : Icons.expand_more,
+                ),
+                label: Text(showAll.value ? 'Show Less' : 'Show All Works'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ── Logistics section ────────────────────────────────────────────────────
   Widget _buildLogistics(
     BuildContext context,
     CrmTheme crmColors,
+    AsyncValue<List<ServiceRegion>> asyncRegions,
+    List<ServiceRegion> availableRegions,
+    ValueNotifier<String> selectedRegionId,
+    List<Employee> availableDrivers,
+    ValueNotifier<String> selectedDriverId,
     TextEditingController regionCtrl,
     TextEditingController mapUrlCtrl,
     TextEditingController travelModeCtrl,
     TextEditingController driverCtrl,
     TextEditingController travelTimeCtrl,
-    TextEditingController pocCtrl,
+    TextEditingController travelDistanceCtrl,
     TextEditingController roomCtrl,
     TextEditingController startCtrl,
     TextEditingController endCtrl,
@@ -429,49 +1059,83 @@ class ManageBookingScreen extends HookConsumerWidget {
       title: 'Logistics & Location',
       child: Column(
         children: [
-          LayoutBuilder(builder: (ctx, constraints) {
-            final narrow = constraints.maxWidth < 400;
-            return GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: narrow ? 1 : 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: narrow ? 4 : 3,
-              children: [
-                _buildField(ctx, 'LOCATION / REGION', regionCtrl),
-                _buildField(ctx, 'MAP URL / COORDINATES', mapUrlCtrl,
-                    hint: 'Google Maps Link'),
-                Row(children: [
-                  Expanded(
-                      child: _buildField(ctx, 'TRAVEL MODE', travelModeCtrl)),
-                  8.w,
-                  Expanded(child: _buildField(ctx, 'DRIVER POV', driverCtrl)),
-                ]),
-                Row(children: [
-                  Expanded(
-                      child: _buildField(ctx, 'TRAVEL TIME', travelTimeCtrl)),
-                  8.w,
-                  Expanded(child: _buildField(ctx, 'POC AT VENUE', pocCtrl)),
-                ]),
-              ],
-            );
-          }),
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final narrow = constraints.maxWidth < 400;
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: narrow ? 1 : 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: narrow ? 4 : 3,
+                children: [
+                  _buildRegionDropdown(
+                    ctx,
+                    crmColors,
+                    asyncRegions,
+                    availableRegions,
+                    selectedRegionId,
+                    regionCtrl,
+                  ),
+                  _buildField(
+                    ctx,
+                    'MAP URL / COORDINATES',
+                    mapUrlCtrl,
+                    hint: 'Google Maps Link',
+                  ),
+                  _buildField(ctx, 'TRAVEL MODE', travelModeCtrl),
+                  _buildDriverDropdown(
+                    ctx,
+                    crmColors,
+                    availableDrivers,
+                    selectedDriverId,
+                    driverCtrl,
+                  ),
+                  _buildField(ctx, 'TRAVEL TIME', travelTimeCtrl),
+                  _buildField(
+                    ctx,
+                    'TRAVEL DISTANCE (KM)',
+                    travelDistanceCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
           16.h,
-          _buildField(context, 'REQUIRED ROOM DETAIL', roomCtrl,
-              hint: 'e.g. NIL or Room 202'),
+          _buildField(
+            context,
+            'REQUIRED ROOM DETAIL',
+            roomCtrl,
+            hint: 'e.g. NIL or Room 202',
+          ),
           24.h,
           const Divider(),
           24.h,
-          Row(children: [
-            Expanded(
-                child: _buildField(context, 'SERVICE START TIME', startCtrl,
-                    textColor: Colors.amber)),
-            16.w,
-            Expanded(
-                child: _buildField(context, 'REQUIRED COMPLETION', endCtrl,
-                    textColor: Colors.amber)),
-          ]),
+          Row(
+            children: [
+              Expanded(
+                child: _buildField(
+                  context,
+                  'SERVICE START TIME',
+                  startCtrl,
+                  textColor: Colors.amber,
+                ),
+              ),
+              16.w,
+              Expanded(
+                child: _buildField(
+                  context,
+                  'REQUIRED COMPLETION',
+                  endCtrl,
+                  textColor: Colors.amber,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -490,19 +1154,21 @@ class ManageBookingScreen extends HookConsumerWidget {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.indigo.withValues(alpha: 0.05),
-        border:
-            Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.indigo.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('SCHEDULED DATES',
-              style: TextStyle(
-                  color: Colors.indigo.shade400,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.2)),
+          Text(
+            'SCHEDULED DATES',
+            style: TextStyle(
+              color: Colors.indigo.shade400,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              letterSpacing: 1.2,
+            ),
+          ),
           const Divider(color: Colors.indigoAccent),
           16.h,
           _dateBadge(context, dateStr, 'confirmed', crmColors),
@@ -513,32 +1179,38 @@ class ManageBookingScreen extends HookConsumerWidget {
           24.h,
           const Divider(color: Colors.indigoAccent),
           16.h,
-          _buildField(context, 'SECONDARY CONTACT', secondaryCtrl,
-              hint: 'Alternative Phone',
-              keyboardType: TextInputType.phone),
+          _buildField(
+            context,
+            'SECONDARY CONTACT',
+            secondaryCtrl,
+            hint: 'Alternative Phone',
+            keyboardType: TextInputType.phone,
+          ),
         ],
       ),
     );
   }
 
-  Widget _dateBadge(BuildContext context, String date, String status,
-      CrmTheme crmColors) {
+  Widget _dateBadge(
+    BuildContext context,
+    String date,
+    String status,
+    CrmTheme crmColors,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: crmColors.surface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: Colors.indigo.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.indigo.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(date, style: const TextStyle(fontWeight: FontWeight.bold)),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: Colors.indigo.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
@@ -546,11 +1218,12 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: Text(
               status.toUpperCase(),
               style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.indigo.shade400,
-                  fontWeight: FontWeight.bold),
+                fontSize: 10,
+                color: Colors.indigo.shade400,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -561,8 +1234,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     bool isNarrow,
-    ValueNotifier<List<Map<String, dynamic>>> assignments,
-    List<Map<String, dynamic>> availableArtists,
+    ValueNotifier<List<BookingAssignment>> assignments,
+    List<Employee> availableStaff,
+    AsyncValue<List<Employee>> asyncEmployees,
   ) {
     return _SectionCard(
       title: 'Artist Assignment Flow',
@@ -575,29 +1249,38 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('CURRENT ASSIGNED TEAM',
-                    style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: crmColors.textSecondary,
-                        letterSpacing: 1.2)),
+                Text(
+                  'CURRENT ASSIGNED TEAM',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: crmColors.textSecondary,
+                    letterSpacing: 1.2,
+                  ),
+                ),
                 16.h,
                 if (assignments.value.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                        border: Border.all(color: crmColors.border),
-                        borderRadius: BorderRadius.circular(12)),
+                      border: Border.all(color: crmColors.border),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Center(
-                        child: Text('NO ARTISTS ASSIGNED YET',
-                            style: TextStyle(
-                                color: crmColors.textSecondary,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12))),
+                      child: Text(
+                        'NO ARTISTS ASSIGNED YET',
+                        style: TextStyle(
+                          color: crmColors.textSecondary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                   )
                 else
                   ...assignments.value.map(
-                      (a) => _buildAssignmentBlock(a, crmColors, assignments)),
+                    (a) => _buildAssignmentBlock(a, crmColors, assignments),
+                  ),
               ],
             ),
           ),
@@ -614,34 +1297,46 @@ class ManageBookingScreen extends HookConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Container(width: 4, height: 16, color: Colors.indigo),
-                    8.w,
-                    Text('ASSIGN TEAM MEMBER',
+                  Row(
+                    children: [
+                      Container(width: 4, height: 16, color: Colors.indigo),
+                      8.w,
+                      Text(
+                        'ASSIGN TEAM MEMBER',
                         style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: crmColors.textSecondary,
-                            letterSpacing: 1.2)),
-                  ]),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
                   24.h,
                   _buildAssignForm(
-                      context, crmColors, availableArtists, assignments),
+                    context,
+                    crmColors,
+                    availableStaff,
+                    assignments,
+                    asyncEmployees,
+                  ),
                   24.h,
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                        color: crmColors.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: crmColors.border)),
+                      color: crmColors.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: crmColors.border),
+                    ),
                     child: Text(
                       'Note: A booking must have one Lead Artist before Assistants can be added.',
                       style: TextStyle(
-                          fontSize: 10,
-                          color: crmColors.textSecondary,
-                          fontStyle: FontStyle.italic),
+                        fontSize: 10,
+                        color: crmColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
@@ -652,10 +1347,11 @@ class ManageBookingScreen extends HookConsumerWidget {
   }
 
   Widget _buildAssignmentBlock(
-    Map<String, dynamic> lead,
+    BookingAssignment lead,
     CrmTheme crmColors,
-    ValueNotifier<List<Map<String, dynamic>>> assignments,
+    ValueNotifier<List<BookingAssignment>> assignments,
   ) {
+    final isLead = lead.roleType == 'lead';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -665,7 +1361,8 @@ class ManageBookingScreen extends HookConsumerWidget {
             color: crmColors.surface,
             borderRadius: BorderRadius.circular(8),
             border: const Border(
-                left: BorderSide(color: Colors.amber, width: 4)),
+              left: BorderSide(color: Colors.amber, width: 4),
+            ),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -673,45 +1370,60 @@ class ManageBookingScreen extends HookConsumerWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Text(lead['artist_name'] as String,
-                        style:
-                            const TextStyle(fontWeight: FontWeight.bold)),
-                    8.w,
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 2),
-                      decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4)),
-                      child: const Text('LEAD',
+                  Row(
+                    children: [
+                      Text(
+                        lead.artistName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      8.w,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (isLead ? Colors.amber : Colors.indigo)
+                              .withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isLead ? 'LEAD' : 'ASSISTANT',
                           style: TextStyle(
-                              fontSize: 9,
-                              color: Colors.amber,
-                              fontWeight: FontWeight.bold)),
-                    )
-                  ]),
+                            fontSize: 9,
+                            color: isLead ? Colors.amber : Colors.indigo,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   4.h,
                   Text(
-                      '${lead["role"]} • ${lead["type"]}',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: crmColors.textSecondary,
-                          fontWeight: FontWeight.bold)),
+                    '${lead.role} • ${lead.type}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: crmColors.textSecondary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
               ),
               TextButton(
                 onPressed: () {
                   assignments.value = assignments.value
-                      .where((a) => a['id'] != lead['id'])
+                      .where((a) => a.employeeId != lead.employeeId)
                       .toList();
                 },
-                child: const Text('REMOVE',
-                    style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-              )
+                child: const Text(
+                  'REMOVE',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -723,14 +1435,34 @@ class ManageBookingScreen extends HookConsumerWidget {
   Widget _buildAssignForm(
     BuildContext context,
     CrmTheme crmColors,
-    List<Map<String, dynamic>> availableArtists,
-    ValueNotifier<List<Map<String, dynamic>>> assignments,
+    List<Employee> availableStaff,
+    ValueNotifier<List<BookingAssignment>> assignments,
+    AsyncValue<List<Employee>> asyncEmployees,
   ) {
     final selectedArtistId = ValueNotifier<String?>(null);
     final roleCtrl = TextEditingController();
-    final hasLead =
-        assignments.value.any((a) => a['role_type'] == 'lead');
+    final hasLead = assignments.value.any((a) => a.roleType == 'lead');
     final isLead = !hasLead;
+    final selectableStaff = availableStaff
+        .where(
+          (employee) =>
+              employee.artistRole == (isLead ? 'artist' : 'assistant'),
+        )
+        .where(
+          (employee) => !assignments.value.any(
+            (assignment) => assignment.employeeId == employee.id,
+          ),
+        )
+        .fold<List<Employee>>([], (items, employee) {
+          final alreadyAdded = items.any((item) => item.id == employee.id);
+          if (!alreadyAdded) {
+            items.add(employee);
+          }
+          return items;
+        });
+    final assignDropdownKey = ValueKey(
+      'assign-${isLead ? 'lead' : 'assistant'}-${selectableStaff.map((employee) => employee.id).join(',')}',
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -751,30 +1483,64 @@ class ManageBookingScreen extends HookConsumerWidget {
           Text(
             isLead ? 'ASSIGN LEAD ARTIST' : 'ADD ASSISTANT',
             style: TextStyle(
-                fontSize: 9,
-                color: isLead ? Colors.amber : Colors.indigoAccent,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2),
+              fontSize: 9,
+              color: isLead ? Colors.amber : Colors.indigoAccent,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
           ),
           12.h,
-          DropdownButtonFormField<String>(
-            items: availableArtists
-                .map((a) => DropdownMenuItem(
-                    value: a['id'] as String,
-                    child:
-                        Text('${a["name"]} (${a["type"]})')))
-                .toList(),
-            onChanged: (v) => selectedArtistId.value = v,
-            decoration: _inputDeco(
-                'Select artist…', crmColors).copyWith(isDense: true),
-          ),
+          if (asyncEmployees.isLoading)
+            const LinearProgressIndicator(minHeight: 2)
+          else if (asyncEmployees.hasError)
+            Text(
+              'Unable to load staff right now.',
+              style: TextStyle(color: Colors.red.shade400),
+            )
+          else if (selectableStaff.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: crmColors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: crmColors.border),
+              ),
+              child: Text(
+                isLead
+                    ? 'No active artists available to assign as lead.'
+                    : 'No active assistants available to add.',
+                style: TextStyle(color: crmColors.textSecondary, fontSize: 12),
+              ),
+            )
+          else
+            DropdownButtonFormField<String>(
+              key: assignDropdownKey,
+              initialValue: null,
+              items: selectableStaff
+                  .map(
+                    (employee) => DropdownMenuItem(
+                      value: employee.id,
+                      child: Text(
+                        '${employee.name} (${employee.type}${employee.specialization.isNotEmpty ? ' • ${employee.specialization}' : ''})',
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) => selectedArtistId.value = v,
+              decoration: _inputDeco(
+                isLead ? 'Select lead artist…' : 'Select assistant…',
+                crmColors,
+              ).copyWith(isDense: true),
+            ),
           if (!isLead) ...[
             12.h,
             TextField(
               controller: roleCtrl,
-              decoration: _inputDeco('Role, e.g. Hair / Draping',
-                      crmColors)
-                  .copyWith(isDense: true),
+              decoration: _inputDeco(
+                'Role, e.g. Hair / Draping',
+                crmColors,
+              ).copyWith(isDense: true),
             ),
           ],
           12.h,
@@ -783,28 +1549,28 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: ElevatedButton(
               onPressed: () {
                 if (selectedArtistId.value == null) return;
-                final artist = availableArtists.firstWhere(
-                    (a) => a['id'] == selectedArtistId.value);
+                final artist = selectableStaff.firstWhere(
+                  (employee) => employee.id == selectedArtistId.value,
+                );
                 assignments.value = [
                   ...assignments.value,
-                  {
-                    'id': artist['id'],
-                    'artist_name': artist['name'],
-                    'role': isLead
+                  BookingAssignment(
+                    employeeId: artist.id,
+                    artistName: artist.name,
+                    role: isLead
                         ? 'Lead Artist'
-                        : (roleCtrl.text.isEmpty
-                            ? 'Assistant'
-                            : roleCtrl.text),
-                    'type': artist['type'],
-                    'role_type': isLead ? 'lead' : 'assistant',
-                  }
+                        : (roleCtrl.text.trim().isEmpty
+                              ? 'Assistant'
+                              : roleCtrl.text.trim()),
+                    phone: artist.phone,
+                    type: artist.type,
+                    roleType: isLead ? 'lead' : 'assistant',
+                  ),
                 ];
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    isLead ? Colors.amber : Colors.indigo,
-                foregroundColor:
-                    isLead ? Colors.black : Colors.white,
+                backgroundColor: isLead ? Colors.amber : Colors.indigo,
+                foregroundColor: isLead ? Colors.black : Colors.white,
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
               ),
               child: Text(isLead ? 'ASSIGN LEAD' : 'ADD ASSISTANT'),
@@ -828,20 +1594,23 @@ class ManageBookingScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
         4.h,
         TextFormField(
           controller: ctrl,
           keyboardType: keyboardType,
           style: TextStyle(
-              color: textColor,
-              fontWeight:
-                  textColor != null ? FontWeight.bold : FontWeight.normal),
+            color: textColor,
+            fontWeight: textColor != null ? FontWeight.bold : FontWeight.normal,
+          ),
           decoration: _inputDeco(hint ?? '', crmColors),
         ),
       ],
@@ -858,17 +1627,265 @@ class ManageBookingScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
         4.h,
         TextFormField(
           controller: ctrl,
           maxLines: 2,
           decoration: _inputDeco(hint ?? '', crmColors),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildAddonEditor(
+    BuildContext context,
+    CrmTheme crmColors,
+    ValueNotifier<List<BookingAddon>> addons,
+    List<AddonService> availableAddonServices,
+    AsyncValue<List<AddonService>> asyncAddonServices,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'PACKAGE / ADD-ON DETAILS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: crmColors.textSecondary,
+                letterSpacing: 1.2,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                addons.value = [
+                  ...addons.value,
+                  const BookingAddon(
+                    addonServiceId: '',
+                    service: '',
+                    amount: 0,
+                    persons: 1,
+                  ),
+                ];
+              },
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Add Row'),
+            ),
+          ],
+        ),
+        8.h,
+        if (asyncAddonServices.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (asyncAddonServices.hasError)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Could not load add-on services.',
+              style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+            ),
+          ),
+        if (addons.value.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: crmColors.border),
+            ),
+            child: Text(
+              'No add-ons added yet. Add service, amount, and number of persons.',
+              style: TextStyle(color: crmColors.textSecondary, fontSize: 12),
+            ),
+          )
+        else
+          ...List.generate(
+            addons.value.length,
+            (index) => _buildAddonRow(
+              context,
+              crmColors,
+              index,
+              availableAddonServices,
+              addons.value[index],
+              onChanged: (updatedAddon) {
+                final next = [...addons.value];
+                next[index] = updatedAddon;
+                addons.value = next;
+              },
+              onRemove: () {
+                final next = [...addons.value]..removeAt(index);
+                addons.value = next;
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  static Widget _buildAddonRow(
+    BuildContext context,
+    CrmTheme crmColors,
+    int index,
+    List<AddonService> availableAddonServices,
+    BookingAddon addon, {
+    required ValueChanged<BookingAddon> onChanged,
+    required VoidCallback onRemove,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: crmColors.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ADD-ON ${index + 1}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: crmColors.textSecondary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              TextButton(
+                onPressed: onRemove,
+                child: const Text(
+                  'REMOVE',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          8.h,
+          Text(
+            'SERVICE',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: crmColors.textSecondary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          4.h,
+          DropdownButtonFormField<String>(
+            initialValue:
+                availableAddonServices.any(
+                  (service) => service.id == addon.addonServiceId,
+                )
+                ? addon.addonServiceId
+                : null,
+            items: availableAddonServices
+                .map(
+                  (service) => DropdownMenuItem(
+                    value: service.id,
+                    child: Text(
+                      '${service.name} - ₹ ${service.price.toStringAsFixed(0)}',
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              final selected = availableAddonServices.firstWhere(
+                (service) => service.id == value,
+              );
+              onChanged(
+                addon.copyWith(
+                  addonServiceId: selected.id,
+                  service: selected.name,
+                  amount: selected.price,
+                ),
+              );
+            },
+            decoration: _inputDeco('Select add-on service', crmColors),
+          ),
+          12.h,
+          Row(
+            children: [
+              Expanded(
+                child: _buildAddonField(
+                  context,
+                  'PRICE',
+                  addon.amount == 0 ? '' : addon.amount.toStringAsFixed(0),
+                  (value) => onChanged(
+                    addon.copyWith(amount: double.tryParse(value) ?? 0),
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                ),
+              ),
+              12.w,
+              Expanded(
+                child: _buildAddonField(
+                  context,
+                  'NUMBER OF PERSONS',
+                  addon.persons.toString(),
+                  (value) => onChanged(
+                    addon.copyWith(persons: int.tryParse(value) ?? 1),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _buildAddonField(
+    BuildContext context,
+    String label,
+    String initialValue,
+    ValueChanged<String> onChanged, {
+    TextInputType? keyboardType,
+  }) {
+    final crmColors = context.crmColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        TextFormField(
+          key: ValueKey('$label-$initialValue'),
+          initialValue: initialValue,
+          keyboardType: keyboardType,
+          onChanged: onChanged,
+          decoration: _inputDeco('', crmColors),
         ),
       ],
     );
@@ -885,20 +1902,25 @@ class ManageBookingScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
         4.h,
         DropdownButtonFormField<String>(
           initialValue: value,
           items: items
-              .map((e) => DropdownMenuItem(
+              .map(
+                (e) => DropdownMenuItem(
                   value: e,
-                  child: Text(
-                      e[0].toUpperCase() + e.substring(1))))
+                  child: Text(e[0].toUpperCase() + e.substring(1)),
+                ),
+              )
               .toList(),
           onChanged: onChanged,
           decoration: _inputDeco('', crmColors),
@@ -908,30 +1930,36 @@ class ManageBookingScreen extends HookConsumerWidget {
   }
 
   static Widget _buildInfoField(
-      BuildContext context, String label, String value) {
+    BuildContext context,
+    String label,
+    String value,
+  ) {
     final crmColors = context.crmColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
         4.h,
         Container(
           width: double.infinity,
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: crmColors.surface.withValues(alpha: 0.5),
             border: Border.all(color: crmColors.border),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, fontSize: 13)),
+          child: Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
         ),
       ],
     );
@@ -943,33 +1971,222 @@ class ManageBookingScreen extends HookConsumerWidget {
     TextEditingController ctrl,
     CrmTheme crmColors, {
     Color? textColor,
+    bool readOnly = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
         4.h,
         TextFormField(
           controller: ctrl,
-          keyboardType:
-              const TextInputType.numberWithOptions(decimal: true),
+          readOnly: readOnly,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
           style: TextStyle(
-              color: textColor ?? crmColors.textPrimary,
-              fontWeight: FontWeight.bold),
+            color: textColor ?? crmColors.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
           decoration: _inputDeco('', crmColors).copyWith(
             prefixIcon: const Padding(
-              padding:
-                  EdgeInsets.only(left: 12.0, top: 12, bottom: 12),
-              child: Text('₹ ',
-                  style: TextStyle(
-                      color: Colors.grey, fontWeight: FontWeight.bold)),
+              padding: EdgeInsets.only(left: 12.0, top: 12, bottom: 12),
+              child: Text(
+                '₹ ',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildRegionDropdown(
+    BuildContext context,
+    CrmTheme crmColors,
+    AsyncValue<List<ServiceRegion>> asyncRegions,
+    List<ServiceRegion> availableRegions,
+    ValueNotifier<String> selectedRegionId,
+    TextEditingController regionCtrl,
+  ) {
+    final currentValue =
+        availableRegions.any((region) => region.id == selectedRegionId.value)
+        ? selectedRegionId.value
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'LOCATION / REGION',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        if (asyncRegions.isLoading)
+          const LinearProgressIndicator(minHeight: 2)
+        else if (asyncRegions.hasError)
+          TextFormField(
+            controller: regionCtrl,
+            decoration: _inputDeco('Region', crmColors),
+          )
+        else
+          DropdownButtonFormField<String>(
+            key: ValueKey(
+              'booking-region-${currentValue ?? 'none'}-${availableRegions.map((region) => region.id).join(',')}',
+            ),
+            initialValue: currentValue,
+            items: availableRegions
+                .map(
+                  (region) => DropdownMenuItem(
+                    value: region.id,
+                    child: Text(region.name),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              selectedRegionId.value = value ?? '';
+              final selected = availableRegions
+                  .cast<ServiceRegion?>()
+                  .firstWhere(
+                    (region) => region?.id == value,
+                    orElse: () => null,
+                  );
+              regionCtrl.text = selected?.name ?? '';
+            },
+            decoration: _inputDeco(
+              regionCtrl.text.isEmpty ? 'Select region' : regionCtrl.text,
+              crmColors,
+            ),
+          ),
+      ],
+    );
+  }
+
+  static Widget _buildDriverDropdown(
+    BuildContext context,
+    CrmTheme crmColors,
+    List<Employee> availableDrivers,
+    ValueNotifier<String> selectedDriverId,
+    TextEditingController driverCtrl,
+  ) {
+    final currentValue =
+        availableDrivers.any((driver) => driver.id == selectedDriverId.value)
+        ? selectedDriverId.value
+        : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'DRIVER',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        DropdownButtonFormField<String>(
+          key: ValueKey(
+            'booking-driver-${currentValue ?? 'none'}-${availableDrivers.map((driver) => driver.id).join(',')}',
+          ),
+          initialValue: currentValue,
+          items: availableDrivers
+              .map(
+                (driver) => DropdownMenuItem(
+                  value: driver.id,
+                  child: Text(
+                    driver.phone.isEmpty
+                        ? driver.name
+                        : '${driver.name} (${driver.phone})',
+                  ),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            selectedDriverId.value = value ?? '';
+            final selected = availableDrivers.cast<Employee?>().firstWhere(
+              (driver) => driver?.id == value,
+              orElse: () => null,
+            );
+            driverCtrl.text = selected?.name ?? '';
+          },
+          decoration: _inputDeco(
+            driverCtrl.text.isEmpty ? 'Select driver' : driverCtrl.text,
+            crmColors,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildDiscountField(
+    BuildContext context,
+    CrmTheme crmColors,
+    TextEditingController ctrl,
+    ValueNotifier<String> discountType,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'DISCOUNT',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        Row(
+          children: [
+            SizedBox(
+              width: 96,
+              child: DropdownButtonFormField<String>(
+                initialValue: discountType.value,
+                items: const [
+                  DropdownMenuItem(value: 'inr', child: Text('INR')),
+                  DropdownMenuItem(value: 'percent', child: Text('%')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    discountType.value = value;
+                  }
+                },
+                decoration: _inputDeco('', crmColors),
+              ),
+            ),
+            12.w,
+            Expanded(
+              child: TextFormField(
+                controller: ctrl,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: _inputDeco('', crmColors).copyWith(
+                  prefixText: discountType.value == 'inr' ? '₹ ' : null,
+                  suffixText: discountType.value == 'percent' ? '%' : null,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -978,21 +2195,21 @@ class ManageBookingScreen extends HookConsumerWidget {
   static InputDecoration _inputDeco(String hint, CrmTheme crmColors) {
     return InputDecoration(
       hintText: hint,
-      hintStyle:
-          TextStyle(color: crmColors.textSecondary, fontSize: 12),
+      hintStyle: TextStyle(color: crmColors.textSecondary, fontSize: 12),
       isDense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: crmColors.border)),
+        borderRadius: BorderRadius.circular(4),
+        borderSide: BorderSide(color: crmColors.border),
+      ),
       enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: crmColors.border)),
+        borderRadius: BorderRadius.circular(4),
+        borderSide: BorderSide(color: crmColors.border),
+      ),
       focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide:
-              const BorderSide(color: Colors.amber, width: 1.5)),
+        borderRadius: BorderRadius.circular(4),
+        borderSide: const BorderSide(color: Colors.amber, width: 1.5),
+      ),
       filled: true,
       fillColor: crmColors.surface,
     );
@@ -1003,6 +2220,56 @@ class ManageBookingScreen extends HookConsumerWidget {
     final m = dt.minute.toString().padLeft(2, '0');
     final ampm = dt.hour < 12 ? 'AM' : 'PM';
     return '$h:$m $ampm';
+  }
+
+  static DateTime _mergeDateAndTime(
+    DateTime date,
+    String timeText,
+    DateTime fallback,
+  ) {
+    final parsed = _parseTime(timeText);
+    if (parsed == null) return fallback;
+
+    return DateTime(
+      date.year,
+      date.month,
+      date.day,
+      parsed.hour,
+      parsed.minute,
+    );
+  }
+
+  static TimeOfDay? _parseTime(String value) {
+    final match = RegExp(
+      r'^(\d{1,2}):(\d{2})\s*([AP]M)$',
+      caseSensitive: false,
+    ).firstMatch(value.trim());
+    if (match == null) return null;
+
+    final rawHour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    final meridiem = (match.group(3) ?? '').toUpperCase();
+    if (rawHour == null || minute == null) return null;
+
+    var hour = rawHour % 12;
+    if (meridiem == 'PM') {
+      hour += 12;
+    }
+
+    return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  static List<BookingAddon> _normalizedAddons(List<BookingAddon> addons) {
+    return addons
+        .where((addon) => addon.service.trim().isNotEmpty)
+        .map(
+          (addon) => addon.copyWith(
+            service: addon.service.trim(),
+            amount: addon.amount < 0 ? 0 : addon.amount,
+            persons: addon.persons < 1 ? 1 : addon.persons,
+          ),
+        )
+        .toList();
   }
 }
 
@@ -1033,7 +2300,10 @@ class _SectionCard extends StatelessWidget {
         border: Border.all(color: crmColors.border),
         boxShadow: const [
           BoxShadow(
-              color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -1050,26 +2320,28 @@ class _SectionCard extends StatelessWidget {
                     Text(
                       title.toUpperCase(),
                       style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: titleColor ?? crmColors.textPrimary,
-                          letterSpacing: 1.2),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor ?? crmColors.textPrimary,
+                        letterSpacing: 1.2,
+                      ),
                     ),
                     if (subtitle != null) ...[
                       4.h,
                       Text(
                         subtitle!.toUpperCase(),
                         style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: crmColors.textSecondary,
-                            letterSpacing: 1.1),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                          letterSpacing: 1.1,
+                        ),
                       ),
-                    ]
+                    ],
                   ],
                 ),
               ),
-              if (action != null) action!,
+              action ?? const SizedBox.shrink(),
             ],
           ),
           const SizedBox(height: 24),

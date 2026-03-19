@@ -1,63 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../services/package_service.dart';
 
-class ServicesManagementScreen extends StatelessWidget {
+class ServicesManagementScreen extends ConsumerWidget {
   const ServicesManagementScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-
-    // Placeholder data
-    final services = [
-      {
-        'category': 'Hair Styling',
-        'title': 'Balayage & Cut',
-        'duration': '120 min',
-        'price': '\$150.00',
-        'image': 'https://picsum.photos/seed/salon/400/250',
-      },
-      {
-        'category': 'Makeup & Bridal',
-        'title': 'Bridal Trial Makeup',
-        'duration': '90 min',
-        'price': '\$90.00',
-        'image': 'https://picsum.photos/seed/makeup/400/250',
-      },
-      {
-        'category': 'Spa & Massage',
-        'title': 'Deep Tissue Massage',
-        'duration': '60 min',
-        'price': '\$110.00',
-        'image': 'https://picsum.photos/seed/massage/400/250',
-      },
-      {
-        'category': 'Spa & Massage',
-        'title': 'Hydrating Facial',
-        'duration': '45 min',
-        'price': '\$85.00',
-        'image': 'https://picsum.photos/seed/facial/400/250',
-      },
-      {
-        'category': 'Makeup & Bridal',
-        'title': 'Evening Glam Makeup',
-        'duration': '60 min',
-        'price': '\$75.00',
-        'image': 'https://picsum.photos/seed/glam/400/250',
-      },
-      {
-        'category': 'Hair Styling',
-        'title': "Men's Executive Grooming",
-        'duration': '45 min',
-        'price': '\$65.00',
-        'image': 'https://picsum.photos/seed/grooming/400/250',
-      },
-    ];
+    final asyncPackages = ref.watch(packagesProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -70,35 +27,43 @@ class ServicesManagementScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Services Management',
+                    'Package Management',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    'Manage your salon and beauty services, pricing, and durations.',
+                    'Manage packages, base pricing, advances, and region overrides.',
                     style: TextStyle(color: crmColors.textSecondary),
                   ),
                 ],
               ),
             ),
-            if (!isMobile) ...[
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.filter_list, size: 18),
-                label: const Text('Filter'),
+            if (!isMobile)
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => context.go('/services/addons'),
+                    icon: const Icon(
+                      Icons.playlist_add_circle_outlined,
+                      size: 18,
+                    ),
+                    label: const Text('Add-ons'),
+                  ),
+                  16.w,
+                  OutlinedButton.icon(
+                    onPressed: () => context.go('/services/regions'),
+                    icon: const Icon(Icons.location_on_outlined, size: 18),
+                    label: const Text('Regions'),
+                  ),
+                  16.w,
+                  ElevatedButton.icon(
+                    onPressed: () => context.go('/services/add'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add Package'),
+                  ),
+                ],
               ),
-              16.w,
-              ElevatedButton.icon(
-                onPressed: () => context.go('/services/add'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Service'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: crmColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
           ],
         ),
         if (isMobile) ...[
@@ -107,9 +72,20 @@ class ServicesManagementScreen extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.filter_list, size: 18),
-                  label: const Text('Filter'),
+                  onPressed: () => context.go('/services/addons'),
+                  icon: const Icon(
+                    Icons.playlist_add_circle_outlined,
+                    size: 18,
+                  ),
+                  label: const Text('Add-ons'),
+                ),
+              ),
+              16.w,
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => context.go('/services/regions'),
+                  icon: const Icon(Icons.location_on_outlined, size: 18),
+                  label: const Text('Regions'),
                 ),
               ),
               16.w,
@@ -117,11 +93,7 @@ class ServicesManagementScreen extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () => context.go('/services/add'),
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Service'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: crmColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
+                  label: const Text('Add Package'),
                 ),
               ),
             ],
@@ -129,133 +101,198 @@ class ServicesManagementScreen extends StatelessWidget {
         ],
         24.h,
         Expanded(
-          child: GridView.builder(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isMobile ? 1 : 3,
-              crossAxisSpacing: 24,
-              mainAxisSpacing: 24,
-              childAspectRatio: 1.1,
+          child: asyncPackages.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (error, stack) => Center(
+              child: Text(
+                'Failed to load packages: $error',
+                style: TextStyle(color: crmColors.textSecondary),
+              ),
             ),
-            itemCount: services.length,
-            itemBuilder: (context, index) {
-              final service = services[index];
-              return _buildServiceCard(context, service);
+            data: (packages) {
+              if (packages.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 48,
+                        color: crmColors.border,
+                      ),
+                      16.h,
+                      Text(
+                        'No packages yet.',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      8.h,
+                      Text(
+                        'Create your first package with regional pricing overrides.',
+                        style: TextStyle(color: crmColors.textSecondary),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                itemCount: packages.length,
+                separatorBuilder: (context, index) => 16.h,
+                itemBuilder: (context, index) {
+                  final package = packages[index];
+                  return Card(
+                    child: Padding(
+                      padding: 20.p,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      package.name,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                    ),
+                                    6.h,
+                                    Text(
+                                      package.description.isEmpty
+                                          ? 'No description added.'
+                                          : package.description,
+                                      style: TextStyle(
+                                        color: crmColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  await ref
+                                      .read(packageServiceProvider)
+                                      .deletePackage(package.id);
+                                  ref.invalidate(packagesProvider);
+                                },
+                                icon: const Icon(
+                                  Icons.delete_outline,
+                                  size: 16,
+                                ),
+                                label: const Text('Delete'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: crmColors.destructive,
+                                ),
+                              ),
+                            ],
+                          ),
+                          16.h,
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              _InfoChip(
+                                label: 'Base Price',
+                                value: '₹ ${package.price.toStringAsFixed(0)}',
+                              ),
+                              _InfoChip(
+                                label: 'Advance',
+                                value:
+                                    '₹ ${package.advanceAmount.toStringAsFixed(0)} / day',
+                              ),
+                              _InfoChip(
+                                label: 'Region Overrides',
+                                value: '${package.regionPrices.length}',
+                              ),
+                            ],
+                          ),
+                          if (package.regionPrices.isNotEmpty) ...[
+                            16.h,
+                            Text(
+                              'Regional Pricing',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            12.h,
+                            ...package.regionPrices.map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      item.regionName.isEmpty
+                                          ? 'Region ${item.regionId}'
+                                          : item.regionName,
+                                    ),
+                                    Text(
+                                      '₹ ${item.price.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                        color: crmColors.success,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              );
             },
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _buildServiceCard(BuildContext context, Map<String, String> service) {
+class _InfoChip extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _InfoChip({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    final theme = Theme.of(context);
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: crmColors.secondary,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 3,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(service['image']!, fit: BoxFit.cover),
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      service['category']!,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: crmColors.textSecondary,
+              letterSpacing: 0.8,
             ),
           ),
-          Expanded(
-            flex: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    service['title']!,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.schedule,
-                            size: 14,
-                            color: crmColors.textSecondary,
-                          ),
-                          4.w,
-                          Text(
-                            service['duration']!,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: crmColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Text(
-                        service['price']!,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 1),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Edit'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: crmColors.textPrimary,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {},
-                        icon: const Icon(Icons.delete_outline, size: 16),
-                        label: const Text('Delete'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.red.shade300,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+          4.h,
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: crmColors.textPrimary,
             ),
           ),
         ],
