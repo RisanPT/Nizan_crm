@@ -2,6 +2,8 @@ class BookingAssignment {
   final String employeeId;
   final String artistName;
   final String role;
+  final String specialization;
+  final List<String> works;
   final String phone;
   final String type;
   final String roleType;
@@ -10,16 +12,33 @@ class BookingAssignment {
     required this.employeeId,
     required this.artistName,
     required this.role,
+    this.specialization = '',
+    this.works = const [],
     this.phone = '',
     required this.type,
     required this.roleType,
   });
 
   factory BookingAssignment.fromJson(Map<String, dynamic> json) {
+    final normalizedWorks = ((json['works'] as List?) ?? const [])
+        .map((item) => item?.toString().trim() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList();
+    final specialization = json['specialization'] as String? ?? '';
+    final role = json['role'] as String? ?? '';
     return BookingAssignment(
       employeeId: json['employeeId'] as String? ?? '',
       artistName: json['artistName'] as String? ?? '',
-      role: json['role'] as String? ?? '',
+      role: role,
+      specialization: specialization,
+      works: normalizedWorks.isNotEmpty
+          ? normalizedWorks
+          : [
+              if (specialization.trim().isNotEmpty)
+                specialization.trim()
+              else if (role.trim().isNotEmpty)
+                role.trim(),
+            ],
       phone: json['phone'] as String? ?? '',
       type: json['type'] as String? ?? '',
       roleType: json['roleType'] as String? ?? 'assistant',
@@ -31,6 +50,8 @@ class BookingAssignment {
       'employeeId': employeeId,
       'artistName': artistName,
       'role': role,
+      'specialization': specialization,
+      'works': works,
       'phone': phone,
       'type': type,
       'roleType': roleType,
@@ -41,6 +62,8 @@ class BookingAssignment {
     String? employeeId,
     String? artistName,
     String? role,
+    String? specialization,
+    List<String>? works,
     String? phone,
     String? type,
     String? roleType,
@@ -49,6 +72,8 @@ class BookingAssignment {
       employeeId: employeeId ?? this.employeeId,
       artistName: artistName ?? this.artistName,
       role: role ?? this.role,
+      specialization: specialization ?? this.specialization,
+      works: works ?? this.works,
       phone: phone ?? this.phone,
       type: type ?? this.type,
       roleType: roleType ?? this.roleType,

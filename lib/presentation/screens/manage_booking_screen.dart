@@ -251,16 +251,20 @@ class ManageBookingScreen extends HookConsumerWidget {
     }, [booking?.id]);
 
     String activeArtistName() {
-      final primaryArtist = assignments.value.cast<BookingAssignment?>().firstWhere(
+      final primaryArtist = assignments.value
+          .cast<BookingAssignment?>()
+          .firstWhere(
             (assignment) =>
                 assignment != null &&
                 assignment.artistName.trim().isNotEmpty &&
-                assignment.roleType.toLowerCase() == 'artist',
+                assignment.roleType.toLowerCase() == 'lead',
             orElse: () => null,
           );
       if (primaryArtist != null) return primaryArtist.artistName.trim();
 
-      final fallbackArtist = assignments.value.cast<BookingAssignment?>().firstWhere(
+      final fallbackArtist = assignments.value
+          .cast<BookingAssignment?>()
+          .firstWhere(
             (assignment) =>
                 assignment != null && assignment.artistName.trim().isNotEmpty,
             orElse: () => null,
@@ -269,6 +273,16 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     final currentArtistName = activeArtistName();
+    final currentLeadAssignment = assignments.value
+        .cast<BookingAssignment?>()
+        .firstWhere(
+          (assignment) =>
+              assignment != null &&
+              assignment.employeeId.trim().isNotEmpty &&
+              assignment.roleType.toLowerCase() == 'lead',
+          orElse: () => null,
+        );
+    final currentArtistId = currentLeadAssignment?.employeeId.trim() ?? '';
     final currentBookingDate =
         DateTime.tryParse(bookingDateCtrl.text.trim()) ??
         booking?.bookingDate ??
@@ -281,12 +295,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                   item.bookingDate.year == currentBookingDate.year &&
                   item.bookingDate.month == currentBookingDate.month &&
                   item.bookingDate.day == currentBookingDate.day;
-              final activeStatus = item.status.toLowerCase() != 'rejected' &&
+              final activeStatus =
+                  item.status.toLowerCase() != 'rejected' &&
                   item.status.toLowerCase() != 'cancelled';
               final containsArtist = item.assignedStaff.any(
                 (assignment) =>
+                    (currentArtistId.isNotEmpty &&
+                        assignment.employeeId.trim() == currentArtistId) ||
                     assignment.artistName.trim().toLowerCase() ==
-                    currentArtistName.toLowerCase(),
+                        currentArtistName.toLowerCase(),
               );
               return sameDay && activeStatus && containsArtist;
             }).toList();
@@ -383,18 +400,14 @@ class ManageBookingScreen extends HookConsumerWidget {
         );
       }
 
-      if (context.mounted) {
-        context.pop();
-      }
-    }
+  }
 
     Booking buildCurrentBookingSnapshot() {
       final parsedBookingDate =
-          DateTime.tryParse(bookingDateCtrl.text.trim()) ??
-          booking?.bookingDate ??
-          DateTime.now();
+          DateTime.tryParse(bookingDateCtrl.text.trim()) ?? booking.bookingDate;
       final normalizedAddons = _normalizedAddons(addons.value);
-      final subtotal = basePackageAmount +
+      final subtotal =
+          basePackageAmount +
           normalizedAddons.fold<double>(
             0,
             (sum, addon) => sum + (addon.amount * addon.persons),
@@ -862,7 +875,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                         width: isMobile ? double.infinity : 250,
                         child: ElevatedButton(
                           onPressed: () async {
-                            final updatedBooking = buildCurrentBookingSnapshot();
+                            final updatedBooking =
+                                buildCurrentBookingSnapshot();
 
                             try {
                               final savedBooking = await ref
@@ -870,6 +884,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                                   .updateBooking(updatedBooking);
                               if (context.mounted) {
                                 await showPrintDialog(savedBooking);
+                                if (context.mounted) {
+                                  if (context.canPop()) {
+                                    context.pop();
+                                  } else {
+                                    context.go('/calendar');
+                                  }
+                                }
                               }
                             } catch (error) {
                               if (context.mounted) {
@@ -921,7 +942,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<Booking> bookings,
     ValueNotifier<bool> showAll,
   ) {
-    final visibleBookings = showAll.value ? bookings : bookings.take(3).toList();
+    final visibleBookings = showAll.value
+        ? bookings
+        : bookings.take(3).toList();
 
     return _SectionCard(
       title: "Today's Works",
@@ -1010,10 +1033,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                         ),
                       ),
                       12.w,
-                      Icon(
-                        Icons.chevron_right,
-                        color: crmColors.textSecondary,
-                      ),
+                      Icon(Icons.chevron_right, color: crmColors.textSecondary),
                     ],
                   ),
                 ),
@@ -1400,7 +1420,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ),
                   4.h,
                   Text(
-                    '${lead.role} • ${lead.type}',
+                    '${lead.works.isNotEmpty ? lead.works.join(', ') : lead.role} • ${lead.type}',
                     style: TextStyle(
                       fontSize: 10,
                       color: crmColors.textSecondary,
@@ -1562,6 +1582,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                         : (roleCtrl.text.trim().isEmpty
                               ? 'Assistant'
                               : roleCtrl.text.trim()),
+                    specialization: artist.specialization,
+                    works: artist.works.isNotEmpty
+                        ? artist.works
+                        : [
+                            if (artist.specialization.trim().isNotEmpty)
+                              artist.specialization.trim(),
+                          ],
                     phone: artist.phone,
                     type: artist.type,
                     roleType: isLead ? 'lead' : 'assistant',

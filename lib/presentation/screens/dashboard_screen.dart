@@ -415,10 +415,16 @@ class _PendingBookingRequestsCard extends ConsumerWidget {
                 style: TextStyle(color: crmColors.textSecondary),
               ),
               data: (bookings) {
-                final pendingBookings = bookings
-                    .where((booking) => booking.status.toLowerCase() == 'pending')
-                    .toList()
-                  ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+                final pendingBookings =
+                    bookings
+                        .where(
+                          (booking) =>
+                              booking.status.toLowerCase() == 'pending',
+                        )
+                        .toList()
+                      ..sort(
+                        (a, b) => a.serviceStart.compareTo(b.serviceStart),
+                      );
 
                 if (pendingBookings.isEmpty) {
                   return Container(
@@ -452,7 +458,7 @@ class _PendingBookingRequestsCard extends ConsumerWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: visibleBookings.length,
-                  separatorBuilder: (_, __) => const Divider(),
+                  separatorBuilder: (context, index) => const Divider(),
                   itemBuilder: (context, index) {
                     final booking = visibleBookings[index];
                     return ListTile(
@@ -489,7 +495,6 @@ class _PendingBookingRequestsCard extends ConsumerWidget {
     );
   }
 }
-
 
 class _UpcomingBookingTile extends StatelessWidget {
   final Booking booking;
@@ -581,49 +586,51 @@ class _PopularServicesCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Popular Services',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Popular Services',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                TextButton(onPressed: () {}, child: const Text('View All')),
-              ],
-            ),
-            16.h,
-            // Mock list
-            _buildServiceItem(
-              context,
-              Icons.auto_awesome,
-              'Bridal Makeover Package',
-              '\$18,500',
-              '124 Bookings this month',
-            ),
-            const Divider(),
-            _buildServiceItem(
-              context,
-              Icons.cut,
-              'Premium Hair Styling',
-              '\$8,200',
-              '98 Bookings this month',
-            ),
-            const Divider(),
-            _buildServiceItem(
-              context,
-              Icons.spa,
-              'Luxury Spa Facial',
-              '\$6,500',
-              '65 Bookings this month',
-            ),
-          ],
+                  TextButton(onPressed: () {}, child: const Text('View All')),
+                ],
+              ),
+              16.h,
+              // Mock list
+              _buildServiceItem(
+                context,
+                Icons.auto_awesome,
+                'Bridal Makeover Package',
+                '\$18,500',
+                '124 Bookings this month',
+              ),
+              const Divider(),
+              _buildServiceItem(
+                context,
+                Icons.cut,
+                'Premium Hair Styling',
+                '\$8,200',
+                '98 Bookings this month',
+              ),
+              const Divider(),
+              _buildServiceItem(
+                context,
+                Icons.spa,
+                'Luxury Spa Facial',
+                '\$6,500',
+                '65 Bookings this month',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -662,49 +669,51 @@ class _TopStaffCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Top Performing Staff',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Top Performing Staff',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-                TextButton(onPressed: () {}, child: const Text('View Team')),
-              ],
-            ),
-            16.h,
-            // Mock list
-            _buildStaffItem(
-              context,
-              'Jessica Davis',
-              'Senior Makeover Artist',
-              '4.9',
-              '42 Appointments',
-            ),
-            const Divider(),
-            _buildStaffItem(
-              context,
-              'Amanda Lopez',
-              'Hair Stylist',
-              '4.8',
-              '38 Appointments',
-            ),
-            const Divider(),
-            _buildStaffItem(
-              context,
-              'Michael Chen',
-              'Esthetician',
-              '4.7',
-              '31 Appointments',
-            ),
-          ],
+                  TextButton(onPressed: () {}, child: const Text('View Team')),
+                ],
+              ),
+              16.h,
+              // Mock list
+              _buildStaffItem(
+                context,
+                'Jessica Davis',
+                'Senior Makeover Artist',
+                '4.9',
+                '42 Appointments',
+              ),
+              const Divider(),
+              _buildStaffItem(
+                context,
+                'Amanda Lopez',
+                'Hair Stylist',
+                '4.8',
+                '38 Appointments',
+              ),
+              const Divider(),
+              _buildStaffItem(
+                context,
+                'Michael Chen',
+                'Esthetician',
+                '4.7',
+                '31 Appointments',
+              ),
+            ],
+          ),
         ),
       ),
     );

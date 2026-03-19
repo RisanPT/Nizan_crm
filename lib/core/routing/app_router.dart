@@ -34,6 +34,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Dashboard Overview';
           } else if (state.uri.path == '/clients') {
             title = 'Clients Directory';
+          } else if (state.uri.path == '/booking/requests') {
+            title = 'Booking Requests';
           } else if (state.uri.path == '/calendar') {
             title = 'Calendar Scheduler';
           } else if (state.uri.path == '/services') {
@@ -44,8 +46,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Add-on Services';
           } else if (state.uri.path == '/staff') {
             title = 'Staff Management';
-          } else if (state.uri.path == '/booking/requests') {
-            title = 'Booking Requests';
           }
 
           return MainLayout(title: title, child: child);

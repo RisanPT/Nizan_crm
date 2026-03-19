@@ -5,6 +5,16 @@ import 'package:web/web.dart' as web;
 import '../models/booking.dart';
 import 'booking_print_service.dart';
 
+String _staffWorkLabel(BookingAssignment staff) {
+  if (staff.works.isNotEmpty) {
+    return staff.works.join(', ');
+  }
+  if (staff.specialization.trim().isNotEmpty) {
+    return staff.specialization.trim();
+  }
+  return staff.role.trim();
+}
+
 Future<void> printBookingDetails(
   Booking booking, {
   required BookingPrintVariant variant,
@@ -64,6 +74,66 @@ String _buildPrintableHtml(
   String artistName = '',
 }) {
   final isArtistCopy = variant == BookingPrintVariant.artist;
+  final worksToPrint = isArtistCopy && relatedArtistBookings.isNotEmpty
+      ? (relatedArtistBookings.toList()..sort((a,b) => a.serviceStart.compareTo(b.serviceStart)))
+      : [booking];
+
+  final pagesHtml = worksToPrint.map((work) {
+    return '<div class="booking-page">\n' +
+        _buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName) +
+        '\n</div>';
+  }).join('\n');
+
+  return '''
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Booking ${_escape(booking.customerName)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; color: #0b1b3b; padding: 32px; margin: 0; }
+      h1, h2, h3, p { margin: 0; }
+      .header { margin-bottom: 24px; }
+      .title { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+      .muted { color: #667085; font-size: 14px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+      .card { border: 1px solid #d9dde3; border-radius: 12px; padding: 16px; }
+      .label { font-size: 12px; text-transform: uppercase; color: #667085; margin-bottom: 6px; }
+      .value { font-size: 16px; font-weight: 600; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #d9dde3; padding: 10px; text-align: left; font-size: 14px; }
+      th { background: #f5f7fa; }
+      .section { margin-top: 28px; }
+      .summary { margin-top: 24px; border-top: 2px solid #0b1b3b; padding-top: 16px; }
+      .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+      .summary-row strong { font-size: 16px; }
+      .detail-table td:first-child { width: 220px; font-weight: 700; color: #44526d; }
+      .schedule-note { margin-top: 8px; color: #667085; font-size: 13px; }
+      .current-work-row td { background: #fff8e6; font-weight: 600; }
+      .current-badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #0b1b3b; color: white; font-size: 11px; font-weight: 700; }
+      .booking-page { page-break-after: always; }
+      .booking-page:last-child { page-break-after: auto; }
+      @media print {
+        body { padding: 0; }
+        .booking-page { padding: 16px; margin-bottom: 24px; }
+        .section { break-inside: avoid; }
+      }
+    </style>
+  </head>
+  <body>
+$pagesHtml
+  </body>
+</html>
+''';
+}
+
+String _buildSingleBookingHtml(
+  Booking booking,
+  BookingPrintVariant variant,
+  List<Booking> relatedArtistBookings,
+  String artistName,
+) {
+  final isArtistCopy = variant == BookingPrintVariant.artist;
   final assignedStaffRows = booking.assignedStaff.isEmpty
       ? '<tr><td colspan="3">No staff assigned</td></tr>'
       : booking.assignedStaff
@@ -72,7 +142,7 @@ String _buildPrintableHtml(
                   '''
 <tr>
   <td>${_escape(staff.artistName)}</td>
-  <td>${_escape(staff.role)}</td>
+  <td>${_escape(_staffWorkLabel(staff))}</td>
   <td>${_escape(staff.type)}</td>
 </tr>''',
             )
@@ -157,21 +227,17 @@ String _buildPrintableHtml(
   final effectiveArtistName = artistName.trim().isNotEmpty
       ? artistName.trim()
       : booking.assignedStaff
-              .where((staff) => staff.roleType.toLowerCase() == 'artist')
-              .map((staff) => staff.artistName.trim())
-              .firstWhere((name) => name.isNotEmpty, orElse: () => '') ??
-          '';
+            .where((staff) => staff.roleType.toLowerCase() == 'lead')
+            .map((staff) => staff.artistName.trim())
+            .firstWhere((name) => name.isNotEmpty, orElse: () => '');
   final sortedArtistWorks = {
     for (final item in relatedArtistBookings) item.id: item,
-  }.values.toList()
-    ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+  }.values.toList()..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
   final artistWorkRows = sortedArtistWorks.isEmpty
       ? '<tr><td colspan="5">No other works scheduled for this artist today</td></tr>'
-      : sortedArtistWorks
-            .map(
-              (item) {
-                final isCurrentBooking = item.id == booking.id;
-                return '''
+      : sortedArtistWorks.map((item) {
+          final isCurrentBooking = item.id == booking.id;
+          return '''
 <tr>
   <td>${isCurrentBooking ? 'Current' : ''}</td>
   <td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td>
@@ -179,16 +245,12 @@ String _buildPrintableHtml(
   <td>${_escape(item.service)}</td>
   <td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td>
 </tr>''';
-              },
-            )
-            .join();
+        }).join();
   final artistClientDetailRows = sortedArtistWorks.isEmpty
       ? '<tr><td colspan="8">No client details available for this artist today</td></tr>'
-      : sortedArtistWorks
-            .map(
-              (item) {
-                final isCurrentBooking = item.id == booking.id;
-                return '''
+      : sortedArtistWorks.map((item) {
+          final isCurrentBooking = item.id == booking.id;
+          return '''
 <tr${isCurrentBooking ? ' class="current-work-row"' : ''}>
   <td>${isCurrentBooking ? '<span class="current-badge">Current</span>' : ''}</td>
   <td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td>
@@ -199,44 +261,9 @@ String _buildPrintableHtml(
   <td>${_escape(item.service)}</td>
   <td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td>
 </tr>''';
-              },
-            )
-            .join();
+        }).join();
 
   return '''
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Booking ${_escape(booking.customerName)}</title>
-    <style>
-      body { font-family: Arial, sans-serif; color: #0b1b3b; padding: 32px; }
-      h1, h2, h3, p { margin: 0; }
-      .header { margin-bottom: 24px; }
-      .title { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
-      .muted { color: #667085; font-size: 14px; }
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
-      .card { border: 1px solid #d9dde3; border-radius: 12px; padding: 16px; }
-      .label { font-size: 12px; text-transform: uppercase; color: #667085; margin-bottom: 6px; }
-      .value { font-size: 16px; font-weight: 600; }
-      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-      th, td { border: 1px solid #d9dde3; padding: 10px; text-align: left; font-size: 14px; }
-      th { background: #f5f7fa; }
-      .section { margin-top: 28px; }
-      .summary { margin-top: 24px; border-top: 2px solid #0b1b3b; padding-top: 16px; }
-      .summary-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
-      .summary-row strong { font-size: 16px; }
-      .detail-table td:first-child { width: 220px; font-weight: 700; color: #44526d; }
-      .schedule-note { margin-top: 8px; color: #667085; font-size: 13px; }
-      .current-work-row td { background: #fff8e6; font-weight: 600; }
-      .current-badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #0b1b3b; color: white; font-size: 11px; font-weight: 700; }
-      @media print {
-        body { padding: 16px; }
-        .section { break-inside: avoid; }
-      }
-    </style>
-  </head>
-  <body>
     <div class="header">
       <div class="title">Booking Details - $title</div>
       <p class="muted">$subtitle</p>
@@ -317,7 +344,7 @@ String _buildPrintableHtml(
     </div>
 
     <div class="section">
-      <h3>Today\'s Artist Works</h3>
+      <h3>Today's Artist Works</h3>
       <p class="schedule-note">${_escape(effectiveArtistName.isEmpty ? 'Assigned artist' : effectiveArtistName)} schedule for ${_formatDate(booking.bookingDate)}, sorted by time.</p>
       <table>
         <thead>
@@ -325,15 +352,15 @@ String _buildPrintableHtml(
         </thead>
         <tbody>
           ${sortedArtistWorks.isEmpty ? artistWorkRows : sortedArtistWorks.map((item) {
-            final isCurrentBooking = item.id == booking.id;
-            return '<tr${isCurrentBooking ? ' class="current-work-row"' : ''}><td>${isCurrentBooking ? '<span class="current-badge">Current</span>' : ''}</td><td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td><td>${_escape(item.customerName)}</td><td>${_escape(item.service)}</td><td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td></tr>';
-          }).join()}
+                final isCurrentBooking = item.id == booking.id;
+                return '<tr${isCurrentBooking ? ' class="current-work-row"' : ''}><td>${isCurrentBooking ? '<span class="current-badge">Current</span>' : ''}</td><td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td><td>${_escape(item.customerName)}</td><td>${_escape(item.service)}</td><td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td></tr>';
+              }).join()}
         </tbody>
       </table>
     </div>
 
     <div class="section">
-      <h3>Today\'s Client Details</h3>
+      <h3>Today's Client Details</h3>
       <p class="schedule-note">Combined client sheet for all works assigned to ${_escape(effectiveArtistName.isEmpty ? 'this artist' : effectiveArtistName)} today.</p>
       <table>
         <thead>
@@ -365,10 +392,9 @@ String _buildPrintableHtml(
       <div class="summary-row"><span>Applied Discount Amount</span><span>INR ${booking.discountAmount.toStringAsFixed(0)}</span></div>
       <div class="summary-row"><strong>Forecast Balance</strong><strong>INR ${forecast.toStringAsFixed(0)}</strong></div>
     </div>
-  </body>
-</html>
 ''';
 }
+
 
 String _formatDate(DateTime value) {
   final day = value.day.toString().padLeft(2, '0');

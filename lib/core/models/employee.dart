@@ -5,6 +5,7 @@ class Employee {
   final String type;
   final String artistRole;
   final String specialization;
+  final List<String> works;
   final String phone;
   final String status;
   final String regionId;
@@ -17,6 +18,7 @@ class Employee {
     required this.type,
     required this.artistRole,
     required this.specialization,
+    this.works = const [],
     required this.phone,
     required this.status,
     required this.regionId,
@@ -32,6 +34,10 @@ class Employee {
       type: json['type'] as String? ?? 'outsource',
       artistRole: json['artistRole'] as String? ?? 'artist',
       specialization: json['specialization'] as String? ?? '',
+      works: ((json['works'] as List?) ?? const [])
+          .map((item) => item?.toString().trim() ?? '')
+          .where((item) => item.isNotEmpty)
+          .toList(),
       phone: json['phone'] as String? ?? '',
       status: json['status'] as String? ?? 'active',
       regionId: region is Map<String, dynamic>
@@ -50,6 +56,7 @@ class Employee {
       'type': type,
       'artistRole': artistRole,
       'specialization': specialization,
+      'works': works,
       'phone': phone,
       'status': status,
       'regionId': regionId,

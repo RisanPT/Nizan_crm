@@ -55,13 +55,22 @@ class Sidebar extends StatelessWidget {
                   onTap: () => context.go('/clients'),
                 ),
                 _SidebarItem(
-                  icon: Icons.calendar_month_outlined,
-                  title: 'Appointments',
+                  icon: Icons.calendar_month,
+                  title: 'Calendar',
                   isCollapsed: width == 80.0,
                   isSelected: GoRouterState.of(
                     context,
                   ).uri.path.startsWith('/calendar'),
                   onTap: () => context.go('/calendar'),
+                ),
+                _SidebarItem(
+                  icon: Icons.receipt_long_outlined,
+                  title: 'Booking',
+                  isCollapsed: width == 80.0,
+                  isSelected: GoRouterState.of(
+                    context,
+                  ).uri.path.startsWith('/booking'),
+                  onTap: () => context.go('/booking/requests'),
                 ),
                 32.h,
                 _buildSectionTitle(
