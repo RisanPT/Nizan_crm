@@ -20,9 +20,9 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   String? _activeBookingId;
 
   Future<void> _updateStatus(Booking booking, String status) async {
-    await ref.read(bookingProvider.notifier).updateBooking(
-          booking.copyWith(status: status),
-        );
+    await ref
+        .read(bookingProvider.notifier)
+        .updateBooking(booking.copyWith(status: status));
   }
 
   Future<void> _bulkConfirm(List<Booking> pendingBookings) async {
@@ -44,9 +44,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
           _activeBookingId = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${toUpdate.length} booking(s) confirmed.'),
-          ),
+          SnackBar(content: Text('${toUpdate.length} booking(s) confirmed.')),
         );
       }
     } catch (error) {
@@ -68,19 +66,20 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(
-        child: Text('Failed to load booking requests: $error'),
-      ),
+      error: (error, stack) =>
+          Center(child: Text('Failed to load booking requests: $error')),
       data: (bookings) {
-        final pendingBookings = bookings
-            .where((booking) => booking.status.toLowerCase() == 'pending')
-            .toList()
-          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+        final pendingBookings =
+            bookings
+                .where((booking) => booking.status.toLowerCase() == 'pending')
+                .toList()
+              ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
 
         final activeBooking = pendingBookings.cast<Booking?>().firstWhere(
-              (booking) => booking?.id == _activeBookingId,
-              orElse: () => pendingBookings.isNotEmpty ? pendingBookings.first : null,
-            );
+          (booking) => booking?.id == _activeBookingId,
+          orElse: () =>
+              pendingBookings.isNotEmpty ? pendingBookings.first : null,
+        );
 
         if (pendingBookings.isNotEmpty && _activeBookingId == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -101,9 +100,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                     children: [
                       Text(
                         'Booking Requests',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       8.h,
                       Text(
@@ -172,9 +170,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                         14.h,
                         Text(
                           'No pending booking requests.',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         8.h,
                         Text(
@@ -191,7 +188,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
               Expanded(
                 child: ListView.separated(
                   itemCount: pendingBookings.length,
-                  separatorBuilder: (_, __) => 12.h,
+                  separatorBuilder: (context, index) => 12.h,
                   itemBuilder: (context, index) {
                     final booking = pendingBookings[index];
                     return _MobileBookingRequestCard(
@@ -209,7 +206,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                       onReview: () async {
                         await showDialog<void>(
                           context: context,
-                          builder: (_) => _BookingApprovalDialog(booking: booking),
+                          builder: (_) =>
+                              _BookingApprovalDialog(booking: booking),
                         );
                       },
                     );
@@ -228,14 +226,19 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                           padding: 20.p,
                           child: ListView.separated(
                             itemCount: pendingBookings.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final booking = pendingBookings[index];
-                              final isSelected = _selectedIds.contains(booking.id);
+                              final isSelected = _selectedIds.contains(
+                                booking.id,
+                              );
                               final isActive = booking.id == activeBooking?.id;
 
                               return InkWell(
-                                onTap: () => setState(() => _activeBookingId = booking.id),
+                                onTap: () => setState(
+                                  () => _activeBookingId = booking.id,
+                                ),
                                 borderRadius: BorderRadius.circular(16),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -244,7 +247,9 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: isActive
-                                        ? crmColors.secondary.withValues(alpha: 0.35)
+                                        ? crmColors.secondary.withValues(
+                                            alpha: 0.35,
+                                          )
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(16),
                                   ),
@@ -275,7 +280,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                       14.w,
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               booking.customerName,
@@ -326,9 +332,12 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                         onAccept: activeBooking == null
                             ? null
                             : () async {
+                                final scaffoldMessenger = ScaffoldMessenger.of(
+                                  context,
+                                );
                                 await _updateStatus(activeBooking, 'confirmed');
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  scaffoldMessenger.showSnackBar(
                                     const SnackBar(
                                       content: Text(
                                         'Booking confirmed and moved to calendar.',
@@ -340,9 +349,12 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                         onReject: activeBooking == null
                             ? null
                             : () async {
+                                final scaffoldMessenger = ScaffoldMessenger.of(
+                                  context,
+                                );
                                 await _updateStatus(activeBooking, 'rejected');
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  scaffoldMessenger.showSnackBar(
                                     const SnackBar(
                                       content: Text('Booking rejected.'),
                                     ),
@@ -412,21 +424,32 @@ class _AdminReviewSlide extends StatelessWidget {
                   Text(
                     'Accept Or Reject Booking',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   10.h,
                   Text(
                     'Confirm this booking to move it into the CRM calendar, or reject it to stop the request.',
-                    style: TextStyle(color: crmColors.textSecondary, height: 1.5),
+                    style: TextStyle(
+                      color: crmColors.textSecondary,
+                      height: 1.5,
+                    ),
                   ),
                   24.h,
                   _ApprovalRow(label: 'Client', value: booking!.customerName),
                   _ApprovalRow(label: 'Phone', value: booking!.phone),
+                  _ApprovalRow(
+                    label: 'Email',
+                    value: booking!.email.isEmpty
+                        ? 'Missing email'
+                        : booking!.email,
+                  ),
                   _ApprovalRow(label: 'Package', value: booking!.service),
                   _ApprovalRow(
                     label: 'Region',
-                    value: booking!.region.isEmpty ? 'Default' : booking!.region,
+                    value: booking!.region.isEmpty
+                        ? 'Default'
+                        : booking!.region,
                   ),
                   _ApprovalRow(
                     label: 'Date',
@@ -445,7 +468,9 @@ class _AdminReviewSlide extends StatelessWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: onReject == null ? null : () => onReject!.call(),
+                          onPressed: onReject == null
+                              ? null
+                              : () => onReject!.call(),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: crmColors.destructive,
                             side: BorderSide(color: crmColors.destructive),
@@ -457,7 +482,9 @@ class _AdminReviewSlide extends StatelessWidget {
                       14.w,
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: onAccept == null ? null : () => onAccept!.call(),
+                          onPressed: onAccept == null
+                              ? null
+                              : () => onAccept!.call(),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: crmColors.primary,
                             foregroundColor: Colors.white,
@@ -543,15 +570,16 @@ class _BookingApprovalDialog extends ConsumerStatefulWidget {
       _BookingApprovalDialogState();
 }
 
-class _BookingApprovalDialogState extends ConsumerState<_BookingApprovalDialog> {
+class _BookingApprovalDialogState
+    extends ConsumerState<_BookingApprovalDialog> {
   bool _saving = false;
 
   Future<void> _changeStatus(String status) async {
     setState(() => _saving = true);
     try {
-      await ref.read(bookingProvider.notifier).updateBooking(
-            widget.booking.copyWith(status: status),
-          );
+      await ref
+          .read(bookingProvider.notifier)
+          .updateBooking(widget.booking.copyWith(status: status));
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

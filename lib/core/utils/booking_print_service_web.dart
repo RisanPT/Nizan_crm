@@ -79,9 +79,7 @@ String _buildPrintableHtml(
       : [booking];
 
   final pagesHtml = worksToPrint.map((work) {
-    return '<div class="booking-page">\n' +
-        _buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName) +
-        '\n</div>';
+    return '<div class="booking-page">\n${_buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName)}\n</div>';
   }).join('\n');
 
   return '''

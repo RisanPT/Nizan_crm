@@ -343,7 +343,12 @@ class AddBookingScreen extends HookConsumerWidget {
                                   option.name,
                               onSelected: (Customer selection) {
                                 phoneCtrl.text = selection.phone ?? '';
-                                emailCtrl.text = selection.email;
+                                emailCtrl.text =
+                                    selection.email.contains(
+                                      '@placeholder.local',
+                                    )
+                                    ? ''
+                                    : selection.email;
                               },
                               fieldViewBuilder:
                                   (
@@ -408,10 +413,23 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: TextFormField(
                                 controller: emailCtrl,
                                 keyboardType: TextInputType.emailAddress,
-                                decoration: _inputDeco(
-                                  'Email (Optional)',
-                                  crmColors,
-                                ),
+                                decoration: _inputDeco('Email', crmColors),
+                                validator: (v) {
+                                  final value = v?.trim() ?? '';
+                                  if (value.isEmpty) return 'Required';
+                                  final emailPattern = RegExp(
+                                    r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                                  );
+                                  if (!emailPattern.hasMatch(value)) {
+                                    return 'Enter a valid email';
+                                  }
+                                  if (value.toLowerCase().endsWith(
+                                    '@placeholder.local',
+                                  )) {
+                                    return 'Enter a real client email';
+                                  }
+                                  return null;
+                                },
                               ),
                             ),
                           ],

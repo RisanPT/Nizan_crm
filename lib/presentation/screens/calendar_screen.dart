@@ -43,7 +43,9 @@ class CalendarScreen extends HookConsumerWidget {
   }
 
   static String _artistLabelForBooking(Booking booking) {
-    final artistAssignment = booking.assignedStaff.cast<BookingAssignment?>().firstWhere(
+    final artistAssignment = booking.assignedStaff
+        .cast<BookingAssignment?>()
+        .firstWhere(
           (assignment) =>
               assignment != null &&
               assignment.artistName.trim().isNotEmpty &&
@@ -55,13 +57,17 @@ class CalendarScreen extends HookConsumerWidget {
       return artistAssignment.artistName.trim();
     }
 
-    final fallbackAssignment = booking.assignedStaff.cast<BookingAssignment?>().firstWhere(
+    final fallbackAssignment = booking.assignedStaff
+        .cast<BookingAssignment?>()
+        .firstWhere(
           (assignment) =>
               assignment != null && assignment.artistName.trim().isNotEmpty,
           orElse: () => null,
         );
 
-    return fallbackAssignment?.artistName.trim() ?? 'Not Assigned';
+    final customerName = booking.customerName.trim();
+    return fallbackAssignment?.artistName.trim() ??
+        (customerName.isNotEmpty ? customerName : 'Not Assigned');
   }
 
   static List<_ArtistDayGroup> _groupBookingsByArtist(List<Booking> bookings) {
@@ -72,23 +78,27 @@ class CalendarScreen extends HookConsumerWidget {
       grouped.putIfAbsent(label, () => <Booking>[]).add(booking);
     }
 
-    final groups = grouped.entries
-        .map(
-          (entry) => _ArtistDayGroup(
-            artistLabel: entry.key,
-            bookings: entry.value..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)),
-          ),
-        )
-        .toList()
-      ..sort((a, b) {
-        if (a.artistLabel == 'Not Assigned' && b.artistLabel != 'Not Assigned') {
-          return 1;
-        }
-        if (b.artistLabel == 'Not Assigned' && a.artistLabel != 'Not Assigned') {
-          return -1;
-        }
-        return a.artistLabel.compareTo(b.artistLabel);
-      });
+    final groups =
+        grouped.entries
+            .map(
+              (entry) => _ArtistDayGroup(
+                artistLabel: entry.key,
+                bookings: entry.value
+                  ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)),
+              ),
+            )
+            .toList()
+          ..sort((a, b) {
+            if (a.artistLabel == 'Not Assigned' &&
+                b.artistLabel != 'Not Assigned') {
+              return 1;
+            }
+            if (b.artistLabel == 'Not Assigned' &&
+                a.artistLabel != 'Not Assigned') {
+              return -1;
+            }
+            return a.artistLabel.compareTo(b.artistLabel);
+          });
 
     return groups;
   }
@@ -244,7 +254,9 @@ class CalendarScreen extends HookConsumerWidget {
                 if (pickedDate == null) return;
 
                 try {
-                  await ref.read(blockedDateServiceProvider).saveBlockedDate(
+                  await ref
+                      .read(blockedDateServiceProvider)
+                      .saveBlockedDate(
                         date: pickedDate!,
                         reason: reasonCtrl.text.trim(),
                       );
@@ -253,7 +265,9 @@ class CalendarScreen extends HookConsumerWidget {
                 } catch (error) {
                   if (dialogContext.mounted) {
                     ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text('Failed to save blocked date: $error')),
+                      SnackBar(
+                        content: Text('Failed to save blocked date: $error'),
+                      ),
                     );
                   }
                 }
@@ -311,7 +325,8 @@ class CalendarScreen extends HookConsumerWidget {
                           child: ListView.separated(
                             shrinkWrap: true,
                             itemCount: blockedDates.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final item = blockedDates[index];
                               final formatted =
@@ -331,8 +346,9 @@ class CalendarScreen extends HookConsumerWidget {
                                       ref.invalidate(blockedDatesProvider);
                                     } catch (error) {
                                       if (dialogContext.mounted) {
-                                        ScaffoldMessenger.of(dialogContext)
-                                            .showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          dialogContext,
+                                        ).showSnackBar(
                                           SnackBar(
                                             content: Text(
                                               'Failed to remove blocked date: $error',
@@ -430,7 +446,7 @@ class CalendarScreen extends HookConsumerWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: manageBlockedDates,
-                  icon:  Icon(Icons.calendar_month, size: 18),
+                  icon: Icon(Icons.calendar_month, size: 18),
                   label: const Text('Blocked'),
                 ),
               ),
@@ -598,31 +614,31 @@ class CalendarScreen extends HookConsumerWidget {
                         : const SizedBox.shrink(),
                   ),
                 ),
-                const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
-                    children: [
-                      _buildLegendItem(
-                        context,
-                        'Hair Services',
-                        _serviceColors['hair']!,
-                      ),
-                      _buildLegendItem(
-                        context,
-                        'Makeup & Bridal',
-                        _serviceColors['makeup']!,
-                      ),
-                      _buildLegendItem(
-                        context,
-                        'Spa & Massage',
-                        _serviceColors['spa']!,
-                      ),
-                    ],
-                  ),
-                ),
+                // const Divider(height: 1),
+                // Padding(
+                //   padding: const EdgeInsets.all(16),
+                //   child: Wrap(
+                //     spacing: 24,
+                //     runSpacing: 12,
+                //     children: [
+                //       _buildLegendItem(
+                //         context,
+                //         'Hair Services',
+                //         _serviceColors['hair']!,
+                //       ),
+                //       _buildLegendItem(
+                //         context,
+                //         'Makeup & Bridal',
+                //         _serviceColors['makeup']!,
+                //       ),
+                //       _buildLegendItem(
+                //         context,
+                //         'Spa & Massage',
+                //         _serviceColors['spa']!,
+                //       ),
+                //     ],
+                //   ),
+                // ),
               ],
             ),
           ),
@@ -674,6 +690,11 @@ class CalendarScreen extends HookConsumerWidget {
       separatorBuilder: (context, index) => 12.h,
       itemBuilder: (ctx, i) {
         final b = bookings[i];
+        final isAssigned = b.assignedStaff
+            .cast<BookingAssignment?>()
+            .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
+        final borderColor = isAssigned ? _colorForService(b.service) : const Color(0xFF8E9BAE);
+
         return GestureDetector(
           onTap: () => context.push('/booking/manage/${b.id}'),
           child: Container(
@@ -682,7 +703,7 @@ class CalendarScreen extends HookConsumerWidget {
               color: _bgForService(b.service),
               borderRadius: BorderRadius.circular(8),
               border: Border(
-                left: BorderSide(color: _colorForService(b.service), width: 4),
+                left: BorderSide(color: borderColor, width: 4),
               ),
             ),
             child: Row(
@@ -711,9 +732,7 @@ class CalendarScreen extends HookConsumerWidget {
                         _artistLabelForBooking(b),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: _artistLabelForBooking(b) == 'Not Assigned'
-                              ? crmColors.textSecondary
-                              : crmColors.textPrimary,
+                          color: isAssigned ? crmColors.textPrimary : crmColors.textSecondary,
                         ),
                       ),
                     ],
@@ -779,16 +798,20 @@ class CalendarScreen extends HookConsumerWidget {
               ),
               itemBuilder: (context, index) {
                 final day = days[index];
-                final dayBookings = bookings
-                    .where((booking) => booking.isOnDate(day))
-                    .toList()
-                  ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
-                final artistGroups = _groupBookingsByArtist(dayBookings);
                 final isCurrentMonth = day.month == month.month;
                 final isToday =
                     day.year == now.year &&
                     day.month == now.month &&
                     day.day == now.day;
+                final dayBookings = isCurrentMonth
+                    ? (bookings
+                          .where((booking) => booking.isOnDate(day))
+                          .toList()
+                        ..sort(
+                          (a, b) => a.serviceStart.compareTo(b.serviceStart),
+                        ))
+                    : <Booking>[];
+                final artistGroups = _groupBookingsByArtist(dayBookings);
 
                 return Container(
                   padding: const EdgeInsets.all(8),
@@ -801,54 +824,58 @@ class CalendarScreen extends HookConsumerWidget {
                         ? crmColors.surface
                         : crmColors.background.withValues(alpha: 0.5),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                        alignment: Alignment.topCenter,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isToday ? crmColors.primary : Colors.transparent,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${day.day}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: isToday
-                                  ? Colors.white
-                                  : isCurrentMonth
-                                  ? crmColors.textPrimary
-                                  : crmColors.textSecondary,
+                  child: !isCurrentMonth
+                      ? const SizedBox.shrink()
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Align(
+                              alignment: Alignment.topCenter,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isToday
+                                      ? crmColors.primary
+                                      : Colors.transparent,
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '${day.day}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: isToday
+                                        ? Colors.white
+                                        : crmColors.textPrimary,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
+                            8.h,
+                            ...artistGroups
+                                .take(4)
+                                .map(
+                                  (group) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: _buildMonthBookingPill(context, group),
+                                  ),
+                                ),
+                            if (artistGroups.length > 4)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2, left: 6),
+                                child: Text(
+                                  '${artistGroups.length - 4} more',
+                                  style: TextStyle(
+                                    color: crmColors.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
-                      8.h,
-                      ...artistGroups.take(4).map(
-                        (group) => Padding(
-                          padding: const EdgeInsets.only(bottom: 6),
-                          child: _buildMonthBookingPill(context, group),
-                        ),
-                      ),
-                      if (artistGroups.length > 4)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2, left: 6),
-                          child: Text(
-                            '${artistGroups.length - 4} more',
-                            style: TextStyle(
-                              color: crmColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                 );
               },
             ),
@@ -894,11 +921,7 @@ class CalendarScreen extends HookConsumerWidget {
                 const SizedBox(width: 84),
                 ...weekDays.map(
                   (day) => Expanded(
-                    child: _buildTopDayHeader(
-                      context,
-                      day: day,
-                      now: now,
-                    ),
+                    child: _buildTopDayHeader(context, day: day, now: now),
                   ),
                 ),
               ],
@@ -939,7 +962,9 @@ class CalendarScreen extends HookConsumerWidget {
                               border: Border(
                                 right: BorderSide(color: crmColors.border),
                                 bottom: BorderSide(
-                                  color: crmColors.border.withValues(alpha: 0.7),
+                                  color: crmColors.border.withValues(
+                                    alpha: 0.7,
+                                  ),
                                 ),
                               ),
                             ),
@@ -957,10 +982,13 @@ class CalendarScreen extends HookConsumerWidget {
                     ),
                   ),
                   ...weekDays.map((day) {
-                    final dayBookings = bookings
-                        .where((booking) => booking.isOnDate(day))
-                        .toList()
-                      ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+                    final dayBookings =
+                        bookings
+                            .where((booking) => booking.isOnDate(day))
+                            .toList()
+                          ..sort(
+                            (a, b) => a.serviceStart.compareTo(b.serviceStart),
+                          );
                     final artistGroups = _groupBookingsByArtist(dayBookings);
 
                     return Expanded(
@@ -977,16 +1005,20 @@ class CalendarScreen extends HookConsumerWidget {
                             ),
                             child: Column(
                               children: [
-                                ...artistGroups.take(3).map(
-                                  (group) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: _buildReferencePill(
-                                      context,
-                                      group,
-                                      compact: true,
+                                ...artistGroups
+                                    .take(3)
+                                    .map(
+                                      (group) => Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 6,
+                                        ),
+                                        child: _buildReferencePill(
+                                          context,
+                                          group,
+                                          compact: true,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -997,7 +1029,9 @@ class CalendarScreen extends HookConsumerWidget {
                                 border: Border(
                                   right: BorderSide(color: crmColors.border),
                                   bottom: BorderSide(
-                                    color: crmColors.border.withValues(alpha: 0.7),
+                                    color: crmColors.border.withValues(
+                                      alpha: 0.7,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1037,10 +1071,9 @@ class CalendarScreen extends HookConsumerWidget {
     const topLaneHeight = 96.0;
     const hourRowHeight = 64.0;
 
-    final dayBookings = bookings
-        .where((booking) => booking.isOnDate(day))
-        .toList()
-      ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+    final dayBookings =
+        bookings.where((booking) => booking.isOnDate(day)).toList()
+          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
     final artistGroups = _groupBookingsByArtist(dayBookings);
 
     return Padding(
@@ -1057,11 +1090,7 @@ class CalendarScreen extends HookConsumerWidget {
               children: [
                 const SizedBox(width: 84),
                 Expanded(
-                  child: _buildTopDayHeader(
-                    context,
-                    day: day,
-                    now: now,
-                  ),
+                  child: _buildTopDayHeader(context, day: day, now: now),
                 ),
               ],
             ),
@@ -1194,10 +1223,7 @@ class CalendarScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildMonthBookingPill(
-    BuildContext context,
-    _ArtistDayGroup group,
-  ) {
+  Widget _buildMonthBookingPill(BuildContext context, _ArtistDayGroup group) {
     return _buildReferencePill(context, group);
   }
 
@@ -1207,7 +1233,15 @@ class CalendarScreen extends HookConsumerWidget {
     bool compact = false,
   }) {
     final booking = group.bookings.first;
-    final accent = _colorForService(booking.service);
+    
+    final isAssigned = booking.assignedStaff
+        .cast<BookingAssignment?>()
+        .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
+
+    final accent = isAssigned 
+        ? _colorForService(booking.service) 
+        : const Color(0xFF8E9BAE); // Slate gray for unassigned
+
     final label = group.count > 1
         ? '${group.artistLabel.toUpperCase()} (${group.count})'
         : group.artistLabel.toUpperCase();
@@ -1253,9 +1287,7 @@ class CalendarScreen extends HookConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        border: Border(
-          right: BorderSide(color: crmColors.border),
-        ),
+        border: Border(right: BorderSide(color: crmColors.border)),
       ),
       child: Column(
         children: [
@@ -1299,14 +1331,13 @@ class CalendarScreen extends HookConsumerWidget {
 
   static List<DateTime> _buildMonthCells(DateTime month) {
     final monthStart = DateTime(month.year, month.month, 1);
-    final gridStart = monthStart.subtract(Duration(days: monthStart.weekday % 7));
+    final gridStart = monthStart.subtract(
+      Duration(days: monthStart.weekday % 7),
+    );
     return List.generate(
       42,
-      (index) => DateTime(
-        gridStart.year,
-        gridStart.month,
-        gridStart.day + index,
-      ),
+      (index) =>
+          DateTime(gridStart.year, gridStart.month, gridStart.day + index),
     );
   }
 }
@@ -1315,10 +1346,7 @@ class _ArtistDayGroup {
   final String artistLabel;
   final List<Booking> bookings;
 
-  const _ArtistDayGroup({
-    required this.artistLabel,
-    required this.bookings,
-  });
+  const _ArtistDayGroup({required this.artistLabel, required this.bookings});
 
   int get count => bookings.length;
 }
