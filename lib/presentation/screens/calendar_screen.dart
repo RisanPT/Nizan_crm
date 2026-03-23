@@ -4,10 +4,12 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
+import '../../core/models/employee.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/blocked_date_service.dart';
+import '../../services/employee_service.dart';
 
 class CalendarScreen extends HookConsumerWidget {
   const CalendarScreen({super.key});
@@ -115,6 +117,15 @@ class CalendarScreen extends HookConsumerWidget {
     final confirmedBookings = allBookings
         .where((booking) => booking.status.toLowerCase() == 'confirmed')
         .toList();
+    final asyncEmployees = ref.watch(employeesProvider);
+    final activeArtists = (asyncEmployees.value ?? const [])
+        .where(
+          (employee) =>
+              employee.status.toLowerCase() == 'active' &&
+              employee.artistRole.toLowerCase() == 'artist',
+        )
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
     final asyncBlockedDates = ref.watch(blockedDatesProvider);
     final blockedDates = asyncBlockedDates.value ?? [];
 
@@ -129,6 +140,7 @@ class CalendarScreen extends HookConsumerWidget {
     final weekStart = useState<DateTime>(currentWeekMonday);
     final monthFocus = useState<DateTime>(DateTime(now.year, now.month, 1));
     final viewMode = useState<String>('Month');
+    final selectedArtistFilter = useState<String>('all');
 
     final weekDays = List.generate(
       7,
@@ -222,6 +234,22 @@ class CalendarScreen extends HookConsumerWidget {
         selectedDayIndex.value = 0;
       }
     }
+
+    final filteredConfirmedBookings = confirmedBookings.where((booking) {
+      final filter = selectedArtistFilter.value;
+      if (filter == 'all') return true;
+      if (filter == 'unassigned') {
+        return !booking.assignedStaff.any(
+          (assignment) => assignment.artistName.trim().isNotEmpty,
+        );
+      }
+      return booking.assignedStaff.any(
+        (assignment) =>
+            (assignment.roleType.toLowerCase() == 'artist' ||
+                assignment.roleType.toLowerCase() == 'lead') &&
+            assignment.employeeId == filter,
+      );
+    }).toList();
 
     Future<void> manageBlockedDates() async {
       final reasonCtrl = TextEditingController();
@@ -418,15 +446,6 @@ class CalendarScreen extends HookConsumerWidget {
                 ),
               ),
               16.w,
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.filter_list, size: 18),
-                label: const Text('Filter'),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: crmColors.surface,
-                ),
-              ),
-              16.w,
               ElevatedButton.icon(
                 onPressed: () => context.push('/booking/add'),
                 icon: const Icon(Icons.add, size: 18),
@@ -452,10 +471,11 @@ class CalendarScreen extends HookConsumerWidget {
               ),
               16.w,
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.filter_list, size: 18),
-                  label: const Text('Filter'),
+                child: _buildArtistFilter(
+                  context,
+                  crmColors,
+                  activeArtists,
+                  selectedArtistFilter,
                 ),
               ),
               16.w,
@@ -535,13 +555,11 @@ class CalendarScreen extends HookConsumerWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          OutlinedButton.icon(
-                            onPressed: () {},
-                            icon: const CircleAvatar(
-                              radius: 4,
-                              backgroundColor: Colors.blue,
-                            ),
-                            label: const Text('All Staff'),
+                          _buildArtistFilter(
+                            context,
+                            crmColors,
+                            activeArtists,
+                            selectedArtistFilter,
                           ),
                           16.w,
                           SegmentedButton<String>(
@@ -555,10 +573,7 @@ class CalendarScreen extends HookConsumerWidget {
                             ],
                             selected: {viewMode.value},
                             onSelectionChanged: (selection) {
-                              final selected = selection.first;
-                              viewMode.value = selected == 'Day'
-                                  ? 'Week'
-                                  : selected;
+                              viewMode.value = selection.first;
                             },
                             style: SegmentedButton.styleFrom(
                               backgroundColor: crmColors.input,
@@ -577,7 +592,7 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _monthView(
                             context,
                             crmColors,
-                            confirmedBookings,
+                            filteredConfirmedBookings,
                             monthFocus.value,
                             now,
                           )
@@ -585,7 +600,7 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _dayView(
                             context,
                             crmColors,
-                            confirmedBookings,
+                            filteredConfirmedBookings,
                             selectedDay,
                             now,
                           )
@@ -593,7 +608,7 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _weekView(
                             context,
                             crmColors,
-                            confirmedBookings,
+                            filteredConfirmedBookings,
                             weekDays,
                             now,
                           )
@@ -602,7 +617,7 @@ class CalendarScreen extends HookConsumerWidget {
                             context,
                             crmColors,
                             [
-                              ...confirmedBookings.where(
+                              ...filteredConfirmedBookings.where(
                                 (b) => b.isOnDate(selectedDay),
                               ),
                             ]..sort(
@@ -883,6 +898,71 @@ class CalendarScreen extends HookConsumerWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildArtistFilter(
+    BuildContext context,
+    CrmTheme crmColors,
+    List<Employee> activeArtists,
+    ValueNotifier<String> selectedArtistFilter,
+  ) {
+    return PopupMenuButton<String>(
+      tooltip: 'Filter by artist',
+      onSelected: (value) => selectedArtistFilter.value = value,
+      itemBuilder: (context) => [
+        const PopupMenuItem<String>(
+          value: 'all',
+          child: Text('All Staff'),
+        ),
+        const PopupMenuItem<String>(
+          value: 'unassigned',
+          child: Text('Not Assigned'),
+        ),
+        ...activeArtists.map(
+          (artist) => PopupMenuItem<String>(
+            value: artist.id,
+            child: Text(artist.name),
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: crmColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: crmColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.filter_list, size: 18),
+            8.w,
+            Text(
+              _filterLabelForValue(selectedArtistFilter.value, activeArtists),
+              style: TextStyle(
+                color: crmColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            8.w,
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 18,
+              color: crmColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _filterLabelForValue(String value, List<Employee> activeArtists) {
+    if (value == 'all') return 'All Staff';
+    if (value == 'unassigned') return 'Not Assigned';
+    for (final artist in activeArtists) {
+      if (artist.id == value) return artist.name;
+    }
+    return 'All Staff';
   }
 
   Widget _weekView(

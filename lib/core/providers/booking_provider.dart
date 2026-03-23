@@ -14,7 +14,51 @@ class BookingNotifier extends _$BookingNotifier {
 
   Future<List<Booking>> _fetchBookings() async {
     final service = ref.watch(bookingServiceProvider);
-    return service.getBookings();
+    final bookings = await service.getBookings();
+    return _syncAutoCompletedBookings(service, bookings);
+  }
+
+  Future<List<Booking>> _syncAutoCompletedBookings(
+    BookingService service,
+    List<Booking> bookings,
+  ) async {
+    final today = DateTime.now();
+    final startOfToday = DateTime(today.year, today.month, today.day);
+
+    final staleConfirmedBookings = bookings
+        .where(
+          (booking) =>
+              booking.status.toLowerCase() == 'confirmed' &&
+              DateTime(
+                    booking.serviceEnd.year,
+                    booking.serviceEnd.month,
+                    booking.serviceEnd.day,
+                  )
+                  .isBefore(startOfToday),
+        )
+        .toList();
+
+    if (staleConfirmedBookings.isEmpty) {
+      return bookings;
+    }
+
+    final updatedById = <String, Booking>{};
+
+    for (final booking in staleConfirmedBookings) {
+      try {
+        final updated = await service.updateBooking(
+          booking.copyWith(status: 'completed'),
+        );
+        updatedById[updated.id] = updated;
+      } catch (_) {
+        updatedById[booking.id] = booking.copyWith(status: 'completed');
+      }
+    }
+
+    return [
+      for (final booking in bookings)
+        updatedById[booking.id] ?? booking,
+    ];
   }
 
   Future<Booking> addBooking(Booking booking) async {

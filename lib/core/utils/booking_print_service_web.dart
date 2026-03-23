@@ -75,12 +75,15 @@ String _buildPrintableHtml(
 }) {
   final isArtistCopy = variant == BookingPrintVariant.artist;
   final worksToPrint = isArtistCopy && relatedArtistBookings.isNotEmpty
-      ? (relatedArtistBookings.toList()..sort((a,b) => a.serviceStart.compareTo(b.serviceStart)))
+      ? (relatedArtistBookings.toList()
+          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)))
       : [booking];
 
-  final pagesHtml = worksToPrint.map((work) {
-    return '<div class="booking-page">\n${_buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName)}\n</div>';
-  }).join('\n');
+  final pagesHtml = worksToPrint
+      .map((work) {
+        return '<div class="booking-page">\n${_buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName)}\n</div>';
+      })
+      .join('\n');
 
   return '''
 <!DOCTYPE html>
@@ -111,10 +114,29 @@ String _buildPrintableHtml(
       .current-badge { display: inline-block; padding: 3px 8px; border-radius: 999px; background: #0b1b3b; color: white; font-size: 11px; font-weight: 700; }
       .booking-page { page-break-after: always; }
       .booking-page:last-child { page-break-after: auto; }
+      .client-confirmation { border: 1px solid #d9dde3; border-radius: 18px; padding: 28px; }
+      .client-brand { text-align: center; margin-bottom: 24px; }
+      .client-brand h1 { font-size: 26px; margin-bottom: 6px; letter-spacing: 0.04em; }
+      .client-brand p { color: #667085; font-size: 14px; }
+      .client-greeting { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
+      .client-intro { color: #44526d; margin-bottom: 20px; line-height: 1.6; }
+      .client-detail-block { border: 1px solid #d9dde3; border-radius: 14px; padding: 18px; margin-bottom: 16px; background: #fcfcfd; }
+      .client-detail-block h3 { font-size: 16px; margin-bottom: 14px; }
+      .client-detail-line { margin-bottom: 10px; line-height: 1.6; }
+      .client-detail-line strong { color: #0b1b3b; }
+      .client-finance { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 20px 0; }
+      .client-finance-card { border: 1px solid #d9dde3; border-radius: 14px; padding: 16px; }
+      .finance-label { color: #667085; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
+      .finance-value { font-size: 20px; font-weight: 700; }
+      .client-terms { margin-top: 18px; }
+      .client-terms h3 { font-size: 16px; margin-bottom: 12px; }
+      .client-terms ol { margin: 0; padding-left: 22px; color: #44526d; line-height: 1.7; }
+      .client-terms li { margin-bottom: 8px; }
       @media print {
         body { padding: 0; }
         .booking-page { padding: 16px; margin-bottom: 24px; }
         .section { break-inside: avoid; }
+        .client-confirmation, .client-detail-block, .client-finance-card { break-inside: avoid; }
       }
     </style>
   </head>
@@ -132,6 +154,9 @@ String _buildSingleBookingHtml(
   String artistName,
 ) {
   final isArtistCopy = variant == BookingPrintVariant.artist;
+  if (!isArtistCopy) {
+    return _buildClientConfirmationHtml(booking);
+  }
   final assignedStaffRows = booking.assignedStaff.isEmpty
       ? '<tr><td colspan="3">No staff assigned</td></tr>'
       : booking.assignedStaff
@@ -393,11 +418,115 @@ String _buildSingleBookingHtml(
 ''';
 }
 
+String _buildClientConfirmationHtml(Booking booking) {
+  final addonSummary = booking.addons.isEmpty
+      ? 'Nil'
+      : booking.addons
+            .map((addon) => '${addon.service} x${addon.persons}')
+            .join(', ');
+  final outfitSummary = booking.outfitDetails.trim().isEmpty
+      ? 'To be confirmed'
+      : booking.outfitDetails.trim();
+  final remainingBalance =
+      booking.totalPrice - booking.advanceAmount - booking.discountAmount;
+
+  return '''
+    <div class="client-confirmation">
+      <div class="client-brand">
+        <h1>Team N Makeovers</h1>
+        <p>Client Booking Confirmation</p>
+      </div>
+
+      <div class="client-greeting">Dear ${_escape(booking.customerName)},</div>
+      <p class="client-intro">
+        We are delighted to confirm your booking with Team N Makeovers for your upcoming event. Here are the basic details:
+      </p>
+
+      <div class="client-detail-block">
+        <h3>Basic Details</h3>
+        <div class="client-detail-line"><strong>Bride's Name :</strong> ${_escape(booking.customerName)}</div>
+        <div class="client-detail-line"><strong>Booking Date :</strong> ${_escape(_formatMonthYear(booking.bookingDate))}</div>
+        <div class="client-detail-line"><strong>Event Date &amp; Time :</strong> ${_escape(_formatLongDate(booking.serviceStart))}</div>
+        <div class="client-detail-line"><strong>Get Ready Time :</strong> ${_escape('${_formatTime(booking.serviceStart)} - ${_formatTime(booking.serviceEnd)}')}</div>
+        <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.region.isEmpty ? 'To be confirmed' : booking.region)}</div>
+        <div class="client-detail-line"><strong>Package :</strong> ${_escape(booking.service)}</div>
+        <div class="client-detail-line"><strong>Outfit :</strong> ${_escape(outfitSummary)}</div>
+        <div class="client-detail-line"><strong>Add Ons :</strong> ${_escape(addonSummary)}</div>
+        <div class="client-detail-line"><strong>Phone :</strong> ${_escape(booking.phone)}</div>
+        <div class="client-detail-line"><strong>Email :</strong> ${_escape(booking.email)}</div>
+      </div>
+
+      <div class="client-finance">
+        <div class="client-finance-card">
+          <div class="finance-label">Advance Paid</div>
+          <div class="finance-value">INR ${booking.advanceAmount.toStringAsFixed(0)}</div>
+        </div>
+        <div class="client-finance-card">
+          <div class="finance-label">Total Amount</div>
+          <div class="finance-value">INR ${booking.totalPrice.toStringAsFixed(0)}</div>
+        </div>
+        <div class="client-finance-card">
+          <div class="finance-label">Discount</div>
+          <div class="finance-value">INR ${booking.discountAmount.toStringAsFixed(0)}</div>
+        </div>
+        <div class="client-finance-card">
+          <div class="finance-label">Remaining Payment Due</div>
+          <div class="finance-value">INR ${remainingBalance.toStringAsFixed(0)}</div>
+        </div>
+      </div>
+
+      <div class="client-terms">
+        <h3>Terms and Conditions</h3>
+        <ol>
+          <li>Addon Services: Any additional services beyond the package will be discussed separately and added to the final invoice accordingly.</li>
+          <li>Time and Date Change: Any request for changes in time or date should be discussed and confirmed with us in advance. We will do our best to accommodate changes, subject to availability.</li>
+          <li>Change in Outfit: If there is a change in the chosen outfit, please inform us at the earliest convenience. This helps our team plan and execute the styling properly for the revised look.</li>
+        </ol>
+      </div>
+    </div>
+''';
+}
 
 String _formatDate(DateTime value) {
   final day = value.day.toString().padLeft(2, '0');
   final month = value.month.toString().padLeft(2, '0');
   return '$day/$month/${value.year}';
+}
+
+String _formatMonthYear(DateTime value) {
+  const months = [
+    'JAN',
+    'FEB',
+    'MAR',
+    'APR',
+    'MAY',
+    'JUN',
+    'JUL',
+    'AUG',
+    'SEP',
+    'OCT',
+    'NOV',
+    'DEC',
+  ];
+  return '${months[value.month - 1]} ${value.year}';
+}
+
+String _formatLongDate(DateTime value) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return '${months[value.month - 1]} ${value.day}, ${value.year}';
 }
 
 String _formatTime(DateTime value) {

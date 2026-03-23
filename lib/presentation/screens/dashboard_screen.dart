@@ -14,6 +14,41 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
+    final asyncBookings = ref.watch(bookingProvider);
+    final allBookings = asyncBookings.value ?? const <Booking>[];
+    final now = DateTime.now();
+
+    String monthKey(DateTime value) => '${value.year}-${value.month}';
+    final currentMonthKey = monthKey(now);
+    final monthBookings = allBookings
+        .where((booking) => monthKey(booking.serviceStart) == currentMonthKey)
+        .toList();
+
+    final totalWorksInMonth = monthBookings
+        .where((booking) => booking.status.toLowerCase() != 'cancelled')
+        .length;
+    final completedWorksInMonth = monthBookings
+        .where((booking) => booking.status.toLowerCase() == 'completed')
+        .length;
+    final cancelledWorksInMonth = monthBookings
+        .where((booking) => booking.status.toLowerCase() == 'cancelled')
+        .length;
+    final totalForecastAmount = monthBookings
+        .where((booking) => booking.status.toLowerCase() != 'cancelled')
+        .where((booking) => booking.status.toLowerCase() != 'completed')
+        .fold<double>(
+          0,
+          (sum, booking) =>
+              sum +
+              (booking.totalPrice -
+                      booking.advanceAmount -
+                      booking.discountAmount)
+                  .clamp(0, double.infinity),
+        );
+
+    String money(double amount) => 'INR ${amount.toStringAsFixed(0)}';
+    final monthLabel =
+        '${_monthName(now.month)} ${now.year}';
 
     return SingleChildScrollView(
       child: Column(
@@ -53,31 +88,31 @@ class DashboardScreen extends ConsumerWidget {
                 runSpacing: spacing,
                 children: [
                   _StatCard(
-                    title: 'Today\'s Appointments',
-                    value: '18',
+                    title: 'Total Works This Month',
+                    value: totalWorksInMonth.toString(),
                     icon: Icons.event,
-                    trend: '+4 from yesterday',
+                    trend: monthLabel,
                     width: itemWidth,
                   ),
                   _StatCard(
-                    title: 'Monthly Revenue',
-                    value: '\$42,500',
-                    icon: Icons.attach_money,
-                    trend: '+12% from last month',
+                    title: 'Forecast Amount This Month',
+                    value: money(totalForecastAmount),
+                    icon: Icons.account_balance_wallet_outlined,
+                    trend: monthLabel,
                     width: itemWidth,
                   ),
                   _StatCard(
-                    title: 'New Clients',
-                    value: '64',
-                    icon: Icons.group_add,
-                    trend: '+8% from last month',
+                    title: 'Cancelled Works',
+                    value: cancelledWorksInMonth.toString(),
+                    icon: Icons.event_busy,
+                    trend: monthLabel,
                     width: itemWidth,
                   ),
                   _StatCard(
-                    title: 'Customer Satisfaction',
-                    value: '4.9/5',
-                    icon: Icons.star_border,
-                    trend: '+0.2 from last month',
+                    title: 'Completed Works',
+                    value: completedWorksInMonth.toString(),
+                    icon: Icons.task_alt,
+                    trend: monthLabel,
                     width: itemWidth,
                   ),
                 ],
@@ -143,6 +178,24 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _monthName(int month) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return months[month - 1];
 }
 
 class _StatCard extends StatelessWidget {
