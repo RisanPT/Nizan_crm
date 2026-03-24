@@ -128,6 +128,10 @@ class Sidebar extends StatelessWidget {
                   icon: Icons.settings_outlined,
                   title: 'Settings',
                   isCollapsed: width == 80.0,
+                  isSelected: GoRouterState.of(
+                    context,
+                  ).uri.path.startsWith('/settings'),
+                  onTap: () => context.go('/settings'),
                 ),
               ],
             ),

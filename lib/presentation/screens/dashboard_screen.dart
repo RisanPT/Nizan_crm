@@ -5,7 +5,10 @@ import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/dashboard_report_service.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../services/employee_service.dart';
+import '../../services/package_service.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -15,6 +18,8 @@ class DashboardScreen extends ConsumerWidget {
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
     final asyncBookings = ref.watch(bookingProvider);
+    final asyncPackages = ref.watch(packagesProvider);
+    final asyncEmployees = ref.watch(employeesProvider);
     final allBookings = asyncBookings.value ?? const <Booking>[];
     final now = DateTime.now();
 
@@ -47,8 +52,30 @@ class DashboardScreen extends ConsumerWidget {
         );
 
     String money(double amount) => 'INR ${amount.toStringAsFixed(0)}';
-    final monthLabel =
-        '${_monthName(now.month)} ${now.year}';
+    final monthLabel = '${_monthName(now.month)} ${now.year}';
+
+    Future<void> exportReport() async {
+      final bookings = asyncBookings.value;
+      final packages = asyncPackages.value;
+      final employees = asyncEmployees.value;
+
+      if (bookings == null || packages == null || employees == null) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please wait until dashboard data finishes loading.'),
+          ),
+        );
+        return;
+      }
+
+      await downloadDashboardReport(
+        month: now,
+        bookings: bookings,
+        packages: packages,
+        employees: employees,
+      );
+    }
 
     return SingleChildScrollView(
       child: Column(
@@ -67,7 +94,7 @@ class DashboardScreen extends ConsumerWidget {
               ),
               if (!ResponsiveBuilder.isMobile(context))
                 OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: exportReport,
                   icon: const Icon(Icons.download, size: 18),
                   label: const Text('Export Report'),
                 ),
@@ -130,7 +157,11 @@ class DashboardScreen extends ConsumerWidget {
                   flex: 2,
                   child: Column(
                     children: [
-                      const _RevenueChartCard(),
+                      _RevenueChartCard(
+                        monthBookings: monthBookings,
+                        monthLabel: monthLabel,
+                        onExport: exportReport,
+                      ),
                       24.h,
                       const _PendingBookingRequestsCard(),
                       24.h,
@@ -152,7 +183,11 @@ class DashboardScreen extends ConsumerWidget {
           else
             Column(
               children: [
-                const _RevenueChartCard(),
+                _RevenueChartCard(
+                  monthBookings: monthBookings,
+                  monthLabel: monthLabel,
+                  onExport: exportReport,
+                ),
                 24.h,
                 const _PendingBookingRequestsCard(),
                 24.h,
@@ -280,10 +315,24 @@ class _StatCard extends StatelessWidget {
 }
 
 class _RevenueChartCard extends StatelessWidget {
-  const _RevenueChartCard();
+  const _RevenueChartCard({
+    required this.monthBookings,
+    required this.monthLabel,
+    required this.onExport,
+  });
+
+  final List<Booking> monthBookings;
+  final String monthLabel;
+  final Future<void> Function() onExport;
 
   @override
   Widget build(BuildContext context) {
+    final chartData = _buildRevenueSeries(monthBookings);
+    final peakRevenue = chartData.fold<double>(
+      0,
+      (max, item) => item.revenue > max ? item.revenue : max,
+    );
+
     return Card(
       child: Padding(
         padding: 20.p,
@@ -301,11 +350,13 @@ class _RevenueChartCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                TextButton(onPressed: () {}, child: const Text('View Report')),
+                TextButton(
+                  onPressed: onExport,
+                  child: const Text('View Report'),
+                ),
               ],
             ),
             16.h,
-            // Placeholder for Bar Chart
             Container(
               height: 300,
               width: double.infinity,
@@ -314,15 +365,128 @@ class _RevenueChartCard extends StatelessWidget {
                 border: Border.all(color: context.crmColors.border),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Center(
-                child: Text(
-                  'Bar Chart Placeholder\n(Requires a charting package like fl_chart)',
-                ),
-              ),
+              child: chartData.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No revenue data for $monthLabel yet.',
+                        style: TextStyle(
+                          color: context.crmColors.textSecondary,
+                        ),
+                      ),
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Daily revenue and booking count for $monthLabel',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: context.crmColors.textSecondary,
+                                ),
+                          ),
+                          20.h,
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                for (final point in chartData)
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                      ),
+                                      child: _RevenueBar(
+                                        point: point,
+                                        maxRevenue:
+                                            peakRevenue <= 0 ? 1 : peakRevenue,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RevenueBar extends StatelessWidget {
+  const _RevenueBar({
+    required this.point,
+    required this.maxRevenue,
+  });
+
+  final _RevenuePoint point;
+  final double maxRevenue;
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final ratio = (point.revenue / maxRevenue).clamp(0.0, 1.0);
+    final barHeight = 26 + (ratio * 132);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text(
+          'INR ${point.revenue.toStringAsFixed(0)}',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: crmColors.textSecondary,
+              ),
+          textAlign: TextAlign.center,
+        ),
+        8.h,
+        Tooltip(
+          message:
+              '${point.dayLabel}\nRevenue: INR ${point.revenue.toStringAsFixed(0)}\nBookings: ${point.bookingsCount}',
+          child: Container(
+            height: barHeight,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  crmColors.sidebar,
+                  crmColors.primary,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: crmColors.sidebar.withValues(alpha: 0.16),
+                  blurRadius: 10,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            alignment: Alignment.topCenter,
+            padding: const EdgeInsets.only(top: 7),
+            child: Text(
+              '${point.bookingsCount}',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+        ),
+        8.h,
+        Text(
+          point.dayLabel,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: crmColors.textSecondary,
+              ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
@@ -631,71 +795,133 @@ class _UpcomingBookingTile extends StatelessWidget {
   }
 }
 
-class _PopularServicesCard extends StatelessWidget {
+class _PopularServicesCard extends ConsumerWidget {
   const _PopularServicesCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crmColors = context.crmColors;
+    final asyncBookings = ref.watch(bookingProvider);
+    final asyncPackages = ref.watch(packagesProvider);
+
     return Card(
       child: Padding(
         padding: 20.p,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Popular Services',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Popular Services',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  TextButton(onPressed: () {}, child: const Text('View All')),
-                ],
+                ),
+                TextButton(
+                  onPressed: () => context.go('/services'),
+                  child: const Text('View All'),
+                ),
+              ],
+            ),
+            16.h,
+            asyncBookings.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
               ),
-              16.h,
-              // Mock list
-              _buildServiceItem(
-                context,
-                Icons.auto_awesome,
-                'Bridal Makeover Package',
-                '\$18,500',
-                '124 Bookings this month',
+              error: (error, stack) => Text(
+                'Failed to load service metrics.',
+                style: TextStyle(color: crmColors.textSecondary),
               ),
-              const Divider(),
-              _buildServiceItem(
-                context,
-                Icons.cut,
-                'Premium Hair Styling',
-                '\$8,200',
-                '98 Bookings this month',
-              ),
-              const Divider(),
-              _buildServiceItem(
-                context,
-                Icons.spa,
-                'Luxury Spa Facial',
-                '\$6,500',
-                '65 Bookings this month',
-              ),
-            ],
-          ),
+              data: (bookings) {
+                return asyncPackages.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (error, stack) => Text(
+                    'Failed to load services.',
+                    style: TextStyle(color: crmColors.textSecondary),
+                  ),
+                  data: (packages) {
+                    final now = DateTime.now();
+                    final monthBookings = bookings.where((booking) {
+                      return booking.serviceStart.year == now.year &&
+                          booking.serviceStart.month == now.month &&
+                          booking.status.toLowerCase() != 'cancelled';
+                    }).toList();
+
+                    final packageById = {
+                      for (final package in packages) package.id: package,
+                    };
+                    final metrics = <_ServiceMetric>[];
+
+                    final grouped = <String, List<Booking>>{};
+                    for (final booking in monthBookings) {
+                      final key = booking.packageId.isNotEmpty
+                          ? booking.packageId
+                          : booking.service.trim().toLowerCase();
+                      grouped.putIfAbsent(key, () => []).add(booking);
+                    }
+
+                    grouped.forEach((key, serviceBookings) {
+                      final sample = serviceBookings.first;
+                      final matchedPackage = packageById[sample.packageId];
+                      final price = matchedPackage?.price ?? sample.totalPrice;
+                      metrics.add(
+                        _ServiceMetric(
+                          name: matchedPackage?.name ?? sample.service,
+                          bookingsCount: serviceBookings.length,
+                          amount: price,
+                          icon: _serviceIcon(
+                            matchedPackage?.name ?? sample.service,
+                          ),
+                        ),
+                      );
+                    });
+
+                    metrics.sort((a, b) {
+                      final bookingsCompare =
+                          b.bookingsCount.compareTo(a.bookingsCount);
+                      if (bookingsCompare != 0) return bookingsCompare;
+                      return b.amount.compareTo(a.amount);
+                    });
+
+                    final visibleMetrics = metrics.take(3).toList();
+
+                    if (visibleMetrics.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          'No service bookings yet for this month.',
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        for (var i = 0; i < visibleMetrics.length; i++) ...[
+                          _buildServiceItem(context, visibleMetrics[i]),
+                          if (i != visibleMetrics.length - 1) const Divider(),
+                        ],
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildServiceItem(
-    BuildContext context,
-    IconData icon,
-    String name,
-    String rev,
-    String bookings,
-  ) {
+  Widget _buildServiceItem(BuildContext context, _ServiceMetric metric) {
     final crmColors = context.crmColors;
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -705,105 +931,271 @@ class _PopularServicesCard extends StatelessWidget {
           color: crmColors.secondary,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Icon(icon, color: crmColors.textPrimary),
+        child: Icon(metric.icon, color: crmColors.textPrimary),
       ),
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(bookings),
-      trailing: Text(rev, style: const TextStyle(fontWeight: FontWeight.bold)),
+      title: Text(
+        metric.name,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text('${metric.bookingsCount} bookings this month'),
+      trailing: Text(
+        'INR ${metric.amount.toStringAsFixed(0)}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
     );
   }
 }
 
-class _TopStaffCard extends StatelessWidget {
+class _TopStaffCard extends ConsumerWidget {
   const _TopStaffCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crmColors = context.crmColors;
+    final asyncBookings = ref.watch(bookingProvider);
+    final asyncEmployees = ref.watch(employeesProvider);
+
     return Card(
       child: Padding(
         padding: 20.p,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Top Performing Staff',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Top Performing Staff',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  TextButton(onPressed: () {}, child: const Text('View Team')),
-                ],
+                ),
+                TextButton(
+                  onPressed: () => context.go('/staff'),
+                  child: const Text('View Team'),
+                ),
+              ],
+            ),
+            16.h,
+            asyncBookings.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
               ),
-              16.h,
-              // Mock list
-              _buildStaffItem(
-                context,
-                'Jessica Davis',
-                'Senior Makeover Artist',
-                '4.9',
-                '42 Appointments',
+              error: (error, stack) => Text(
+                'Failed to load staff performance.',
+                style: TextStyle(color: crmColors.textSecondary),
               ),
-              const Divider(),
-              _buildStaffItem(
-                context,
-                'Amanda Lopez',
-                'Hair Stylist',
-                '4.8',
-                '38 Appointments',
-              ),
-              const Divider(),
-              _buildStaffItem(
-                context,
-                'Michael Chen',
-                'Esthetician',
-                '4.7',
-                '31 Appointments',
-              ),
-            ],
-          ),
+              data: (bookings) {
+                return asyncEmployees.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 24),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (error, stack) => Text(
+                    'Failed to load staff members.',
+                    style: TextStyle(color: crmColors.textSecondary),
+                  ),
+                  data: (employees) {
+                    final now = DateTime.now();
+                    final monthBookings = bookings.where((booking) {
+                      return booking.serviceStart.year == now.year &&
+                          booking.serviceStart.month == now.month &&
+                          booking.status.toLowerCase() != 'cancelled';
+                    }).toList();
+
+                    final employeeById = {
+                      for (final employee in employees) employee.id: employee,
+                    };
+                    final stats = <String, _StaffMetric>{};
+
+                    for (final booking in monthBookings) {
+                      for (final assignment in booking.assignedStaff) {
+                        if (assignment.employeeId.isEmpty) continue;
+                        final employee = employeeById[assignment.employeeId];
+                        final existing = stats[assignment.employeeId];
+                        final role =
+                            employee?.specialization.trim().isNotEmpty == true
+                            ? employee!.specialization.trim()
+                            : assignment.works.isNotEmpty
+                                ? assignment.works.join(', ')
+                                : assignment.role;
+
+                        stats[assignment.employeeId] = _StaffMetric(
+                          employeeId: assignment.employeeId,
+                          name: employee?.name ?? assignment.artistName,
+                          role: role.isEmpty ? 'Assigned Staff' : role,
+                          appointmentsCount:
+                              (existing?.appointmentsCount ?? 0) + 1,
+                        );
+                      }
+                    }
+
+                    final visibleStaff = stats.values.toList()
+                      ..sort((a, b) {
+                        final countCompare =
+                            b.appointmentsCount.compareTo(a.appointmentsCount);
+                        if (countCompare != 0) return countCompare;
+                        return a.name.compareTo(b.name);
+                      });
+
+                    if (visibleStaff.isEmpty) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Text(
+                          'No staff assignments yet for this month.',
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      );
+                    }
+
+                    final topStaff = visibleStaff.take(3).toList();
+
+                    return Column(
+                      children: [
+                        for (var i = 0; i < topStaff.length; i++) ...[
+                          _buildStaffItem(context, topStaff[i]),
+                          if (i != topStaff.length - 1) const Divider(),
+                        ],
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStaffItem(
-    BuildContext context,
-    String name,
-    String role,
-    String rating,
-    String appts,
-  ) {
+  Widget _buildStaffItem(BuildContext context, _StaffMetric metric) {
     final crmColors = context.crmColors;
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: const CircleAvatar(child: Icon(Icons.person)),
-      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(role),
+      leading: CircleAvatar(
+        backgroundColor: crmColors.primary,
+        foregroundColor: Colors.white,
+        child: Text(
+          _initialsForName(metric.name),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      title: Text(
+        metric.name,
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(metric.role),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.star, size: 14, color: crmColors.warning),
-              4.w,
-              Text(rating, style: const TextStyle(fontWeight: FontWeight.bold)),
-            ],
+          Text(
+            '${metric.appointmentsCount}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           4.h,
           Text(
-            appts,
+            metric.appointmentsCount == 1
+                ? '1 appointment'
+                : '${metric.appointmentsCount} appointments',
             style: TextStyle(fontSize: 12, color: crmColors.textSecondary),
           ),
         ],
       ),
     );
   }
+}
+
+class _ServiceMetric {
+  final String name;
+  final int bookingsCount;
+  final double amount;
+  final IconData icon;
+
+  const _ServiceMetric({
+    required this.name,
+    required this.bookingsCount,
+    required this.amount,
+    required this.icon,
+  });
+}
+
+class _StaffMetric {
+  final String employeeId;
+  final String name;
+  final String role;
+  final int appointmentsCount;
+
+  const _StaffMetric({
+    required this.employeeId,
+    required this.name,
+    required this.role,
+    required this.appointmentsCount,
+  });
+}
+
+IconData _serviceIcon(String serviceName) {
+  final normalized = serviceName.toLowerCase();
+  if (normalized.contains('hair')) return Icons.cut;
+  if (normalized.contains('spa') || normalized.contains('facial')) {
+    return Icons.spa;
+  }
+  if (normalized.contains('bridal') || normalized.contains('makeover')) {
+    return Icons.auto_awesome;
+  }
+  return Icons.design_services_outlined;
+}
+
+String _initialsForName(String name) {
+  final parts = name
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((part) => part.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+  return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+}
+
+List<_RevenuePoint> _buildRevenueSeries(List<Booking> monthBookings) {
+  final grouped = <String, _RevenuePoint>{};
+
+  for (final booking in monthBookings) {
+    if (booking.status.toLowerCase() == 'cancelled') continue;
+    final dayLabel = _UpcomingBookingTile._formatDate(booking.serviceStart);
+    final previous = grouped[dayLabel];
+    grouped[dayLabel] = _RevenuePoint(
+      dayLabel: dayLabel,
+      revenue: (previous?.revenue ?? 0) + booking.totalPrice,
+      bookingsCount: (previous?.bookingsCount ?? 0) + 1,
+      sortDate: DateTime(
+        booking.serviceStart.year,
+        booking.serviceStart.month,
+        booking.serviceStart.day,
+      ),
+    );
+  }
+
+  final series = grouped.values.toList()
+    ..sort((a, b) => a.sortDate.compareTo(b.sortDate));
+
+  if (series.length <= 7) return series;
+  return series.sublist(series.length - 7);
+}
+
+class _RevenuePoint {
+  final String dayLabel;
+  final double revenue;
+  final int bookingsCount;
+  final DateTime sortDate;
+
+  const _RevenuePoint({
+    required this.dayLabel,
+    required this.revenue,
+    required this.bookingsCount,
+    required this.sortDate,
+  });
 }

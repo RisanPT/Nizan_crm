@@ -1,17 +1,41 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../core/providers/auth_provider.dart';
 
 part 'dio_provider.g.dart';
 
+const apiBaseUrl = 'http://localhost:5001/api';
+
 @riverpod
-Dio dio( ref) {
-  // If you are using Android Emulator, localhost might need to be 10.0.2.2.
-  // If you are using real device, use your computer's local IP address.
-  return Dio(
+Dio dio(Ref ref) {
+  final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://localhost:5001/api',
+      baseUrl: apiBaseUrl,
       connectTimeout: const Duration(seconds: 5),
       receiveTimeout: const Duration(seconds: 3),
     ),
   );
+
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final auth = ref.read(authControllerProvider);
+        final token = auth.session?.token;
+
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+
+        handler.next(options);
+      },
+      onError: (error, handler) async {
+        if (error.response?.statusCode == 401) {
+          await ref.read(authControllerProvider).logout();
+        }
+        handler.next(error);
+      },
+    ),
+  );
+
+  return dio;
 }
