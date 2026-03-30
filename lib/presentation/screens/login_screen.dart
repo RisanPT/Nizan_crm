@@ -67,56 +67,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               Expanded(
                 child: Container(
                   color: crmColors.sidebar,
-                  padding: 48.px,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _BrandHeader(inverted: true),
-                      const Spacer(),
-                      Container(
-                        padding: 32.px,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(28),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.1),
+                  child: Center(
+                    child: Container(
+                      width: 320,
+                      height: 320,
+                      padding: 36.px,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(40),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.18),
+                            blurRadius: 42,
+                            offset: const Offset(0, 22),
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'CRM access for your sales and operations team.',
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                            ),
-                            16.h,
-                            Text(
-                              'Track clients, manage bookings, handle staff allocation, and confirm advance invoices from one place.',
-                              style: theme.textTheme.bodyLarge?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.78),
-                                height: 1.6,
-                              ),
-                            ),
-                            28.h,
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: const [
-                                _FeatureChip(label: 'Booking Requests'),
-                                _FeatureChip(label: 'Client Directory'),
-                                _FeatureChip(label: 'Staff Scheduling'),
-                                _FeatureChip(label: 'Advance Invoices'),
-                              ],
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
-                      const Spacer(),
-                    ],
+                      child: Image.asset(
+                        'assets/images/nizan_logo.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -167,12 +138,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               borderRadius: BorderRadius.circular(28),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const _BrandHeader(inverted: true),
+                Container(
+                  width: 132,
+                  height: 132,
+                  padding: 18.px,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 24,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/images/nizan_logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
                 24.h,
                 Text(
                   'Welcome back to your booking desk.',
+                  textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -181,6 +172,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 12.h,
                 Text(
                   'Sign in to manage live CRM requests, client records, and staff planning.',
+                  textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.78),
                     height: 1.5,
@@ -330,82 +322,6 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _BrandHeader extends StatelessWidget {
-  const _BrandHeader({required this.inverted});
-
-  final bool inverted;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final crmColors = context.crmColors;
-
-    return Row(
-      children: [
-        Container(
-          padding: 10.px,
-          decoration: BoxDecoration(
-            color: inverted ? Colors.white : crmColors.surface,
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Image.asset(
-            'assets/images/nizan_logo.png',
-            width: 34,
-            height: 34,
-            fit: BoxFit.contain,
-          ),
-        ),
-        14.w,
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Nizan CRM',
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: inverted ? Colors.white : crmColors.textPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              'Makeovers Operations',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: inverted
-                    ? Colors.white.withValues(alpha: 0.74)
-                    : crmColors.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _FeatureChip extends StatelessWidget {
-  const _FeatureChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

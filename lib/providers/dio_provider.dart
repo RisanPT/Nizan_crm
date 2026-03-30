@@ -4,7 +4,10 @@ import '../core/providers/auth_provider.dart';
 
 part 'dio_provider.g.dart';
 
-const apiBaseUrl = 'http://localhost:5001/api';
+const apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://localhost:5001/api',
+);
 
 @riverpod
 Dio dio(Ref ref) {

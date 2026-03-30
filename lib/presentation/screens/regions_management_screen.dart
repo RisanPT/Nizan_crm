@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/service_region.dart';
 import '../../core/theme/crm_theme.dart';
@@ -15,6 +16,13 @@ class RegionsManagementScreen extends HookConsumerWidget {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncRegions = ref.watch(regionsProvider);
+
+    Future<void> handleBack() async {
+      final didPop = await Navigator.of(context).maybePop();
+      if (!didPop && context.mounted) {
+        context.go('/services');
+      }
+    }
 
     Future<void> openRegionDialog([ServiceRegion? region]) async {
       final nameCtrl = TextEditingController(text: region?.name ?? '');
@@ -93,6 +101,11 @@ class RegionsManagementScreen extends HookConsumerWidget {
       children: [
         Row(
           children: [
+            IconButton(
+              onPressed: handleBack,
+              icon: const Icon(Icons.arrow_back),
+            ),
+            8.w,
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

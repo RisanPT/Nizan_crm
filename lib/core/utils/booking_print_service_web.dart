@@ -19,12 +19,16 @@ Future<void> printBookingDetails(
   Booking booking, {
   required BookingPrintVariant variant,
   List<Booking> relatedArtistBookings = const [],
+  List<BookingDisplayEntry> relatedArtistEntries = const [],
+  BookingDisplayEntry? selectedArtistEntry,
   String artistName = '',
 }) async {
   final content = _buildPrintableHtml(
     booking,
     variant: variant,
     relatedArtistBookings: relatedArtistBookings,
+    relatedArtistEntries: relatedArtistEntries,
+    selectedArtistEntry: selectedArtistEntry,
     artistName: artistName,
   );
   final blob = web.Blob(
@@ -71,19 +75,29 @@ String _buildPrintableHtml(
   Booking booking, {
   required BookingPrintVariant variant,
   List<Booking> relatedArtistBookings = const [],
+  List<BookingDisplayEntry> relatedArtistEntries = const [],
+  BookingDisplayEntry? selectedArtistEntry,
   String artistName = '',
 }) {
-  final isArtistCopy = variant == BookingPrintVariant.artist;
-  final worksToPrint = isArtistCopy && relatedArtistBookings.isNotEmpty
-      ? (relatedArtistBookings.toList()
-          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)))
-      : [booking];
-
-  final pagesHtml = worksToPrint
-      .map((work) {
-        return '<div class="booking-page">\n${_buildSingleBookingHtml(work, variant, relatedArtistBookings, artistName)}\n</div>';
-      })
-      .join('\n');
+  final artistPages =
+      variant == BookingPrintVariant.artist &&
+              relatedArtistEntries.isNotEmpty
+          ? relatedArtistEntries
+          : [
+              if (selectedArtistEntry != null)
+                selectedArtistEntry
+              else
+                booking.displayEntries.first,
+            ];
+  final pagesHtml =
+      variant == BookingPrintVariant.artist
+          ? artistPages
+              .map(
+                (entry) =>
+                    '<div class="booking-page">\n${_buildSingleBookingHtml(entry.booking, variant, relatedArtistBookings, relatedArtistEntries, entry, artistName)}\n</div>',
+              )
+              .join('\n')
+          : '<div class="booking-page">\n${_buildSingleBookingHtml(booking, variant, relatedArtistBookings, relatedArtistEntries, selectedArtistEntry, artistName)}\n</div>';
 
   return '''
 <!DOCTYPE html>
@@ -151,15 +165,51 @@ String _buildSingleBookingHtml(
   Booking booking,
   BookingPrintVariant variant,
   List<Booking> relatedArtistBookings,
+  List<BookingDisplayEntry> relatedArtistEntries,
+  BookingDisplayEntry? selectedArtistEntry,
   String artistName,
 ) {
   final isArtistCopy = variant == BookingPrintVariant.artist;
   if (!isArtistCopy) {
     return _buildClientConfirmationHtml(booking);
   }
-  final assignedStaffRows = booking.assignedStaff.isEmpty
+  final activeArtistEntry = selectedArtistEntry ?? booking.displayEntries.first;
+  final activeEntryAssignments =
+      booking.bookingItems.isNotEmpty
+          ? activeArtistEntry.assignedStaff
+          : (activeArtistEntry.assignedStaff.isNotEmpty
+                ? activeArtistEntry.assignedStaff
+                : booking.assignedStaff);
+  final effectiveArtistEntries =
+      relatedArtistEntries.isNotEmpty
+          ? relatedArtistEntries.toList()
+          : relatedArtistBookings
+              .expand((item) => item.displayEntries)
+              .where((entry) => entry.assignedStaff.isNotEmpty)
+              .toList();
+  effectiveArtistEntries.sort(
+    (a, b) => a.serviceStart.compareTo(b.serviceStart),
+  );
+  final entryBookingDate =
+      activeArtistEntry.selectedDates.isNotEmpty
+          ? activeArtistEntry.selectedDates.first
+          : booking.bookingDate;
+  final entryDiscountAmount = booking.bookingItems.isEmpty
+      ? booking.discountAmount
+      : 0.0;
+  final entryDiscountLabel = booking.bookingItems.isEmpty
+      ? (booking.discountType == 'percent'
+            ? '${booking.discountValue.toStringAsFixed(0)}%'
+            : 'INR ${booking.discountValue.toStringAsFixed(0)}')
+      : 'INR 0';
+  final entryForecast =
+      activeArtistEntry.totalPrice -
+      activeArtistEntry.advanceAmount -
+      entryDiscountAmount;
+
+  final assignedStaffRows = activeEntryAssignments.isEmpty
       ? '<tr><td colspan="3">No staff assigned</td></tr>'
-      : booking.assignedStaff
+      : activeEntryAssignments
             .map(
               (staff) =>
                   '''
@@ -186,11 +236,6 @@ String _buildSingleBookingHtml(
             )
             .join();
 
-  final discountLabel = booking.discountType == 'percent'
-      ? '${booking.discountValue.toStringAsFixed(0)}%'
-      : 'INR ${booking.discountValue.toStringAsFixed(0)}';
-  final forecast =
-      booking.totalPrice - booking.advanceAmount - booking.discountAmount;
   final statusLabel = booking.status.isEmpty
       ? 'Pending'
       : _titleCase(booking.status);
@@ -229,18 +274,19 @@ String _buildSingleBookingHtml(
   final artistRows = [
     _detailRow(
       'Assigned Artist(s)',
-      booking.assignedStaff.isEmpty
+      activeEntryAssignments.isEmpty
           ? ''
-          : booking.assignedStaff.map((staff) => staff.artistName).join(', '),
+          : activeEntryAssignments.map((staff) => staff.artistName).join(', '),
     ),
     _detailRow(
       'Artist Mobile Number',
-      booking.assignedStaff
+      activeEntryAssignments
           .where((staff) => staff.phone.trim().isNotEmpty)
           .map((staff) => '${staff.artistName}: ${staff.phone}')
           .join(', '),
     ),
-    _detailRow('Package', booking.service),
+    _detailRow('Package', activeArtistEntry.service),
+    _detailRow('Event Slot', activeArtistEntry.eventSlot),
     _detailRow('Status', statusLabel),
   ].where((row) => row.isNotEmpty).join();
   final title = isArtistCopy ? 'Artist Copy' : 'Client Copy';
@@ -249,40 +295,38 @@ String _buildSingleBookingHtml(
       : 'Booking confirmation copy for client';
   final effectiveArtistName = artistName.trim().isNotEmpty
       ? artistName.trim()
-      : booking.assignedStaff
+      : activeEntryAssignments
             .where((staff) => staff.roleType.toLowerCase() == 'lead')
             .map((staff) => staff.artistName.trim())
             .firstWhere((name) => name.isNotEmpty, orElse: () => '');
-  final sortedArtistWorks = {
-    for (final item in relatedArtistBookings) item.id: item,
-  }.values.toList()..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+  final sortedArtistWorks = effectiveArtistEntries;
   final artistWorkRows = sortedArtistWorks.isEmpty
       ? '<tr><td colspan="5">No other works scheduled for this artist today</td></tr>'
       : sortedArtistWorks.map((item) {
-          final isCurrentBooking = item.id == booking.id;
+          final isCurrentBooking = item.id == activeArtistEntry.id;
           return '''
 <tr>
   <td>${isCurrentBooking ? 'Current' : ''}</td>
   <td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td>
-  <td>${_escape(item.customerName)}</td>
+  <td>${_escape(item.booking.customerName)}</td>
   <td>${_escape(item.service)}</td>
-  <td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td>
+  <td>${_escape(item.booking.region.isEmpty ? 'No region' : item.booking.region)}</td>
 </tr>''';
         }).join();
   final artistClientDetailRows = sortedArtistWorks.isEmpty
       ? '<tr><td colspan="8">No client details available for this artist today</td></tr>'
       : sortedArtistWorks.map((item) {
-          final isCurrentBooking = item.id == booking.id;
+          final isCurrentBooking = item.id == activeArtistEntry.id;
           return '''
 <tr${isCurrentBooking ? ' class="current-work-row"' : ''}>
   <td>${isCurrentBooking ? '<span class="current-badge">Current</span>' : ''}</td>
   <td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td>
-  <td>${_escape(item.customerName)}</td>
-  <td>${_escape(item.phone)}</td>
-  <td>${_escape(item.secondaryContact.isEmpty ? '-' : item.secondaryContact)}</td>
-  <td>${_escape(item.email.isEmpty ? '-' : item.email)}</td>
+  <td>${_escape(item.booking.customerName)}</td>
+  <td>${_escape(item.booking.phone)}</td>
+  <td>${_escape(item.booking.secondaryContact.isEmpty ? '-' : item.booking.secondaryContact)}</td>
+  <td>${_escape(item.booking.email.isEmpty ? '-' : item.booking.email)}</td>
   <td>${_escape(item.service)}</td>
-  <td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td>
+  <td>${_escape(item.booking.region.isEmpty ? 'No region' : item.booking.region)}</td>
 </tr>''';
         }).join();
 
@@ -300,17 +344,17 @@ String _buildSingleBookingHtml(
       </div>
       <div class="card">
         <div class="label">Service</div>
-        <div class="value">${_escape(booking.service)}</div>
+        <div class="value">${_escape(activeArtistEntry.service)}</div>
         <p class="muted">${_escape(booking.region.isEmpty ? 'No region selected' : booking.region)}${booking.driverName.isEmpty ? '' : ' • Driver: ${_escape(booking.driverName)}'}</p>
       </div>
       <div class="card">
         <div class="label">Booking Date</div>
-        <div class="value">${_formatDate(booking.bookingDate)}</div>
-        <p class="muted">${_formatTime(booking.serviceStart)} - ${_formatTime(booking.serviceEnd)}</p>
+        <div class="value">${_formatDate(entryBookingDate)}</div>
+        <p class="muted">${_formatTime(activeArtistEntry.serviceStart)} - ${_formatTime(activeArtistEntry.serviceEnd)}</p>
       </div>
       <div class="card">
         <div class="label">Booking ID</div>
-        <div class="value">${_escape(booking.id)}</div>
+        <div class="value">${_escape(booking.displayBookingNumber)}</div>
         <p class="muted">Status: ${_escape(statusLabel)}</p>
       </div>
     </div>
@@ -368,16 +412,13 @@ String _buildSingleBookingHtml(
 
     <div class="section">
       <h3>Today's Artist Works</h3>
-      <p class="schedule-note">${_escape(effectiveArtistName.isEmpty ? 'Assigned artist' : effectiveArtistName)} schedule for ${_formatDate(booking.bookingDate)}, sorted by time.</p>
+      <p class="schedule-note">${_escape(effectiveArtistName.isEmpty ? 'Assigned artist' : effectiveArtistName)} schedule for ${_formatDate(entryBookingDate)}, sorted by time.</p>
       <table>
         <thead>
           <tr><th>Current</th><th>Time</th><th>Client</th><th>Service</th><th>Region</th></tr>
         </thead>
         <tbody>
-          ${sortedArtistWorks.isEmpty ? artistWorkRows : sortedArtistWorks.map((item) {
-                final isCurrentBooking = item.id == booking.id;
-                return '<tr${isCurrentBooking ? ' class="current-work-row"' : ''}><td>${isCurrentBooking ? '<span class="current-badge">Current</span>' : ''}</td><td>${_formatTime(item.serviceStart)} - ${_formatTime(item.serviceEnd)}</td><td>${_escape(item.customerName)}</td><td>${_escape(item.service)}</td><td>${_escape(item.region.isEmpty ? 'No region' : item.region)}</td></tr>';
-              }).join()}
+          $artistWorkRows
         </tbody>
       </table>
     </div>
@@ -409,11 +450,11 @@ String _buildSingleBookingHtml(
     </div>
 
     <div class="summary">
-      <div class="summary-row"><span>Total Amount</span><span>INR ${booking.totalPrice.toStringAsFixed(0)}</span></div>
-      <div class="summary-row"><span>Advance Paid</span><span>INR ${booking.advanceAmount.toStringAsFixed(0)}</span></div>
-      <div class="summary-row"><span>Discount</span><span>$discountLabel</span></div>
-      <div class="summary-row"><span>Applied Discount Amount</span><span>INR ${booking.discountAmount.toStringAsFixed(0)}</span></div>
-      <div class="summary-row"><strong>Forecast Balance</strong><strong>INR ${forecast.toStringAsFixed(0)}</strong></div>
+      <div class="summary-row"><span>Total Amount</span><span>INR ${activeArtistEntry.totalPrice.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><span>Advance Paid</span><span>INR ${activeArtistEntry.advanceAmount.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><span>Discount</span><span>$entryDiscountLabel</span></div>
+      <div class="summary-row"><span>Applied Discount Amount</span><span>INR ${entryDiscountAmount.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><strong>Forecast Balance</strong><strong>INR ${entryForecast.toStringAsFixed(0)}</strong></div>
     </div>
 ''';
 }

@@ -16,6 +16,7 @@ import '../../presentation/screens/regions_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
 import '../../presentation/screens/login_screen.dart';
+import '../../presentation/screens/sales_bookings_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 
 // Create a global key for the root navigator
@@ -78,6 +79,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Add-on Services';
           } else if (state.uri.path == '/staff') {
             title = 'Staff Management';
+          } else if (state.uri.path == '/sales') {
+            title = 'Sales & Invoices';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
           }
@@ -112,7 +115,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/services/add',
-            builder: (context, state) => const AddServiceScreen(),
+            builder: (context, state) => AddServiceScreen(
+              packageId: state.uri.queryParameters['id'],
+            ),
           ),
           GoRoute(
             path: '/services/regions',
@@ -127,6 +132,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const StaffManagementScreen(),
           ),
           GoRoute(
+            path: '/sales',
+            builder: (context, state) => const SalesBookingsScreen(),
+          ),
+          GoRoute(
             path: '/booking/add',
             builder: (context, state) => const AddBookingScreen(),
           ),
@@ -138,6 +147,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/booking/manage/:id',
             builder: (context, state) => ManageBookingScreen(
               bookingId: state.pathParameters['id'] ?? '1042',
+              bookingEntryId: state.uri.queryParameters['entry'],
             ),
           ),
           GoRoute(

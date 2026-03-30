@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -17,8 +19,13 @@ import '../../services/region_service.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
+  final String? bookingEntryId;
 
-  const ManageBookingScreen({super.key, required this.bookingId});
+  const ManageBookingScreen({
+    super.key,
+    required this.bookingId,
+    this.bookingEntryId,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,6 +55,29 @@ class ManageBookingScreen extends HookConsumerWidget {
       (b) => b?.id == bookingId,
       orElse: () => null,
     );
+    final bookingEntries = booking?.displayEntries ?? const <BookingDisplayEntry>[];
+    final selectedDisplayEntry = bookingEntries
+        .cast<BookingDisplayEntry?>()
+        .firstWhere(
+          (entry) => entry?.id == bookingEntryId,
+          orElse: () => bookingEntries.isNotEmpty ? bookingEntries.first : null,
+        );
+    final selectedBookingItemIndex =
+        booking != null &&
+            booking.bookingItems.isNotEmpty &&
+            selectedDisplayEntry != null
+        ? booking.displayEntries.indexWhere(
+            (entry) => entry.id == selectedDisplayEntry.id,
+          )
+        : -1;
+    final displayBookingNumber = booking?.displayBookingNumber ?? bookingId;
+    final canonicalBookingDate =
+        selectedDisplayEntry != null &&
+            selectedDisplayEntry.selectedDates.isNotEmpty
+        ? selectedDisplayEntry.selectedDates.first
+        : booking != null && booking.selectedDates.isNotEmpty
+        ? booking.selectedDates.first
+        : booking?.bookingDate;
 
     // ── Editable state (pre-filled from booking, editable by user) ──────────
     final statusState = useState(booking?.id != null ? 'confirmed' : 'pending');
@@ -67,19 +97,33 @@ class ManageBookingScreen extends HookConsumerWidget {
     final phoneCtrl = useTextEditingController(text: booking?.phone ?? '');
     final emailCtrl = useTextEditingController(text: booking?.email ?? '');
     final bookingDateCtrl = useTextEditingController(
-      text: booking?.bookingDate.toString().split(' ')[0] ?? '',
+      text: canonicalBookingDate == null
+          ? ''
+          : _formatDateOnly(canonicalBookingDate),
     );
     final startTimeCtrl = useTextEditingController(
-      text: booking != null ? _fmt(booking.serviceStart) : '',
+      text: selectedDisplayEntry != null
+          ? _fmt(selectedDisplayEntry.serviceStart)
+          : booking != null
+          ? _fmt(booking.serviceStart)
+          : '',
     );
     final endTimeCtrl = useTextEditingController(
-      text: booking != null ? _fmt(booking.serviceEnd) : '',
+      text: selectedDisplayEntry != null
+          ? _fmt(selectedDisplayEntry.serviceEnd)
+          : booking != null
+          ? _fmt(booking.serviceEnd)
+          : '',
     );
     final totalAmountCtrl = useTextEditingController(
-      text: booking?.totalPrice.toStringAsFixed(0) ?? '',
+      text: selectedDisplayEntry?.totalPrice.toStringAsFixed(0) ??
+          booking?.totalPrice.toStringAsFixed(0) ??
+          '',
     );
     final advanceCtrl = useTextEditingController(
-      text: booking?.advanceAmount.toStringAsFixed(0) ?? '',
+      text: selectedDisplayEntry?.advanceAmount.toStringAsFixed(0) ??
+          booking?.advanceAmount.toStringAsFixed(0) ??
+          '',
     );
     final discountCtrl = useTextEditingController(
       text:
@@ -111,10 +155,17 @@ class ManageBookingScreen extends HookConsumerWidget {
     final travelDistanceCtrl = useTextEditingController(
       text: booking?.travelDistanceKm.toStringAsFixed(0) ?? '',
     );
+    final eventSlotInputCtrl = useTextEditingController();
+    final eventSlots = useState<List<String>>(
+      _parseEventSlots(booking?.eventSlot ?? ''),
+    );
     final roomCtrl = useTextEditingController();
     final secondaryPhoneCtrl = useTextEditingController();
     final outfitCtrl = useTextEditingController();
     final captureStaffCtrl = useTextEditingController();
+    final temporaryStaffCtrl = useTextEditingController(
+      text: booking?.temporaryStaffDetails ?? '',
+    );
     final staffNeedsCtrl = useTextEditingController();
     final remarksCtrl = useTextEditingController();
 
@@ -124,11 +175,19 @@ class ManageBookingScreen extends HookConsumerWidget {
           nameCtrl.text = booking.customerName;
           phoneCtrl.text = booking.phone;
           emailCtrl.text = booking.email;
-          bookingDateCtrl.text = booking.bookingDate.toString().split(' ')[0];
-          startTimeCtrl.text = _fmt(booking.serviceStart);
-          endTimeCtrl.text = _fmt(booking.serviceEnd);
-          totalAmountCtrl.text = booking.totalPrice.toStringAsFixed(0);
-          advanceCtrl.text = booking.advanceAmount.toStringAsFixed(0);
+          bookingDateCtrl.text = canonicalBookingDate == null
+              ? ''
+              : _formatDateOnly(canonicalBookingDate);
+          startTimeCtrl.text = _fmt(
+            selectedDisplayEntry?.serviceStart ?? booking.serviceStart,
+          );
+          endTimeCtrl.text = _fmt(
+            selectedDisplayEntry?.serviceEnd ?? booking.serviceEnd,
+          );
+          totalAmountCtrl.text = (selectedDisplayEntry?.totalPrice ?? booking.totalPrice)
+              .toStringAsFixed(0);
+          advanceCtrl.text = (selectedDisplayEntry?.advanceAmount ?? booking.advanceAmount)
+              .toStringAsFixed(0);
           discountType.value = booking.discountType;
           discountCtrl.text =
               ((booking.discountValue == 0
@@ -136,21 +195,25 @@ class ManageBookingScreen extends HookConsumerWidget {
                       : booking.discountValue))
                   .toStringAsFixed(0);
           balanceCtrl.text =
-              (booking.totalPrice -
-                      booking.advanceAmount -
+              ((selectedDisplayEntry?.totalPrice ?? booking.totalPrice) -
+                      (selectedDisplayEntry?.advanceAmount ?? booking.advanceAmount) -
                       booking.discountAmount)
                   .toStringAsFixed(0);
-          packageCtrl.text = booking.service;
+          packageCtrl.text = selectedDisplayEntry?.service ?? booking.service;
           mapUrlCtrl.text = booking.mapUrl;
           travelModeCtrl.text = booking.travelMode;
           travelTimeCtrl.text = booking.travelTime;
           travelDistanceCtrl.text = booking.travelDistanceKm == 0
               ? ''
               : booking.travelDistanceKm.toStringAsFixed(0);
+          eventSlots.value = _parseEventSlots(
+            selectedDisplayEntry?.eventSlot ?? booking.eventSlot,
+          );
           roomCtrl.text = booking.requiredRoomDetail;
           secondaryPhoneCtrl.text = booking.secondaryContact;
           outfitCtrl.text = booking.outfitDetails;
           captureStaffCtrl.text = booking.captureStaffDetails;
+          temporaryStaffCtrl.text = booking.temporaryStaffDetails;
           staffNeedsCtrl.text = booking.staffInstructions;
           remarksCtrl.text = booking.internalRemarks;
           contentRequired.value = booking.contentCreationRequired;
@@ -172,19 +235,28 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.travelMode,
         booking?.travelTime,
         booking?.travelDistanceKm,
+        booking?.eventSlot,
         booking?.requiredRoomDetail,
         booking?.secondaryContact,
         booking?.outfitDetails,
         booking?.captureStaffDetails,
+        booking?.temporaryStaffDetails,
         booking?.staffInstructions,
         booking?.internalRemarks,
         booking?.contentCreationRequired,
         booking?.totalPrice,
         booking?.advanceAmount,
+        selectedDisplayEntry?.id,
+        selectedDisplayEntry?.service,
+        selectedDisplayEntry?.eventSlot,
+        selectedDisplayEntry?.totalPrice,
+        selectedDisplayEntry?.advanceAmount,
+        selectedDisplayEntry?.serviceStart,
+        selectedDisplayEntry?.serviceEnd,
         booking?.discountAmount,
         booking?.discountType,
         booking?.discountValue,
-        booking?.bookingDate,
+        canonicalBookingDate,
         booking?.serviceStart,
         booking?.serviceEnd,
         booking?.service,
@@ -201,6 +273,10 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     final basePackageAmount = useMemoized(() {
+      if (selectedDisplayEntry != null) {
+        return selectedDisplayEntry.totalPrice;
+      }
+
       final savedAddonTotal =
           booking?.addons.fold<double>(
             0,
@@ -209,7 +285,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           0;
       final baseAmount = (booking?.totalPrice ?? 0) - savedAddonTotal;
       return baseAmount < 0 ? 0.0 : baseAmount;
-    }, [booking?.id]);
+    }, [booking?.id, selectedDisplayEntry?.id, selectedDisplayEntry?.totalPrice]);
 
     double appliedDiscountAmount(double subtotal) {
       final inputValue = parseMoney(discountCtrl.text);
@@ -244,11 +320,17 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     useEffect(() {
       if (booking != null) {
-        assignments.value = List<BookingAssignment>.from(booking.assignedStaff);
+        assignments.value = List<BookingAssignment>.from(
+          selectedDisplayEntry != null
+              ? selectedDisplayEntry.assignedStaff
+              : booking.bookingItems.isNotEmpty
+              ? const <BookingAssignment>[]
+              : booking.assignedStaff,
+        );
         addons.value = List<BookingAddon>.from(booking.addons);
       }
       return null;
-    }, [booking?.id]);
+    }, [booking?.id, selectedDisplayEntry?.id]);
 
     String activeArtistName() {
       final primaryArtist = assignments.value
@@ -284,17 +366,14 @@ class ManageBookingScreen extends HookConsumerWidget {
         );
     final currentArtistId = currentLeadAssignment?.employeeId.trim() ?? '';
     final currentBookingDate =
-        DateTime.tryParse(bookingDateCtrl.text.trim()) ??
-        booking?.bookingDate ??
+        _parseDateInput(bookingDateCtrl.text.trim()) ??
+        canonicalBookingDate ??
         DateTime.now();
     final todayArtistWorks = currentArtistName.isEmpty
         ? const <Booking>[]
         : (() {
             final items = allBookings.where((item) {
-              final sameDay =
-                  item.bookingDate.year == currentBookingDate.year &&
-                  item.bookingDate.month == currentBookingDate.month &&
-                  item.bookingDate.day == currentBookingDate.day;
+              final sameDay = item.isOnDate(currentBookingDate);
               final activeStatus =
                   item.status.toLowerCase() != 'rejected' &&
                   item.status.toLowerCase() != 'cancelled';
@@ -310,6 +389,40 @@ class ManageBookingScreen extends HookConsumerWidget {
             items.sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
             return items;
           })();
+    final todayArtistEntries = currentArtistName.isEmpty
+        ? const <BookingDisplayEntry>[]
+        : (() {
+            final items = allBookings
+                .expand((item) => item.displayEntries)
+                .where((entry) {
+                  final sameDay = entry.isOnDate(currentBookingDate);
+                  final activeStatus =
+                      entry.booking.status.toLowerCase() != 'rejected' &&
+                      entry.booking.status.toLowerCase() != 'cancelled';
+                  final containsArtist = entry.assignedStaff.any(
+                    (assignment) =>
+                        (currentArtistId.isNotEmpty &&
+                            assignment.employeeId.trim() == currentArtistId) ||
+                        assignment.artistName.trim().toLowerCase() ==
+                            currentArtistName.toLowerCase(),
+                  );
+                  return sameDay && activeStatus && containsArtist;
+                })
+                .toList();
+            items.sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+            return items;
+          })();
+    final currentWorkIndex = todayArtistEntries.indexWhere(
+      (item) => item.id == selectedDisplayEntry?.id,
+    );
+    final previousArtistWork = currentWorkIndex > 0
+        ? todayArtistEntries[currentWorkIndex - 1]
+        : null;
+    final previousWorkDistanceKm = previousArtistWork == null
+        ? null
+        : (booking == null
+              ? null
+              : _distanceBetweenBookings(previousArtistWork.booking, booking));
 
     useEffect(() {
       final selectedRegion = availableRegions.cast<ServiceRegion?>().firstWhere(
@@ -396,6 +509,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           updatedBooking,
           variant: BookingPrintVariant.artist,
           relatedArtistBookings: todayArtistWorks,
+          relatedArtistEntries: todayArtistEntries,
+          selectedArtistEntry: selectedDisplayEntry,
           artistName: currentArtistName,
         );
       }
@@ -404,7 +519,9 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     Booking buildCurrentBookingSnapshot() {
       final parsedBookingDate =
-          DateTime.tryParse(bookingDateCtrl.text.trim()) ?? booking.bookingDate;
+          _parseDateInput(bookingDateCtrl.text.trim()) ??
+          canonicalBookingDate ??
+          booking.bookingDate;
       final normalizedAddons = _normalizedAddons(addons.value);
       final subtotal =
           basePackageAmount +
@@ -416,11 +533,43 @@ class ManageBookingScreen extends HookConsumerWidget {
       final appliedDiscount = discountType.value == 'percent'
           ? subtotal * (rawDiscountValue.clamp(0.0, 100.0) / 100)
           : rawDiscountValue.clamp(0.0, subtotal);
+      final currentItemDates =
+          selectedDisplayEntry?.selectedDates.isNotEmpty == true
+          ? selectedDisplayEntry!.selectedDates
+          : booking.selectedDates;
+      final updatedBookingItems =
+          selectedBookingItemIndex >= 0 &&
+              selectedBookingItemIndex < booking.bookingItems.length
+          ? booking.bookingItems.asMap().entries.map((entry) {
+              if (entry.key != selectedBookingItemIndex) {
+                return entry.value;
+              }
+
+              return entry.value.copyWith(
+                service: packageCtrl.text.trim().isEmpty
+                    ? entry.value.service
+                    : packageCtrl.text.trim(),
+                eventSlot: eventSlots.value.join(' | '),
+                selectedDates: currentItemDates,
+                totalPrice: subtotal,
+                advanceAmount:
+                    double.tryParse(advanceCtrl.text.trim()) ??
+                    entry.value.advanceAmount,
+                assignedStaff: assignments.value,
+              );
+            }).toList()
+          : booking.bookingItems;
+      final summarizedAssignments = updatedBookingItems.isNotEmpty
+          ? _summarizeBookingItemAssignments(updatedBookingItems)
+          : assignments.value;
 
       return booking.copyWith(
         customerName: nameCtrl.text.trim(),
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
+        service: packageCtrl.text.trim().isEmpty
+            ? booking.service
+            : packageCtrl.text.trim(),
         regionId: selectedRegionId.value,
         driverId: selectedDriverId.value,
         region: regionCtrl.text.trim(),
@@ -432,10 +581,12 @@ class ManageBookingScreen extends HookConsumerWidget {
         travelDistanceKm:
             double.tryParse(travelDistanceCtrl.text.trim()) ??
             booking.travelDistanceKm,
+        eventSlot: eventSlots.value.join(' | '),
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
         outfitDetails: outfitCtrl.text.trim(),
         captureStaffDetails: captureStaffCtrl.text.trim(),
+        temporaryStaffDetails: temporaryStaffCtrl.text.trim(),
         staffInstructions: staffNeedsCtrl.text.trim(),
         internalRemarks: remarksCtrl.text.trim(),
         contentCreationRequired: contentRequired.value,
@@ -456,8 +607,9 @@ class ManageBookingScreen extends HookConsumerWidget {
         discountAmount: appliedDiscount,
         discountType: discountType.value,
         discountValue: rawDiscountValue,
-        assignedStaff: assignments.value,
+        assignedStaff: summarizedAssignments,
         addons: normalizedAddons,
+        bookingItems: updatedBookingItems,
       );
     }
 
@@ -477,7 +629,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ),
                   8.w,
                   Text(
-                    'Manage Booking #$bookingId',
+                    'Manage Booking #$displayBookingNumber',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -505,12 +657,12 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
           24.h,
 
-          if (todayArtistWorks.length > 1) ...[
+          if (todayArtistEntries.length > 1) ...[
             _buildTodayWorksSection(
               context,
               crmColors,
               currentArtistName,
-              todayArtistWorks,
+              todayArtistEntries,
               showAllTodayWorks,
             ),
             24.h,
@@ -526,19 +678,6 @@ class ManageBookingScreen extends HookConsumerWidget {
                   title: 'Core Booking Management',
                   subtitle: 'Status, Customer & Financials',
                   titleColor: Colors.amber,
-                  action: ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.share, size: 16),
-                    label: const Text('SHARE WITH ARTIST'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.indigo,
-                      foregroundColor: Colors.white,
-                      textStyle: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
                   child: Column(
                     children: [
                       LayoutBuilder(
@@ -601,11 +740,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                             crossAxisSpacing: 16,
                             childAspectRatio: narrow ? 5 : 2.7,
                             children: [
-                              _buildInfoField(
-                                context,
-                                'PACKAGE',
-                                packageCtrl.text,
-                              ),
+                              _buildField(context, 'PACKAGE', packageCtrl),
                               _buildCurrencyField(
                                 context,
                                 'TOTAL AMOUNT',
@@ -659,9 +794,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                     driverCtrl,
                     travelTimeCtrl,
                     travelDistanceCtrl,
+                    eventSlots,
+                    eventSlotInputCtrl,
                     roomCtrl,
                     startTimeCtrl,
                     endTimeCtrl,
+                    previousArtistWork,
+                    previousWorkDistanceKm,
                   ),
                   24.h,
                   _buildScheduledDates(
@@ -690,9 +829,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                           driverCtrl,
                           travelTimeCtrl,
                           travelDistanceCtrl,
+                          eventSlots,
+                          eventSlotInputCtrl,
                           roomCtrl,
                           startTimeCtrl,
                           endTimeCtrl,
+                          previousArtistWork,
+                          previousWorkDistanceKm,
                         ),
                       ),
                       24.w,
@@ -718,6 +861,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   assignments,
                   availableStaff,
                   asyncEmployees,
+                  temporaryStaffCtrl,
                 ),
                 24.h,
 
@@ -744,6 +888,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                                   context,
                                   'CAPTURE STAFF (PHOTO/VIDEO)',
                                   captureStaffCtrl,
+                                ),
+                                16.h,
+                                _buildField(
+                                  context,
+                                  'TEMPORARY STAFF FOR THIS BOOKING',
+                                  temporaryStaffCtrl,
+                                  hint: 'Temporary hires for this event only',
                                 ),
                                 16.h,
                                 Container(
@@ -939,7 +1090,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     String artistName,
-    List<Booking> bookings,
+    List<BookingDisplayEntry> bookings,
     ValueNotifier<bool> showAll,
   ) {
     final visibleBookings = showAll.value
@@ -952,10 +1103,12 @@ class ManageBookingScreen extends HookConsumerWidget {
       child: Column(
         children: [
           ...visibleBookings.map(
-            (booking) => Padding(
+            (entry) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: InkWell(
-                onTap: () => context.go('/booking/manage/${booking.id}'),
+                onTap: () => context.go(
+                  '/booking/manage/${entry.booking.id}?entry=${Uri.encodeComponent(entry.id)}',
+                ),
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
                   padding: const EdgeInsets.all(16),
@@ -977,7 +1130,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          _fmt(booking.serviceStart),
+                          _fmt(entry.serviceStart),
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: crmColors.primary,
@@ -992,7 +1145,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              booking.customerName,
+                              entry.booking.customerName,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
@@ -1000,12 +1153,23 @@ class ManageBookingScreen extends HookConsumerWidget {
                             ),
                             4.h,
                             Text(
-                              booking.service,
+                              entry.service,
                               style: TextStyle(
                                 color: crmColors.textSecondary,
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
+                            if (entry.eventSlot.trim().isNotEmpty) ...[
+                              4.h,
+                              Text(
+                                entry.eventSlot,
+                                style: TextStyle(
+                                  color: crmColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1016,19 +1180,20 @@ class ManageBookingScreen extends HookConsumerWidget {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: booking.status.toLowerCase() == 'confirmed'
+                          color: entry.booking.status.toLowerCase() == 'confirmed'
                               ? Colors.green.withValues(alpha: 0.12)
                               : Colors.amber.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          booking.status.toUpperCase(),
+                          entry.booking.status.toUpperCase(),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: booking.status.toLowerCase() == 'confirmed'
-                                ? Colors.green.shade700
-                                : Colors.amber.shade800,
+                            color:
+                                entry.booking.status.toLowerCase() == 'confirmed'
+                                    ? Colors.green.shade700
+                                    : Colors.amber.shade800,
                           ),
                         ),
                       ),
@@ -1071,9 +1236,13 @@ class ManageBookingScreen extends HookConsumerWidget {
     TextEditingController driverCtrl,
     TextEditingController travelTimeCtrl,
     TextEditingController travelDistanceCtrl,
+    ValueNotifier<List<String>> eventSlots,
+    TextEditingController eventSlotInputCtrl,
     TextEditingController roomCtrl,
     TextEditingController startCtrl,
     TextEditingController endCtrl,
+    BookingDisplayEntry? previousArtistWork,
+    double? previousWorkDistanceKm,
   ) {
     return _SectionCard(
       title: 'Logistics & Location',
@@ -1121,10 +1290,35 @@ class ManageBookingScreen extends HookConsumerWidget {
                       decimal: true,
                     ),
                   ),
+                  _buildSlotEditor(
+                    ctx,
+                    eventSlots,
+                    eventSlotInputCtrl,
+                  ),
                 ],
               );
             },
           ),
+          if (previousArtistWork != null && previousWorkDistanceKm != null) ...[
+            16.h,
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: crmColors.background,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: crmColors.border),
+              ),
+              child: Text(
+                'Previous slot for this artist: ${previousArtistWork.booking.customerName} (${previousArtistWork.service.trim().isEmpty ? 'Work' : previousArtistWork.service}) at ${_fmt(previousArtistWork.serviceStart)}. Distance from previous work to this booking: ${previousWorkDistanceKm.toStringAsFixed(1)} km.',
+                style: TextStyle(
+                  color: crmColors.textSecondary,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
           16.h,
           _buildField(
             context,
@@ -1168,8 +1362,19 @@ class ManageBookingScreen extends HookConsumerWidget {
     Booking booking,
     TextEditingController secondaryCtrl,
   ) {
-    final dateStr = booking.bookingDate.toString().split(' ')[0];
-    final endDateStr = booking.serviceEnd.toString().split(' ')[0];
+    final selectedDates = booking.selectedDates.isNotEmpty
+        ? booking.selectedDates
+        : [booking.bookingDate, booking.serviceEnd]
+            .fold<List<DateTime>>(<DateTime>[], (items, date) {
+                final exists = items.any(
+                  (item) =>
+                      item.year == date.year &&
+                      item.month == date.month &&
+                      item.day == date.day,
+                );
+                if (!exists) items.add(date);
+                return items;
+              });
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -1191,11 +1396,19 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
           const Divider(color: Colors.indigoAccent),
           16.h,
-          _dateBadge(context, dateStr, 'confirmed', crmColors),
-          if (dateStr != endDateStr) ...[
-            8.h,
-            _dateBadge(context, endDateStr, 'pending', crmColors),
-          ],
+          Wrap(
+            spacing: 0,
+            runSpacing: 8,
+            children: [
+              for (var index = 0; index < selectedDates.length; index++)
+                _dateBadge(
+                  context,
+                  selectedDates[index].toString().split(' ')[0],
+                  index == 0 ? 'primary' : 'extra',
+                  crmColors,
+                ),
+            ],
+          ),
           24.h,
           const Divider(color: Colors.indigoAccent),
           16.h,
@@ -1257,6 +1470,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     ValueNotifier<List<BookingAssignment>> assignments,
     List<Employee> availableStaff,
     AsyncValue<List<Employee>> asyncEmployees,
+    TextEditingController temporaryStaffCtrl,
   ) {
     return _SectionCard(
       title: 'Artist Assignment Flow',
@@ -1339,6 +1553,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableStaff,
                     assignments,
                     asyncEmployees,
+                  ),
+                  16.h,
+                  _buildTextArea(
+                    context,
+                    'TEMPORARY STAFF FOR THIS BOOKING',
+                    temporaryStaffCtrl,
+                    hint: 'Add temporary hires without storing them in staff management',
                   ),
                   24.h,
                   Container(
@@ -1640,6 +1861,114 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
           decoration: _inputDeco(hint ?? '', crmColors),
         ),
+      ],
+    );
+  }
+
+  static Widget _buildSlotEditor(
+    BuildContext context,
+    ValueNotifier<List<String>> eventSlots,
+    TextEditingController inputCtrl,
+  ) {
+    final crmColors = context.crmColors;
+
+    void addSlot() {
+      final value = inputCtrl.text.trim();
+      if (value.isEmpty) return;
+
+      final normalizedValue = value.replaceAll(RegExp(r'\s+'), ' ');
+      final existing = eventSlots.value.map((slot) => slot.toLowerCase());
+      if (existing.contains(normalizedValue.toLowerCase())) {
+        inputCtrl.clear();
+        return;
+      }
+
+      eventSlots.value = [...eventSlots.value, normalizedValue];
+      inputCtrl.clear();
+    }
+
+    void removeSlot(String slot) {
+      eventSlots.value = eventSlots.value
+          .where((item) => item != slot)
+          .toList();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'EVENT SLOT',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: inputCtrl,
+                onFieldSubmitted: (_) => addSlot(),
+                decoration: _inputDeco(
+                  'Add slot e.g. Morning wedding',
+                  crmColors,
+                ),
+              ),
+            ),
+            8.w,
+            SizedBox(
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: addSlot,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber,
+                  foregroundColor: Colors.black,
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (eventSlots.value.isNotEmpty) ...[
+          10.h,
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: eventSlots.value
+                .map(
+                  (slot) => Chip(
+                    label: Text(
+                      slot,
+                      style: TextStyle(
+                        color: crmColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    backgroundColor: crmColors.surface,
+                    side: BorderSide(color: crmColors.border),
+                    deleteIcon: const Icon(Icons.close, size: 18),
+                    onDeleted: () => removeSlot(slot),
+                  ),
+                )
+                .toList(),
+          ),
+        ] else ...[
+          10.h,
+          Text(
+            'Add one or more slots like Morning wedding, Muhurtham, Evening reception, or Night event.',
+            style: TextStyle(
+              fontSize: 11,
+              color: crmColors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1956,42 +2285,6 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
-  static Widget _buildInfoField(
-    BuildContext context,
-    String label,
-    String value,
-  ) {
-    final crmColors = context.crmColors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: crmColors.textSecondary,
-            letterSpacing: 1.2,
-          ),
-        ),
-        4.h,
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: crmColors.surface.withValues(alpha: 0.5),
-            border: Border.all(color: crmColors.border),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-        ),
-      ],
-    );
-  }
-
   static Widget _buildCurrencyField(
     BuildContext context,
     String label,
@@ -2249,6 +2542,24 @@ class ManageBookingScreen extends HookConsumerWidget {
     return '$h:$m $ampm';
   }
 
+  static String _formatDateOnly(DateTime dt) {
+    final year = dt.year.toString().padLeft(4, '0');
+    final month = dt.month.toString().padLeft(2, '0');
+    final day = dt.day.toString().padLeft(2, '0');
+    return '$year-$month-$day';
+  }
+
+  static DateTime? _parseDateInput(String value) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value.trim());
+    if (match == null) return null;
+
+    return DateTime(
+      int.parse(match.group(1)!),
+      int.parse(match.group(2)!),
+      int.parse(match.group(3)!),
+    );
+  }
+
   static DateTime _mergeDateAndTime(
     DateTime date,
     String timeText,
@@ -2296,6 +2607,79 @@ class ManageBookingScreen extends HookConsumerWidget {
             persons: addon.persons < 1 ? 1 : addon.persons,
           ),
         )
+        .toList();
+  }
+
+  static List<BookingAssignment> _summarizeBookingItemAssignments(
+    List<BookingItem> items,
+  ) {
+    final mergedAssignments = <BookingAssignment>[];
+    final seen = <String>{};
+
+    for (final item in items) {
+      for (final assignment in item.assignedStaff) {
+        final key = assignment.employeeId.trim().isNotEmpty
+            ? assignment.employeeId.trim()
+            : '${assignment.artistName.trim()}::${assignment.roleType.trim()}';
+        if (key.isEmpty || seen.contains(key)) continue;
+        seen.add(key);
+        mergedAssignments.add(assignment);
+      }
+    }
+
+    return mergedAssignments;
+  }
+
+  static double? _distanceBetweenBookings(Booking from, Booking to) {
+    final fromCoords = _extractCoordinates(from.mapUrl);
+    final toCoords = _extractCoordinates(to.mapUrl);
+    if (fromCoords == null || toCoords == null) return null;
+
+    const earthRadiusKm = 6371.0;
+    final lat1 = fromCoords.$1 * 3.141592653589793 / 180;
+    final lat2 = toCoords.$1 * 3.141592653589793 / 180;
+    final dLat = (toCoords.$1 - fromCoords.$1) * 3.141592653589793 / 180;
+    final dLng = (toCoords.$2 - fromCoords.$2) * 3.141592653589793 / 180;
+
+    final a =
+        _sinSquared(dLat / 2) +
+        (math.cos(lat1) * math.cos(lat2) * _sinSquared(dLng / 2));
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadiusKm * c;
+  }
+
+  static (double, double)? _extractCoordinates(String value) {
+    final text = value.trim();
+    if (text.isEmpty) return null;
+
+    final patterns = [
+      RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)'),
+      RegExp(r'q=(-?\d+\.\d+),(-?\d+\.\d+)'),
+      RegExp(r'(-?\d+\.\d+),\s*(-?\d+\.\d+)'),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(text);
+      if (match == null) continue;
+      final lat = double.tryParse(match.group(1) ?? '');
+      final lng = double.tryParse(match.group(2) ?? '');
+      if (lat != null && lng != null) {
+        return (lat, lng);
+      }
+    }
+    return null;
+  }
+
+  static double _sinSquared(double value) {
+    final sine = math.sin(value);
+    return sine * sine;
+  }
+
+  static List<String> _parseEventSlots(String value) {
+    return value
+        .split(RegExp(r'\s*\|\s*|\s*,\s*|\n+'))
+        .map((slot) => slot.trim())
+        .where((slot) => slot.isNotEmpty)
         .toList();
   }
 }

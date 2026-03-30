@@ -44,22 +44,14 @@ class CalendarScreen extends HookConsumerWidget {
     return const Color(0xFFF6F7F9);
   }
 
-  static String _artistLabelForBooking(Booking booking) {
-    final artistAssignment = booking.assignedStaff
-        .cast<BookingAssignment?>()
-        .firstWhere(
-          (assignment) =>
-              assignment != null &&
-              assignment.artistName.trim().isNotEmpty &&
-              assignment.roleType.toLowerCase() == 'artist',
-          orElse: () => null,
-        );
+  static String _artistLabelForEntry(BookingDisplayEntry entry) {
+    final artistAssignment = _primaryArtistAssignment(entry);
 
     if (artistAssignment != null) {
       return artistAssignment.artistName.trim();
     }
 
-    final fallbackAssignment = booking.assignedStaff
+    final fallbackAssignment = entry.assignedStaff
         .cast<BookingAssignment?>()
         .firstWhere(
           (assignment) =>
@@ -67,40 +59,80 @@ class CalendarScreen extends HookConsumerWidget {
           orElse: () => null,
         );
 
-    final customerName = booking.customerName.trim();
+    final customerName = entry.booking.customerName.trim();
     return fallbackAssignment?.artistName.trim() ??
         (customerName.isNotEmpty ? customerName : 'Not Assigned');
   }
 
-  static List<_ArtistDayGroup> _groupBookingsByArtist(List<Booking> bookings) {
-    final grouped = <String, List<Booking>>{};
+  static BookingAssignment? _primaryArtistAssignment(BookingDisplayEntry entry) {
+    return entry.assignedStaff.cast<BookingAssignment?>().firstWhere(
+      (assignment) =>
+          assignment != null &&
+          assignment.artistName.trim().isNotEmpty &&
+          (assignment.roleType.toLowerCase() == 'artist' ||
+              assignment.roleType.toLowerCase() == 'lead'),
+      orElse: () => null,
+    );
+  }
 
-    for (final booking in bookings) {
-      final label = _artistLabelForBooking(booking);
-      grouped.putIfAbsent(label, () => <Booking>[]).add(booking);
+  static List<BookingDisplayEntry> _entriesForDay(
+    List<Booking> bookings,
+    DateTime day,
+  ) {
+    final entries = bookings
+        .expand((booking) => booking.displayEntries)
+        .where((entry) => entry.isOnDate(day))
+        .toList()
+      ..sort((a, b) {
+        final startComparison = a.serviceStart.compareTo(b.serviceStart);
+        if (startComparison != 0) return startComparison;
+        return a.summaryLabel.compareTo(b.summaryLabel);
+      });
+
+    return entries;
+  }
+
+  static List<_ArtistDayGroup> _groupBookingsByArtist(
+    List<BookingDisplayEntry> bookings,
+  ) {
+    final grouped = <String, List<BookingDisplayEntry>>{};
+    final groupLabels = <String, String>{};
+    final groupTypes = <String, bool>{};
+    for (final entry in bookings) {
+      final assignedArtist = _primaryArtistAssignment(entry);
+      final label = _artistLabelForEntry(entry);
+      final key = assignedArtist != null
+          ? 'artist:${assignedArtist.employeeId.isNotEmpty ? assignedArtist.employeeId : assignedArtist.artistName.trim().toLowerCase()}'
+          : 'entry:${entry.id}';
+      grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
+      groupLabels[key] = label;
+      groupTypes[key] = assignedArtist != null;
     }
 
-    final groups =
-        grouped.entries
-            .map(
-              (entry) => _ArtistDayGroup(
-                artistLabel: entry.key,
-                bookings: entry.value
-                  ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)),
-              ),
-            )
-            .toList()
-          ..sort((a, b) {
-            if (a.artistLabel == 'Not Assigned' &&
-                b.artistLabel != 'Not Assigned') {
-              return 1;
-            }
-            if (b.artistLabel == 'Not Assigned' &&
-                a.artistLabel != 'Not Assigned') {
-              return -1;
-            }
-            return a.artistLabel.compareTo(b.artistLabel);
-          });
+    final groups = grouped.entries
+        .map(
+          (entry) => _ArtistDayGroup(
+            artistLabel: groupLabels[entry.key] ?? 'Not Assigned',
+            hasAssignedArtistGroup: groupTypes[entry.key] ?? false,
+            bookings: entry.value..sort((a, b) => a.serviceStart.compareTo(b.serviceStart)),
+          ),
+        )
+        .toList()
+      ..sort((a, b) {
+        if (a.artistLabel == 'Not Assigned' &&
+            b.artistLabel != 'Not Assigned') {
+          return 1;
+        }
+        if (b.artistLabel == 'Not Assigned' &&
+            a.artistLabel != 'Not Assigned') {
+          return -1;
+        }
+        final timeComparison = a.bookings.first.serviceStart.compareTo(
+          b.bookings.first.serviceStart,
+        );
+        if (timeComparison != 0) return timeComparison;
+        return a.artistLabel.compareTo(b.artistLabel);
+      });
 
     return groups;
   }
@@ -114,8 +146,8 @@ class CalendarScreen extends HookConsumerWidget {
     // All bookings from provider
     final asyncBookings = ref.watch(bookingProvider);
     final allBookings = asyncBookings.value ?? [];
-    final confirmedBookings = allBookings
-        .where((booking) => booking.status.toLowerCase() == 'confirmed')
+    final calendarBookings = allBookings
+        .where((booking) => booking.status.toLowerCase() != 'rejected')
         .toList();
     final asyncEmployees = ref.watch(employeesProvider);
     final activeArtists = (asyncEmployees.value ?? const [])
@@ -235,7 +267,7 @@ class CalendarScreen extends HookConsumerWidget {
       }
     }
 
-    final filteredConfirmedBookings = confirmedBookings.where((booking) {
+    final filteredCalendarBookings = calendarBookings.where((booking) {
       final filter = selectedArtistFilter.value;
       if (filter == 'all') return true;
       if (filter == 'unassigned') {
@@ -353,7 +385,7 @@ class CalendarScreen extends HookConsumerWidget {
                           child: ListView.separated(
                             shrinkWrap: true,
                             itemCount: blockedDates.length,
-                            separatorBuilder: (_, __) =>
+                            separatorBuilder: (_, _) =>
                                 const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final item = blockedDates[index];
@@ -410,6 +442,447 @@ class CalendarScreen extends HookConsumerWidget {
           );
         },
       );
+    }
+
+    Widget buildDayDialogMetric({
+      required String label,
+      required String value,
+    }) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1,
+              ),
+            ),
+            6.h,
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget buildDayDialogChip(String label) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: crmColors.secondary.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: crmColors.primary,
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+          ),
+        ),
+      );
+    }
+
+    Future<void> openDayBookingsDialog(
+      DateTime day,
+      List<BookingDisplayEntry> entries,
+    ) async {
+      if (entries.isEmpty) return;
+
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) {
+          final totalAdvance = entries.fold<double>(
+            0,
+            (sum, entry) => sum + entry.advanceAmount,
+          );
+          return Dialog(
+            insetPadding: const EdgeInsets.all(20),
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 660, maxHeight: 760),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: crmColors.surface,
+                  borderRadius: BorderRadius.circular(32),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.16),
+                      blurRadius: 32,
+                      offset: const Offset(0, 20),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(28, 24, 22, 22),
+                      decoration: BoxDecoration(
+                        color: crmColors.primary,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(32),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${monthTitle(day)} • ${day.day}',
+                                      style: theme.textTheme.headlineSmall
+                                          ?.copyWith(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
+                                    6.h,
+                                    Text(
+                                      '${entries.length} booking${entries.length == 1 ? '' : 's'} scheduled for this day',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.12),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  onPressed: () =>
+                                      Navigator.of(dialogContext).pop(),
+                                  icon: const Icon(
+                                    Icons.close,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          18.h,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: buildDayDialogMetric(
+                                  label: 'Packages',
+                                  value: '${entries.length}',
+                                ),
+                              ),
+                              12.w,
+                              Expanded(
+                                child: buildDayDialogMetric(
+                                  label: 'Advance',
+                                  value:
+                                      '₹${totalAdvance.toStringAsFixed(0)}',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+                        child: ListView.separated(
+                          itemCount: entries.length,
+                          separatorBuilder: (_, _) => 12.h,
+                          itemBuilder: (context, index) {
+                            final entry = entries[index];
+                            final booking = entry.booking;
+                            final artistName = _artistLabelForEntry(entry);
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.of(dialogContext).pop();
+                                  context.push(
+                                    '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(entry.id)}',
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(24),
+                                child: Container(
+                                  padding: const EdgeInsets.all(18),
+                                  decoration: BoxDecoration(
+                                    color: crmColors.background,
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(
+                                      color: crmColors.border,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 52,
+                                        height: 52,
+                                        decoration: BoxDecoration(
+                                          color: crmColors.secondary,
+                                          borderRadius:
+                                              BorderRadius.circular(18),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Text(
+                                          booking.initials,
+                                          style: TextStyle(
+                                            color: crmColors.primary,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                                      16.w,
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    entry.service,
+                                                    style: theme
+                                                        .textTheme
+                                                        .titleMedium
+                                                        ?.copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                        ),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  '₹${entry.advanceAmount.toStringAsFixed(0)}',
+                                                  style: TextStyle(
+                                                    color: crmColors.primary,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 16,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            10.h,
+                                            Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                buildDayDialogChip(
+                                                  entry.eventSlot.trim().isEmpty
+                                                      ? 'Open Slot'
+                                                      : entry.eventSlot.trim(),
+                                                ),
+                                                buildDayDialogChip(
+                                                  '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
+                                                ),
+                                                buildDayDialogChip(
+                                                  booking.customerName,
+                                                ),
+                                              ],
+                                            ),
+                                            12.h,
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    artistName,
+                                                    style: TextStyle(
+                                                      color: crmColors
+                                                          .textSecondary,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      'Open booking',
+                                                      style: TextStyle(
+                                                        color:
+                                                            crmColors.primary,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                    6.w,
+                                                    Icon(
+                                                      Icons.arrow_forward_ios,
+                                                      size: 14,
+                                                      color:
+                                                          crmColors.primary,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    Future<void> openMonthPicker() async {
+      final pickedMonth = await showDialog<DateTime>(
+        context: context,
+        builder: (dialogContext) {
+          var selectedYear = monthFocus.value.year;
+          const monthLabels = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec',
+          ];
+
+          return StatefulBuilder(
+            builder: (context, setState) {
+              return Dialog(
+                insetPadding: const EdgeInsets.all(20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Jump To Month',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        16.h,
+                        Row(
+                          children: [
+                            IconButton(
+                              onPressed: () =>
+                                  setState(() => selectedYear -= 1),
+                              icon: const Icon(Icons.chevron_left),
+                            ),
+                            Expanded(
+                              child: Center(
+                                child: Text(
+                                  '$selectedYear',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () =>
+                                  setState(() => selectedYear += 1),
+                              icon: const Icon(Icons.chevron_right),
+                            ),
+                          ],
+                        ),
+                        16.h,
+                        GridView.builder(
+                          shrinkWrap: true,
+                          itemCount: monthLabels.length,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            mainAxisSpacing: 12,
+                            crossAxisSpacing: 12,
+                            childAspectRatio: 2.2,
+                          ),
+                          itemBuilder: (context, index) {
+                            final monthNumber = index + 1;
+                            final isActive =
+                                selectedYear == monthFocus.value.year &&
+                                monthNumber == monthFocus.value.month;
+                            return InkWell(
+                              onTap: () => Navigator.of(dialogContext).pop(
+                                DateTime(selectedYear, monthNumber, 1),
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isActive
+                                      ? crmColors.primary
+                                      : crmColors.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: crmColors.border),
+                                ),
+                                child: Text(
+                                  monthLabels[index],
+                                  style: TextStyle(
+                                    color: isActive
+                                        ? Colors.white
+                                        : crmColors.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+
+      if (pickedMonth != null) {
+        monthFocus.value = pickedMonth;
+      }
     }
 
     return Column(
@@ -532,11 +1005,15 @@ class CalendarScreen extends HookConsumerWidget {
                             icon: const Icon(Icons.chevron_right),
                           ),
                           16.w,
-                          if (!isMobile)
+                          if (viewMode.value == 'Month')
+                            OutlinedButton.icon(
+                              onPressed: openMonthPicker,
+                              icon: const Icon(Icons.calendar_month_outlined),
+                              label: Text(monthTitle(monthFocus.value)),
+                            )
+                          else if (!isMobile)
                             Text(
-                              viewMode.value == 'Month'
-                                  ? monthTitle(monthFocus.value)
-                                  : weekRangeTitle(),
+                              weekRangeTitle(),
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
@@ -592,15 +1069,16 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _monthView(
                             context,
                             crmColors,
-                            filteredConfirmedBookings,
+                            filteredCalendarBookings,
                             monthFocus.value,
                             now,
+                            onOpenDay: openDayBookingsDialog,
                           )
                         : viewMode.value == 'Day'
                         ? _dayView(
                             context,
                             crmColors,
-                            filteredConfirmedBookings,
+                            filteredCalendarBookings,
                             selectedDay,
                             now,
                           )
@@ -608,7 +1086,7 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _weekView(
                             context,
                             crmColors,
-                            filteredConfirmedBookings,
+                            filteredCalendarBookings,
                             weekDays,
                             now,
                           )
@@ -617,7 +1095,7 @@ class CalendarScreen extends HookConsumerWidget {
                             context,
                             crmColors,
                             [
-                              ...filteredConfirmedBookings.where(
+                                ...filteredCalendarBookings.where(
                                 (b) => b.isOnDate(selectedDay),
                               ),
                             ]..sort(
@@ -669,7 +1147,9 @@ class CalendarScreen extends HookConsumerWidget {
     List<Booking> bookings,
     DateTime day,
   ) {
-    if (bookings.isEmpty) {
+    final entries = _entriesForDay(bookings, day);
+
+    if (entries.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(48),
@@ -701,21 +1181,26 @@ class CalendarScreen extends HookConsumerWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: bookings.length,
+      itemCount: entries.length,
       separatorBuilder: (context, index) => 12.h,
       itemBuilder: (ctx, i) {
-        final b = bookings[i];
-        final isAssigned = b.assignedStaff
+        final entry = entries[i];
+        final b = entry.booking;
+        final isAssigned = entry.assignedStaff
             .cast<BookingAssignment?>()
             .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
-        final borderColor = isAssigned ? _colorForService(b.service) : const Color(0xFF8E9BAE);
+        final borderColor = isAssigned
+            ? _colorForService(entry.service)
+            : const Color(0xFF8E9BAE);
 
         return GestureDetector(
-          onTap: () => context.push('/booking/manage/${b.id}'),
+          onTap: () => context.push(
+            '/booking/manage/${b.id}?entry=${Uri.encodeComponent(entry.id)}',
+          ),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: _bgForService(b.service),
+              color: _bgForService(entry.service),
               borderRadius: BorderRadius.circular(8),
               border: Border(
                 left: BorderSide(color: borderColor, width: 4),
@@ -728,7 +1213,7 @@ class CalendarScreen extends HookConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        b.service,
+                        entry.summaryLabel,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
@@ -736,7 +1221,7 @@ class CalendarScreen extends HookConsumerWidget {
                       ),
                       4.h,
                       Text(
-                        '${_fmt(b.serviceStart)} – ${_fmt(b.serviceEnd)}',
+                        '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
                         style: TextStyle(
                           color: crmColors.textSecondary,
                           fontSize: 12,
@@ -744,7 +1229,7 @@ class CalendarScreen extends HookConsumerWidget {
                       ),
                       4.h,
                       Text(
-                        _artistLabelForBooking(b),
+                        _artistLabelForEntry(entry),
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           color: isAssigned ? crmColors.textPrimary : crmColors.textSecondary,
@@ -768,6 +1253,13 @@ class CalendarScreen extends HookConsumerWidget {
     List<Booking> bookings,
     DateTime month,
     DateTime now,
+    {
+    required Future<void> Function(
+      DateTime day,
+      List<BookingDisplayEntry> entries,
+    )
+    onOpenDay,
+  }
   ) {
     final days = _buildMonthCells(month);
     const weekdayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -803,94 +1295,138 @@ class CalendarScreen extends HookConsumerWidget {
                   .toList(),
             ),
             const Divider(height: 1),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: days.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 7,
-                childAspectRatio: 1.02,
-              ),
-              itemBuilder: (context, index) {
-                final day = days[index];
-                final isCurrentMonth = day.month == month.month;
-                final isToday =
-                    day.year == now.year &&
-                    day.month == now.month &&
-                    day.day == now.day;
-                final dayBookings = isCurrentMonth
-                    ? (bookings
-                          .where((booking) => booking.isOnDate(day))
-                          .toList()
-                        ..sort(
-                          (a, b) => a.serviceStart.compareTo(b.serviceStart),
-                        ))
-                    : <Booking>[];
-                final artistGroups = _groupBookingsByArtist(dayBookings);
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final monthWidth = constraints.maxWidth;
+                final maxVisibleGroups = monthWidth < 900
+                    ? 1
+                    : monthWidth < 1200
+                    ? 2
+                    : 3;
+                final childAspectRatio = monthWidth < 900
+                    ? 0.9
+                    : monthWidth < 1200
+                    ? 0.98
+                    : 1.08;
 
-                return Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      right: BorderSide(color: crmColors.border),
-                      bottom: BorderSide(color: crmColors.border),
-                    ),
-                    color: isCurrentMonth
-                        ? crmColors.surface
-                        : crmColors.background.withValues(alpha: 0.5),
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: days.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 7,
+                    childAspectRatio: childAspectRatio,
                   ),
-                  child: !isCurrentMonth
-                      ? const SizedBox.shrink()
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Align(
-                              alignment: Alignment.topCenter,
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isToday
-                                      ? crmColors.primary
-                                      : Colors.transparent,
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  '${day.day}',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: isToday
-                                        ? Colors.white
-                                        : crmColors.textPrimary,
+                  itemBuilder: (context, index) {
+                    final day = days[index];
+                    final isCurrentMonth = day.month == month.month;
+                    final isToday =
+                        day.year == now.year &&
+                        day.month == now.month &&
+                        day.day == now.day;
+                    final dayBookings = isCurrentMonth
+                        ? _entriesForDay(bookings, day)
+                        : <BookingDisplayEntry>[];
+                    final artistGroups = _groupBookingsByArtist(dayBookings);
+
+                    return Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: BorderSide(color: crmColors.border),
+                          bottom: BorderSide(color: crmColors.border),
+                        ),
+                        color: isCurrentMonth
+                            ? crmColors.surface
+                            : crmColors.background.withValues(alpha: 0.5),
+                      ),
+                      child: !isCurrentMonth
+                          ? const SizedBox.shrink()
+                          : Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: dayBookings.isEmpty
+                                    ? null
+                                    : () => onOpenDay(day, dayBookings),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Align(
+                                        alignment: Alignment.topCenter,
+                                        child: Container(
+                                          width: 38,
+                                          height: 38,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: isToday
+                                                ? crmColors.primary
+                                                : Colors.transparent,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            '${day.day}',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w700,
+                                              color: isToday
+                                                  ? Colors.white
+                                                  : crmColors.textPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      6.h,
+                                      ...artistGroups
+                                          .take(maxVisibleGroups)
+                                          .map(
+                                            (group) => Padding(
+                                              padding:
+                                                  const EdgeInsets.only(
+                                                bottom: 4,
+                                              ),
+                                              child: _buildMonthBookingPill(
+                                                context,
+                                                group,
+                                              ),
+                                            ),
+                                          ),
+                                      if (artistGroups.length >
+                                          maxVisibleGroups)
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: crmColors.secondary
+                                                .withValues(alpha: 0.35),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            'View all (${artistGroups.length})',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color:
+                                                  crmColors.textSecondary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
                             ),
-                            8.h,
-                            ...artistGroups
-                                .take(4)
-                                .map(
-                                  (group) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: _buildMonthBookingPill(context, group),
-                                  ),
-                                ),
-                            if (artistGroups.length > 4)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2, left: 6),
-                                child: Text(
-                                  '${artistGroups.length - 4} more',
-                                  style: TextStyle(
-                                    color: crmColors.textSecondary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+                    );
+                  },
                 );
               },
             ),
@@ -1062,13 +1598,7 @@ class CalendarScreen extends HookConsumerWidget {
                     ),
                   ),
                   ...weekDays.map((day) {
-                    final dayBookings =
-                        bookings
-                            .where((booking) => booking.isOnDate(day))
-                            .toList()
-                          ..sort(
-                            (a, b) => a.serviceStart.compareTo(b.serviceStart),
-                          );
+                    final dayBookings = _entriesForDay(bookings, day);
                     final artistGroups = _groupBookingsByArtist(dayBookings);
 
                     return Expanded(
@@ -1151,9 +1681,7 @@ class CalendarScreen extends HookConsumerWidget {
     const topLaneHeight = 96.0;
     const hourRowHeight = 64.0;
 
-    final dayBookings =
-        bookings.where((booking) => booking.isOnDate(day)).toList()
-          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+    final dayBookings = _entriesForDay(bookings, day);
     final artistGroups = _groupBookingsByArtist(dayBookings);
 
     return Padding(
@@ -1247,7 +1775,7 @@ class CalendarScreen extends HookConsumerWidget {
                             ),
                             if (artistGroups.isEmpty)
                               Text(
-                                'No confirmed bookings',
+                                'No bookings for this day',
                                 style: TextStyle(
                                   color: crmColors.textSecondary,
                                   fontWeight: FontWeight.w600,
@@ -1279,32 +1807,8 @@ class CalendarScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildLegendItem(BuildContext context, String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        8.w,
-        Text(
-          label,
-          style: TextStyle(
-            color: context.crmColors.textSecondary,
-            fontSize: 13,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildMonthBookingPill(BuildContext context, _ArtistDayGroup group) {
-    return _buildReferencePill(context, group);
+    return _buildReferencePill(context, group, compact: true);
   }
 
   Widget _buildReferencePill(
@@ -1312,22 +1816,30 @@ class CalendarScreen extends HookConsumerWidget {
     _ArtistDayGroup group, {
     bool compact = false,
   }) {
-    final booking = group.bookings.first;
+    final bookingEntry = group.bookings.first;
+    final booking = bookingEntry.booking;
     
-    final isAssigned = booking.assignedStaff
+    final isAssigned = bookingEntry.assignedStaff
         .cast<BookingAssignment?>()
         .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
 
     final accent = isAssigned 
-        ? _colorForService(booking.service) 
+        ? _colorForService(bookingEntry.service) 
         : const Color(0xFF8E9BAE); // Slate gray for unassigned
 
-    final label = group.count > 1
+    final detailLabel = bookingEntry.eventSlot.trim().isNotEmpty
+        ? bookingEntry.eventSlot.trim()
+        : bookingEntry.service.trim();
+    final label = group.hasAssignedArtistGroup && group.count > 1
         ? '${group.artistLabel.toUpperCase()} (${group.count})'
-        : group.artistLabel.toUpperCase();
+        : (detailLabel.isEmpty
+              ? group.artistLabel.toUpperCase()
+              : '${group.artistLabel.toUpperCase()} • ${detailLabel.toUpperCase()}');
 
     return InkWell(
-      onTap: () => context.push('/booking/manage/${booking.id}'),
+      onTap: () => context.push(
+        '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(bookingEntry.id)}',
+      ),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         width: double.infinity,
@@ -1424,9 +1936,14 @@ class CalendarScreen extends HookConsumerWidget {
 
 class _ArtistDayGroup {
   final String artistLabel;
-  final List<Booking> bookings;
+  final bool hasAssignedArtistGroup;
+  final List<BookingDisplayEntry> bookings;
 
-  const _ArtistDayGroup({required this.artistLabel, required this.bookings});
+  const _ArtistDayGroup({
+    required this.artistLabel,
+    required this.hasAssignedArtistGroup,
+    required this.bookings,
+  });
 
   int get count => bookings.length;
 }

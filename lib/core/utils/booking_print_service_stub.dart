@@ -5,5 +5,7 @@ Future<void> printBookingDetails(
   Booking booking, {
   required BookingPrintVariant variant,
   List<Booking> relatedArtistBookings = const [],
+  List<BookingDisplayEntry> relatedArtistEntries = const [],
+  BookingDisplayEntry? selectedArtistEntry,
   String artistName = '',
 }) async {}

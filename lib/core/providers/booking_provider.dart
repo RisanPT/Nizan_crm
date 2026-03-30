@@ -64,21 +64,16 @@ class BookingNotifier extends _$BookingNotifier {
   Future<Booking> addBooking(Booking booking) async {
     final service = ref.read(bookingServiceProvider);
 
-    // Optimistic update
-    final previousState = state;
-    state = AsyncData([...(state.value ?? []), booking]);
-
     try {
       final createdBooking = await service.createBooking(booking);
-      state = AsyncData([
-        for (final existing in state.value ?? [])
-          if (existing.id == booking.id) createdBooking else existing,
-      ]);
-      ref.invalidateSelf();
+      if (ref.mounted) {
+        ref.invalidateSelf();
+      }
       return createdBooking;
     } catch (err, stack) {
-      state = previousState; // Rollback
-      state = AsyncError(err, stack);
+      if (ref.mounted) {
+        state = AsyncError(err, stack);
+      }
       rethrow;
     }
   }

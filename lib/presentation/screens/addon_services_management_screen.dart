@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/addon_service.dart';
 import '../../core/theme/crm_theme.dart';
@@ -13,6 +14,13 @@ class AddonServicesManagementScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final asyncAddonServices = ref.watch(addonServicesProvider);
+
+    Future<void> handleBack() async {
+      final didPop = await Navigator.of(context).maybePop();
+      if (!didPop && context.mounted) {
+        context.go('/services');
+      }
+    }
 
     Future<void> openEditor([AddonService? addonService]) async {
       final nameCtrl = TextEditingController(text: addonService?.name ?? '');
@@ -116,6 +124,11 @@ class AddonServicesManagementScreen extends ConsumerWidget {
       children: [
         Row(
           children: [
+            IconButton(
+              onPressed: handleBack,
+              icon: const Icon(Icons.arrow_back),
+            ),
+            8.w,
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

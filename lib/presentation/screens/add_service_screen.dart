@@ -11,7 +11,9 @@ import '../../services/package_service.dart';
 import '../../services/region_service.dart';
 
 class AddServiceScreen extends HookConsumerWidget {
-  const AddServiceScreen({super.key});
+  final String? packageId;
+
+  const AddServiceScreen({super.key, this.packageId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -19,7 +21,12 @@ class AddServiceScreen extends HookConsumerWidget {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncRegions = ref.watch(regionsProvider);
+    final asyncPackages = ref.watch(packagesProvider);
     final regions = asyncRegions.value ?? const <ServiceRegion>[];
+    final existingPackage = asyncPackages.value?.cast<ServicePackage?>().firstWhere(
+      (item) => item?.id == packageId,
+      orElse: () => null,
+    );
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
     final packageNameCtrl = useTextEditingController();
@@ -27,10 +34,42 @@ class AddServiceScreen extends HookConsumerWidget {
     final advanceCtrl = useTextEditingController(text: '3000');
     final descriptionCtrl = useTextEditingController();
     final isSaving = useState(false);
+    final hasPrefilled = useState(false);
     final regionPriceControllers = useMemoized(
       () => {for (final region in regions) region.id: TextEditingController()},
       [regions.map((region) => region.id).join(',')],
     );
+
+    Future<void> handleBack() async {
+      final didPop = await Navigator.of(context).maybePop();
+      if (!didPop && context.mounted) {
+        context.go('/services');
+      }
+    }
+
+    useEffect(() {
+      if (existingPackage == null || hasPrefilled.value) {
+        return null;
+      }
+
+      packageNameCtrl.text = existingPackage.name;
+      priceCtrl.text = existingPackage.price.toStringAsFixed(0);
+      advanceCtrl.text = existingPackage.advanceAmount.toStringAsFixed(0);
+      descriptionCtrl.text = existingPackage.description;
+
+      for (final controller in regionPriceControllers.values) {
+        controller.clear();
+      }
+
+      for (final item in existingPackage.regionPrices) {
+        regionPriceControllers[item.regionId]?.text = item.price.toStringAsFixed(
+          0,
+        );
+      }
+
+      hasPrefilled.value = true;
+      return null;
+    }, [existingPackage, regionPriceControllers]);
 
     Future<void> submitPackage() async {
       if (!formKey.currentState!.validate()) {
@@ -60,6 +99,7 @@ class AddServiceScreen extends HookConsumerWidget {
         await ref
             .read(packageServiceProvider)
             .savePackage(
+              id: existingPackage?.id,
               name: packageNameCtrl.text.trim(),
               price: double.parse(priceCtrl.text.trim()),
               advanceAmount: double.parse(advanceCtrl.text.trim()),
@@ -71,8 +111,12 @@ class AddServiceScreen extends HookConsumerWidget {
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Package saved successfully.'),
+            SnackBar(
+              content: Text(
+                existingPackage == null
+                    ? 'Package saved successfully.'
+                    : 'Package updated successfully.',
+              ),
               backgroundColor: Color(0xFF10B981),
             ),
           );
@@ -98,6 +142,7 @@ class AddServiceScreen extends HookConsumerWidget {
       advanceCtrl: advanceCtrl,
       descriptionCtrl: descriptionCtrl,
       isSaving: isSaving.value,
+      isEditing: existingPackage != null,
       onSubmit: submitPackage,
     );
 
@@ -117,12 +162,12 @@ class AddServiceScreen extends HookConsumerWidget {
           Row(
             children: [
               IconButton(
-                onPressed: () => context.pop(),
+                onPressed: handleBack,
                 icon: const Icon(Icons.arrow_back),
               ),
               8.w,
               Text(
-                'Create New Package',
+                existingPackage == null ? 'Create New Package' : 'Edit Package',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -159,6 +204,7 @@ class _BasicInfoCard extends StatelessWidget {
   final TextEditingController advanceCtrl;
   final TextEditingController descriptionCtrl;
   final bool isSaving;
+  final bool isEditing;
   final VoidCallback onSubmit;
 
   const _BasicInfoCard({
@@ -170,6 +216,7 @@ class _BasicInfoCard extends StatelessWidget {
     required this.advanceCtrl,
     required this.descriptionCtrl,
     required this.isSaving,
+    required this.isEditing,
     required this.onSubmit,
   });
 
@@ -248,7 +295,11 @@ class _BasicInfoCard extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: isSaving ? null : onSubmit,
-                  child: Text(isSaving ? 'Saving...' : 'Save Package'),
+                  child: Text(
+                    isSaving
+                        ? (isEditing ? 'Updating...' : 'Saving...')
+                        : (isEditing ? 'Update Package' : 'Save Package'),
+                  ),
                 ),
               ),
             ],

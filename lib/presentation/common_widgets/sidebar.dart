@@ -101,6 +101,10 @@ class Sidebar extends StatelessWidget {
                   icon: Icons.receipt_long_outlined,
                   title: 'Sales & Invoices',
                   isCollapsed: width == 80.0,
+                  isSelected: GoRouterState.of(
+                    context,
+                  ).uri.path.startsWith('/sales'),
+                  onTap: () => context.go('/sales'),
                 ),
                 _SidebarItem(
                   icon: Icons.inventory_2_outlined,

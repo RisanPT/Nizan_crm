@@ -57,7 +57,14 @@ class EmployeeService {
 
       return Employee.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw Exception('Failed to save employee: ${e.message}');
+      String errorMessage = 'Failed to save employee: ${e.message}';
+      if (e.response != null && e.response!.data != null) {
+        final data = e.response!.data;
+        if (data is Map && data['message'] != null) {
+          errorMessage = data['message'].toString();
+        }
+      }
+      throw Exception(errorMessage);
     }
   }
 

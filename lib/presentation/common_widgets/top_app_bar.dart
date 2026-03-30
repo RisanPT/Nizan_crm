@@ -18,6 +18,7 @@ class TopAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
+    final canPop = Navigator.of(context).canPop();
     final auth = ref.read(authControllerProvider);
 
     return ListenableBuilder(
@@ -31,6 +32,12 @@ class TopAppBar extends ConsumerWidget implements PreferredSizeWidget {
         // If mobile, we use standard AppBar so `Scaffold` provides the drawer hamburger icon automatically
         if (isMobile) {
           return AppBar(
+            leading: canPop
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.of(context).maybePop(),
+                  )
+                : null,
             title: Text(
               title,
               style: theme.textTheme.titleLarge?.copyWith(
@@ -77,6 +84,14 @@ class TopAppBar extends ConsumerWidget implements PreferredSizeWidget {
           ),
           child: Row(
             children: [
+              if (canPop) ...[
+                IconButton(
+                  tooltip: 'Back',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                8.w,
+              ],
               Expanded(
                 child: Row(
                   children: [

@@ -175,6 +175,12 @@ class ServicesManagementScreen extends ConsumerWidget {
                                 ),
                               ),
                               TextButton.icon(
+                                onPressed: () =>
+                                    context.go('/services/add?id=${package.id}'),
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                label: const Text('Edit'),
+                              ),
+                              TextButton.icon(
                                 onPressed: () async {
                                   await ref
                                       .read(packageServiceProvider)

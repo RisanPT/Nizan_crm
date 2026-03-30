@@ -7,7 +7,6 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
-import '../../core/utils/booking_print_service.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
 import '../../services/package_service.dart';
@@ -36,32 +35,68 @@ class AddBookingScreen extends HookConsumerWidget {
 
     final selectedRegion = useState<String?>('');
     final selectedPackageId = useState<String?>(null);
-    final bookingDate = useState<DateTime?>(null);
+    final selectedDates = useState<List<DateTime>>([]);
+    final eventSlotCtrl = useTextEditingController();
+    final bookingCart = useState<List<_BookingCartEntry>>([]);
     final startTime = useState<TimeOfDay>(const TimeOfDay(hour: 9, minute: 0));
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
     final totalPrice = useState<double>(0);
     final advanceAmount = useState<double>(0);
+    final totalPackageCount = bookingCart.value.fold<int>(
+      0,
+      (sum, item) => sum + item.quantity,
+    );
+
+    ServicePackage? findPackageById(String? id) {
+      for (final package in packages) {
+        if (package.id == id) return package;
+      }
+      return null;
+    }
+
+    List<BookingItem> buildBookingItems() {
+      final dates = [...selectedDates.value]..sort((a, b) => a.compareTo(b));
+
+      return bookingCart.value
+          .expand((entry) {
+            final package = findPackageById(entry.packageId);
+            if (package == null) return const <BookingItem>[];
+            final basePrice = package.effectivePriceForRegion(
+              selectedRegion.value,
+            );
+            return List.generate(
+              entry.quantity,
+              (_) => BookingItem(
+                packageId: package.id,
+                service: package.name,
+                eventSlot: entry.eventSlot,
+                selectedDates: dates,
+                totalPrice: basePrice,
+                advanceAmount: package.advanceAmount,
+              ),
+            );
+          })
+          .whereType<BookingItem>()
+          .toList();
+    }
 
     void recalculate() {
-      if (packages.isEmpty) {
+      final bookingItems = buildBookingItems();
+      if (packages.isEmpty || bookingItems.isEmpty) {
         totalPrice.value = 0;
         advanceAmount.value = 0;
         return;
       }
-
-      dynamic selectedPackage;
-      for (final package in packages) {
-        if (package.id == selectedPackageId.value) {
-          selectedPackage = package;
-          break;
-        }
-      }
-      selectedPackage ??= packages.first;
-
-      totalPrice.value = selectedPackage.effectivePriceForRegion(
-        selectedRegion.value,
+      totalPrice.value = bookingItems.fold<double>(
+        0,
+        (sum, item) => sum + item.totalPrice,
+      ) +
+      ((selectedDates.value.length > 1 ? selectedDates.value.length - 1 : 0) *
+          3000);
+      advanceAmount.value = bookingItems.fold<double>(
+        0,
+        (sum, item) => sum + item.advanceAmount,
       );
-      advanceAmount.value = selectedPackage.advanceAmount;
     }
 
     final validPackageId =
@@ -98,7 +133,37 @@ class AddBookingScreen extends HookConsumerWidget {
 
       recalculate();
       return null;
-    }, [packages, regions, selectedPackageId.value, selectedRegion.value]);
+    }, [
+      packages,
+      regions,
+      bookingCart.value,
+      selectedPackageId.value,
+      selectedRegion.value,
+      selectedDates.value,
+    ]);
+
+    void addPackageToCart() {
+      final selectedPackage = findPackageById(selectedPackageId.value);
+      if (selectedPackage == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a package first.')),
+        );
+        return;
+      }
+
+      final normalizedSlot = eventSlotCtrl.text.trim();
+      bookingCart.value = [
+        ...bookingCart.value,
+        _BookingCartEntry(
+          id: '${selectedPackage.id}-${DateTime.now().microsecondsSinceEpoch}',
+          packageId: selectedPackage.id,
+          eventSlot: normalizedSlot,
+          quantity: 1,
+        ),
+      ];
+      eventSlotCtrl.clear();
+      recalculate();
+    }
 
     Future<void> pickDate() async {
       final picked = await showDatePicker(
@@ -116,7 +181,20 @@ class AddBookingScreen extends HookConsumerWidget {
           child: child!,
         ),
       );
-      if (picked != null) bookingDate.value = picked;
+      if (picked != null) {
+        final normalizedDate = DateTime(picked.year, picked.month, picked.day);
+        final exists = selectedDates.value.any(
+          (date) =>
+              date.year == normalizedDate.year &&
+              date.month == normalizedDate.month &&
+              date.day == normalizedDate.day,
+        );
+        if (!exists) {
+          selectedDates.value = [...selectedDates.value, normalizedDate]
+            ..sort((a, b) => a.compareTo(b));
+          recalculate();
+        }
+      }
     }
 
     Future<void> pickStartTime() async {
@@ -154,46 +232,6 @@ class AddBookingScreen extends HookConsumerWidget {
       return '$h:$m $ampm';
     }
 
-    Future<void> showPrintDialog(Booking booking) async {
-      final action = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Booking Saved'),
-          content: const Text('Choose which PDF you want to print.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop('skip'),
-              child: const Text('Later'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.of(dialogContext).pop('client'),
-              icon: const Icon(Icons.receipt_long, size: 18),
-              label: const Text('Client PDF'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.of(dialogContext).pop('artist'),
-              icon: const Icon(Icons.badge_outlined, size: 18),
-              label: const Text('Artist PDF'),
-            ),
-          ],
-        ),
-      );
-
-      if (action == 'client') {
-        await printBookingDetails(booking, variant: BookingPrintVariant.client);
-      } else if (action == 'artist') {
-        await printBookingDetails(
-          booking,
-          variant: BookingPrintVariant.artist,
-          relatedArtistBookings: const [],
-        );
-      }
-
-      if (context.mounted) {
-        context.go('/calendar');
-      }
-    }
-
     Future<void> submitBooking() async {
       if (!formKey.currentState!.validate()) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -201,24 +239,20 @@ class AddBookingScreen extends HookConsumerWidget {
         );
         return;
       }
-      if (bookingDate.value == null) {
+      if (selectedDates.value.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select an appointment date.')),
+          const SnackBar(content: Text('Please select at least one date.')),
         );
         return;
       }
 
-      final d = bookingDate.value!;
-      dynamic selectedPackage;
-      for (final package in packages) {
-        if (package.id == selectedPackageId.value) {
-          selectedPackage = package;
-          break;
-        }
-      }
-      if (selectedPackage == null) {
+      final sortedDates = [...selectedDates.value]..sort((a, b) => a.compareTo(b));
+      final d = sortedDates.first;
+      final lastDate = sortedDates.last;
+      final bookingItems = buildBookingItems();
+      if (bookingCart.value.isEmpty || bookingItems.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select a package.')),
+          const SnackBar(content: Text('Please add at least one package.')),
         );
         return;
       }
@@ -231,9 +265,9 @@ class AddBookingScreen extends HookConsumerWidget {
         startTime.value.minute,
       );
       final sEnd = DateTime(
-        d.year,
-        d.month,
-        d.day,
+        lastDate.year,
+        lastDate.month,
+        lastDate.day,
         endTime.value.hour,
         endTime.value.minute,
       );
@@ -251,31 +285,41 @@ class AddBookingScreen extends HookConsumerWidget {
 
       final booking = Booking(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        packageId: selectedPackage.id,
+        packageId: bookingItems.first.packageId,
         regionId: selectedRegionModel?.id ?? '',
         customerName: actualName,
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
-        service: selectedPackage.name,
+        service: bookingItems.map((item) => item.service).join(' + '),
+        eventSlot: bookingItems
+            .map((item) => item.eventSlot.trim())
+            .where((item) => item.isNotEmpty)
+            .join(' | '),
         region: selectedRegionModel?.name ?? '',
         bookingDate: d,
+        selectedDates: sortedDates,
         serviceStart: sStart,
         serviceEnd: sEnd,
         totalPrice: totalPrice.value,
         advanceAmount: advanceAmount.value,
+        bookingItems: bookingItems,
       );
 
-      final savedBooking = await ref
-          .read(bookingProvider.notifier)
-          .addBooking(booking);
+      await ref.read(bookingProvider.notifier).addBooking(booking);
+
+      if (!context.mounted) return;
 
       // Invalidate the customers list so the new customer (auto-created
       // on the backend during booking) appears in the Clients Directory.
       ref.invalidate(customersProvider);
 
-      if (context.mounted) {
-        await showPrintDialog(savedBooking);
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Booking created and added to calendar.'),
+          backgroundColor: Color(0xFF10B981),
+        ),
+      );
+      context.go('/calendar');
     }
 
     return SingleChildScrollView(
@@ -285,7 +329,13 @@ class AddBookingScreen extends HookConsumerWidget {
           Row(
             children: [
               IconButton(
-                onPressed: () => context.pop(),
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/calendar');
+                  }
+                },
                 icon: const Icon(Icons.arrow_back),
               ),
               8.w,
@@ -536,90 +586,305 @@ class AddBookingScreen extends HookConsumerWidget {
                           ],
                         ),
                         16.h,
-                        // ── Date + Time row ───────────────────────────────
                         Row(
                           children: [
-                            // Appointment date
                             Expanded(
-                              child: InkWell(
-                                onTap: pickDate,
-                                borderRadius: BorderRadius.circular(8),
+                              child: TextFormField(
+                                controller: eventSlotCtrl,
+                                decoration: _inputDeco(
+                                  'Package Slot (Optional)',
+                                  crmColors,
+                                ),
+                              ),
+                            ),
+                            16.w,
+                            SizedBox(
+                              height: 56,
+                              child: ElevatedButton.icon(
+                                onPressed: addPackageToCart,
+                                icon: const Icon(Icons.add_shopping_cart),
+                                label: const Text('Add Package'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (bookingCart.value.isNotEmpty) ...[
+                          16.h,
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: crmColors.surface,
+                              border: Border.all(color: crmColors.border),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PACKAGE CART ($totalPackageCount)',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                12.h,
+                                ...bookingCart.value.asMap().entries.map(
+                                  (entry) => Padding(
+                                    padding: EdgeInsets.only(
+                                      bottom: entry.key ==
+                                              bookingCart.value.length - 1
+                                          ? 0
+                                          : 12,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                findPackageById(
+                                                      entry.value.packageId,
+                                                    )?.name ??
+                                                    'Package',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              if (entry.value.eventSlot
+                                                  .trim()
+                                                  .isNotEmpty) ...[
+                                                4.h,
+                                                Text(entry.value.eventSlot),
+                                              ],
+                                              4.h,
+                                              Text(
+                                                'Qty ${entry.value.quantity}',
+                                                style: TextStyle(
+                                                  color: crmColors.textSecondary,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                              4.h,
+                                              Text(
+                                                'Advance ₹${((findPackageById(entry.value.packageId)?.advanceAmount ?? 0) * entry.value.quantity).toStringAsFixed(0)}',
+                                                style: TextStyle(
+                                                  color: crmColors.accent,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              onPressed: () {
+                                                final item = bookingCart
+                                                    .value[entry.key];
+                                                if (item.quantity <= 1) {
+                                                  bookingCart.value = bookingCart
+                                                      .value
+                                                      .where(
+                                                        (cartItem) =>
+                                                            cartItem.id !=
+                                                            item.id,
+                                                      )
+                                                      .toList();
+                                                } else {
+                                                  bookingCart.value = bookingCart
+                                                      .value
+                                                      .asMap()
+                                                      .entries
+                                                      .map(
+                                                        (cartEntry) => cartEntry
+                                                                    .key ==
+                                                                entry.key
+                                                            ? cartEntry.value
+                                                                  .copyWith(
+                                                                    quantity:
+                                                                        cartEntry
+                                                                                .value
+                                                                                .quantity -
+                                                                            1,
+                                                                  )
+                                                            : cartEntry.value,
+                                                      )
+                                                      .toList();
+                                                }
+                                                recalculate();
+                                              },
+                                              icon: const Icon(
+                                                Icons.remove_circle_outline,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${entry.value.quantity}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              onPressed: () {
+                                                bookingCart.value = bookingCart
+                                                    .value
+                                                    .asMap()
+                                                    .entries
+                                                    .map(
+                                                      (cartEntry) => cartEntry
+                                                                  .key ==
+                                                              entry.key
+                                                          ? cartEntry.value
+                                                                .copyWith(
+                                                                  quantity:
+                                                                      cartEntry
+                                                                              .value
+                                                                              .quantity +
+                                                                          1,
+                                                                )
+                                                          : cartEntry.value,
+                                                    )
+                                                    .toList();
+                                                recalculate();
+                                              },
+                                              icon: const Icon(
+                                                Icons.add_circle_outline,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        16.h,
+                        // ── Date + Time row ───────────────────────────────
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            InkWell(
+                              onTap: pickDate,
+                              borderRadius: BorderRadius.circular(8),
                                 child: InputDecorator(
                                   decoration: _inputDeco(
-                                    'Appointment Date',
-                                    crmColors,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.calendar_today,
-                                        size: 16,
-                                        color: crmColors.textSecondary,
-                                      ),
-                                      8.w,
-                                      Text(
-                                        bookingDate.value != null
-                                            ? bookingDate.value!
-                                                  .toString()
-                                                  .split(' ')[0]
-                                            : 'Select date…',
+                                    'Booking Dates',
+                                  crmColors,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today,
+                                      size: 16,
+                                      color: crmColors.textSecondary,
+                                    ),
+                                    8.w,
+                                    Expanded(
+                                      child: Text(
+                                        selectedDates.value.isNotEmpty
+                                            ? '${selectedDates.value.length} date${selectedDates.value.length == 1 ? '' : 's'} selected'
+                                            : 'Add booking date…',
                                         style: TextStyle(
-                                          color: bookingDate.value != null
+                                          color: selectedDates.value.isNotEmpty
                                               ? crmColors.textPrimary
                                               : crmColors.textSecondary,
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    Icon(
+                                      Icons.add_circle_outline,
+                                      size: 18,
+                                      color: crmColors.primary,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                            16.w,
-                            // Start time
-                            Expanded(
-                              child: InkWell(
-                                onTap: pickStartTime,
-                                borderRadius: BorderRadius.circular(8),
-                                child: InputDecorator(
-                                  decoration: _inputDeco(
-                                    'Start Time',
-                                    crmColors,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.schedule,
-                                        size: 16,
-                                        color: crmColors.textSecondary,
+                            if (selectedDates.value.isNotEmpty) ...[
+                              12.h,
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: selectedDates.value
+                                    .map(
+                                      (date) => Chip(
+                                        label: Text(
+                                          date.toString().split(' ')[0],
+                                        ),
+                                        onDeleted: () {
+                                          selectedDates.value = selectedDates.value
+                                              .where(
+                                                (item) =>
+                                                    item.year != date.year ||
+                                                    item.month != date.month ||
+                                                    item.day != date.day,
+                                              )
+                                              .toList();
+                                          recalculate();
+                                        },
                                       ),
-                                      8.w,
-                                      Text(fmtTime(startTime.value)),
-                                    ],
+                                    )
+                                    .toList(),
+                              ),
+                            ],
+                            16.h,
+                            Row(
+                              children: [
+                                // Start time
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: pickStartTime,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InputDecorator(
+                                      decoration: _inputDeco(
+                                        'Start Time',
+                                        crmColors,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule,
+                                            size: 16,
+                                            color: crmColors.textSecondary,
+                                          ),
+                                          8.w,
+                                          Text(fmtTime(startTime.value)),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            16.w,
-                            // End time
-                            Expanded(
-                              child: InkWell(
-                                onTap: pickEndTime,
-                                borderRadius: BorderRadius.circular(8),
-                                child: InputDecorator(
-                                  decoration: _inputDeco('End Time', crmColors),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.schedule_outlined,
-                                        size: 16,
-                                        color: crmColors.textSecondary,
+                                16.w,
+                                // End time
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: pickEndTime,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InputDecorator(
+                                      decoration: _inputDeco(
+                                        'End Time',
+                                        crmColors,
                                       ),
-                                      8.w,
-                                      Text(fmtTime(endTime.value)),
-                                    ],
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.schedule_outlined,
+                                            size: 16,
+                                            color: crmColors.textSecondary,
+                                          ),
+                                          8.w,
+                                          Text(fmtTime(endTime.value)),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
+                              ],
                             ),
                           ],
                         ),
@@ -639,7 +904,7 @@ class AddBookingScreen extends HookConsumerWidget {
                             16.w,
                             Expanded(
                               child: _summaryBox(
-                                label: 'ADVANCE (FIXED)',
+                                label: 'ADVANCE TO CONFIRM',
                                 value:
                                     '₹ ${advanceAmount.value.toStringAsFixed(0)}',
                                 border: crmColors.border,
@@ -774,4 +1039,32 @@ List<ServiceRegion> _uniqueRegions(List<ServiceRegion> regions) {
   }
 
   return unique;
+}
+
+class _BookingCartEntry {
+  final String id;
+  final String packageId;
+  final String eventSlot;
+  final int quantity;
+
+  const _BookingCartEntry({
+    required this.id,
+    required this.packageId,
+    this.eventSlot = '',
+    this.quantity = 1,
+  });
+
+  _BookingCartEntry copyWith({
+    String? id,
+    String? packageId,
+    String? eventSlot,
+    int? quantity,
+  }) {
+    return _BookingCartEntry(
+      id: id ?? this.id,
+      packageId: packageId ?? this.packageId,
+      eventSlot: eventSlot ?? this.eventSlot,
+      quantity: quantity ?? this.quantity,
+    );
+  }
 }

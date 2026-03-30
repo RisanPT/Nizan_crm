@@ -74,17 +74,35 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                 .where((booking) => booking.status.toLowerCase() == 'pending')
                 .toList()
               ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+        final pendingEntries = pendingBookings
+            .expand(
+              (booking) => booking.displayEntries.map(
+                (entry) => _BookingRequestEntry(
+                  id: entry.id,
+                  booking: booking,
+                  service: entry.service,
+                  eventSlot: entry.eventSlot,
+                  selectedDates: entry.selectedDates,
+                  totalPrice: entry.totalPrice,
+                  advanceAmount: entry.advanceAmount,
+                  serviceStart: entry.serviceStart,
+                  serviceEnd: entry.serviceEnd,
+                ),
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
 
-        final activeBooking = pendingBookings.cast<Booking?>().firstWhere(
+        final activeBooking = pendingEntries.cast<_BookingRequestEntry?>().firstWhere(
           (booking) => booking?.id == _activeBookingId,
           orElse: () =>
-              pendingBookings.isNotEmpty ? pendingBookings.first : null,
+              pendingEntries.isNotEmpty ? pendingEntries.first : null,
         );
 
-        if (pendingBookings.isNotEmpty && _activeBookingId == null) {
+        if (pendingEntries.isNotEmpty && _activeBookingId == null) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              setState(() => _activeBookingId = pendingBookings.first.id);
+              setState(() => _activeBookingId = pendingEntries.first.id);
             }
           });
         }
@@ -128,7 +146,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
               ],
             ),
             24.h,
-            if (isMobile && pendingBookings.isNotEmpty)
+            if (isMobile && pendingEntries.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
                 child: SizedBox(
@@ -148,7 +166,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                   ),
                 ),
               ),
-            if (pendingBookings.isEmpty)
+            if (pendingEntries.isEmpty)
               Expanded(
                 child: Center(
                   child: Container(
@@ -187,19 +205,19 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
             else if (isMobile)
               Expanded(
                 child: ListView.separated(
-                  itemCount: pendingBookings.length,
+                  itemCount: pendingEntries.length,
                   separatorBuilder: (context, index) => 12.h,
                   itemBuilder: (context, index) {
-                    final booking = pendingBookings[index];
+                    final booking = pendingEntries[index];
                     return _MobileBookingRequestCard(
                       booking: booking,
-                      selected: _selectedIds.contains(booking.id),
+                      selected: _selectedIds.contains(booking.booking.id),
                       onSelected: (selected) {
                         setState(() {
                           if (selected == true) {
-                            _selectedIds.add(booking.id);
+                            _selectedIds.add(booking.booking.id);
                           } else {
-                            _selectedIds.remove(booking.id);
+                            _selectedIds.remove(booking.booking.id);
                           }
                         });
                       },
@@ -225,13 +243,13 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                         child: Padding(
                           padding: 20.p,
                           child: ListView.separated(
-                            itemCount: pendingBookings.length,
+                            itemCount: pendingEntries.length,
                             separatorBuilder: (context, index) =>
                                 const Divider(height: 1),
                             itemBuilder: (context, index) {
-                              final booking = pendingBookings[index];
+                              final booking = pendingEntries[index];
                               final isSelected = _selectedIds.contains(
-                                booking.id,
+                                booking.booking.id,
                               );
                               final isActive = booking.id == activeBooking?.id;
 
@@ -260,9 +278,9 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                         onChanged: (selected) {
                                           setState(() {
                                             if (selected == true) {
-                                              _selectedIds.add(booking.id);
+                                              _selectedIds.add(booking.booking.id);
                                             } else {
-                                              _selectedIds.remove(booking.id);
+                                              _selectedIds.remove(booking.booking.id);
                                             }
                                           });
                                         },
@@ -270,7 +288,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                       CircleAvatar(
                                         backgroundColor: crmColors.secondary,
                                         child: Text(
-                                          booking.initials,
+                                          booking.booking.initials,
                                           style: TextStyle(
                                             color: crmColors.primary,
                                             fontWeight: FontWeight.bold,
@@ -284,14 +302,14 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                               CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              booking.customerName,
+                                              booking.booking.customerName,
                                               style: const TextStyle(
                                                 fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                             4.h,
                                             Text(
-                                              booking.service,
+                                              booking.summaryLabel,
                                               style: TextStyle(
                                                 color: crmColors.textSecondary,
                                               ),
@@ -302,7 +320,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                       SizedBox(
                                         width: 150,
                                         child: Text(
-                                          _formatBookingDateTime(booking),
+                                          _formatBookingDateSummary(booking),
                                           style: TextStyle(
                                             color: crmColors.textSecondary,
                                           ),
@@ -335,7 +353,10 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                 final scaffoldMessenger = ScaffoldMessenger.of(
                                   context,
                                 );
-                                await _updateStatus(activeBooking, 'confirmed');
+                                await _updateStatus(
+                                  activeBooking.booking,
+                                  'confirmed',
+                                );
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
                                     const SnackBar(
@@ -352,7 +373,10 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                 final scaffoldMessenger = ScaffoldMessenger.of(
                                   context,
                                 );
-                                await _updateStatus(activeBooking, 'rejected');
+                                await _updateStatus(
+                                  activeBooking.booking,
+                                  'rejected',
+                                );
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
                                     const SnackBar(
@@ -374,7 +398,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
 }
 
 class _AdminReviewSlide extends StatelessWidget {
-  final Booking? booking;
+  final _BookingRequestEntry? booking;
   final Future<void> Function()? onAccept;
   final Future<void> Function()? onReject;
 
@@ -436,28 +460,32 @@ class _AdminReviewSlide extends StatelessWidget {
                     ),
                   ),
                   24.h,
-                  _ApprovalRow(label: 'Client', value: booking!.customerName),
-                  _ApprovalRow(label: 'Phone', value: booking!.phone),
+                  _ApprovalRow(
+                    label: 'Client',
+                    value: booking!.booking.customerName,
+                  ),
+                  if (booking!.eventSlot.trim().isNotEmpty)
+                    _ApprovalRow(label: 'Slot', value: booking!.eventSlot),
+                  _ApprovalRow(
+                    label: 'Phone',
+                    value: booking!.booking.phone,
+                  ),
                   _ApprovalRow(
                     label: 'Email',
-                    value: booking!.email.isEmpty
+                    value: booking!.booking.email.isEmpty
                         ? 'Missing email'
-                        : booking!.email,
+                        : booking!.booking.email,
                   ),
                   _ApprovalRow(label: 'Package', value: booking!.service),
                   _ApprovalRow(
                     label: 'Region',
-                    value: booking!.region.isEmpty
+                    value: booking!.booking.region.isEmpty
                         ? 'Default'
-                        : booking!.region,
+                        : booking!.booking.region,
                   ),
                   _ApprovalRow(
-                    label: 'Date',
-                    value: _formatBookingDateTime(booking!, dateOnly: true),
-                  ),
-                  _ApprovalRow(
-                    label: 'Time',
-                    value: _formatBookingDateTime(booking!, timeOnly: true),
+                    label: 'Dates',
+                    value: _formatSelectedDatesLabel(booking!),
                   ),
                   _ApprovalRow(
                     label: 'Advance',
@@ -503,7 +531,7 @@ class _AdminReviewSlide extends StatelessWidget {
 }
 
 class _MobileBookingRequestCard extends StatelessWidget {
-  final Booking booking;
+  final _BookingRequestEntry booking;
   final bool selected;
   final ValueChanged<bool?> onSelected;
   final VoidCallback onReview;
@@ -530,19 +558,19 @@ class _MobileBookingRequestCard extends StatelessWidget {
                 Checkbox(value: selected, onChanged: onSelected),
                 Expanded(
                   child: Text(
-                    booking.customerName,
+                    booking.booking.customerName,
                     style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
               ],
             ),
             Text(
-              booking.service,
+              booking.summaryLabel,
               style: TextStyle(color: crmColors.textSecondary),
             ),
             8.h,
             Text(
-              _formatBookingDateTime(booking),
+              _formatBookingDateSummary(booking),
               style: TextStyle(color: crmColors.textSecondary),
             ),
             14.h,
@@ -561,7 +589,7 @@ class _MobileBookingRequestCard extends StatelessWidget {
 }
 
 class _BookingApprovalDialog extends ConsumerStatefulWidget {
-  final Booking booking;
+  final _BookingRequestEntry booking;
 
   const _BookingApprovalDialog({required this.booking});
 
@@ -579,7 +607,7 @@ class _BookingApprovalDialogState
     try {
       await ref
           .read(bookingProvider.notifier)
-          .updateBooking(widget.booking.copyWith(status: status));
+          .updateBooking(widget.booking.booking.copyWith(status: status));
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -660,12 +688,7 @@ class _ApprovalRow extends StatelessWidget {
   }
 }
 
-String _formatBookingDateTime(
-  Booking booking, {
-  bool dateOnly = false,
-  bool timeOnly = false,
-}) {
-  final date = booking.serviceStart;
+String _formatDateShort(DateTime date) {
   const months = [
     'Jan',
     'Feb',
@@ -681,13 +704,52 @@ String _formatBookingDateTime(
     'Dec',
   ];
 
-  final datePart = '${date.day} ${months[date.month - 1]} ${date.year}';
-  final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-  final minute = date.minute.toString().padLeft(2, '0');
-  final period = date.hour >= 12 ? 'PM' : 'AM';
-  final timePart = '$hour:$minute $period';
+  return '${date.day} ${months[date.month - 1]} ${date.year}';
+}
 
-  if (dateOnly) return datePart;
-  if (timeOnly) return timePart;
-  return '$datePart • $timePart';
+String _formatSelectedDatesLabel(_BookingRequestEntry booking) {
+  final dates = _bookingRequestDates(booking);
+  return dates.map(_formatDateShort).join(', ');
+}
+
+String _formatBookingDateSummary(_BookingRequestEntry booking) {
+  final dates = _bookingRequestDates(booking);
+  if (dates.isEmpty) return '-';
+  if (dates.length == 1) return _formatDateShort(dates.first);
+  return '${_formatDateShort(dates.first)} +${dates.length - 1} more';
+}
+
+List<DateTime> _bookingRequestDates(_BookingRequestEntry booking) {
+  if (booking.selectedDates.isNotEmpty) {
+    return [...booking.selectedDates]..sort((a, b) => a.compareTo(b));
+  }
+
+  return [booking.serviceStart];
+}
+
+class _BookingRequestEntry {
+  final String id;
+  final Booking booking;
+  final String service;
+  final String eventSlot;
+  final List<DateTime> selectedDates;
+  final double totalPrice;
+  final double advanceAmount;
+  final DateTime serviceStart;
+  final DateTime serviceEnd;
+
+  const _BookingRequestEntry({
+    required this.id,
+    required this.booking,
+    required this.service,
+    required this.eventSlot,
+    required this.selectedDates,
+    required this.totalPrice,
+    required this.advanceAmount,
+    required this.serviceStart,
+    required this.serviceEnd,
+  });
+
+  String get summaryLabel =>
+      eventSlot.trim().isEmpty ? service : '$service • ${eventSlot.trim()}';
 }
