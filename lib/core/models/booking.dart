@@ -246,6 +246,63 @@ class BookingDisplayEntry {
   }
 }
 
+class BookingPageSummary {
+  final double totalSales;
+  final double totalAdvance;
+  final int completedCount;
+  final int cancelledCount;
+
+  const BookingPageSummary({
+    this.totalSales = 0,
+    this.totalAdvance = 0,
+    this.completedCount = 0,
+    this.cancelledCount = 0,
+  });
+
+  factory BookingPageSummary.fromJson(Map<String, dynamic> json) {
+    return BookingPageSummary(
+      totalSales: (json['totalSales'] as num?)?.toDouble() ?? 0,
+      totalAdvance: (json['totalAdvance'] as num?)?.toDouble() ?? 0,
+      completedCount: (json['completedCount'] as num?)?.toInt() ?? 0,
+      cancelledCount: (json['cancelledCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class PaginatedBookingsResponse {
+  final List<Booking> items;
+  final int page;
+  final int limit;
+  final int totalItems;
+  final int totalPages;
+  final BookingPageSummary summary;
+
+  const PaginatedBookingsResponse({
+    required this.items,
+    required this.page,
+    required this.limit,
+    required this.totalItems,
+    required this.totalPages,
+    required this.summary,
+  });
+
+  factory PaginatedBookingsResponse.fromJson(Map<String, dynamic> json) {
+    return PaginatedBookingsResponse(
+      items: ((json['items'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(Booking.fromJson)
+          .toList(),
+      page: (json['page'] as num?)?.toInt() ?? 1,
+      limit: (json['limit'] as num?)?.toInt() ?? 20,
+      totalItems: (json['totalItems'] as num?)?.toInt() ?? 0,
+      totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
+      summary: BookingPageSummary.fromJson(
+        (json['summary'] as Map<String, dynamic>?) ?? const {},
+      ),
+    );
+  }
+}
+
 /// A model class representing a single booking in the system.
 class Booking {
   final String id;
@@ -256,6 +313,7 @@ class Booking {
   final String customerName;
   final String phone;
   final String email;
+  final bool legacyBooking;
   final String service;
   final String region;
   final String driverName;
@@ -295,6 +353,7 @@ class Booking {
     required this.customerName,
     required this.phone,
     this.email = '',
+    this.legacyBooking = false,
     required this.service,
     this.region = '',
     this.driverName = '',
@@ -432,6 +491,7 @@ class Booking {
       customerName: json['customerName'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
       email: json['email'] as String? ?? '',
+      legacyBooking: json['legacyBooking'] as bool? ?? false,
       service: json['service'] as String? ?? '',
       region: json['region'] as String? ?? '',
       driverName: json['driverName'] as String? ?? '',
@@ -489,6 +549,7 @@ class Booking {
       'driverId': driverId,
       'phone': phone,
       'email': email,
+      'legacyBooking': legacyBooking,
       'service': service,
       'region': region,
       'driverName': driverName,
@@ -532,6 +593,7 @@ class Booking {
     String? customerName,
     String? phone,
     String? email,
+    bool? legacyBooking,
     String? service,
     String? region,
     String? driverName,
@@ -571,6 +633,7 @@ class Booking {
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
       email: email ?? this.email,
+      legacyBooking: legacyBooking ?? this.legacyBooking,
       service: service ?? this.service,
       region: region ?? this.region,
       driverName: driverName ?? this.driverName,

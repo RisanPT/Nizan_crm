@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/customer_service.dart';
 
-class ClientsDirectoryScreen extends ConsumerWidget {
+class ClientsDirectoryScreen extends HookConsumerWidget {
   const ClientsDirectoryScreen({super.key});
 
   @override
@@ -14,6 +17,13 @@ class ClientsDirectoryScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncCustomers = ref.watch(
+      paginatedCustomersProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
 
     return SingleChildScrollView(
       child: Column(
@@ -189,10 +199,9 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                   const Divider(),
 
                   // Data from provider
-                  ref
-                      .watch(customersProvider)
-                      .when(
-                        data: (customers) {
+                  asyncCustomers.when(
+                        data: (response) {
+                          final customers = response.items;
                           if (customers.isEmpty) {
                             return Padding(
                               padding: const EdgeInsets.all(32.0),
@@ -226,26 +235,40 @@ class ClientsDirectoryScreen extends ConsumerWidget {
                             );
                           }
                           return Column(
-                            children: customers
-                                .map(
-                                  (c) => Column(
-                                    children: [
-                                      _buildClientRow(
-                                        context,
-                                        ref,
-                                        id: c.id ?? '',
-                                        name: c.name,
-                                        tag: c.status,
-                                        phone: c.phone ?? 'N/A',
-                                        email: c.email.contains('@placeholder')
-                                            ? '—'
-                                            : c.email,
-                                      ),
-                                      const Divider(),
-                                    ],
-                                  ),
-                                )
-                                .toList(),
+                            children: [
+                              ...customers.map(
+                                (c) => Column(
+                                  children: [
+                                    _buildClientRow(
+                                      context,
+                                      ref,
+                                      id: c.id ?? '',
+                                      name: c.name,
+                                      tag: c.status,
+                                      phone: c.phone ?? 'N/A',
+                                      email: c.email.contains('@placeholder')
+                                          ? '—'
+                                          : c.email,
+                                    ),
+                                    const Divider(),
+                                  ],
+                                ),
+                              ),
+                              16.h,
+                              PaginatedFooter(
+                                page: response.page,
+                                limit: response.limit,
+                                totalPages: response.totalPages,
+                                totalItems: response.totalItems,
+                                currentItemCount: response.items.length,
+                                onPrevious: response.page > 1
+                                    ? () => pageState.value -= 1
+                                    : null,
+                                onNext: response.page < response.totalPages
+                                    ? () => pageState.value += 1
+                                    : null,
+                              ),
+                            ],
                           );
                         },
                         loading: () => const Padding(
@@ -309,6 +332,7 @@ class ClientsDirectoryScreen extends ConsumerWidget {
         try {
           await ref.read(customerServiceProvider).deleteCustomer(id);
           ref.invalidate(customersProvider);
+          ref.invalidate(paginatedCustomersProvider);
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(

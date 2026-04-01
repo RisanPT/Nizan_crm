@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/package_service.dart';
 
-class ServicesManagementScreen extends ConsumerWidget {
+class ServicesManagementScreen extends HookConsumerWidget {
   const ServicesManagementScreen({super.key});
 
   @override
@@ -14,7 +17,13 @@ class ServicesManagementScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final asyncPackages = ref.watch(packagesProvider);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncPackages = ref.watch(
+      paginatedPackagesProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -109,7 +118,8 @@ class ServicesManagementScreen extends ConsumerWidget {
                 style: TextStyle(color: crmColors.textSecondary),
               ),
             ),
-            data: (packages) {
+            data: (response) {
+              final packages = response.items;
               if (packages.isEmpty) {
                 return Center(
                   child: Column(
@@ -186,6 +196,7 @@ class ServicesManagementScreen extends ConsumerWidget {
                                       .read(packageServiceProvider)
                                       .deletePackage(package.id);
                                   ref.invalidate(packagesProvider);
+                                  ref.invalidate(paginatedPackagesProvider);
                                 },
                                 icon: const Icon(
                                   Icons.delete_outline,
@@ -259,6 +270,23 @@ class ServicesManagementScreen extends ConsumerWidget {
               );
             },
           ),
+        ),
+        20.h,
+        asyncPackages.maybeWhen(
+          data: (response) => PaginatedFooter(
+            page: response.page,
+            limit: response.limit,
+            totalPages: response.totalPages,
+            totalItems: response.totalItems,
+            currentItemCount: response.items.length,
+            onPrevious: response.page > 1
+                ? () => pageState.value -= 1
+                : null,
+            onNext: response.page < response.totalPages
+                ? () => pageState.value += 1
+                : null,
+          ),
+          orElse: () => const SizedBox.shrink(),
         ),
       ],
     );

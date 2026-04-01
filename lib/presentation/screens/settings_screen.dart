@@ -1,20 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/crm_user.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/user_service.dart';
 
-class SettingsScreen extends ConsumerWidget {
+class SettingsScreen extends HookConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
-    final asyncUsers = ref.watch(crmUsersProvider);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncUsers = ref.watch(
+      paginatedCrmUsersProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
     final auth = ref.read(authControllerProvider);
     final isMobile = ResponsiveBuilder.isMobile(context);
 
@@ -138,6 +147,7 @@ class SettingsScreen extends ConsumerWidget {
                         }
 
                         ref.invalidate(crmUsersProvider);
+                        ref.invalidate(paginatedCrmUsersProvider);
                         if (!dialogContext.mounted) return;
                         Navigator.of(dialogContext).pop();
                       } catch (error) {
@@ -205,7 +215,8 @@ class SettingsScreen extends ConsumerWidget {
               label: const Text('Add User'),
             ),
             child: asyncUsers.when(
-              data: (users) {
+              data: (response) {
+                final users = response.items;
                 if (users.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
@@ -215,13 +226,27 @@ class SettingsScreen extends ConsumerWidget {
 
                 if (isMobile) {
                   return Column(
-                    children: users
-                        .map((user) => _MobileUserCard(
-                              user: user,
-                              currentUserId: auth.session?.userId ?? '',
-                              onEdit: () => openUserDialog(user),
-                            ))
-                        .toList(),
+                    children: [
+                      ...users.map((user) => _MobileUserCard(
+                            user: user,
+                            currentUserId: auth.session?.userId ?? '',
+                            onEdit: () => openUserDialog(user),
+                          )),
+                      16.h,
+                      PaginatedFooter(
+                        page: response.page,
+                        limit: response.limit,
+                        totalPages: response.totalPages,
+                        totalItems: response.totalItems,
+                        currentItemCount: response.items.length,
+                        onPrevious: response.page > 1
+                            ? () => pageState.value -= 1
+                            : null,
+                        onNext: response.page < response.totalPages
+                            ? () => pageState.value += 1
+                            : null,
+                      ),
+                    ],
                   );
                 }
 
@@ -255,6 +280,20 @@ class SettingsScreen extends ConsumerWidget {
                         currentUserId: auth.session?.userId ?? '',
                         onEdit: () => openUserDialog(user),
                       ),
+                    ),
+                    16.h,
+                    PaginatedFooter(
+                      page: response.page,
+                      limit: response.limit,
+                      totalPages: response.totalPages,
+                      totalItems: response.totalItems,
+                      currentItemCount: response.items.length,
+                      onPrevious: response.page > 1
+                          ? () => pageState.value -= 1
+                          : null,
+                      onNext: response.page < response.totalPages
+                          ? () => pageState.value += 1
+                          : null,
                     ),
                   ],
                 );

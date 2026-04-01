@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../core/models/service_package.dart';
 import '../providers/dio_provider.dart';
 
@@ -9,6 +11,14 @@ final packageServiceProvider = Provider<PackageService>((ref) {
 
 final packagesProvider = FutureProvider<List<ServicePackage>>((ref) async {
   return ref.watch(packageServiceProvider).getPackages();
+});
+
+final paginatedPackagesProvider = FutureProvider.family<
+    PaginatedListResponse<ServicePackage>, ListPageParams>((ref, params) async {
+  return ref.watch(packageServiceProvider).getPaginatedPackages(
+        page: params.page,
+        limit: params.limit,
+      );
 });
 
 class PackageService {
@@ -23,6 +33,24 @@ class PackageService {
       return data
           .map((item) => ServicePackage.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load packages: ${e.message}');
+    }
+  }
+
+  Future<PaginatedListResponse<ServicePackage>> getPaginatedPackages({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/packages',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        ServicePackage.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception('Failed to load packages: ${e.message}');
     }

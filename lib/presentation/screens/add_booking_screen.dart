@@ -32,6 +32,8 @@ class AddBookingScreen extends HookConsumerWidget {
     final nameCtrl = useTextEditingController();
     final emailCtrl = useTextEditingController();
     final phoneCtrl = useTextEditingController();
+    final allowMissingEmail = useState(false);
+    final isSubmitting = useState(false);
 
     final selectedRegion = useState<String?>('');
     final selectedPackageId = useState<String?>(null);
@@ -232,7 +234,15 @@ class AddBookingScreen extends HookConsumerWidget {
       return '$h:$m $ampm';
     }
 
+    String formatDateForRoute(DateTime date) {
+      final year = date.year.toString().padLeft(4, '0');
+      final month = date.month.toString().padLeft(2, '0');
+      final day = date.day.toString().padLeft(2, '0');
+      return '$year-$month-$day';
+    }
+
     Future<void> submitBooking() async {
+      if (isSubmitting.value) return;
       if (!formKey.currentState!.validate()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please fill all required fields.')),
@@ -290,6 +300,7 @@ class AddBookingScreen extends HookConsumerWidget {
         customerName: actualName,
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
+        legacyBooking: allowMissingEmail.value,
         service: bookingItems.map((item) => item.service).join(' + '),
         eventSlot: bookingItems
             .map((item) => item.eventSlot.trim())
@@ -305,31 +316,54 @@ class AddBookingScreen extends HookConsumerWidget {
         bookingItems: bookingItems,
       );
 
-      await ref.read(bookingProvider.notifier).addBooking(booking);
+      isSubmitting.value = true;
+      try {
+        await ref.read(bookingProvider.notifier).addBooking(booking);
 
-      if (!context.mounted) return;
+        if (!context.mounted) return;
 
-      // Invalidate the customers list so the new customer (auto-created
-      // on the backend during booking) appears in the Clients Directory.
-      ref.invalidate(customersProvider);
+        // Invalidate the customers list so the new customer (auto-created
+        // on the backend during booking) appears in the Clients Directory.
+        ref.invalidate(customersProvider);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Booking created and added to calendar.'),
-          backgroundColor: Color(0xFF10B981),
-        ),
-      );
-      context.go('/calendar');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Booking created and added to calendar.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+        context.go('/calendar?date=${formatDateForRoute(d)}');
+      } catch (error) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error.toString().replaceFirst('Exception: ', ''),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      } finally {
+        if (context.mounted) {
+          isSubmitting.value = false;
+        }
+      }
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Stack(
+      children: [
+        AbsorbPointer(
+          absorbing: isSubmitting.value,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Row(
             children: [
               IconButton(
-                onPressed: () {
+                onPressed: isSubmitting.value
+                    ? null
+                    : () {
                   if (context.canPop()) {
                     context.pop();
                   } else {
@@ -393,12 +427,13 @@ class AddBookingScreen extends HookConsumerWidget {
                                   option.name,
                               onSelected: (Customer selection) {
                                 phoneCtrl.text = selection.phone ?? '';
-                                emailCtrl.text =
-                                    selection.email.contains(
-                                      '@placeholder.local',
-                                    )
+                                final isPlaceholder = selection.email.contains(
+                                  '@placeholder.local',
+                                );
+                                emailCtrl.text = isPlaceholder
                                     ? ''
                                     : selection.email;
+                                allowMissingEmail.value = isPlaceholder;
                               },
                               fieldViewBuilder:
                                   (
@@ -463,9 +498,17 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: TextFormField(
                                 controller: emailCtrl,
                                 keyboardType: TextInputType.emailAddress,
-                                decoration: _inputDeco('Email', crmColors),
+                                decoration: _inputDeco(
+                                  allowMissingEmail.value
+                                      ? 'Email (Optional for old booking)'
+                                      : 'Email',
+                                  crmColors,
+                                ),
                                 validator: (v) {
                                   final value = v?.trim() ?? '';
+                                  if (allowMissingEmail.value && value.isEmpty) {
+                                    return null;
+                                  }
                                   if (value.isEmpty) return 'Required';
                                   final emailPattern = RegExp(
                                     r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
@@ -483,6 +526,19 @@ class AddBookingScreen extends HookConsumerWidget {
                               ),
                             ),
                           ],
+                        ),
+                        10.h,
+                        CheckboxListTile(
+                          value: allowMissingEmail.value,
+                          onChanged: (value) {
+                            allowMissingEmail.value = value ?? false;
+                          },
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: const Text('This is an old booking without email'),
+                          subtitle: const Text(
+                            'CRM can save legacy bookings without a real client email. Confirmation email will be skipped.',
+                          ),
                         ),
                         32.h,
                         const Divider(),
@@ -601,7 +657,9 @@ class AddBookingScreen extends HookConsumerWidget {
                             SizedBox(
                               height: 56,
                               child: ElevatedButton.icon(
-                                onPressed: addPackageToCart,
+                                onPressed: isSubmitting.value
+                                    ? null
+                                    : addPackageToCart,
                                 icon: const Icon(Icons.add_shopping_cart),
                                 label: const Text('Add Package'),
                               ),
@@ -769,7 +827,7 @@ class AddBookingScreen extends HookConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             InkWell(
-                              onTap: pickDate,
+                              onTap: isSubmitting.value ? null : pickDate,
                               borderRadius: BorderRadius.circular(8),
                                 child: InputDecorator(
                                   decoration: _inputDeco(
@@ -838,7 +896,9 @@ class AddBookingScreen extends HookConsumerWidget {
                                 // Start time
                                 Expanded(
                                   child: InkWell(
-                                    onTap: pickStartTime,
+                                    onTap: isSubmitting.value
+                                        ? null
+                                        : pickStartTime,
                                     borderRadius: BorderRadius.circular(8),
                                     child: InputDecorator(
                                       decoration: _inputDeco(
@@ -863,7 +923,9 @@ class AddBookingScreen extends HookConsumerWidget {
                                 // End time
                                 Expanded(
                                   child: InkWell(
-                                    onTap: pickEndTime,
+                                    onTap: isSubmitting.value
+                                        ? null
+                                        : pickEndTime,
                                     borderRadius: BorderRadius.circular(8),
                                     child: InputDecorator(
                                       decoration: _inputDeco(
@@ -914,7 +976,9 @@ class AddBookingScreen extends HookConsumerWidget {
                             16.w,
                             Expanded(
                               child: ElevatedButton(
-                                onPressed: submitBooking,
+                                onPressed: isSubmitting.value
+                                    ? null
+                                    : submitBooking,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: crmColors.primary,
                                   foregroundColor: Colors.white,
@@ -925,13 +989,25 @@ class AddBookingScreen extends HookConsumerWidget {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                 ),
-                                child: const Text(
-                                  'Create Booking',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                                child: isSubmitting.value
+                                    ? const SizedBox(
+                                        height: 22,
+                                        width: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.4,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                        ),
+                                      )
+                                    : const Text(
+                                        'Create Booking',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
                             ),
                           ],
@@ -944,8 +1020,37 @@ class AddBookingScreen extends HookConsumerWidget {
             ),
           ),
           48.h,
-        ],
-      ),
+              ],
+            ),
+          ),
+        ),
+        if (isSubmitting.value)
+          Positioned.fill(
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.08),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 28,
+                      width: 28,
+                      child: CircularProgressIndicator(strokeWidth: 2.6),
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'Saving booking...',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

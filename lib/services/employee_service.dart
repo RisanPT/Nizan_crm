@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/employee.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
 
 final employeeServiceProvider = Provider<EmployeeService>((ref) {
@@ -10,6 +12,17 @@ final employeeServiceProvider = Provider<EmployeeService>((ref) {
 final employeesProvider = FutureProvider<List<Employee>>((ref) async {
   return ref.watch(employeeServiceProvider).getEmployees();
 });
+
+final paginatedEmployeesProvider =
+    FutureProvider.family<PaginatedListResponse<Employee>, ListPageParams>((
+      ref,
+      params,
+    ) async {
+      return ref.watch(employeeServiceProvider).getPaginatedEmployees(
+            page: params.page,
+            limit: params.limit,
+          );
+    });
 
 class EmployeeService {
   final Dio _dio;
@@ -23,6 +36,24 @@ class EmployeeService {
       return data
           .map((item) => Employee.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load employees: ${e.message}');
+    }
+  }
+
+  Future<PaginatedListResponse<Employee>> getPaginatedEmployees({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/employees',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        Employee.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception('Failed to load employees: ${e.message}');
     }

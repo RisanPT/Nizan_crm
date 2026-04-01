@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/crm_user.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
 
 final userServiceProvider = Provider<UserService>((ref) {
@@ -10,6 +12,17 @@ final userServiceProvider = Provider<UserService>((ref) {
 final crmUsersProvider = FutureProvider<List<CrmUser>>((ref) async {
   return ref.watch(userServiceProvider).getUsers();
 });
+
+final paginatedCrmUsersProvider =
+    FutureProvider.family<PaginatedListResponse<CrmUser>, ListPageParams>((
+      ref,
+      params,
+    ) async {
+      return ref.watch(userServiceProvider).getPaginatedUsers(
+            page: params.page,
+            limit: params.limit,
+          );
+    });
 
 class UserService {
   UserService(this._dio);
@@ -23,6 +36,24 @@ class UserService {
       return data
           .map((item) => CrmUser.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to load users'));
+    }
+  }
+
+  Future<PaginatedListResponse<CrmUser>> getPaginatedUsers({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/auth/users',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        CrmUser.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception(_message(e, 'Failed to load users'));
     }

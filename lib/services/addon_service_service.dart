@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/addon_service.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
 
 final addonServiceServiceProvider = Provider<AddonServiceService>((ref) {
@@ -9,6 +11,14 @@ final addonServiceServiceProvider = Provider<AddonServiceService>((ref) {
 
 final addonServicesProvider = FutureProvider<List<AddonService>>((ref) async {
   return ref.watch(addonServiceServiceProvider).getAddonServices();
+});
+
+final paginatedAddonServicesProvider = FutureProvider.family<
+    PaginatedListResponse<AddonService>, ListPageParams>((ref, params) async {
+  return ref.watch(addonServiceServiceProvider).getPaginatedAddonServices(
+        page: params.page,
+        limit: params.limit,
+      );
 });
 
 class AddonServiceService {
@@ -23,6 +33,24 @@ class AddonServiceService {
       return data
           .map((item) => AddonService.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load add-on services: ${e.message}');
+    }
+  }
+
+  Future<PaginatedListResponse<AddonService>> getPaginatedAddonServices({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/addon-services',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        AddonService.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception('Failed to load add-on services: ${e.message}');
     }

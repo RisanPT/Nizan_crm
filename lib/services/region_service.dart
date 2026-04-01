@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../core/models/service_region.dart';
 import '../providers/dio_provider.dart';
 
@@ -9,6 +11,14 @@ final regionServiceProvider = Provider<RegionService>((ref) {
 
 final regionsProvider = FutureProvider<List<ServiceRegion>>((ref) async {
   return ref.watch(regionServiceProvider).getRegions(activeOnly: true);
+});
+
+final paginatedRegionsProvider = FutureProvider.family<
+    PaginatedListResponse<ServiceRegion>, ListPageParams>((ref, params) async {
+  return ref.watch(regionServiceProvider).getPaginatedRegions(
+        page: params.page,
+        limit: params.limit,
+      );
 });
 
 class RegionService {
@@ -26,6 +36,29 @@ class RegionService {
       return data
           .map((item) => ServiceRegion.fromJson(item as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load regions: ${e.message}');
+    }
+  }
+
+  Future<PaginatedListResponse<ServiceRegion>> getPaginatedRegions({
+    int page = 1,
+    int limit = 20,
+    bool activeOnly = false,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/regions',
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (activeOnly) 'active': 'true',
+        },
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        ServiceRegion.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception('Failed to load regions: ${e.message}');
     }

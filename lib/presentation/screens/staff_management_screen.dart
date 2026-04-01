@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/employee.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/models/service_region.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
 
@@ -16,7 +19,13 @@ class StaffManagementScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final asyncEmployees = ref.watch(employeesProvider);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncEmployees = ref.watch(
+      paginatedEmployeesProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
     final asyncRegions = ref.watch(regionsProvider);
 
     Future<void> openStaffDialog([
@@ -196,6 +205,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           regionId: regionId,
                         );
                     ref.invalidate(employeesProvider);
+                    ref.invalidate(paginatedEmployeesProvider);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -282,7 +292,8 @@ class StaffManagementScreen extends HookConsumerWidget {
                 style: TextStyle(color: crmColors.textSecondary),
               ),
             ),
-            data: (employees) {
+            data: (response) {
+              final employees = response.items;
               if (employees.isEmpty) {
                 return Center(
                   child: Text(
@@ -335,6 +346,23 @@ class StaffManagementScreen extends HookConsumerWidget {
               );
             },
           ),
+        ),
+        20.h,
+        asyncEmployees.maybeWhen(
+          data: (response) => PaginatedFooter(
+            page: response.page,
+            limit: response.limit,
+            totalPages: response.totalPages,
+            totalItems: response.totalItems,
+            currentItemCount: response.items.length,
+            onPrevious: response.page > 1
+                ? () => pageState.value -= 1
+                : null,
+            onNext: response.page < response.totalPages
+                ? () => pageState.value += 1
+                : null,
+          ),
+          orElse: () => const SizedBox.shrink(),
         ),
       ],
     );
@@ -435,6 +463,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       .read(employeeServiceProvider)
                       .deleteEmployee(employee.id);
                   ref.invalidate(employeesProvider);
+                  ref.invalidate(paginatedEmployeesProvider);
                 },
                 style: TextButton.styleFrom(
                   foregroundColor: crmColors.destructive,

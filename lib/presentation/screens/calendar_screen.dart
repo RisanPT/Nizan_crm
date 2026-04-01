@@ -12,7 +12,9 @@ import '../../services/blocked_date_service.dart';
 import '../../services/employee_service.dart';
 
 class CalendarScreen extends HookConsumerWidget {
-  const CalendarScreen({super.key});
+  const CalendarScreen({super.key, this.initialFocusDate});
+
+  final DateTime? initialFocusDate;
 
   // Maps service names to colors for the calendar blocks
   static const _serviceColors = {
@@ -161,7 +163,7 @@ class CalendarScreen extends HookConsumerWidget {
     final asyncBlockedDates = ref.watch(blockedDatesProvider);
     final blockedDates = asyncBlockedDates.value ?? [];
 
-    final now = DateTime.now();
+    final now = initialFocusDate ?? DateTime.now();
     final currentWeekMonday = useMemoized(
       () => DateTime(
         now.year,

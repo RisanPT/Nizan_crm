@@ -1,9 +1,41 @@
 import 'dart:async';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../services/booking_service.dart';
 import '../models/booking.dart';
 
 part 'booking_provider.g.dart';
+
+class PaginatedBookingsParams {
+  final int page;
+  final int limit;
+
+  const PaginatedBookingsParams({
+    required this.page,
+    required this.limit,
+  });
+
+  @override
+  bool operator ==(Object other) {
+    return other is PaginatedBookingsParams &&
+        other.page == page &&
+        other.limit == limit;
+  }
+
+  @override
+  int get hashCode => Object.hash(page, limit);
+}
+
+final paginatedBookingsProvider = FutureProvider.family<
+  PaginatedBookingsResponse,
+  PaginatedBookingsParams
+>((ref, params) async {
+  final service = ref.watch(bookingServiceProvider);
+  return service.getPaginatedBookings(
+    page: params.page,
+    limit: params.limit,
+  );
+});
 
 @riverpod
 class BookingNotifier extends _$BookingNotifier {

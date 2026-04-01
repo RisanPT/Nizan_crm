@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/models/service_region.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/region_service.dart';
 
 class RegionsManagementScreen extends HookConsumerWidget {
@@ -15,7 +18,13 @@ class RegionsManagementScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final asyncRegions = ref.watch(regionsProvider);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncRegions = ref.watch(
+      paginatedRegionsProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
 
     Future<void> handleBack() async {
       final didPop = await Navigator.of(context).maybePop();
@@ -83,6 +92,7 @@ class RegionsManagementScreen extends HookConsumerWidget {
                           status: status,
                         );
                     ref.invalidate(regionsProvider);
+                    ref.invalidate(paginatedRegionsProvider);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -149,7 +159,8 @@ class RegionsManagementScreen extends HookConsumerWidget {
                 style: TextStyle(color: crmColors.textSecondary),
               ),
             ),
-            data: (regions) {
+            data: (response) {
+              final regions = response.items;
               if (regions.isEmpty) {
                 return Center(
                   child: Text(
@@ -193,6 +204,7 @@ class RegionsManagementScreen extends HookConsumerWidget {
                                   .read(regionServiceProvider)
                                   .deleteRegion(region.id);
                               ref.invalidate(regionsProvider);
+                              ref.invalidate(paginatedRegionsProvider);
                             },
                             style: TextButton.styleFrom(
                               foregroundColor: crmColors.destructive,
@@ -207,6 +219,23 @@ class RegionsManagementScreen extends HookConsumerWidget {
               );
             },
           ),
+        ),
+        20.h,
+        asyncRegions.maybeWhen(
+          data: (response) => PaginatedFooter(
+            page: response.page,
+            limit: response.limit,
+            totalPages: response.totalPages,
+            totalItems: response.totalItems,
+            currentItemCount: response.items.length,
+            onPrevious: response.page > 1
+                ? () => pageState.value -= 1
+                : null,
+            onNext: response.page < response.totalPages
+                ? () => pageState.value += 1
+                : null,
+          ),
+          orElse: () => const SizedBox.shrink(),
         ),
       ],
     );

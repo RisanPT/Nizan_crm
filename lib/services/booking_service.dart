@@ -15,6 +15,21 @@ class BookingService {
 
   BookingService(this._dio);
 
+  String _extractErrorMessage(
+    DioException error,
+    String fallback,
+  ) {
+    final responseData = error.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      final message = responseData['message']?.toString().trim() ?? '';
+      if (message.isNotEmpty) return message;
+    }
+
+    final dioMessage = error.message?.trim() ?? '';
+    if (dioMessage.isNotEmpty) return dioMessage;
+    return fallback;
+  }
+
   Future<List<Booking>> getBookings() async {
     try {
       final response = await _dio.get('/bookings');
@@ -23,7 +38,31 @@ class BookingService {
           .map((e) => Booking.fromJson(e as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
-      throw Exception('Failed to load bookings: ${e.message}');
+      throw Exception(
+        'Failed to load bookings: ${_extractErrorMessage(e, 'Unable to load bookings.')}',
+      );
+    }
+  }
+
+  Future<PaginatedBookingsResponse> getPaginatedBookings({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/bookings/paged',
+        queryParameters: {
+          'page': page,
+          'limit': limit,
+        },
+      );
+      return PaginatedBookingsResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
+    } on DioException catch (e) {
+      throw Exception(
+        'Failed to load paginated bookings: ${_extractErrorMessage(e, 'Unable to load paginated bookings.')}',
+      );
     }
   }
 
@@ -32,7 +71,9 @@ class BookingService {
       final response = await _dio.post('/bookings', data: booking.toJson());
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw Exception('Failed to create booking: ${e.message}');
+      throw Exception(
+        'Failed to create booking: ${_extractErrorMessage(e, 'Unable to create booking.')}',
+      );
     }
   }
 
@@ -44,7 +85,9 @@ class BookingService {
       );
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } on DioException catch (e) {
-      throw Exception('Failed to update booking: ${e.message}');
+      throw Exception(
+        'Failed to update booking: ${_extractErrorMessage(e, 'Unable to update booking.')}',
+      );
     }
   }
 
@@ -52,7 +95,9 @@ class BookingService {
     try {
       await _dio.delete('/bookings/$id');
     } on DioException catch (e) {
-      throw Exception('Failed to delete booking: ${e.message}');
+      throw Exception(
+        'Failed to delete booking: ${_extractErrorMessage(e, 'Unable to delete booking.')}',
+      );
     }
   }
 }

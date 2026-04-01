@@ -23,6 +23,20 @@ import '../../presentation/screens/settings_screen.dart';
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
 
+DateTime? _parseCalendarFocusDate(String? raw) {
+  final value = raw?.trim() ?? '';
+  if (value.isEmpty) return null;
+
+  final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+  if (match == null) return null;
+
+  return DateTime(
+    int.parse(match.group(1)!),
+    int.parse(match.group(2)!),
+    int.parse(match.group(3)!),
+  );
+}
+
 final goRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
 
@@ -107,7 +121,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/calendar',
-            builder: (context, state) => const CalendarScreen(),
+            builder: (context, state) => CalendarScreen(
+              initialFocusDate: _parseCalendarFocusDate(
+                state.uri.queryParameters['date'],
+              ),
+            ),
           ),
           GoRoute(
             path: '/services',

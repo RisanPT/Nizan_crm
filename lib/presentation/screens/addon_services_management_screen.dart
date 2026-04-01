@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/addon_service.dart';
+import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
+import '../common_widgets/paginated_footer.dart';
 import '../../services/addon_service_service.dart';
 
-class AddonServicesManagementScreen extends ConsumerWidget {
+class AddonServicesManagementScreen extends HookConsumerWidget {
   const AddonServicesManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
-    final asyncAddonServices = ref.watch(addonServicesProvider);
+    final pageState = useState(1);
+    const pageSize = 20;
+    final asyncAddonServices = ref.watch(
+      paginatedAddonServicesProvider(
+        ListPageParams(page: pageState.value, limit: pageSize),
+      ),
+    );
 
     Future<void> handleBack() async {
       final didPop = await Navigator.of(context).maybePop();
@@ -106,6 +115,7 @@ class AddonServicesManagementScreen extends ConsumerWidget {
                           status: status,
                         );
                     ref.invalidate(addonServicesProvider);
+                    ref.invalidate(paginatedAddonServicesProvider);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -163,7 +173,8 @@ class AddonServicesManagementScreen extends ConsumerWidget {
                 style: TextStyle(color: crmColors.textSecondary),
               ),
             ),
-            data: (addonServices) {
+            data: (response) {
+              final addonServices = response.items;
               if (addonServices.isEmpty) {
                 return Center(
                   child: Text(
@@ -207,6 +218,7 @@ class AddonServicesManagementScreen extends ConsumerWidget {
                                   .read(addonServiceServiceProvider)
                                   .deleteAddonService(item.id);
                               ref.invalidate(addonServicesProvider);
+                              ref.invalidate(paginatedAddonServicesProvider);
                             },
                             child: Text(
                               'Delete',
@@ -221,6 +233,23 @@ class AddonServicesManagementScreen extends ConsumerWidget {
               );
             },
           ),
+        ),
+        20.h,
+        asyncAddonServices.maybeWhen(
+          data: (response) => PaginatedFooter(
+            page: response.page,
+            limit: response.limit,
+            totalPages: response.totalPages,
+            totalItems: response.totalItems,
+            currentItemCount: response.items.length,
+            onPrevious: response.page > 1
+                ? () => pageState.value -= 1
+                : null,
+            onNext: response.page < response.totalPages
+                ? () => pageState.value += 1
+                : null,
+          ),
+          orElse: () => const SizedBox.shrink(),
         ),
       ],
     );

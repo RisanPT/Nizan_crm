@@ -16,11 +16,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crmColors = context.crmColors;
     final theme = Theme.of(context);
-    final asyncBookings = ref.watch(bookingProvider);
     final isMobile = ResponsiveBuilder.isMobile(context);
     final selectedIds = useState<Set<String>>(<String>{});
+    final pageState = useState(1);
+    const pageSize = 20;
+    final pageParams = PaginatedBookingsParams(
+      page: pageState.value,
+      limit: pageSize,
+    );
+    final asyncPaginatedBookings = ref.watch(paginatedBookingsProvider(pageParams));
 
-    Future<void> deleteBookings(List<String> bookingIds) async {
+    useEffect(() {
+      selectedIds.value = <String>{};
+      return null;
+    }, [pageState.value]);
+
+    Future<void> deleteBookings(List<String> bookingIds, int currentPageCount) async {
       if (bookingIds.isEmpty) return;
 
       final confirmed = await showDialog<bool>(
@@ -54,13 +65,19 @@ class SalesBookingsScreen extends HookConsumerWidget {
         await notifier.removeBooking(bookingId);
       }
 
+      ref.invalidate(paginatedBookingsProvider);
+
       selectedIds.value = {
         for (final existingId in selectedIds.value)
           if (!bookingIds.contains(existingId)) existingId,
       };
+
+      if (bookingIds.length >= currentPageCount && pageState.value > 1) {
+        pageState.value -= 1;
+      }
     }
 
-    return asyncBookings.when(
+    return asyncPaginatedBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(
         child: Text(
@@ -68,27 +85,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
           style: TextStyle(color: crmColors.textSecondary),
         ),
       ),
-      data: (bookings) {
-        final sortedBookings = [...bookings]
-          ..sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
-
-        final totalSales = sortedBookings.fold<double>(
-          0,
-          (sum, booking) => sum + booking.totalPrice,
-        );
-        final totalAdvance = sortedBookings.fold<double>(
-          0,
-          (sum, booking) => sum + booking.advanceAmount,
-        );
-        final completedCount = sortedBookings
-            .where((booking) => booking.status.toLowerCase() == 'completed')
-            .length;
-        final cancelledCount = sortedBookings
-            .where((booking) => booking.status.toLowerCase() == 'cancelled')
-            .length;
+      data: (response) {
+        final bookings = response.items;
         final allSelected =
-            sortedBookings.isNotEmpty &&
-            sortedBookings.every((booking) => selectedIds.value.contains(booking.id));
+            bookings.isNotEmpty &&
+            bookings.every((booking) => selectedIds.value.contains(booking.id));
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -115,12 +116,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
                   if (!isMobile) ...[
                     Checkbox(
                       value: allSelected,
-                      onChanged: sortedBookings.isEmpty
+                      onChanged: bookings.isEmpty
                           ? null
                           : (value) {
                               selectedIds.value = value == true
                                   ? {
-                                      for (final booking in sortedBookings)
+                                      for (final booking in bookings)
                                         booking.id,
                                     }
                                   : <String>{};
@@ -135,7 +136,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
                   if (selectedIds.value.isNotEmpty)
                     ElevatedButton.icon(
                       onPressed: () =>
-                          deleteBookings(selectedIds.value.toList(growable: false)),
+                          deleteBookings(
+                            selectedIds.value.toList(growable: false),
+                            bookings.length,
+                          ),
                       icon: const Icon(Icons.delete_outline, size: 18),
                       label: Text('Delete Selected (${selectedIds.value.length})'),
                       style: ElevatedButton.styleFrom(
@@ -152,23 +156,23 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 children: [
                   _MetricCard(
                     label: 'Total Bookings',
-                    value: '${sortedBookings.length}',
+                    value: '${response.totalItems}',
                   ),
                   _MetricCard(
                     label: 'Sales Value',
-                    value: '₹${_money(totalSales)}',
+                    value: '₹${_money(response.summary.totalSales)}',
                   ),
                   _MetricCard(
                     label: 'Advance Collected',
-                    value: '₹${_money(totalAdvance)}',
+                    value: '₹${_money(response.summary.totalAdvance)}',
                   ),
                   _MetricCard(
                     label: 'Completed',
-                    value: '$completedCount',
+                    value: '${response.summary.completedCount}',
                   ),
                   _MetricCard(
                     label: 'Cancelled',
-                    value: '$cancelledCount',
+                    value: '${response.summary.cancelledCount}',
                   ),
                 ],
               ),
@@ -181,7 +185,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 ),
                 child: isMobile
                     ? Column(
-                        children: sortedBookings
+                        children: bookings
                             .map(
                               (booking) => _MobileBookingCard(
                                 booking: booking,
@@ -195,7 +199,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   }
                                   selectedIds.value = next;
                                 },
-                                onDelete: () => deleteBookings([booking.id]),
+                                onDelete: () => deleteBookings([booking.id], bookings.length),
                               ),
                             )
                             .toList(),
@@ -222,7 +226,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             ),
                           ),
                           const Divider(height: 1),
-                          ...sortedBookings.map(
+                          ...bookings.map(
                             (booking) => _DesktopBookingRow(
                               booking: booking,
                               isSelected: selectedIds.value.contains(booking.id),
@@ -232,14 +236,28 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   next.add(booking.id);
                                 } else {
                                   next.remove(booking.id);
-                                }
-                                selectedIds.value = next;
-                              },
-                              onDelete: () => deleteBookings([booking.id]),
+                                  }
+                                  selectedIds.value = next;
+                                },
+                              onDelete: () => deleteBookings([booking.id], bookings.length),
                             ),
                           ),
                         ],
                       ),
+              ),
+              20.h,
+              _PaginationBar(
+                page: response.page,
+                limit: response.limit,
+                totalPages: response.totalPages,
+                totalItems: response.totalItems,
+                currentItemCount: bookings.length,
+                onPrevious: response.page > 1
+                    ? () => pageState.value -= 1
+                    : null,
+                onNext: response.page < response.totalPages
+                    ? () => pageState.value += 1
+                    : null,
               ),
             ],
           ),
@@ -286,6 +304,74 @@ class _MetricCard extends StatelessWidget {
               fontSize: 28,
               fontWeight: FontWeight.w800,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  final int page;
+  final int limit;
+  final int totalPages;
+  final int totalItems;
+  final int currentItemCount;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  const _PaginationBar({
+    required this.page,
+    required this.limit,
+    required this.totalPages,
+    required this.totalItems,
+    required this.currentItemCount,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final startItem = totalItems == 0 ? 0 : ((page - 1) * limit) + 1;
+    final endItem = totalItems == 0 ? 0 : startItem + currentItemCount - 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: crmColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Showing $startItem-$endItem of $totalItems bookings',
+              style: TextStyle(
+                color: crmColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            'Page $page of $totalPages',
+            style: TextStyle(
+              color: crmColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          12.w,
+          OutlinedButton.icon(
+            onPressed: onPrevious,
+            icon: const Icon(Icons.chevron_left),
+            label: const Text('Previous'),
+          ),
+          8.w,
+          ElevatedButton.icon(
+            onPressed: onNext,
+            icon: const Icon(Icons.chevron_right),
+            label: const Text('Next'),
           ),
         ],
       ),

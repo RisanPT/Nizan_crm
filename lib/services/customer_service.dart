@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../core/models/list_page_params.dart';
+import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
 import '../models/customer.dart';
 
@@ -16,6 +18,18 @@ final customersProvider = FutureProvider<List<Customer>>((ref) {
   return service.getCustomers();
 });
 
+final paginatedCustomersProvider =
+    FutureProvider.family<PaginatedListResponse<Customer>, ListPageParams>((
+      ref,
+      params,
+    ) {
+      final service = ref.watch(customerServiceProvider);
+      return service.getPaginatedCustomers(
+        page: params.page,
+        limit: params.limit,
+      );
+    });
+
 class CustomerService {
   final Dio _dio;
 
@@ -26,6 +40,24 @@ class CustomerService {
       final response = await _dio.get('/customers');
       final data = response.data as List;
       return data.map((e) => Customer.fromJson(e as Map<String, dynamic>)).toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load customers: ${e.message}');
+    }
+  }
+
+  Future<PaginatedListResponse<Customer>> getPaginatedCustomers({
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final response = await _dio.get(
+        '/customers',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      return PaginatedListResponse.fromJson(
+        response.data as Map<String, dynamic>,
+        Customer.fromJson,
+      );
     } on DioException catch (e) {
       throw Exception('Failed to load customers: ${e.message}');
     }
