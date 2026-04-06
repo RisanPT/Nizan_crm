@@ -5,7 +5,7 @@ import 'core/theme/app_theme.dart';
 
 void main() {
   runApp(
-    // Wrapping the top level with ProviderScope so Riverpod works inside the app
+
     const ProviderScope(child: MyApp()),
   );
 }
