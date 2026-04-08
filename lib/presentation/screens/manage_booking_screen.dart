@@ -13,8 +13,10 @@ import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/addon_service.dart';
 import '../../core/models/employee.dart';
+import '../../core/models/service_package.dart';
 import '../../services/addon_service_service.dart';
 import '../../services/employee_service.dart';
+import '../../services/package_service.dart';
 import '../../services/region_service.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
@@ -40,6 +42,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     final asyncEmployees = ref.watch(employeesProvider);
     final asyncAddonServices = ref.watch(addonServicesProvider);
     final asyncRegions = ref.watch(regionsProvider);
+    final asyncPackages = ref.watch(packagesProvider);
     final availableStaff = (asyncEmployees.value ?? const <Employee>[])
         .where((employee) => employee.status.toLowerCase() == 'active')
         .toList();
@@ -51,6 +54,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             .where((service) => service.status.toLowerCase() == 'active')
             .toList();
     final availableRegions = asyncRegions.value ?? const <ServiceRegion>[];
+    final availablePackages = asyncPackages.value ?? const <ServicePackage>[];
     final Booking? booking = allBookings.cast<Booking?>().firstWhere(
       (b) => b?.id == bookingId,
       orElse: () => null,
@@ -89,6 +93,11 @@ class ManageBookingScreen extends HookConsumerWidget {
     final discountType = useState<String>(booking?.discountType ?? 'inr');
     final selectedRegionId = useState<String>(booking?.regionId ?? '');
     final selectedDriverId = useState<String>(booking?.driverId ?? '');
+    final selectedPackageId = useState<String>(
+      selectedDisplayEntry != null && selectedBookingItemIndex >= 0
+          ? booking?.bookingItems[selectedBookingItemIndex].packageId ?? ''
+          : booking?.packageId ?? '',
+    );
 
     // Controllers pre-filled from real booking data
     final nameCtrl = useTextEditingController(
@@ -168,6 +177,21 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
     final staffNeedsCtrl = useTextEditingController();
     final remarksCtrl = useTextEditingController();
+    final initialBasePackageAmount = (() {
+      if (selectedDisplayEntry != null) {
+        return selectedDisplayEntry.totalPrice;
+      }
+
+      final savedAddonTotal =
+          booking?.addons.fold<double>(
+            0,
+            (sum, addon) => sum + (addon.amount * addon.persons),
+          ) ??
+          0;
+      final baseAmount = (booking?.totalPrice ?? 0) - savedAddonTotal;
+      return baseAmount < 0 ? 0.0 : baseAmount;
+    })();
+    final basePackageAmount = useState<double>(initialBasePackageAmount);
 
     useEffect(
       () {
@@ -199,7 +223,26 @@ class ManageBookingScreen extends HookConsumerWidget {
                       (selectedDisplayEntry?.advanceAmount ?? booking.advanceAmount) -
                       booking.discountAmount)
                   .toStringAsFixed(0);
-          packageCtrl.text = selectedDisplayEntry?.service ?? booking.service;
+          final initialService =
+              selectedDisplayEntry?.service ?? booking.service;
+          packageCtrl.text =
+              booking.legacyBooking &&
+                  initialService.trim().toLowerCase() == 'legacy sale import'
+              ? 'Custom Package'
+              : initialService;
+          selectedPackageId.value =
+              selectedDisplayEntry != null && selectedBookingItemIndex >= 0
+              ? booking.bookingItems[selectedBookingItemIndex].packageId
+              : booking.packageId;
+          basePackageAmount.value = selectedDisplayEntry?.totalPrice ??
+              (() {
+                final savedAddonTotal = booking.addons.fold<double>(
+                  0,
+                  (sum, addon) => sum + (addon.amount * addon.persons),
+                );
+                final baseAmount = booking.totalPrice - savedAddonTotal;
+                return baseAmount < 0 ? 0.0 : baseAmount;
+              })();
           mapUrlCtrl.text = booking.mapUrl;
           travelModeCtrl.text = booking.travelMode;
           travelTimeCtrl.text = booking.travelTime;
@@ -260,6 +303,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.serviceStart,
         booking?.serviceEnd,
         booking?.service,
+        booking?.packageId,
+        selectedBookingItemIndex,
       ],
     );
 
@@ -272,21 +317,6 @@ class ManageBookingScreen extends HookConsumerWidget {
       );
     }
 
-    final basePackageAmount = useMemoized(() {
-      if (selectedDisplayEntry != null) {
-        return selectedDisplayEntry.totalPrice;
-      }
-
-      final savedAddonTotal =
-          booking?.addons.fold<double>(
-            0,
-            (sum, addon) => sum + (addon.amount * addon.persons),
-          ) ??
-          0;
-      final baseAmount = (booking?.totalPrice ?? 0) - savedAddonTotal;
-      return baseAmount < 0 ? 0.0 : baseAmount;
-    }, [booking?.id, selectedDisplayEntry?.id, selectedDisplayEntry?.totalPrice]);
-
     double appliedDiscountAmount(double subtotal) {
       final inputValue = parseMoney(discountCtrl.text);
       if (discountType.value == 'percent') {
@@ -298,7 +328,7 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     useEffect(
       () {
-        final subtotal = basePackageAmount + addonTotal(addons.value);
+        final subtotal = basePackageAmount.value + addonTotal(addons.value);
         final discountAmount = appliedDiscountAmount(subtotal);
         final advanceAmount = parseMoney(advanceCtrl.text);
         final forecast = (subtotal - advanceAmount - discountAmount).clamp(
@@ -310,7 +340,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         return null;
       },
       [
-        basePackageAmount,
+        basePackageAmount.value,
         addons.value,
         advanceValue.text,
         discountValueListenable.text,
@@ -331,6 +361,42 @@ class ManageBookingScreen extends HookConsumerWidget {
       }
       return null;
     }, [booking?.id, selectedDisplayEntry?.id]);
+
+    ServicePackage? findPackageById(String? id) {
+      if (id == null || id.isEmpty) return null;
+      return availablePackages.cast<ServicePackage?>().firstWhere(
+        (package) => package?.id == id,
+        orElse: () => null,
+      );
+    }
+
+    double effectivePackagePrice(ServicePackage package) {
+      return package.effectivePriceForRegion(selectedRegionId.value);
+    }
+
+    void applySelectedPackage(String packageId) {
+      if (packageId.isEmpty) {
+        selectedPackageId.value = '';
+        return;
+      }
+
+      final package = findPackageById(packageId);
+      if (package == null) return;
+
+      selectedPackageId.value = package.id;
+      packageCtrl.text = package.name;
+      basePackageAmount.value = effectivePackagePrice(package);
+      advanceCtrl.text = package.advanceAmount.toStringAsFixed(0);
+    }
+
+    useEffect(() {
+      final selectedPackage = findPackageById(selectedPackageId.value);
+      if (selectedPackage != null) {
+        packageCtrl.text = selectedPackage.name;
+        basePackageAmount.value = effectivePackagePrice(selectedPackage);
+      }
+      return null;
+    }, [selectedPackageId.value, selectedRegionId.value, availablePackages]);
 
     String activeArtistName() {
       final primaryArtist = assignments.value
@@ -524,7 +590,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           booking.bookingDate;
       final normalizedAddons = _normalizedAddons(addons.value);
       final subtotal =
-          basePackageAmount +
+          basePackageAmount.value +
           normalizedAddons.fold<double>(
             0,
             (sum, addon) => sum + (addon.amount * addon.persons),
@@ -546,6 +612,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               }
 
               return entry.value.copyWith(
+                packageId: selectedPackageId.value.trim(),
                 service: packageCtrl.text.trim().isEmpty
                     ? entry.value.service
                     : packageCtrl.text.trim(),
@@ -565,6 +632,7 @@ class ManageBookingScreen extends HookConsumerWidget {
 
       return booking.copyWith(
         customerName: nameCtrl.text.trim(),
+        packageId: selectedPackageId.value.trim(),
         phone: phoneCtrl.text.trim(),
         email: emailCtrl.text.trim(),
         service: packageCtrl.text.trim().isEmpty
@@ -740,13 +808,27 @@ class ManageBookingScreen extends HookConsumerWidget {
                             crossAxisSpacing: 16,
                             childAspectRatio: narrow ? 5 : 2.7,
                             children: [
-                              _buildField(context, 'PACKAGE', packageCtrl),
+                              _buildPackageSelector(
+                                context,
+                                crmColors,
+                                asyncPackages,
+                                availablePackages,
+                                selectedPackageId,
+                                packageCtrl,
+                                onPackageChanged: applySelectedPackage,
+                              ),
                               _buildCurrencyField(
                                 context,
                                 'TOTAL AMOUNT',
                                 totalAmountCtrl,
                                 crmColors,
-                                readOnly: true,
+                                readOnly: selectedPackageId.value.isNotEmpty,
+                                onChanged: (value) {
+                                  if (selectedPackageId.value.isNotEmpty) return;
+                                  basePackageAmount.value =
+                                      double.tryParse(value.trim()) ??
+                                      basePackageAmount.value;
+                                },
                               ),
                               _buildCurrencyField(
                                 context,
@@ -773,6 +855,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                           );
                         },
                       ),
+                      if (selectedPackageId.value.isEmpty) ...[
+                        16.h,
+                        _buildField(
+                          context,
+                          'CUSTOM PACKAGE NAME',
+                          packageCtrl,
+                          hint: 'Enter custom package name',
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -1865,6 +1956,67 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
+  static Widget _buildPackageSelector(
+    BuildContext context,
+    CrmTheme crmColors,
+    AsyncValue<List<ServicePackage>> asyncPackages,
+    List<ServicePackage> availablePackages,
+    ValueNotifier<String> selectedPackageId,
+    TextEditingController packageCtrl, {
+    required ValueChanged<String> onPackageChanged,
+  }) {
+    final currentValue =
+        availablePackages.any((package) => package.id == selectedPackageId.value)
+        ? selectedPackageId.value
+        : '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PACKAGE',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        DropdownButtonFormField<String>(
+          initialValue: currentValue,
+          items: [
+            const DropdownMenuItem(
+              value: '',
+              child: Text('Custom Package'),
+            ),
+            ...availablePackages.map(
+              (package) => DropdownMenuItem(
+                value: package.id,
+                child: Text(package.name),
+              ),
+            ),
+          ],
+          onChanged: (value) => onPackageChanged(value ?? ''),
+          decoration: _inputDeco('', crmColors),
+        ),
+        if (asyncPackages.isLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+        if (asyncPackages.hasError)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              'Could not load packages.',
+              style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+            ),
+          ),
+      ],
+    );
+  }
+
   static Widget _buildSlotEditor(
     BuildContext context,
     ValueNotifier<List<String>> eventSlots,
@@ -2292,6 +2444,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     CrmTheme crmColors, {
     Color? textColor,
     bool readOnly = false,
+    ValueChanged<String>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2310,6 +2463,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           controller: ctrl,
           readOnly: readOnly,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: onChanged,
           style: TextStyle(
             color: textColor ?? crmColors.textPrimary,
             fontWeight: FontWeight.bold,
@@ -2690,14 +2844,12 @@ class _SectionCard extends StatelessWidget {
   final String? subtitle;
   final Widget child;
   final Color? titleColor;
-  final Widget? action;
 
   const _SectionCard({
     required this.title,
     this.subtitle,
     required this.child,
     this.titleColor,
-    this.action,
   });
 
   @override
@@ -2752,7 +2904,6 @@ class _SectionCard extends StatelessWidget {
                   ],
                 ),
               ),
-              action ?? const SizedBox.shrink(),
             ],
           ),
           const SizedBox(height: 24),
