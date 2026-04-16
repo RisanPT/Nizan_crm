@@ -5,19 +5,37 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 
 class Sidebar extends StatelessWidget {
-  const Sidebar({super.key});
+  final bool fleetExpanded;
+  /// True when the user explicitly collapsed the Fleet menu (overrides
+  /// the auto-open that normally fires when on a /fleet/* route).
+  final bool fleetUserCollapsed;
+  final ValueChanged<bool> onFleetExpandToggle;
+
+  const Sidebar({
+    super.key,
+    required this.fleetExpanded,
+    required this.fleetUserCollapsed,
+    required this.onFleetExpandToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
+    final currentPath = GoRouterState.of(context).uri.path;
+    final isFleetRoute = currentPath.startsWith('/fleet');
+    // Only collapse to icon-only mode on true tablet breakpoint
+    final isCollapsed = isTablet && !isMobile;
+    // Auto-open fleet submenu when on a fleet route, unless the user
+    // explicitly collapsed it (fleetUserCollapsed acts as an override).
+    final effectiveFleetExpanded =
+        !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
 
     // If on tablet, it's collapsed (icons only, 80 width). If desktop, expanded (250 width).
     // On mobile, this will be used inside a Drawer, so it can be 250 width.
-    final width = (isTablet && !ResponsiveBuilder.isMobile(context))
-        ? 80.0
-        : 250.0;
+    final width = isCollapsed ? 80.0 : 250.0;
 
     return Container(
       width: width,
@@ -34,107 +52,144 @@ class Sidebar extends StatelessWidget {
               children: [
                 _buildSectionTitle(
                   'CRM',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                   theme: theme,
                 ),
                 8.h,
                 _SidebarItem(
                   icon: Icons.dashboard_outlined,
                   title: 'Dashboard',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(context).uri.path == '/',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath == '/',
                   onTap: () => context.go('/'),
                 ),
                 _SidebarItem(
                   icon: Icons.people_outline,
                   title: 'Clients',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/client'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/client'),
                   onTap: () => context.go('/clients'),
                 ),
                 _SidebarItem(
                   icon: Icons.calendar_month,
                   title: 'Calendar',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/calendar'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/calendar'),
                   onTap: () => context.go('/calendar'),
                 ),
                 _SidebarItem(
                   icon: Icons.receipt_long_outlined,
                   title: 'Booking',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/booking'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/booking'),
                   onTap: () => context.go('/booking/requests'),
                 ),
                 32.h,
                 _buildSectionTitle(
                   'ERP',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                   theme: theme,
                 ),
                 8.h,
                 _SidebarItem(
                   icon: Icons.design_services_outlined,
                   title: 'Services',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/services'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/services'),
                   onTap: () => context.go('/services'),
                 ),
                 _SidebarItem(
                   icon: Icons.badge_outlined,
                   title: 'Staff Management',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/staff'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/staff'),
                   onTap: () => context.go('/staff'),
                 ),
                 _SidebarItem(
                   icon: Icons.receipt_long_outlined,
                   title: 'Sales & Invoices',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/sales'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/sales'),
                   onTap: () => context.go('/sales'),
                 ),
                 _SidebarItem(
+                  icon: Icons.local_shipping_outlined,
+                  title: 'Fleet',
+                  isCollapsed: isCollapsed,
+                  isSelected: isFleetRoute,
+                  trailing: isCollapsed
+                      ? null
+                      : Icon(
+                          effectiveFleetExpanded
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                  onTap: () {
+                    // Toggle using the raw stored state, not the computed
+                    // effectiveFleetExpanded, to avoid infinite toggle fights.
+                    onFleetExpandToggle(!fleetExpanded || fleetUserCollapsed);
+                  },
+                ),
+                if (!isCollapsed && effectiveFleetExpanded) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: _SidebarItem(
+                      icon: Icons.directions_car_outlined,
+                      title: 'Cars',
+                      isCollapsed: false,
+                      isSelected: currentPath == '/fleet/vehicles',
+                      onTap: () => context.go('/fleet/vehicles'),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: _SidebarItem(
+                      icon: Icons.badge_outlined,
+                      title: 'Drivers',
+                      isCollapsed: false,
+                      isSelected: currentPath == '/fleet/drivers',
+                      onTap: () => context.go('/fleet/drivers'),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 14),
+                    child: _SidebarItem(
+                      icon: Icons.local_gas_station_outlined,
+                      title: 'Expenses',
+                      isCollapsed: false,
+                      isSelected: currentPath == '/fleet/fuel',
+                      onTap: () => context.go('/fleet/fuel'),
+                    ),
+                  ),
+                ],
+                _SidebarItem(
                   icon: Icons.inventory_2_outlined,
                   title: 'Inventory',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                 ),
                 32.h,
                 _buildSectionTitle(
                   'BUSINESS',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                   theme: theme,
                 ),
                 8.h,
                 _SidebarItem(
                   icon: Icons.campaign_outlined,
                   title: 'Marketing',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                 ),
                 _SidebarItem(
                   icon: Icons.analytics_outlined,
                   title: 'Reports & Analytics',
-                  isCollapsed: width == 80.0,
+                  isCollapsed: isCollapsed,
                 ),
                 _SidebarItem(
                   icon: Icons.settings_outlined,
                   title: 'Settings',
-                  isCollapsed: width == 80.0,
-                  isSelected: GoRouterState.of(
-                    context,
-                  ).uri.path.startsWith('/settings'),
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/settings'),
                   onTap: () => context.go('/settings'),
                 ),
               ],
@@ -218,6 +273,7 @@ class _SidebarItem extends StatelessWidget {
   final bool isCollapsed;
   final bool isSelected;
   final VoidCallback? onTap;
+  final Widget? trailing;
 
   const _SidebarItem({
     required this.icon,
@@ -225,6 +281,7 @@ class _SidebarItem extends StatelessWidget {
     required this.isCollapsed,
     this.isSelected = false,
     this.onTap,
+    this.trailing,
   });
 
   @override
@@ -271,6 +328,7 @@ class _SidebarItem extends StatelessWidget {
                     ),
                   ),
                 ),
+                ...?(trailing != null ? [trailing!] : null),
               ],
             ],
           ),

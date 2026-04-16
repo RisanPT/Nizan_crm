@@ -19,19 +19,35 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final selectedIds = useState<Set<String>>(<String>{});
     final pageState = useState(1);
+    final searchCtrl = useTextEditingController();
+    final searchQuery = useState('');
+    final duplicatesOnly = useState(false);
     const pageSize = 20;
     final pageParams = PaginatedBookingsParams(
       page: pageState.value,
       limit: pageSize,
+      search: searchQuery.value,
+      duplicatesOnly: duplicatesOnly.value,
     );
-    final asyncPaginatedBookings = ref.watch(paginatedBookingsProvider(pageParams));
+    final asyncPaginatedBookings = ref.watch(
+      paginatedBookingsProvider(pageParams),
+    );
 
     useEffect(() {
       selectedIds.value = <String>{};
       return null;
     }, [pageState.value]);
 
-    Future<void> deleteBookings(List<String> bookingIds, int currentPageCount) async {
+    useEffect(() {
+      pageState.value = 1;
+      selectedIds.value = <String>{};
+      return null;
+    }, [searchQuery.value, duplicatesOnly.value]);
+
+    Future<void> deleteBookings(
+      List<String> bookingIds,
+      int currentPageCount,
+    ) async {
       if (bookingIds.isEmpty) return;
 
       final confirmed = await showDialog<bool>(
@@ -105,10 +121,62 @@ class SalesBookingsScreen extends HookConsumerWidget {
               8.h,
               Text(
                 'All bookings with financial status, advance tracking, and invoice-ready totals.',
-                style: TextStyle(
-                  color: crmColors.textSecondary,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: crmColors.textSecondary, fontSize: 15),
+              ),
+              20.h,
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SizedBox(
+                    width: isMobile ? double.infinity : 360,
+                    child: TextFormField(
+                      controller: searchCtrl,
+                      onFieldSubmitted: (value) {
+                        final trimmed = value.trim();
+                        searchQuery.value = trimmed;
+                        if (trimmed.isEmpty) {
+                          searchCtrl.clear();
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText:
+                            'Search by client, phone, package, region or booking no...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: searchQuery.value.isEmpty
+                            ? IconButton(
+                                onPressed: () =>
+                                    searchQuery.value = searchCtrl.text.trim(),
+                                icon: const Icon(Icons.search),
+                              )
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    onPressed: () => searchQuery.value =
+                                        searchCtrl.text.trim(),
+                                    icon: const Icon(Icons.search),
+                                  ),
+                                  IconButton(
+                                    onPressed: () {
+                                      searchCtrl.clear();
+                                      searchQuery.value = '';
+                                    },
+                                    icon: const Icon(Icons.close),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                  FilterChip(
+                    selected: duplicatesOnly.value,
+                    onSelected: (value) => duplicatesOnly.value = value,
+                    avatar: const Icon(Icons.copy_all_outlined, size: 18),
+                    label: const Text('Duplicates only'),
+                  ),
+                ],
               ),
               20.h,
               Row(
@@ -120,10 +188,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                           ? null
                           : (value) {
                               selectedIds.value = value == true
-                                  ? {
-                                      for (final booking in bookings)
-                                        booking.id,
-                                    }
+                                  ? {for (final booking in bookings) booking.id}
                                   : <String>{};
                             },
                     ),
@@ -135,13 +200,14 @@ class SalesBookingsScreen extends HookConsumerWidget {
                   const Spacer(),
                   if (selectedIds.value.isNotEmpty)
                     ElevatedButton.icon(
-                      onPressed: () =>
-                          deleteBookings(
-                            selectedIds.value.toList(growable: false),
-                            bookings.length,
-                          ),
+                      onPressed: () => deleteBookings(
+                        selectedIds.value.toList(growable: false),
+                        bookings.length,
+                      ),
                       icon: const Icon(Icons.delete_outline, size: 18),
-                      label: Text('Delete Selected (${selectedIds.value.length})'),
+                      label: Text(
+                        'Delete Selected (${selectedIds.value.length})',
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: crmColors.destructive,
                         foregroundColor: Colors.white,
@@ -174,9 +240,26 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     label: 'Cancelled',
                     value: '${response.summary.cancelledCount}',
                   ),
+                  _MetricCard(
+                    label: 'Duplicate Entries',
+                    value: '${response.duplicateItems}',
+                  ),
                 ],
               ),
               24.h,
+              if (duplicatesOnly.value)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    response.duplicateItems == 0
+                        ? 'No duplicate bookings found for the current filter.'
+                        : '${response.duplicateItems} duplicate entries found across ${response.duplicateGroups} groups. Review them, then use single delete or bulk delete safely.',
+                    style: TextStyle(
+                      color: crmColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
               Container(
                 decoration: BoxDecoration(
                   color: crmColors.surface,
@@ -189,7 +272,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             .map(
                               (booking) => _MobileBookingCard(
                                 booking: booking,
-                                isSelected: selectedIds.value.contains(booking.id),
+                                isSelected: selectedIds.value.contains(
+                                  booking.id,
+                                ),
                                 onSelectChanged: (value) {
                                   final next = {...selectedIds.value};
                                   if (value == true) {
@@ -199,7 +284,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   }
                                   selectedIds.value = next;
                                 },
-                                onDelete: () => deleteBookings([booking.id], bookings.length),
+                                onDelete: () => deleteBookings([
+                                  booking.id,
+                                ], bookings.length),
                               ),
                             )
                             .toList(),
@@ -214,9 +301,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             child: Row(
                               children: const [
                                 SizedBox(width: 44),
-                                Expanded(flex: 2, child: _HeaderText('Booking')),
+                                Expanded(
+                                  flex: 2,
+                                  child: _HeaderText('Booking'),
+                                ),
                                 Expanded(flex: 2, child: _HeaderText('Client')),
-                                Expanded(flex: 2, child: _HeaderText('Package')),
+                                Expanded(
+                                  flex: 2,
+                                  child: _HeaderText('Package'),
+                                ),
                                 Expanded(child: _HeaderText('Status')),
                                 Expanded(child: _HeaderText('Advance')),
                                 Expanded(child: _HeaderText('Total')),
@@ -229,17 +322,20 @@ class SalesBookingsScreen extends HookConsumerWidget {
                           ...bookings.map(
                             (booking) => _DesktopBookingRow(
                               booking: booking,
-                              isSelected: selectedIds.value.contains(booking.id),
+                              isSelected: selectedIds.value.contains(
+                                booking.id,
+                              ),
                               onSelectChanged: (value) {
                                 final next = {...selectedIds.value};
                                 if (value == true) {
                                   next.add(booking.id);
                                 } else {
                                   next.remove(booking.id);
-                                  }
-                                  selectedIds.value = next;
-                                },
-                              onDelete: () => deleteBookings([booking.id], bookings.length),
+                                }
+                                selectedIds.value = next;
+                              },
+                              onDelete: () =>
+                                  deleteBookings([booking.id], bookings.length),
                             ),
                           ),
                         ],
@@ -415,11 +511,10 @@ class _DesktopBookingRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    final balance = ((booking.totalPrice -
-                booking.advanceAmount -
-                booking.discountAmount)
-            .clamp(0, double.infinity))
-        .toDouble();
+    final balance =
+        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount)
+                .clamp(0, double.infinity))
+            .toDouble();
 
     return InkWell(
       onTap: () => context.go('/booking/manage/${booking.id}'),
@@ -429,10 +524,7 @@ class _DesktopBookingRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 44,
-              child: Checkbox(
-                value: isSelected,
-                onChanged: onSelectChanged,
-              ),
+              child: Checkbox(value: isSelected, onChanged: onSelectChanged),
             ),
             Expanded(
               flex: 2,
@@ -442,7 +534,20 @@ class _DesktopBookingRow extends StatelessWidget {
               ),
             ),
             Expanded(flex: 2, child: Text(booking.customerName)),
-            Expanded(flex: 2, child: Text(booking.service)),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(booking.service),
+                  if (booking.duplicateCount > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _DuplicateBadge(count: booking.duplicateCount),
+                    ),
+                ],
+              ),
+            ),
             Expanded(child: _StatusChip(status: booking.status)),
             Expanded(child: Text('₹${_money(booking.advanceAmount)}')),
             Expanded(child: Text('₹${_money(booking.totalPrice)}')),
@@ -496,11 +601,10 @@ class _MobileBookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    final balance = ((booking.totalPrice -
-                booking.advanceAmount -
-                booking.discountAmount)
-            .clamp(0, double.infinity))
-        .toDouble();
+    final balance =
+        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount)
+                .clamp(0, double.infinity))
+            .toDouble();
 
     return InkWell(
       onTap: () => context.go('/booking/manage/${booking.id}'),
@@ -514,10 +618,7 @@ class _MobileBookingCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Checkbox(
-                  value: isSelected,
-                  onChanged: onSelectChanged,
-                ),
+                Checkbox(value: isSelected, onChanged: onSelectChanged),
                 Expanded(
                   child: Text(
                     booking.customerName,
@@ -538,6 +639,10 @@ class _MobileBookingCard extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (booking.duplicateCount > 1) ...[
+              8.h,
+              _DuplicateBadge(count: booking.duplicateCount),
+            ],
             10.h,
             Wrap(
               spacing: 12,
@@ -551,10 +656,7 @@ class _MobileBookingCard extends StatelessWidget {
                   label: 'Total',
                   value: '₹${_money(booking.totalPrice)}',
                 ),
-                _MiniFinance(
-                  label: 'Balance',
-                  value: '₹${_money(balance)}',
-                ),
+                _MiniFinance(label: 'Balance', value: '₹${_money(balance)}'),
                 _MiniFinance(
                   label: 'Date',
                   value: _formatDate(booking.bookingDate),
@@ -620,6 +722,31 @@ class _MiniFinance extends StatelessWidget {
   }
 }
 
+class _DuplicateBadge extends StatelessWidget {
+  final int count;
+
+  const _DuplicateBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Possible duplicate ($count)',
+        style: TextStyle(
+          color: Colors.red.shade700,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusChip extends StatelessWidget {
   final String status;
 
@@ -655,11 +782,7 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(
-          color: fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-        ),
+        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.w800),
       ),
     );
   }

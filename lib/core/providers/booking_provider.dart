@@ -9,33 +9,42 @@ part 'booking_provider.g.dart';
 class PaginatedBookingsParams {
   final int page;
   final int limit;
+  final String search;
+  final bool duplicatesOnly;
 
   const PaginatedBookingsParams({
     required this.page,
     required this.limit,
+    this.search = '',
+    this.duplicatesOnly = false,
   });
 
   @override
   bool operator ==(Object other) {
     return other is PaginatedBookingsParams &&
         other.page == page &&
-        other.limit == limit;
+        other.limit == limit &&
+        other.search == search &&
+        other.duplicatesOnly == duplicatesOnly;
   }
 
   @override
-  int get hashCode => Object.hash(page, limit);
+  int get hashCode => Object.hash(page, limit, search, duplicatesOnly);
 }
 
-final paginatedBookingsProvider = FutureProvider.family<
-  PaginatedBookingsResponse,
-  PaginatedBookingsParams
->((ref, params) async {
-  final service = ref.watch(bookingServiceProvider);
-  return service.getPaginatedBookings(
-    page: params.page,
-    limit: params.limit,
-  );
-});
+final paginatedBookingsProvider =
+    FutureProvider.family<PaginatedBookingsResponse, PaginatedBookingsParams>((
+      ref,
+      params,
+    ) async {
+      final service = ref.watch(bookingServiceProvider);
+      return service.getPaginatedBookings(
+        page: params.page,
+        limit: params.limit,
+        search: params.search,
+        duplicatesOnly: params.duplicatesOnly,
+      );
+    });
 
 @riverpod
 class BookingNotifier extends _$BookingNotifier {
@@ -62,11 +71,10 @@ class BookingNotifier extends _$BookingNotifier {
           (booking) =>
               booking.status.toLowerCase() == 'confirmed' &&
               DateTime(
-                    booking.serviceEnd.year,
-                    booking.serviceEnd.month,
-                    booking.serviceEnd.day,
-                  )
-                  .isBefore(startOfToday),
+                booking.serviceEnd.year,
+                booking.serviceEnd.month,
+                booking.serviceEnd.day,
+              ).isBefore(startOfToday),
         )
         .toList();
 
@@ -87,10 +95,7 @@ class BookingNotifier extends _$BookingNotifier {
       }
     }
 
-    return [
-      for (final booking in bookings)
-        updatedById[booking.id] ?? booking,
-    ];
+    return [for (final booking in bookings) updatedById[booking.id] ?? booking];
   }
 
   Future<Booking> addBooking(Booking booking) async {

@@ -15,10 +15,7 @@ class BookingService {
 
   BookingService(this._dio);
 
-  String _extractErrorMessage(
-    DioException error,
-    String fallback,
-  ) {
+  String _extractErrorMessage(DioException error, String fallback) {
     final responseData = error.response?.data;
     if (responseData is Map<String, dynamic>) {
       final message = responseData['message']?.toString().trim() ?? '';
@@ -47,6 +44,8 @@ class BookingService {
   Future<PaginatedBookingsResponse> getPaginatedBookings({
     int page = 1,
     int limit = 20,
+    String search = '',
+    bool duplicatesOnly = false,
   }) async {
     try {
       final response = await _dio.get(
@@ -54,6 +53,8 @@ class BookingService {
         queryParameters: {
           'page': page,
           'limit': limit,
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+          if (duplicatesOnly) 'duplicatesOnly': true,
         },
       );
       return PaginatedBookingsResponse.fromJson(

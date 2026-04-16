@@ -275,6 +275,8 @@ class PaginatedBookingsResponse {
   final int limit;
   final int totalItems;
   final int totalPages;
+  final int duplicateItems;
+  final int duplicateGroups;
   final BookingPageSummary summary;
 
   const PaginatedBookingsResponse({
@@ -283,6 +285,8 @@ class PaginatedBookingsResponse {
     required this.limit,
     required this.totalItems,
     required this.totalPages,
+    this.duplicateItems = 0,
+    this.duplicateGroups = 0,
     required this.summary,
   });
 
@@ -296,6 +300,8 @@ class PaginatedBookingsResponse {
       limit: (json['limit'] as num?)?.toInt() ?? 20,
       totalItems: (json['totalItems'] as num?)?.toInt() ?? 0,
       totalPages: (json['totalPages'] as num?)?.toInt() ?? 1,
+      duplicateItems: (json['duplicateItems'] as num?)?.toInt() ?? 0,
+      duplicateGroups: (json['duplicateGroups'] as num?)?.toInt() ?? 0,
       summary: BookingPageSummary.fromJson(
         (json['summary'] as Map<String, dynamic>?) ?? const {},
       ),
@@ -340,6 +346,7 @@ class Booking {
   final double discountAmount;
   final String discountType;
   final double discountValue;
+  final int duplicateCount;
   final List<BookingAssignment> assignedStaff;
   final List<BookingAddon> addons;
   final List<BookingItem> bookingItems;
@@ -380,6 +387,7 @@ class Booking {
     this.discountAmount = 0,
     this.discountType = 'inr',
     this.discountValue = 0,
+    this.duplicateCount = 0,
     this.assignedStaff = const [],
     this.addons = const [],
     this.bookingItems = const [],
@@ -525,6 +533,7 @@ class Booking {
       discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
       discountType: json['discountType'] as String? ?? 'inr',
       discountValue: (json['discountValue'] as num?)?.toDouble() ?? 0.0,
+      duplicateCount: (json['duplicateCount'] as num?)?.toInt() ?? 0,
       assignedStaff: ((json['assignedStaff'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(BookingAssignment.fromJson)
@@ -568,9 +577,7 @@ class Booking {
       'internalRemarks': internalRemarks,
       'contentCreationRequired': contentCreationRequired,
       'bookingDate': _formatDateOnly(bookingDate),
-      'selectedDates': selectedDates
-          .map(_formatDateOnly)
-          .toList(),
+      'selectedDates': selectedDates.map(_formatDateOnly).toList(),
       'serviceStart': serviceStart.toIso8601String(),
       'serviceEnd': serviceEnd.toIso8601String(),
       'totalPrice': totalPrice,
@@ -578,6 +585,7 @@ class Booking {
       'discountAmount': discountAmount,
       'discountType': discountType,
       'discountValue': discountValue,
+      'duplicateCount': duplicateCount,
       'assignedStaff': assignedStaff.map((item) => item.toJson()).toList(),
       'addons': addons.map((item) => item.toJson()).toList(),
       'bookingItems': bookingItems.map((item) => item.toJson()).toList(),
@@ -620,6 +628,7 @@ class Booking {
     double? discountAmount,
     String? discountType,
     double? discountValue,
+    int? duplicateCount,
     List<BookingAssignment>? assignedStaff,
     List<BookingAddon>? addons,
     List<BookingItem>? bookingItems,
@@ -662,6 +671,7 @@ class Booking {
       discountAmount: discountAmount ?? this.discountAmount,
       discountType: discountType ?? this.discountType,
       discountValue: discountValue ?? this.discountValue,
+      duplicateCount: duplicateCount ?? this.duplicateCount,
       assignedStaff: assignedStaff ?? this.assignedStaff,
       addons: addons ?? this.addons,
       bookingItems: bookingItems ?? this.bookingItems,

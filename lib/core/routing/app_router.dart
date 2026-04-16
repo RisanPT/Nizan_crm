@@ -18,6 +18,9 @@ import '../../presentation/screens/booking_requests_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sales_bookings_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
+import '../../presentation/screens/fleet_vehicles_screen.dart';
+import '../../presentation/screens/fleet_drivers_screen.dart';
+import '../../presentation/screens/fuel_expenses_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -95,6 +98,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Staff Management';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
+          } else if (state.uri.path == '/fleet/vehicles') {
+            title = 'Fleet Vehicles';
+          } else if (state.uri.path == '/fleet/drivers') {
+            title = 'Fleet Drivers';
+          } else if (state.uri.path == '/fleet/fuel') {
+            title = 'Fleet Expenses';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
           }
@@ -152,6 +161,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales',
             builder: (context, state) => const SalesBookingsScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/vehicles',
+            builder: (context, state) => const FleetVehiclesScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/drivers',
+            builder: (context, state) => const FleetDriversScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/fuel',
+            builder: (context, state) => const FuelExpensesScreen(),
           ),
           GoRoute(
             path: '/booking/add',

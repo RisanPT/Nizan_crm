@@ -39,6 +39,8 @@ class AddBookingScreen extends HookConsumerWidget {
     final selectedPackageId = useState<String?>(null);
     final selectedDates = useState<List<DateTime>>([]);
     final eventSlotCtrl = useTextEditingController();
+    final customPackageNameCtrl = useTextEditingController();
+    final customPackageAmountCtrl = useTextEditingController();
     final bookingCart = useState<List<_BookingCartEntry>>([]);
     final startTime = useState<TimeOfDay>(const TimeOfDay(hour: 9, minute: 0));
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
@@ -61,6 +63,19 @@ class AddBookingScreen extends HookConsumerWidget {
 
       return bookingCart.value
           .expand((entry) {
+            if (entry.packageId.isEmpty) {
+              return List.generate(
+                entry.quantity,
+                (_) => BookingItem(
+                  packageId: '',
+                  service: entry.packageName,
+                  eventSlot: entry.eventSlot,
+                  selectedDates: dates,
+                  totalPrice: entry.customAmount,
+                  advanceAmount: entry.advanceAmount,
+                ),
+              );
+            }
             final package = findPackageById(entry.packageId);
             if (package == null) return const <BookingItem>[];
             final basePrice = package.effectivePriceForRegion(
@@ -102,7 +117,8 @@ class AddBookingScreen extends HookConsumerWidget {
     }
 
     final validPackageId =
-        packages.any((package) => package.id == selectedPackageId.value)
+        selectedPackageId.value == '' ||
+            packages.any((package) => package.id == selectedPackageId.value)
         ? selectedPackageId.value
         : null;
     final validRegionId =
@@ -120,10 +136,10 @@ class AddBookingScreen extends HookConsumerWidget {
     useEffect(() {
       if (packages.isNotEmpty &&
           (selectedPackageId.value == null ||
-              selectedPackageId.value!.isEmpty ||
-              !packages.any(
-                (package) => package.id == selectedPackageId.value,
-              ))) {
+              (selectedPackageId.value!.isNotEmpty &&
+                  !packages.any(
+                    (package) => package.id == selectedPackageId.value,
+                  )))) {
         selectedPackageId.value = packages.first.id;
       }
 
@@ -145,6 +161,43 @@ class AddBookingScreen extends HookConsumerWidget {
     ]);
 
     void addPackageToCart() {
+      final isCustomPackage = selectedPackageId.value == '';
+      if (isCustomPackage) {
+        final customName = customPackageNameCtrl.text.trim();
+        final customAmount =
+            double.tryParse(customPackageAmountCtrl.text.trim()) ?? 0;
+        if (customName.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a custom package name.')),
+          );
+          return;
+        }
+        if (customAmount <= 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please enter a valid custom package amount.')),
+          );
+          return;
+        }
+
+        final normalizedSlot = eventSlotCtrl.text.trim();
+        bookingCart.value = [
+          ...bookingCart.value,
+          _BookingCartEntry(
+            id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
+            packageId: '',
+            packageName: customName,
+            customAmount: customAmount,
+            eventSlot: normalizedSlot,
+            quantity: 1,
+          ),
+        ];
+        eventSlotCtrl.clear();
+        customPackageNameCtrl.clear();
+        customPackageAmountCtrl.clear();
+        recalculate();
+        return;
+      }
+
       final selectedPackage = findPackageById(selectedPackageId.value);
       if (selectedPackage == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -618,16 +671,20 @@ class AddBookingScreen extends HookConsumerWidget {
                               child: DropdownButtonFormField<String>(
                                 key: packageDropdownKey,
                                 initialValue: validPackageId,
-                                items: packages
-                                    .map(
+                                items: [
+                                  const DropdownMenuItem(
+                                    value: '',
+                                    child: Text('Custom Package'),
+                                  ),
+                                  ...packages.map(
                                       (p) => DropdownMenuItem(
                                         value: p.id,
                                         child: Text(
                                           '${p.name} (₹${p.price.toStringAsFixed(0)})',
                                         ),
                                       ),
-                                    )
-                                    .toList(),
+                                    ),
+                                ],
                                 onChanged: packages.isEmpty
                                     ? null
                                     : (val) {
@@ -635,12 +692,40 @@ class AddBookingScreen extends HookConsumerWidget {
                                         recalculate();
                                       },
                                 decoration: _inputDeco('Package', crmColors),
-                                validator: (v) =>
-                                    v == null || v.isEmpty ? 'Required' : null,
+                                validator: (v) => v == null ? 'Required' : null,
                               ),
                             ),
                           ],
                         ),
+                        if (selectedPackageId.value == '') ...[
+                          16.h,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: customPackageNameCtrl,
+                                  decoration: _inputDeco(
+                                    'Custom Package Name',
+                                    crmColors,
+                                  ),
+                                ),
+                              ),
+                              16.w,
+                              Expanded(
+                                child: TextFormField(
+                                  controller: customPackageAmountCtrl,
+                                  keyboardType: const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                                  decoration: _inputDeco(
+                                    'Custom Package Amount',
+                                    crmColors,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         16.h,
                         Row(
                           children: [
@@ -702,10 +787,12 @@ class AddBookingScreen extends HookConsumerWidget {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                findPackageById(
-                                                      entry.value.packageId,
-                                                    )?.name ??
-                                                    'Package',
+                                                entry.value.packageId.isEmpty
+                                                    ? entry.value.packageName
+                                                    : (findPackageById(
+                                                            entry.value.packageId,
+                                                          )?.name ??
+                                                          'Package'),
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.w700,
                                                 ),
@@ -726,7 +813,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                               ),
                                               4.h,
                                               Text(
-                                                'Advance ₹${((findPackageById(entry.value.packageId)?.advanceAmount ?? 0) * entry.value.quantity).toStringAsFixed(0)}',
+                                                'Advance ₹${(((entry.value.packageId.isEmpty ? entry.value.advanceAmount : (findPackageById(entry.value.packageId)?.advanceAmount ?? 0)) * entry.value.quantity)).toStringAsFixed(0)}',
                                                 style: TextStyle(
                                                   color: crmColors.accent,
                                                   fontWeight: FontWeight.w600,
@@ -1149,12 +1236,18 @@ List<ServiceRegion> _uniqueRegions(List<ServiceRegion> regions) {
 class _BookingCartEntry {
   final String id;
   final String packageId;
+  final String packageName;
+  final double customAmount;
+  final double advanceAmount;
   final String eventSlot;
   final int quantity;
 
   const _BookingCartEntry({
     required this.id,
     required this.packageId,
+    this.packageName = '',
+    this.customAmount = 0,
+    this.advanceAmount = 0,
     this.eventSlot = '',
     this.quantity = 1,
   });
@@ -1162,12 +1255,18 @@ class _BookingCartEntry {
   _BookingCartEntry copyWith({
     String? id,
     String? packageId,
+    String? packageName,
+    double? customAmount,
+    double? advanceAmount,
     String? eventSlot,
     int? quantity,
   }) {
     return _BookingCartEntry(
       id: id ?? this.id,
       packageId: packageId ?? this.packageId,
+      packageName: packageName ?? this.packageName,
+      customAmount: customAmount ?? this.customAmount,
+      advanceAmount: advanceAmount ?? this.advanceAmount,
       eventSlot: eventSlot ?? this.eventSlot,
       quantity: quantity ?? this.quantity,
     );
