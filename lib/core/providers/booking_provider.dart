@@ -11,12 +11,14 @@ class PaginatedBookingsParams {
   final int limit;
   final String search;
   final bool duplicatesOnly;
+  final String? financialYear;
 
   const PaginatedBookingsParams({
     required this.page,
     required this.limit,
     this.search = '',
     this.duplicatesOnly = false,
+    this.financialYear,
   });
 
   @override
@@ -25,11 +27,13 @@ class PaginatedBookingsParams {
         other.page == page &&
         other.limit == limit &&
         other.search == search &&
-        other.duplicatesOnly == duplicatesOnly;
+        other.duplicatesOnly == duplicatesOnly &&
+        other.financialYear == financialYear;
   }
 
   @override
-  int get hashCode => Object.hash(page, limit, search, duplicatesOnly);
+  int get hashCode =>
+      Object.hash(page, limit, search, duplicatesOnly, financialYear);
 }
 
 final paginatedBookingsProvider =
@@ -43,6 +47,7 @@ final paginatedBookingsProvider =
         limit: params.limit,
         search: params.search,
         duplicatesOnly: params.duplicatesOnly,
+        financialYear: params.financialYear,
       );
     });
 

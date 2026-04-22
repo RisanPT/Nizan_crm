@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
@@ -10,11 +11,12 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends HookConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tabController = useTabController(initialLength: 5);
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
     final asyncBookings = ref.watch(bookingProvider);
@@ -77,140 +79,75 @@ class DashboardScreen extends ConsumerWidget {
       );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'Welcome back, Jessica. Here\'s what\'s happening today.',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: context.crmColors.textSecondary,
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Welcome back, Jessica. Here\'s what\'s happening today.',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: context.crmColors.textSecondary,
                 ),
               ),
-              if (!ResponsiveBuilder.isMobile(context))
-                OutlinedButton.icon(
-                  onPressed: exportReport,
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Export Report'),
-                ),
+            ),
+            if (!ResponsiveBuilder.isMobile(context))
+              OutlinedButton.icon(
+                onPressed: exportReport,
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Export Report'),
+              ),
+          ],
+        ),
+        16.h,
+        TabBar(
+          controller: tabController,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelColor: context.crmColors.primary,
+          unselectedLabelColor: context.crmColors.textSecondary,
+          indicatorColor: context.crmColors.primary,
+          indicatorWeight: 3,
+          indicatorSize: TabBarIndicatorSize.label,
+          dividerColor: Colors.transparent,
+          overlayColor: WidgetStateProperty.all(Colors.transparent),
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          tabs: const [
+            Tab(text: 'Executive'),
+            Tab(text: 'Sales'),
+            Tab(text: 'Marketing'),
+            Tab(text: 'CRM'),
+            Tab(text: 'Finance'),
+          ],
+        ),
+        8.h,
+        const Divider(height: 1),
+        Expanded(
+          child: TabBarView(
+            controller: tabController,
+            children: [
+              _ExecutiveView(
+                isDesktop: isDesktop,
+                isTablet: isTablet,
+                monthBookings: monthBookings,
+                monthLabel: monthLabel,
+                totalWorksInMonth: totalWorksInMonth,
+                totalForecastAmount: totalForecastAmount,
+                cancelledWorksInMonth: cancelledWorksInMonth,
+                completedWorksInMonth: completedWorksInMonth,
+                money: money,
+                onExport: exportReport,
+              ),
+              _SalesView(isDesktop: isDesktop),
+              _MarketingView(),
+              _CRMView(),
+              _FinanceView(),
             ],
           ),
-          24.h,
-
-          // STATS ROW
-          LayoutBuilder(
-            builder: (context, constraints) {
-              int columns = isDesktop ? 4 : (isTablet ? 2 : 1);
-              double spacing = 16.0;
-              double itemWidth =
-                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  _StatCard(
-                    title: 'Total Works This Month',
-                    value: totalWorksInMonth.toString(),
-                    icon: Icons.event,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Forecast Amount This Month',
-                    value: money(totalForecastAmount),
-                    icon: Icons.account_balance_wallet_outlined,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Cancelled Works',
-                    value: cancelledWorksInMonth.toString(),
-                    icon: Icons.event_busy,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Completed Works',
-                    value: completedWorksInMonth.toString(),
-                    icon: Icons.task_alt,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                ],
-              );
-            },
-          ),
-          24.h,
-
-          // MAIN CONTENT GRID
-          if (isDesktop)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      _RevenueChartCard(
-                        monthBookings: monthBookings,
-                        monthLabel: monthLabel,
-                        onExport: exportReport,
-                      ),
-                      24.h,
-                      const _PendingBookingRequestsCard(),
-                      24.h,
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: const _PopularServicesCard()),
-                          24.w,
-                          Expanded(child: const _TopStaffCard()),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                24.w,
-                Expanded(flex: 1, child: const _UpcomingBookingsCard()),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _RevenueChartCard(
-                  monthBookings: monthBookings,
-                  monthLabel: monthLabel,
-                  onExport: exportReport,
-                ),
-                24.h,
-                const _PendingBookingRequestsCard(),
-                24.h,
-                const _UpcomingBookingsCard(),
-                24.h,
-                if (isTablet)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: const _PopularServicesCard()),
-                      16.w,
-                      Expanded(child: const _TopStaffCard()),
-                    ],
-                  )
-                else ...[
-                  const _PopularServicesCard(),
-                  24.h,
-                  const _TopStaffCard(),
-                ],
-              ],
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1198,4 +1135,723 @@ class _RevenuePoint {
     required this.bookingsCount,
     required this.sortDate,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW TAB VIEWS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ExecutiveView extends StatelessWidget {
+  final bool isDesktop;
+  final bool isTablet;
+  final List<Booking> monthBookings;
+  final String monthLabel;
+  final dynamic totalWorksInMonth;
+  final dynamic totalForecastAmount;
+  final dynamic cancelledWorksInMonth;
+  final dynamic completedWorksInMonth;
+  final String Function(double) money;
+  final Future<void> Function() onExport;
+
+  const _ExecutiveView({
+    required this.isDesktop,
+    required this.isTablet,
+    required this.monthBookings,
+    required this.monthLabel,
+    required this.totalWorksInMonth,
+    required this.totalForecastAmount,
+    required this.cancelledWorksInMonth,
+    required this.completedWorksInMonth,
+    required this.money,
+    required this.onExport,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LayoutBuilder(
+            builder: (context, constraints) {
+              int columns = isDesktop ? 4 : (isTablet ? 2 : 1);
+              double spacing = 16.0;
+              double itemWidth =
+                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  _StatCard(
+                    title: 'Total Works This Month',
+                    value: totalWorksInMonth.toString(),
+                    icon: Icons.event,
+                    trend: monthLabel,
+                    width: itemWidth,
+                  ),
+                  _StatCard(
+                    title: 'Forecast Amount This Month',
+                    value: money(totalForecastAmount),
+                    icon: Icons.account_balance_wallet_outlined,
+                    trend: monthLabel,
+                    width: itemWidth,
+                  ),
+                  _StatCard(
+                    title: 'Cancelled Works',
+                    value: cancelledWorksInMonth.toString(),
+                    icon: Icons.event_busy,
+                    trend: monthLabel,
+                    width: itemWidth,
+                  ),
+                  _StatCard(
+                    title: 'Completed Works',
+                    value: completedWorksInMonth.toString(),
+                    icon: Icons.task_alt,
+                    trend: monthLabel,
+                    width: itemWidth,
+                  ),
+                ],
+              );
+            },
+          ),
+          24.h,
+          if (isDesktop)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    children: [
+                      _RevenueChartCard(
+                        monthBookings: monthBookings,
+                        monthLabel: monthLabel,
+                        onExport: onExport,
+                      ),
+                      24.h,
+                      const _PendingBookingRequestsCard(),
+                      24.h,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: const _PopularServicesCard()),
+                          24.w,
+                          Expanded(child: const _TopStaffCard()),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                24.w,
+                Expanded(flex: 1, child: const _UpcomingBookingsCard()),
+              ],
+            )
+          else
+            Column(
+              children: [
+                _RevenueChartCard(
+                  monthBookings: monthBookings,
+                  monthLabel: monthLabel,
+                  onExport: onExport,
+                ),
+                24.h,
+                const _PendingBookingRequestsCard(),
+                24.h,
+                const _UpcomingBookingsCard(),
+                24.h,
+                if (isTablet)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: const _PopularServicesCard()),
+                      16.w,
+                      Expanded(child: const _TopStaffCard()),
+                    ],
+                  )
+                else ...[
+                  const _PopularServicesCard(),
+                  24.h,
+                  const _TopStaffCard(),
+                ],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesView extends StatelessWidget {
+  final bool isDesktop;
+
+  const _SalesView({required this.isDesktop});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          const _SalesPipelineCard(),
+          24.h,
+          const _SalesConversionCard(),
+          24.h,
+          const _TopPerformersCard(),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarketingView extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          const _MarketingCampaignsCard(),
+          24.h,
+          const _LeadSourceDistributionCard(),
+        ],
+      ),
+    );
+  }
+}
+
+class _CRMView extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          const _CustomerSatisfactionCard(),
+          24.h,
+          const _RecentPatientActivityCard(),
+        ],
+      ),
+    );
+  }
+}
+
+class _FinanceView extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(
+        children: [
+          const _RevenueBreakdownCard(),
+          24.h,
+          const _ExpenseAnalysisCard(),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI COMPONENTS FOR TABS
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SalesPipelineCard extends StatelessWidget {
+  const _SalesPipelineCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Sales Pipeline Flow',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            const _PipelineStep(
+              label: 'Awareness',
+              value: '142 Leads',
+              color: Colors.blue,
+              percentage: 1.0,
+            ),
+            8.h,
+            const _PipelineStep(
+              label: 'Consideration',
+              value: '86 Qualifed',
+              color: Colors.indigo,
+              percentage: 0.6,
+            ),
+            8.h,
+            const _PipelineStep(
+              label: 'Decision',
+              value: '34 Proposals',
+              color: Colors.purple,
+              percentage: 0.24,
+            ),
+            8.h,
+            const _PipelineStep(
+              label: 'Purchase',
+              value: '12 Closed',
+              color: Colors.green,
+              percentage: 0.08,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PipelineStep extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final double percentage;
+
+  const _PipelineStep({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.percentage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+            Text(value, style: TextStyle(color: context.crmColors.textSecondary)),
+          ],
+        ),
+        8.h,
+        LinearProgressIndicator(
+          value: percentage,
+          backgroundColor: color.withOpacity(0.1),
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+          minHeight: 12,
+          borderRadius: BorderRadius.circular(6),
+        ),
+      ],
+    );
+  }
+}
+
+class _SalesConversionCard extends StatelessWidget {
+  const _SalesConversionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            title: 'Conversion Rate',
+            value: '14.2%',
+            icon: Icons.trending_up,
+            trend: '+2.4% from last month',
+            width: double.infinity,
+          ),
+        ),
+        16.w,
+        Expanded(
+          child: _StatCard(
+            title: 'Avg. Deal Size',
+            value: 'INR 42,500',
+            icon: Icons.monetization_on_outlined,
+            trend: '+12% from last month',
+            width: double.infinity,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TopPerformersCard extends StatelessWidget {
+  const _TopPerformersCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Top Sales Performers',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            _performerTile(context, 'Rahul Sharma', '28 Closings', 'INR 1.4M'),
+            const Divider(),
+            _performerTile(context, 'Anjali Nair', '24 Closings', 'INR 1.1M'),
+            const Divider(),
+            _performerTile(context, 'Kevin Peterson', '19 Closings', 'INR 850k'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _performerTile(
+    BuildContext context,
+    String name,
+    String closings,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: context.crmColors.secondary,
+            child: Text(name[0], style: TextStyle(color: context.crmColors.primary)),
+          ),
+          16.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(closings, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 12)),
+              ],
+            ),
+          ),
+          Text(value, style: TextStyle(color: context.crmColors.primary, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarketingCampaignsCard extends StatelessWidget {
+  const _MarketingCampaignsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Active Campaigns',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            _campaignItem(context, 'Summer Wedding Promo', '420 Leads', 'INR 12k Spend'),
+            24.h,
+            _campaignItem(context, 'Corporate Event Package', '186 Leads', 'INR 8k Spend'),
+            24.h,
+            _campaignItem(context, 'Social Media Blast', '1,240 Leads', 'INR 5k Spend'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _campaignItem(BuildContext context, String title, String stats, String spend) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(spend, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 12)),
+          ],
+        ),
+        8.h,
+        Text(stats, style: TextStyle(color: context.crmColors.primary, fontWeight: FontWeight.w500)),
+        4.h,
+        LinearProgressIndicator(
+          value: 0.7,
+          backgroundColor: context.crmColors.border,
+          valueColor: AlwaysStoppedAnimation<Color>(context.crmColors.primary),
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ],
+    );
+  }
+}
+
+class _LeadSourceDistributionCard extends StatelessWidget {
+  const _LeadSourceDistributionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Lead Sources',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            Row(
+              children: [
+                _sourceItem(context, 'Instagram', '45%', Colors.pink),
+                _sourceItem(context, 'Referrals', '25%', Colors.green),
+                _sourceItem(context, 'Website', '20%', Colors.blue),
+                _sourceItem(context, 'Others', '10%', Colors.orange),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sourceItem(BuildContext context, String label, String value, Color color) {
+    return Expanded(
+      child: Column(
+        children: [
+          Container(
+            height: 8,
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+          ),
+          8.h,
+          Text(label, style: const TextStyle(fontSize: 10)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerSatisfactionCard extends StatelessWidget {
+  const _CustomerSatisfactionCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StatCard(
+            title: 'Net Promoter Score',
+            value: '78',
+            icon: Icons.sentiment_very_satisfied,
+            trend: 'High Customer Loyalty',
+            width: double.infinity,
+          ),
+        ),
+        16.w,
+        Expanded(
+          child: _StatCard(
+            title: 'Response Time',
+            value: '1.2 hr',
+            icon: Icons.timer,
+            trend: '-14m from yesterday',
+            width: double.infinity,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentPatientActivityCard extends StatelessWidget {
+  const _RecentPatientActivityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Recent Client Activity',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            _activityItem(context, 'James Wilson', 'Renewed membership', '2 mins ago'),
+            const Divider(),
+            _activityItem(context, 'Sarah Smith', 'Requested callback', '15 mins ago'),
+            const Divider(),
+            _activityItem(context, 'Robert Brown', 'Booked event package', '1 hour ago'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _activityItem(BuildContext context, String name, String action, String time) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          CircleAvatar(radius: 4, backgroundColor: context.crmColors.primary),
+          12.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(action, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13)),
+              ],
+            ),
+          ),
+          Text(time, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+class _RevenueBreakdownCard extends StatelessWidget {
+  const _RevenueBreakdownCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Monthly Finance Health',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            24.h,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _circularStat(context, 'Gross Revenue', 'INR 2.4M', 0.85, Colors.green),
+                _circularStat(context, 'Net Profit', 'INR 840k', 0.35, Colors.blue),
+                _circularStat(context, 'Operating Cost', 'INR 1.2M', 0.5, Colors.orange),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _circularStat(BuildContext context, String label, String value, double progress, Color color) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 80,
+          width: 80,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 8,
+                backgroundColor: color.withOpacity(0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+              Center(
+                child: Text(
+                  '${(progress * 100).toInt()}%',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+        16.h,
+        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+      ],
+    );
+  }
+}
+
+class _ExpenseAnalysisCard extends StatelessWidget {
+  const _ExpenseAnalysisCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: 24.p,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Expense Breakdown',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            16.h,
+            _expenseItem(context, 'Staff Payroll', 'INR 640,000', 0.6),
+            16.h,
+            _expenseItem(context, 'Marketing Ad Spend', 'INR 180,000', 0.2),
+            16.h,
+            _expenseItem(context, 'Operational Utilites', 'INR 120,000', 0.1),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _expenseItem(BuildContext context, String label, String value, double ratio) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        8.h,
+        Container(
+          height: 4,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: context.crmColors.border,
+            borderRadius: BorderRadius.circular(2),
+          ),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: ratio,
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.crmColors.warning,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

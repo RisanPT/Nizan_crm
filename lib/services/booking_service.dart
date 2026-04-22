@@ -46,6 +46,7 @@ class BookingService {
     int limit = 20,
     String search = '',
     bool duplicatesOnly = false,
+    String? financialYear,
   }) async {
     try {
       final response = await _dio.get(
@@ -55,6 +56,8 @@ class BookingService {
           'limit': limit,
           if (search.trim().isNotEmpty) 'search': search.trim(),
           if (duplicatesOnly) 'duplicatesOnly': true,
+          if (financialYear != null && financialYear.isNotEmpty)
+            'financialYear': financialYear,
         },
       );
       return PaginatedBookingsResponse.fromJson(

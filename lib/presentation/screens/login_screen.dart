@@ -17,6 +17,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _selectedState;
+  String? _selectedRegion;
 
   @override
   void dispose() {
@@ -104,6 +106,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         obscurePassword: _obscurePassword,
                         isSubmitting: auth.isSubmitting,
                         isDesktop: isDesktop,
+                        selectedState: _selectedState,
+                        selectedRegion: _selectedRegion,
+                        onStateChanged: (val) =>
+                            setState(() => _selectedState = val),
+                        onRegionChanged: (val) =>
+                            setState(() => _selectedRegion = val),
                         onTogglePassword: () {
                           setState(() => _obscurePassword = !_obscurePassword);
                         },
@@ -189,6 +197,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             obscurePassword: _obscurePassword,
             isSubmitting: auth.isSubmitting,
             isDesktop: false,
+            selectedState: _selectedState,
+            selectedRegion: _selectedRegion,
+            onStateChanged: (val) => setState(() => _selectedState = val),
+            onRegionChanged: (val) => setState(() => _selectedRegion = val),
             onTogglePassword: () {
               setState(() => _obscurePassword = !_obscurePassword);
             },
@@ -208,6 +220,10 @@ class _LoginCard extends StatelessWidget {
     required this.obscurePassword,
     required this.isSubmitting,
     required this.isDesktop,
+    required this.selectedState,
+    required this.selectedRegion,
+    required this.onStateChanged,
+    required this.onRegionChanged,
     required this.onTogglePassword,
     required this.onSubmit,
   });
@@ -218,6 +234,10 @@ class _LoginCard extends StatelessWidget {
   final bool obscurePassword;
   final bool isSubmitting;
   final bool isDesktop;
+  final String? selectedState;
+  final String? selectedRegion;
+  final ValueChanged<String?> onStateChanged;
+  final ValueChanged<String?> onRegionChanged;
   final VoidCallback onTogglePassword;
   final Future<void> Function() onSubmit;
 
@@ -259,6 +279,32 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
             28.h,
+            DropdownButtonFormField<String>(
+              value: selectedState,
+              items: ['Kerala', 'Karnataka']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: onStateChanged,
+              decoration: const InputDecoration(
+                labelText: 'Select State',
+                prefixIcon: Icon(Icons.map_outlined),
+              ),
+              validator: (value) => value == null ? 'State is required' : null,
+            ),
+            16.h,
+            DropdownButtonFormField<String>(
+              value: selectedRegion,
+              items: ['Kochi', 'Calicut']
+                  .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                  .toList(),
+              onChanged: onRegionChanged,
+              decoration: const InputDecoration(
+                labelText: 'Select Region',
+                prefixIcon: Icon(Icons.location_on_outlined),
+              ),
+              validator: (value) => value == null ? 'Region is required' : null,
+            ),
+            16.h,
             TextFormField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,

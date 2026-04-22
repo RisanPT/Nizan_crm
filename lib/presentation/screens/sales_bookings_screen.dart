@@ -7,7 +7,10 @@ import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/dashboard_report_service.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../services/employee_service.dart';
+import '../../services/package_service.dart';
 
 class SalesBookingsScreen extends HookConsumerWidget {
   const SalesBookingsScreen({super.key});
@@ -22,12 +25,18 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final searchCtrl = useTextEditingController();
     final searchQuery = useState('');
     final duplicatesOnly = useState(false);
+    final isMonthlyView = useState(false);
+    final selectedFY = useState<String>('2025-26');
     const pageSize = 20;
+
+    final financialYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
+
     final pageParams = PaginatedBookingsParams(
       page: pageState.value,
       limit: pageSize,
       search: searchQuery.value,
       duplicatesOnly: duplicatesOnly.value,
+      financialYear: selectedFY.value,
     );
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
@@ -42,7 +51,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       pageState.value = 1;
       selectedIds.value = <String>{};
       return null;
-    }, [searchQuery.value, duplicatesOnly.value]);
+    }, [searchQuery.value, duplicatesOnly.value, selectedFY.value]);
 
     Future<void> deleteBookings(
       List<String> bookingIds,
@@ -123,7 +132,47 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 'All bookings with financial status, advance tracking, and invoice-ready totals.',
                 style: TextStyle(color: crmColors.textSecondary, fontSize: 15),
               ),
-              20.h,
+              Wrap(
+                spacing: 16,
+                runSpacing: 16,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  DropdownButton<String>(
+                    value: selectedFY.value,
+                    onChanged: (val) {
+                      if (val != null) selectedFY.value = val;
+                    },
+                    items: financialYears.map((fy) {
+                      return DropdownMenuItem(
+                        value: fy,
+                        child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      );
+                    }).toList(),
+                    style: TextStyle(color: crmColors.primary, fontSize: 16),
+                    underline: Container(height: 2, color: crmColors.primary),
+                  ),
+                  20.w,
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        label: Text('List View'),
+                        icon: Icon(Icons.list),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        label: Text('Monthly Summary'),
+                        icon: Icon(Icons.calendar_month),
+                      ),
+                    ],
+                    selected: {isMonthlyView.value},
+                    onSelectionChanged: (val) {
+                      isMonthlyView.value = val.first;
+                    },
+                  ),
+                ],
+              ),
+              24.h,
               Wrap(
                 spacing: 16,
                 runSpacing: 16,
@@ -260,17 +309,73 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ),
                   ),
                 ),
-              Container(
-                decoration: BoxDecoration(
-                  color: crmColors.surface,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: crmColors.border),
-                ),
-                child: isMobile
-                    ? Column(
-                        children: bookings
-                            .map(
-                              (booking) => _MobileBookingCard(
+              if (isMonthlyView.value)
+                _MonthlySalesSummaryView(
+                  financialYear: selectedFY.value,
+                )
+              else
+                Container(
+                  decoration: BoxDecoration(
+                    color: crmColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: crmColors.border),
+                  ),
+                  child: isMobile
+                      ? Column(
+                          children: bookings
+                              .map(
+                                (booking) => _MobileBookingCard(
+                                  booking: booking,
+                                  isSelected: selectedIds.value.contains(
+                                    booking.id,
+                                  ),
+                                  onSelectChanged: (value) {
+                                    final next = {...selectedIds.value};
+                                    if (value == true) {
+                                      next.add(booking.id);
+                                    } else {
+                                      next.remove(booking.id);
+                                    }
+                                    selectedIds.value = next;
+                                  },
+                                  onDelete: () => deleteBookings([
+                                    booking.id,
+                                  ], bookings.length),
+                                ),
+                              )
+                              .toList(),
+                        )
+                      : Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              child: Row(
+                                children: const [
+                                  SizedBox(width: 44),
+                                  Expanded(
+                                    flex: 2,
+                                    child: _HeaderText('Booking'),
+                                  ),
+                                  Expanded(flex: 2, child: _HeaderText('Date')),
+                                  Expanded(flex: 2, child: _HeaderText('Client')),
+                                  Expanded(
+                                    flex: 2,
+                                    child: _HeaderText('Package'),
+                                  ),
+                                  Expanded(child: _HeaderText('Status')),
+                                  Expanded(child: _HeaderText('Advance')),
+                                  Expanded(child: _HeaderText('Total')),
+                                  Expanded(child: _HeaderText('Balance')),
+                                  SizedBox(width: 60),
+                                ],
+                              ),
+                            ),
+                            const Divider(height: 1),
+                            ...bookings.map(
+                              (booking) => _DesktopBookingRow(
                                 booking: booking,
                                 isSelected: selectedIds.value.contains(
                                   booking.id,
@@ -284,64 +389,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   }
                                   selectedIds.value = next;
                                 },
-                                onDelete: () => deleteBookings([
-                                  booking.id,
-                                ], bookings.length),
+                                onDelete: () =>
+                                    deleteBookings([booking.id], bookings.length),
                               ),
-                            )
-                            .toList(),
-                      )
-                    : Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
                             ),
-                            child: Row(
-                              children: const [
-                                SizedBox(width: 44),
-                                Expanded(
-                                  flex: 2,
-                                  child: _HeaderText('Booking'),
-                                ),
-                                Expanded(flex: 2, child: _HeaderText('Date')),
-                                Expanded(flex: 2, child: _HeaderText('Client')),
-                                Expanded(
-                                  flex: 2,
-                                  child: _HeaderText('Package'),
-                                ),
-                                Expanded(child: _HeaderText('Status')),
-                                Expanded(child: _HeaderText('Advance')),
-                                Expanded(child: _HeaderText('Total')),
-                                Expanded(child: _HeaderText('Balance')),
-                                SizedBox(width: 60),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-                          ...bookings.map(
-                            (booking) => _DesktopBookingRow(
-                              booking: booking,
-                              isSelected: selectedIds.value.contains(
-                                booking.id,
-                              ),
-                              onSelectChanged: (value) {
-                                final next = {...selectedIds.value};
-                                if (value == true) {
-                                  next.add(booking.id);
-                                } else {
-                                  next.remove(booking.id);
-                                }
-                                selectedIds.value = next;
-                              },
-                              onDelete: () =>
-                                  deleteBookings([booking.id], bookings.length),
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
+                          ],
+                        ),
+                ),
               20.h,
               _PaginationBar(
                 page: response.page,
@@ -795,4 +849,367 @@ String _formatDate(DateTime value) {
   final day = value.day.toString().padLeft(2, '0');
   final month = value.month.toString().padLeft(2, '0');
   return '$day/$month/${value.year}';
+}
+
+class _MonthlySalesSummaryView extends ConsumerWidget {
+  final String financialYear;
+
+  const _MonthlySalesSummaryView({required this.financialYear});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crmColors = context.crmColors;
+    final asyncBookings = ref.watch(bookingProvider);
+
+    return asyncBookings.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(child: Text('Error: $err')),
+      data: (allBookings) {
+        // Parse FY
+        final parts = financialYear.split('-');
+        final startYear = int.parse(parts[0]);
+        final endYear = 2000 + int.parse(parts[1]);
+
+        final fyStart = DateTime(startYear, 4, 1);
+        final fyEnd = DateTime(endYear, 3, 31, 23, 59, 59);
+
+        // Filter bookings for this FY
+        final fyBookings = allBookings.where((b) {
+          return !b.bookingDate.isBefore(fyStart) &&
+              !b.bookingDate.isAfter(fyEnd);
+        }).toList();
+
+        // Group by month
+        final monthlyStats = <int, _MonthStats>{};
+        // Initialize all 12 months (Apr to Mar)
+        for (int i = 0; i < 12; i++) {
+          final month = (4 + i - 1) % 12 + 1;
+          final year = (4 + i > 12) ? endYear : startYear;
+          monthlyStats[i] = _MonthStats(month: month, year: year);
+        }
+
+        for (final b in fyBookings) {
+          int monthIndex;
+          if (b.bookingDate.month >= 4) {
+            monthIndex = b.bookingDate.month - 4;
+          } else {
+            monthIndex = b.bookingDate.month + 8;
+          }
+
+          final stats = monthlyStats[monthIndex]!;
+          stats.totalBookings++;
+          if (b.status.toLowerCase() != 'cancelled') {
+            stats.totalSales += b.totalPrice;
+            stats.advanceCollected += b.advanceAmount;
+          }
+          if (b.status.toLowerCase() == 'completed') {
+            stats.completedCount++;
+          } else if (b.status.toLowerCase() == 'cancelled') {
+            stats.cancelledCount++;
+          }
+        }
+
+        final statsList = List.generate(12, (index) => monthlyStats[index]!);
+
+        return Column(
+          children: [
+            _FYPerformanceChart(
+              stats: statsList,
+              financialYear: financialYear,
+            ),
+            24.h,
+            Container(
+              decoration: BoxDecoration(
+                color: crmColors.surface,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: crmColors.border),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(
+                    crmColors.primary.withOpacity(0.05),
+                  ),
+                  columns: const [
+                    DataColumn(label: _HeaderText('MONTH')),
+                    DataColumn(label: _HeaderText('BOOKINGS'), numeric: true),
+                    DataColumn(label: _HeaderText('GROSS SALES'), numeric: true),
+                    DataColumn(label: _HeaderText('ADVANCE'), numeric: true),
+                    DataColumn(label: _HeaderText('COMPLETED'), numeric: true),
+                    DataColumn(label: _HeaderText('CANCELLED'), numeric: true),
+                    DataColumn(label: _HeaderText('ACTION')),
+                  ],
+                  rows: statsList.map((stats) {
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            '${_monthName(stats.month)} ${stats.year}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        DataCell(Text(stats.totalBookings.toString())),
+                        DataCell(Text('₹${_money(stats.totalSales)}')),
+                        DataCell(Text('₹${_money(stats.advanceCollected)}')),
+                        DataCell(Text(stats.completedCount.toString())),
+                        DataCell(Text(stats.cancelledCount.toString())),
+                        DataCell(
+                          IconButton(
+                            icon: const Icon(Icons.download, size: 20),
+                            tooltip: 'Download Monthly Report',
+                            onPressed: () async {
+                              final asyncPackages = ref.read(packagesProvider);
+                              final asyncEmployees = ref.read(employeesProvider);
+                              
+                              if (asyncPackages.value == null || asyncEmployees.value == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Loading requirements...')),
+                                );
+                                return;
+                              }
+
+                              final reportMonth = DateTime(stats.year, stats.month);
+                              // We use the full allBookings but filter it specifically for the report logic inside service
+                              await downloadDashboardReport(
+                                month: reportMonth,
+                                bookings: allBookings,
+                                packages: asyncPackages.value!,
+                                employees: asyncEmployees.value!,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _monthName(int month) {
+    const names = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return names[month - 1];
+  }
+}
+
+class _MonthStats {
+  final int month;
+  final int year;
+  int totalBookings = 0;
+  double totalSales = 0;
+  double advanceCollected = 0;
+  int completedCount = 0;
+  int cancelledCount = 0;
+
+  _MonthStats({required this.month, required this.year});
+}
+
+class _FYPerformanceChart extends StatelessWidget {
+  final List<_MonthStats> stats;
+  final String financialYear;
+
+  const _FYPerformanceChart({
+    required this.stats,
+    required this.financialYear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final maxSales = stats.fold<double>(
+      0,
+      (max, s) => s.totalSales > max ? s.totalSales : max,
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crmColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Financial Performance Chart (FY $financialYear)',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Row(
+                children: [
+                  _LegendItem(color: crmColors.primary, label: 'Gross Sales'),
+                  16.w,
+                  _LegendItem(color: crmColors.sidebar, label: 'Advance Collected'),
+                ],
+              ),
+            ],
+          ),
+          24.h,
+          SizedBox(
+            height: 300,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: stats.map((s) {
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: _MonthlyBarStack(
+                      stats: s,
+                      maxSales: maxSales <= 0 ? 1 : maxSales,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        8.w,
+        Text(
+          label,
+          style: TextStyle(
+            color: context.crmColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MonthlyBarStack extends StatelessWidget {
+  final _MonthStats stats;
+  final double maxSales;
+
+  const _MonthlyBarStack({required this.stats, required this.maxSales});
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final salesRatio = (stats.totalSales / maxSales).clamp(0.0, 1.0);
+    final advanceRatio = (stats.advanceCollected / maxSales).clamp(0.0, 1.0);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _Bar(
+                heightRatio: salesRatio,
+                color: crmColors.primary,
+                tooltip: 'Sales: ₹${stats.totalSales.toStringAsFixed(0)}',
+              ),
+              4.w,
+              _Bar(
+                heightRatio: advanceRatio,
+                color: crmColors.sidebar,
+                tooltip: 'Advance: ₹${stats.advanceCollected.toStringAsFixed(0)}',
+              ),
+            ],
+          ),
+        ),
+        8.h,
+        Text(
+          _monthNameShort(stats.month),
+          style: TextStyle(
+            color: crmColors.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _monthNameShort(int month) {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[month - 1];
+  }
+}
+
+class _Bar extends StatelessWidget {
+  final double heightRatio;
+  final Color color;
+  final String tooltip;
+
+  const _Bar({
+    required this.heightRatio,
+    required this.color,
+    required this.tooltip,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: FractionallySizedBox(
+        heightFactor: heightRatio.clamp(0.05, 1.0),
+        child: Container(
+          width: 12,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [
+                color,
+                color.withValues(alpha: 0.7),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
