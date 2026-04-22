@@ -305,6 +305,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   flex: 2,
                                   child: _HeaderText('Booking'),
                                 ),
+                                Expanded(flex: 2, child: _HeaderText('Date')),
                                 Expanded(flex: 2, child: _HeaderText('Client')),
                                 Expanded(
                                   flex: 2,
@@ -314,7 +315,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                 Expanded(child: _HeaderText('Advance')),
                                 Expanded(child: _HeaderText('Total')),
                                 Expanded(child: _HeaderText('Balance')),
-                                SizedBox(width: 132),
+                                SizedBox(width: 60),
                               ],
                             ),
                           ),
@@ -533,6 +534,16 @@ class _DesktopBookingRow extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                _formatDate(booking.bookingDate),
+                style: TextStyle(
+                  color: crmColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
             Expanded(flex: 2, child: Text(booking.customerName)),
             Expanded(
               flex: 2,
@@ -553,29 +564,17 @@ class _DesktopBookingRow extends StatelessWidget {
             Expanded(child: Text('₹${_money(booking.totalPrice)}')),
             Expanded(child: Text('₹${_money(balance)}')),
             SizedBox(
-              width: 132,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Text(
-                      _formatDate(booking.bookingDate),
-                      textAlign: TextAlign.right,
-                      style: TextStyle(
-                        color: crmColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+              width: 60,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  onPressed: onDelete,
+                  tooltip: 'Delete booking',
+                  icon: Icon(
+                    Icons.delete_outline,
+                    color: crmColors.destructive,
                   ),
-                  IconButton(
-                    onPressed: onDelete,
-                    tooltip: 'Delete booking',
-                    icon: Icon(
-                      Icons.delete_outline,
-                      color: crmColors.destructive,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],

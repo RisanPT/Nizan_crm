@@ -14,6 +14,8 @@ import '../../services/region_service.dart';
 import '../../core/models/service_package.dart';
 import '../../core/models/service_region.dart';
 
+const double kExtraDateChargePerPackage = 3000;
+
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
 
@@ -46,6 +48,8 @@ class AddBookingScreen extends HookConsumerWidget {
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
     final totalPrice = useState<double>(0);
     final advanceAmount = useState<double>(0);
+    final basePackageAmount = useState<double>(0);
+    final extraDateCharge = useState<double>(0);
     final totalPackageCount = bookingCart.value.fold<int>(
       0,
       (sum, item) => sum + item.quantity,
@@ -100,20 +104,27 @@ class AddBookingScreen extends HookConsumerWidget {
     void recalculate() {
       final bookingItems = buildBookingItems();
       if (packages.isEmpty || bookingItems.isEmpty) {
+        basePackageAmount.value = 0;
+        extraDateCharge.value = 0;
         totalPrice.value = 0;
         advanceAmount.value = 0;
         return;
       }
-      totalPrice.value = bookingItems.fold<double>(
+      basePackageAmount.value = bookingItems.fold<double>(
         0,
         (sum, item) => sum + item.totalPrice,
-      ) +
-      ((selectedDates.value.length > 1 ? selectedDates.value.length - 1 : 0) *
-          3000);
-      advanceAmount.value = bookingItems.fold<double>(
-        0,
-        (sum, item) => sum + item.advanceAmount,
       );
+      extraDateCharge.value =
+          (selectedDates.value.length > 1 ? selectedDates.value.length - 1 : 0) *
+          kExtraDateChargePerPackage *
+          (totalPackageCount > 0 ? totalPackageCount : 1);
+      totalPrice.value = basePackageAmount.value + extraDateCharge.value;
+      advanceAmount.value =
+          bookingItems.fold<double>(
+            0,
+            (sum, item) => sum + item.advanceAmount,
+          ) *
+          (selectedDates.value.isEmpty ? 1 : selectedDates.value.length);
     }
 
     final validPackageId =
@@ -1041,6 +1052,26 @@ class AddBookingScreen extends HookConsumerWidget {
                         // ── Totals + Submit ──────────────────────────────
                         Row(
                           children: [
+                            Expanded(
+                              child: _summaryBox(
+                                label: 'BASE PACKAGE AMOUNT',
+                                value:
+                                    '₹ ${basePackageAmount.value.toStringAsFixed(0)}',
+                                border: crmColors.border,
+                                valueColor: crmColors.textPrimary,
+                              ),
+                            ),
+                            16.w,
+                            Expanded(
+                              child: _summaryBox(
+                                label: 'EXTRA DATE CHARGE',
+                                value:
+                                    '₹ ${extraDateCharge.value.toStringAsFixed(0)}',
+                                border: crmColors.border,
+                                valueColor: crmColors.warning,
+                              ),
+                            ),
+                            16.w,
                             Expanded(
                               child: _summaryBox(
                                 label: 'TOTAL AMOUNT',

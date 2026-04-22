@@ -15,6 +15,18 @@ String _staffWorkLabel(BookingAssignment staff) {
   return staff.role.trim();
 }
 
+double _addonTotal(Booking booking) {
+  return booking.addons.fold<double>(
+    0,
+    (sum, addon) => sum + (addon.amount * addon.persons),
+  );
+}
+
+double _packageAmountFromTotal(double totalAmount, double addonTotal) {
+  final value = totalAmount - addonTotal;
+  return value < 0 ? 0 : value;
+}
+
 Future<void> printBookingDetails(
   Booking booking, {
   required BookingPrintVariant variant,
@@ -80,24 +92,22 @@ String _buildPrintableHtml(
   String artistName = '',
 }) {
   final artistPages =
-      variant == BookingPrintVariant.artist &&
-              relatedArtistEntries.isNotEmpty
-          ? relatedArtistEntries
-          : [
-              if (selectedArtistEntry != null)
-                selectedArtistEntry
-              else
-                booking.displayEntries.first,
-            ];
-  final pagesHtml =
-      variant == BookingPrintVariant.artist
-          ? artistPages
-              .map(
-                (entry) =>
-                    '<div class="booking-page">\n${_buildSingleBookingHtml(entry.booking, variant, relatedArtistBookings, relatedArtistEntries, entry, artistName)}\n</div>',
-              )
-              .join('\n')
-          : '<div class="booking-page">\n${_buildSingleBookingHtml(booking, variant, relatedArtistBookings, relatedArtistEntries, selectedArtistEntry, artistName)}\n</div>';
+      variant == BookingPrintVariant.artist && relatedArtistEntries.isNotEmpty
+      ? relatedArtistEntries
+      : [
+          if (selectedArtistEntry != null)
+            selectedArtistEntry
+          else
+            booking.displayEntries.first,
+        ];
+  final pagesHtml = variant == BookingPrintVariant.artist
+      ? artistPages
+            .map(
+              (entry) =>
+                  '<div class="booking-page">\n${_buildSingleBookingHtml(entry.booking, variant, relatedArtistBookings, relatedArtistEntries, entry, artistName)}\n</div>',
+            )
+            .join('\n')
+      : '<div class="booking-page">\n${_buildSingleBookingHtml(booking, variant, relatedArtistBookings, relatedArtistEntries, selectedArtistEntry, artistName)}\n</div>';
 
   return '''
 <!DOCTYPE html>
@@ -173,27 +183,25 @@ String _buildSingleBookingHtml(
   if (!isArtistCopy) {
     return _buildClientConfirmationHtml(booking);
   }
+  final addonTotal = _addonTotal(booking);
   final activeArtistEntry = selectedArtistEntry ?? booking.displayEntries.first;
-  final activeEntryAssignments =
-      booking.bookingItems.isNotEmpty
-          ? activeArtistEntry.assignedStaff
-          : (activeArtistEntry.assignedStaff.isNotEmpty
-                ? activeArtistEntry.assignedStaff
-                : booking.assignedStaff);
-  final effectiveArtistEntries =
-      relatedArtistEntries.isNotEmpty
-          ? relatedArtistEntries.toList()
-          : relatedArtistBookings
-              .expand((item) => item.displayEntries)
-              .where((entry) => entry.assignedStaff.isNotEmpty)
-              .toList();
+  final activeEntryAssignments = booking.bookingItems.isNotEmpty
+      ? activeArtistEntry.assignedStaff
+      : (activeArtistEntry.assignedStaff.isNotEmpty
+            ? activeArtistEntry.assignedStaff
+            : booking.assignedStaff);
+  final effectiveArtistEntries = relatedArtistEntries.isNotEmpty
+      ? relatedArtistEntries.toList()
+      : relatedArtistBookings
+            .expand((item) => item.displayEntries)
+            .where((entry) => entry.assignedStaff.isNotEmpty)
+            .toList();
   effectiveArtistEntries.sort(
     (a, b) => a.serviceStart.compareTo(b.serviceStart),
   );
-  final entryBookingDate =
-      activeArtistEntry.selectedDates.isNotEmpty
-          ? activeArtistEntry.selectedDates.first
-          : booking.bookingDate;
+  final entryBookingDate = activeArtistEntry.selectedDates.isNotEmpty
+      ? activeArtistEntry.selectedDates.first
+      : booking.bookingDate;
   final entryDiscountAmount = booking.bookingItems.isEmpty
       ? booking.discountAmount
       : 0.0;
@@ -202,10 +210,19 @@ String _buildSingleBookingHtml(
             ? '${booking.discountValue.toStringAsFixed(0)}%'
             : 'INR ${booking.discountValue.toStringAsFixed(0)}')
       : 'INR 0';
+  final entryTotalAmount = (booking.bookingItems.isEmpty
+          ? activeArtistEntry.totalPrice
+          : (activeArtistEntry.totalPrice + addonTotal).clamp(
+              0,
+              booking.totalPrice,
+            ))
+      .toDouble();
+  final entryPackageAmount = _packageAmountFromTotal(
+    entryTotalAmount,
+    addonTotal,
+  );
   final entryForecast =
-      activeArtistEntry.totalPrice -
-      activeArtistEntry.advanceAmount -
-      entryDiscountAmount;
+      entryTotalAmount - activeArtistEntry.advanceAmount - entryDiscountAmount;
 
   final assignedStaffRows = activeEntryAssignments.isEmpty
       ? '<tr><td colspan="3">No staff assigned</td></tr>'
@@ -450,7 +467,9 @@ String _buildSingleBookingHtml(
     </div>
 
     <div class="summary">
-      <div class="summary-row"><span>Total Amount</span><span>INR ${activeArtistEntry.totalPrice.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><span>Package Amount</span><span>INR ${entryPackageAmount.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><span>Add-ons</span><span>INR ${addonTotal.toStringAsFixed(0)}</span></div>
+      <div class="summary-row"><span>Total Amount</span><span>INR ${entryTotalAmount.toStringAsFixed(0)}</span></div>
       <div class="summary-row"><span>Advance Paid</span><span>INR ${activeArtistEntry.advanceAmount.toStringAsFixed(0)}</span></div>
       <div class="summary-row"><span>Discount</span><span>$entryDiscountLabel</span></div>
       <div class="summary-row"><span>Applied Discount Amount</span><span>INR ${entryDiscountAmount.toStringAsFixed(0)}</span></div>
@@ -460,6 +479,8 @@ String _buildSingleBookingHtml(
 }
 
 String _buildClientConfirmationHtml(Booking booking) {
+  final addonTotal = _addonTotal(booking);
+  final packageAmount = _packageAmountFromTotal(booking.totalPrice, addonTotal);
   final addonSummary = booking.addons.isEmpty
       ? 'Nil'
       : booking.addons
@@ -503,8 +524,12 @@ String _buildClientConfirmationHtml(Booking booking) {
           <div class="finance-value">INR ${booking.advanceAmount.toStringAsFixed(0)}</div>
         </div>
         <div class="client-finance-card">
-          <div class="finance-label">Total Amount</div>
-          <div class="finance-value">INR ${booking.totalPrice.toStringAsFixed(0)}</div>
+          <div class="finance-label">Package Amount</div>
+          <div class="finance-value">INR ${packageAmount.toStringAsFixed(0)}</div>
+        </div>
+        <div class="client-finance-card">
+          <div class="finance-label">Add-ons</div>
+          <div class="finance-value">INR ${addonTotal.toStringAsFixed(0)}</div>
         </div>
         <div class="client-finance-card">
           <div class="finance-label">Discount</div>
@@ -513,6 +538,10 @@ String _buildClientConfirmationHtml(Booking booking) {
         <div class="client-finance-card">
           <div class="finance-label">Remaining Payment Due</div>
           <div class="finance-value">INR ${remainingBalance.toStringAsFixed(0)}</div>
+        </div>
+        <div class="client-finance-card">
+          <div class="finance-label">Total Amount</div>
+          <div class="finance-value">INR ${booking.totalPrice.toStringAsFixed(0)}</div>
         </div>
       </div>
 

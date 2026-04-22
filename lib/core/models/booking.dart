@@ -199,9 +199,12 @@ class BookingItem {
 class BookingDisplayEntry {
   final String id;
   final Booking booking;
+  final int bookingItemIndex;
   final String service;
   final String eventSlot;
+  final DateTime calendarDate;
   final List<DateTime> selectedDates;
+  final List<DateTime> allSelectedDates;
   final double totalPrice;
   final double advanceAmount;
   final DateTime serviceStart;
@@ -211,9 +214,12 @@ class BookingDisplayEntry {
   const BookingDisplayEntry({
     required this.id,
     required this.booking,
+    this.bookingItemIndex = -1,
     required this.service,
     required this.eventSlot,
+    required this.calendarDate,
     required this.selectedDates,
+    this.allSelectedDates = const [],
     required this.totalPrice,
     required this.advanceAmount,
     required this.serviceStart,
@@ -428,19 +434,71 @@ class Booking {
         : <DateTime>[bookingDate];
 
     if (bookingItems.isEmpty) {
+      final double primaryDateTotal =
+          fallbackDates.length <= 1
+              ? totalPrice
+              : (totalPrice - ((fallbackDates.length - 1) * 3000)).clamp(
+                  0,
+                  double.infinity,
+                ).toDouble();
       return [
         BookingDisplayEntry(
           id: '$id::0',
           booking: this,
+          bookingItemIndex: -1,
           service: service,
           eventSlot: eventSlot,
-          selectedDates: fallbackDates,
-          totalPrice: totalPrice,
-          advanceAmount: advanceAmount,
-          serviceStart: serviceStart,
-          serviceEnd: serviceEnd,
+          calendarDate: fallbackDates.first,
+          selectedDates: [fallbackDates.first],
+          allSelectedDates: fallbackDates,
+          totalPrice: primaryDateTotal,
+          advanceAmount: fallbackDates.length <= 1
+              ? advanceAmount
+              : advanceAmount / fallbackDates.length,
+          serviceStart: DateTime(
+            fallbackDates.first.year,
+            fallbackDates.first.month,
+            fallbackDates.first.day,
+            serviceStart.hour,
+            serviceStart.minute,
+          ),
+          serviceEnd: DateTime(
+            fallbackDates.first.year,
+            fallbackDates.first.month,
+            fallbackDates.first.day,
+            serviceEnd.hour,
+            serviceEnd.minute,
+          ),
           assignedStaff: assignedStaff,
         ),
+        for (var dateIndex = 1; dateIndex < fallbackDates.length; dateIndex++)
+          BookingDisplayEntry(
+            id: '$id::0::$dateIndex',
+            booking: this,
+            bookingItemIndex: -1,
+            service: service,
+            eventSlot: eventSlot,
+            calendarDate: fallbackDates[dateIndex],
+            selectedDates: [fallbackDates[dateIndex]],
+            allSelectedDates: fallbackDates,
+            totalPrice: primaryDateTotal,
+            advanceAmount: advanceAmount / fallbackDates.length,
+            serviceStart: DateTime(
+              fallbackDates[dateIndex].year,
+              fallbackDates[dateIndex].month,
+              fallbackDates[dateIndex].day,
+              serviceStart.hour,
+              serviceStart.minute,
+            ),
+            serviceEnd: DateTime(
+              fallbackDates[dateIndex].year,
+              fallbackDates[dateIndex].month,
+              fallbackDates[dateIndex].day,
+              serviceEnd.hour,
+              serviceEnd.minute,
+            ),
+            assignedStaff: assignedStaff,
+          ),
       ];
     }
 
@@ -458,28 +516,58 @@ class Booking {
         serviceStart.hour,
         serviceStart.minute,
       );
-      final itemEndDate = itemDates.isNotEmpty ? itemDates.last : anchorDate;
-      final itemEnd = DateTime(
-        itemEndDate.year,
-        itemEndDate.month,
-        itemEndDate.day,
-        serviceEnd.hour,
-        serviceEnd.minute,
-      );
-
-      return BookingDisplayEntry(
-        id: '$id::$index',
-        booking: this,
-        service: item.service,
-        eventSlot: item.eventSlot,
-        selectedDates: itemDates,
-        totalPrice: item.totalPrice,
-        advanceAmount: item.advanceAmount,
-        serviceStart: itemStart,
-        serviceEnd: itemEnd,
-        assignedStaff: item.assignedStaff,
-      );
-    }).toList();
+      return [
+        BookingDisplayEntry(
+          id: '$id::$index::0',
+          booking: this,
+          bookingItemIndex: index,
+          service: item.service,
+          eventSlot: item.eventSlot,
+          calendarDate: anchorDate,
+          selectedDates: [anchorDate],
+          allSelectedDates: itemDates,
+          totalPrice: item.totalPrice,
+          advanceAmount: item.advanceAmount,
+          serviceStart: itemStart,
+          serviceEnd: DateTime(
+            anchorDate.year,
+            anchorDate.month,
+            anchorDate.day,
+            serviceEnd.hour,
+            serviceEnd.minute,
+          ),
+          assignedStaff: item.assignedStaff,
+        ),
+        for (var dateIndex = 1; dateIndex < itemDates.length; dateIndex++)
+          BookingDisplayEntry(
+            id: '$id::$index::$dateIndex',
+            booking: this,
+            bookingItemIndex: index,
+            service: item.service,
+            eventSlot: item.eventSlot,
+            calendarDate: itemDates[dateIndex],
+            selectedDates: [itemDates[dateIndex]],
+            allSelectedDates: itemDates,
+            totalPrice: item.totalPrice,
+            advanceAmount: item.advanceAmount,
+            serviceStart: DateTime(
+              itemDates[dateIndex].year,
+              itemDates[dateIndex].month,
+              itemDates[dateIndex].day,
+              serviceStart.hour,
+              serviceStart.minute,
+            ),
+            serviceEnd: DateTime(
+              itemDates[dateIndex].year,
+              itemDates[dateIndex].month,
+              itemDates[dateIndex].day,
+              serviceEnd.hour,
+              serviceEnd.minute,
+            ),
+            assignedStaff: item.assignedStaff,
+          ),
+      ];
+    }).expand((entries) => entries).toList();
   }
 
   factory Booking.fromJson(Map<String, dynamic> json) {

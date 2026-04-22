@@ -15,9 +15,11 @@ import '../../core/models/addon_service.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/service_package.dart';
 import '../../services/addon_service_service.dart';
+import '../../services/booking_service.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 import '../../services/region_service.dart';
+import '../../core/utils/whatsapp_service.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
@@ -47,8 +49,11 @@ class ManageBookingScreen extends HookConsumerWidget {
         .where((employee) => employee.status.toLowerCase() == 'active')
         .toList();
     final availableDrivers = availableStaff
-        .where((employee) => employee.artistRole == 'driver')
+        .where((employee) => employee.artistRole.toLowerCase() == 'driver')
         .toList();
+    final availableDriverIdsSignature = availableDrivers
+        .map((driver) => driver.id)
+        .join(',');
     final availableAddonServices =
         (asyncAddonServices.value ?? const <AddonService>[])
             .where((service) => service.status.toLowerCase() == 'active')
@@ -71,18 +76,19 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking != null &&
             booking.bookingItems.isNotEmpty &&
             selectedDisplayEntry != null
-        ? booking.displayEntries.indexWhere(
-            (entry) => entry.id == selectedDisplayEntry.id,
-          )
+        ? selectedDisplayEntry.bookingItemIndex
         : -1;
     final displayBookingNumber = booking?.displayBookingNumber ?? bookingId;
-    final canonicalBookingDate =
-        selectedDisplayEntry != null &&
-            selectedDisplayEntry.selectedDates.isNotEmpty
-        ? selectedDisplayEntry.selectedDates.first
+    final canonicalBookingDate = selectedDisplayEntry != null
+        ? selectedDisplayEntry.calendarDate
         : booking != null && booking.selectedDates.isNotEmpty
         ? booking.selectedDates.first
         : booking?.bookingDate;
+    final isExtraDateEntry =
+        selectedDisplayEntry != null &&
+        selectedDisplayEntry.allSelectedDates.length > 1 &&
+        selectedDisplayEntry.calendarDate !=
+            selectedDisplayEntry.allSelectedDates.first;
 
     // ── Editable state (pre-filled from booking, editable by user) ──────────
     final statusState = useState(booking?.id != null ? 'confirmed' : 'pending');
@@ -93,7 +99,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     final addons = useState<List<BookingAddon>>([]);
     final discountType = useState<String>(booking?.discountType ?? 'inr');
     final selectedRegionId = useState<String>(booking?.regionId ?? '');
-    final selectedDriverId = useState<String>(booking?.driverId ?? '');
+    final isDeleting = useState(false);
     final selectedPackageId = useState<String>(
       selectedDisplayEntry != null && selectedBookingItemIndex >= 0
           ? booking?.bookingItems[selectedBookingItemIndex].packageId ?? ''
@@ -101,6 +107,25 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
 
     // Controllers pre-filled from real booking data
+    final assignArtistId = useState<String?>(null);
+    final assignRoleCtrl = useTextEditingController();
+    final assignmentType = useState<String>(
+      allBookings.any(
+            (b) =>
+                b.id == bookingId &&
+                b.assignedStaff.any((a) => a.roleType == 'lead'),
+          )
+          ? 'assistant'
+          : 'lead',
+    );
+
+    // Reset selection when changing between Lead / Driver / Assistant
+    useEffect(() {
+      assignArtistId.value = null;
+      assignRoleCtrl.clear();
+      return null;
+    }, [assignmentType.value]);
+
     final nameCtrl = useTextEditingController(
       text: booking?.customerName ?? '',
     );
@@ -111,6 +136,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? ''
           : _formatDateOnly(canonicalBookingDate),
     );
+
     final startTimeCtrl = useTextEditingController(
       text: selectedDisplayEntry != null
           ? _fmt(selectedDisplayEntry.serviceStart)
@@ -156,9 +182,6 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
     final packageCtrl = useTextEditingController(text: booking?.service ?? '');
     final regionCtrl = useTextEditingController(text: booking?.region ?? '');
-    final driverCtrl = useTextEditingController(
-      text: booking?.driverName ?? '',
-    );
 
     // CRM-only fields (empty until filled by user)
     final mapUrlCtrl = useTextEditingController();
@@ -269,7 +292,6 @@ class ManageBookingScreen extends HookConsumerWidget {
           contentRequired.value = booking.contentCreationRequired;
           statusState.value = booking.status;
           selectedRegionId.value = booking.regionId;
-          selectedDriverId.value = booking.driverId;
         }
         return null;
       },
@@ -279,7 +301,6 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.phone,
         booking?.email,
         booking?.regionId,
-        booking?.driverId,
         booking?.status,
         booking?.mapUrl,
         booking?.travelMode,
@@ -358,19 +379,54 @@ class ManageBookingScreen extends HookConsumerWidget {
       ],
     );
 
-    useEffect(() {
-      if (booking != null) {
-        assignments.value = List<BookingAssignment>.from(
-          selectedDisplayEntry != null
-              ? selectedDisplayEntry.assignedStaff
-              : booking.bookingItems.isNotEmpty
-              ? const <BookingAssignment>[]
-              : booking.assignedStaff,
-        );
-        addons.value = List<BookingAddon>.from(booking.addons);
-      }
-      return null;
-    }, [booking?.id, selectedDisplayEntry?.id]);
+    useEffect(
+      () {
+        if (booking != null) {
+          final initialAssignments = List<BookingAssignment>.from(
+            selectedDisplayEntry != null
+                ? selectedDisplayEntry.assignedStaff
+                : booking.bookingItems.isNotEmpty
+                ? const <BookingAssignment>[]
+                : booking.assignedStaff,
+          );
+
+          // Migrate legacy driverId if not already in assignments
+          if (booking.driverId.isNotEmpty &&
+              !initialAssignments.any(
+                (a) => a.employeeId == booking.driverId,
+              )) {
+            final driver = availableDrivers.cast<Employee?>().firstWhere(
+              (d) => d?.id == booking.driverId,
+              orElse: () => null,
+            );
+            if (driver != null) {
+              initialAssignments.add(
+                BookingAssignment(
+                  employeeId: driver.id,
+                  artistName: driver.name,
+                  role: 'Driver',
+                  type: driver.type,
+                  phone: driver.phone,
+                  roleType: 'driver',
+                  works: driver.works.isNotEmpty ? driver.works : ['Driver'],
+                  specialization: driver.specialization,
+                ),
+              );
+            }
+          }
+
+          assignments.value = initialAssignments;
+          addons.value = List<BookingAddon>.from(booking.addons);
+        }
+        return null;
+      },
+      [
+        booking?.id,
+        booking?.driverId,
+        selectedDisplayEntry?.id,
+        availableDriverIdsSignature,
+      ],
+    );
 
     ServicePackage? findPackageById(String? id) {
       if (id == null || id.isEmpty) return null;
@@ -390,6 +446,10 @@ class ManageBookingScreen extends HookConsumerWidget {
         return;
       }
 
+      if (isExtraDateEntry) {
+        return;
+      }
+
       final package = findPackageById(packageId);
       if (package == null) return;
 
@@ -399,14 +459,22 @@ class ManageBookingScreen extends HookConsumerWidget {
       advanceCtrl.text = package.advanceAmount.toStringAsFixed(0);
     }
 
-    useEffect(() {
-      final selectedPackage = findPackageById(selectedPackageId.value);
-      if (selectedPackage != null) {
-        packageCtrl.text = selectedPackage.name;
-        basePackageAmount.value = effectivePackagePrice(selectedPackage);
-      }
-      return null;
-    }, [selectedPackageId.value, selectedRegionId.value, availablePackages]);
+    useEffect(
+      () {
+        final selectedPackage = findPackageById(selectedPackageId.value);
+        if (selectedPackage != null) {
+          packageCtrl.text = selectedPackage.name;
+          basePackageAmount.value = effectivePackagePrice(selectedPackage);
+        }
+        return null;
+      },
+      [
+        selectedPackageId.value,
+        selectedRegionId.value,
+        availablePackages,
+        isExtraDateEntry,
+      ],
+    );
 
     String activeArtistName() {
       final primaryArtist = assignments.value
@@ -513,19 +581,6 @@ class ManageBookingScreen extends HookConsumerWidget {
       return null;
     }, [selectedRegionId.value, availableRegions, booking?.id]);
 
-    useEffect(() {
-      final selectedDriver = availableDrivers.cast<Employee?>().firstWhere(
-        (driver) => driver?.id == selectedDriverId.value,
-        orElse: () => null,
-      );
-      if (selectedDriver != null) {
-        driverCtrl.text = selectedDriver.name;
-      } else if (selectedDriverId.value.isEmpty && booking != null) {
-        driverCtrl.text = booking.driverName;
-      }
-      return null;
-    }, [selectedDriverId.value, availableDrivers, booking?.id]);
-
     if (booking == null) {
       return Center(
         child: Column(
@@ -571,11 +626,22 @@ class ManageBookingScreen extends HookConsumerWidget {
               icon: const Icon(Icons.badge_outlined, size: 18),
               label: const Text('Artist PDF'),
             ),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.of(dialogContext).pop('whatsapp'),
+              icon: const Icon(Icons.chat_outlined, size: 18),
+              label: const Text('WhatsApp'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
           ],
         ),
       );
 
-      if (action == 'client') {
+      if (action == 'whatsapp') {
+        await WhatsAppService.sendInvoiceMessage(updatedBooking);
+      } else if (action == 'client') {
         await printBookingDetails(
           updatedBooking,
           variant: BookingPrintVariant.client,
@@ -590,6 +656,34 @@ class ManageBookingScreen extends HookConsumerWidget {
           artistName: currentArtistName,
         );
       }
+    }
+
+    Future<bool> showDeleteDialog() async {
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete Booking'),
+          content: Text(
+            'This will permanently delete booking #$displayBookingNumber for ${booking.customerName}. This action cannot be undone.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete Booking'),
+            ),
+          ],
+        ),
+      );
+
+      return result ?? false;
     }
 
     Booking buildCurrentBookingSnapshot() {
@@ -609,12 +703,14 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? subtotal * (rawDiscountValue.clamp(0.0, 100.0) / 100)
           : rawDiscountValue.clamp(0.0, subtotal);
       final currentItemDates =
-          selectedDisplayEntry?.selectedDates.isNotEmpty == true
-          ? selectedDisplayEntry!.selectedDates
+          selectedDisplayEntry?.allSelectedDates.isNotEmpty == true
+          ? selectedDisplayEntry!.allSelectedDates
           : booking.selectedDates;
-      final normalizedBookingDates = currentItemDates.length <= 1
-          ? <DateTime>[parsedBookingDate]
-          : currentItemDates;
+      final normalizedBookingDates = _replaceBookingDate(
+        currentItemDates,
+        selectedDisplayEntry?.calendarDate,
+        parsedBookingDate,
+      );
       final updatedBookingItems =
           selectedBookingItemIndex >= 0 &&
               selectedBookingItemIndex < booking.bookingItems.length
@@ -629,9 +725,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? entry.value.service
                     : packageCtrl.text.trim(),
                 eventSlot: eventSlots.value.join(' | '),
-                selectedDates: entry.value.selectedDates.length <= 1
-                    ? <DateTime>[parsedBookingDate]
-                    : entry.value.selectedDates,
+                selectedDates: _replaceBookingDate(
+                  entry.value.selectedDates,
+                  selectedDisplayEntry?.calendarDate,
+                  parsedBookingDate,
+                ),
                 totalPrice: subtotal,
                 advanceAmount:
                     double.tryParse(advanceCtrl.text.trim()) ??
@@ -644,7 +742,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? _summarizeBookingItemAssignments(updatedBookingItems)
           : assignments.value;
 
-      return booking.copyWith(
+      final currentBookingSnapshot = booking.copyWith(
         customerName: nameCtrl.text.trim(),
         packageId: selectedPackageId.value.trim(),
         phone: phoneCtrl.text.trim(),
@@ -653,9 +751,19 @@ class ManageBookingScreen extends HookConsumerWidget {
             ? booking.service
             : packageCtrl.text.trim(),
         regionId: selectedRegionId.value,
-        driverId: selectedDriverId.value,
+        driverId:
+            assignments.value
+                .where((a) => a.roleType == 'driver')
+                .firstOrNull
+                ?.employeeId ??
+            '',
         region: regionCtrl.text.trim(),
-        driverName: driverCtrl.text.trim(),
+        driverName:
+            assignments.value
+                .where((a) => a.roleType == 'driver')
+                .firstOrNull
+                ?.artistName ??
+            '',
         status: statusState.value,
         mapUrl: mapUrlCtrl.text.trim(),
         travelMode: travelModeCtrl.text.trim(),
@@ -694,6 +802,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         addons: normalizedAddons,
         bookingItems: updatedBookingItems,
       );
+      return currentBookingSnapshot;
     }
 
     return SingleChildScrollView(
@@ -724,6 +833,73 @@ class ManageBookingScreen extends HookConsumerWidget {
                     },
                     icon: const Icon(Icons.print_outlined, size: 18),
                     label: const Text('Print'),
+                  ),
+                  12.w,
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await WhatsAppService.sendInvoiceMessage(booking);
+                    },
+                    icon: const Icon(Icons.chat_outlined, size: 18),
+                    label: const Text('WhatsApp'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.green,
+                    ),
+                  ),
+                  12.w,
+                  OutlinedButton.icon(
+                    onPressed: isDeleting.value
+                        ? null
+                        : () async {
+                            final shouldDelete = await showDeleteDialog();
+                            if (!shouldDelete || !context.mounted) return;
+
+                            isDeleting.value = true;
+                            try {
+                              await ref
+                                  .read(bookingServiceProvider)
+                                  .deleteBooking(booking.id);
+                              ref.invalidate(bookingProvider);
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Booking deleted successfully.',
+                                    ),
+                                  ),
+                                );
+                                if (context.canPop()) {
+                                  context.pop();
+                                } else {
+                                  context.go('/calendar');
+                                }
+                              }
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Failed to delete booking: $error',
+                                    ),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            } finally {
+                              isDeleting.value = false;
+                            }
+                          },
+                    icon: isDeleting.value
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.delete_outline, size: 18),
+                    label: Text(isDeleting.value ? 'Deleting...' : 'Delete'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
                   ),
                 ],
               ),
@@ -854,6 +1030,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 availablePackages,
                                 selectedPackageId,
                                 packageCtrl,
+                                isExtraDateEntry: isExtraDateEntry,
                                 onPackageChanged: applySelectedPackage,
                               ),
                               _buildCurrencyField(
@@ -919,11 +1096,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableRegions,
                     selectedRegionId,
                     availableDrivers,
-                    selectedDriverId,
                     regionCtrl,
                     mapUrlCtrl,
                     travelModeCtrl,
-                    driverCtrl,
                     travelTimeCtrl,
                     travelDistanceCtrl,
                     eventSlots,
@@ -954,11 +1129,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                           availableRegions,
                           selectedRegionId,
                           availableDrivers,
-                          selectedDriverId,
                           regionCtrl,
                           mapUrlCtrl,
                           travelModeCtrl,
-                          driverCtrl,
                           travelTimeCtrl,
                           travelDistanceCtrl,
                           eventSlots,
@@ -994,6 +1167,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                   availableStaff,
                   asyncEmployees,
                   temporaryStaffCtrl,
+                  assignArtistId,
+                  assignRoleCtrl,
+                  assignmentType,
                 ),
                 24.h,
 
@@ -1363,11 +1539,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<ServiceRegion> availableRegions,
     ValueNotifier<String> selectedRegionId,
     List<Employee> availableDrivers,
-    ValueNotifier<String> selectedDriverId,
     TextEditingController regionCtrl,
     TextEditingController mapUrlCtrl,
     TextEditingController travelModeCtrl,
-    TextEditingController driverCtrl,
     TextEditingController travelTimeCtrl,
     TextEditingController travelDistanceCtrl,
     ValueNotifier<List<String>> eventSlots,
@@ -1408,13 +1582,6 @@ class ManageBookingScreen extends HookConsumerWidget {
                     hint: 'Google Maps Link',
                   ),
                   _buildField(ctx, 'TRAVEL MODE', travelModeCtrl),
-                  _buildDriverDropdown(
-                    ctx,
-                    crmColors,
-                    availableDrivers,
-                    selectedDriverId,
-                    driverCtrl,
-                  ),
                   _buildField(ctx, 'TRAVEL TIME', travelTimeCtrl),
                   _buildField(
                     ctx,
@@ -1603,6 +1770,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<Employee> availableStaff,
     AsyncValue<List<Employee>> asyncEmployees,
     TextEditingController temporaryStaffCtrl,
+    ValueNotifier<String?> assignArtistId,
+    TextEditingController assignRoleCtrl,
+    ValueNotifier<String> assignmentType,
   ) {
     return _SectionCard(
       title: 'Artist Assignment Flow',
@@ -1685,6 +1855,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableStaff,
                     assignments,
                     asyncEmployees,
+                    assignArtistId,
+                    assignRoleCtrl,
+                    assignmentType,
                   ),
                   16.h,
                   _buildTextArea(
@@ -1725,7 +1898,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     CrmTheme crmColors,
     ValueNotifier<List<BookingAssignment>> assignments,
   ) {
-    final isLead = lead.roleType == 'lead';
+    final roleTypeValue = lead.roleType.toLowerCase();
+    final isLead = roleTypeValue == 'lead';
+    final isDriver = roleTypeValue == 'driver';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1734,8 +1909,15 @@ class ManageBookingScreen extends HookConsumerWidget {
           decoration: BoxDecoration(
             color: crmColors.surface,
             borderRadius: BorderRadius.circular(8),
-            border: const Border(
-              left: BorderSide(color: Colors.amber, width: 4),
+            border: Border(
+              left: BorderSide(
+                color: isLead
+                    ? Colors.amber
+                    : isDriver
+                    ? Colors.green
+                    : Colors.indigo,
+                width: 4,
+              ),
             ),
           ),
           child: Row(
@@ -1762,10 +1944,18 @@ class ManageBookingScreen extends HookConsumerWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          isLead ? 'LEAD' : 'ASSISTANT',
+                          isLead
+                              ? 'LEAD'
+                              : isDriver
+                              ? 'DRIVER'
+                              : 'ASSISTANT',
                           style: TextStyle(
                             fontSize: 9,
-                            color: isLead ? Colors.amber : Colors.indigo,
+                            color: isLead
+                                ? Colors.amber
+                                : isDriver
+                                ? Colors.green
+                                : Colors.indigo,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1812,16 +2002,23 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<Employee> availableStaff,
     ValueNotifier<List<BookingAssignment>> assignments,
     AsyncValue<List<Employee>> asyncEmployees,
+    ValueNotifier<String?> selectedArtistId,
+    TextEditingController roleCtrl,
+    ValueNotifier<String> assignmentType,
   ) {
-    final selectedArtistId = ValueNotifier<String?>(null);
-    final roleCtrl = TextEditingController();
     final hasLead = assignments.value.any((a) => a.roleType == 'lead');
-    final isLead = !hasLead;
+
+    final currentType = assignmentType.value;
+    final isTypeLead = currentType == 'lead';
+    final isTypeDriver = currentType == 'driver';
+
     final selectableStaff = availableStaff
-        .where(
-          (employee) =>
-              employee.artistRole == (isLead ? 'artist' : 'assistant'),
-        )
+        .where((employee) {
+          final role = employee.artistRole.toLowerCase();
+          if (isTypeLead) return role == 'artist';
+          if (isTypeDriver) return role == 'driver';
+          return role == 'assistant' || role == 'artist';
+        })
         .where(
           (employee) => !assignments.value.any(
             (assignment) => assignment.employeeId == employee.id,
@@ -1834,34 +2031,67 @@ class ManageBookingScreen extends HookConsumerWidget {
           }
           return items;
         });
+
     final assignDropdownKey = ValueKey(
-      'assign-${isLead ? 'lead' : 'assistant'}-${selectableStaff.map((employee) => employee.id).join(',')}',
+      'assign-$currentType-${selectableStaff.map((employee) => employee.id).join(',')}',
     );
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isLead
+        color: isTypeLead
             ? Colors.amber.withValues(alpha: 0.05)
+            : isTypeDriver
+            ? Colors.green.withValues(alpha: 0.05)
             : Colors.indigo.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isLead
+          color: isTypeLead
               ? Colors.amber.withValues(alpha: 0.2)
+              : isTypeDriver
+              ? Colors.green.withValues(alpha: 0.2)
               : Colors.indigo.withValues(alpha: 0.2),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            isLead ? 'ASSIGN LEAD ARTIST' : 'ADD ASSISTANT',
-            style: TextStyle(
-              fontSize: 9,
-              color: isLead ? Colors.amber : Colors.indigoAccent,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isTypeLead
+                    ? 'ASSIGN LEAD ARTIST'
+                    : isTypeDriver
+                    ? 'ADD DRIVER'
+                    : 'ADD ASSISTANT',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: isTypeLead
+                      ? Colors.amber
+                      : isTypeDriver
+                      ? Colors.green
+                      : Colors.indigoAccent,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              Row(
+                children: [
+                  _typeChip(
+                    'LEAD',
+                    'lead',
+                    assignmentType,
+                    Colors.amber,
+                    hasLead ? false : true,
+                  ),
+                  8.w,
+                  _typeChip('DRIVER', 'driver', assignmentType, Colors.green),
+                  8.w,
+                  _typeChip('ASST', 'assistant', assignmentType, Colors.indigo),
+                ],
+              ),
+            ],
           ),
           12.h,
           if (asyncEmployees.isLoading)
@@ -1881,7 +2111,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                 border: Border.all(color: crmColors.border),
               ),
               child: Text(
-                isLead
+                isTypeLead
                     ? 'No active artists available to assign as lead.'
                     : 'No active assistants available to add.',
                 style: TextStyle(color: crmColors.textSecondary, fontSize: 12),
@@ -1903,11 +2133,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                   .toList(),
               onChanged: (v) => selectedArtistId.value = v,
               decoration: _inputDeco(
-                isLead ? 'Select lead artist…' : 'Select assistant…',
+                isTypeLead
+                    ? 'Select lead artist…'
+                    : isTypeDriver
+                    ? 'Select driver…'
+                    : 'Select assistant…',
                 crmColors,
               ).copyWith(isDense: true),
             ),
-          if (!isLead) ...[
+          if (!isTypeLead && !isTypeDriver) ...[
             12.h,
             TextField(
               controller: roleCtrl,
@@ -1923,16 +2157,21 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: ElevatedButton(
               onPressed: () {
                 if (selectedArtistId.value == null) return;
-                final artist = selectableStaff.firstWhere(
-                  (employee) => employee.id == selectedArtistId.value,
+                final artist = selectableStaff.cast<Employee?>().firstWhere(
+                  (employee) => employee?.id == selectedArtistId.value,
+                  orElse: () => null,
                 );
+                if (artist == null) return;
+
                 assignments.value = [
                   ...assignments.value,
                   BookingAssignment(
                     employeeId: artist.id,
                     artistName: artist.name,
-                    role: isLead
+                    role: isTypeLead
                         ? 'Lead Artist'
+                        : isTypeDriver
+                        ? 'Driver'
                         : (roleCtrl.text.trim().isEmpty
                               ? 'Assistant'
                               : roleCtrl.text.trim()),
@@ -1941,20 +2180,26 @@ class ManageBookingScreen extends HookConsumerWidget {
                         ? artist.works
                         : [
                             if (artist.specialization.trim().isNotEmpty)
-                              artist.specialization.trim(),
+                              artist.specialization.trim()
+                            else if (isTypeDriver)
+                              'Driver',
                           ],
                     phone: artist.phone,
                     type: artist.type,
-                    roleType: isLead ? 'lead' : 'assistant',
+                    roleType: currentType,
                   ),
                 ];
+
+                // Clear selection after adding
+                selectedArtistId.value = null;
+                roleCtrl.clear();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: isLead ? Colors.amber : Colors.indigo,
-                foregroundColor: isLead ? Colors.black : Colors.white,
+                backgroundColor: isTypeLead ? Colors.amber : Colors.indigo,
+                foregroundColor: isTypeLead ? Colors.black : Colors.white,
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              child: Text(isLead ? 'ASSIGN LEAD' : 'ADD ASSISTANT'),
+              child: Text(isTypeLead ? 'ASSIGN LEAD' : 'ADD TEAM MEMBER'),
             ),
           ),
         ],
@@ -2006,7 +2251,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
-  static Widget _buildTimeField(
+  Widget _buildTimeField(
     BuildContext context,
     String label,
     TextEditingController ctrl, {
@@ -2058,6 +2303,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<ServicePackage> availablePackages,
     ValueNotifier<String> selectedPackageId,
     TextEditingController packageCtrl, {
+    required bool isExtraDateEntry,
     required ValueChanged<String> onPackageChanged,
   }) {
     final currentValue =
@@ -2080,20 +2326,30 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
         ),
         4.h,
-        DropdownButtonFormField<String>(
-          initialValue: currentValue,
-          items: [
-            const DropdownMenuItem(value: '', child: Text('Custom Package')),
-            ...availablePackages.map(
-              (package) => DropdownMenuItem(
-                value: package.id,
-                child: Text(package.name),
+        if (isExtraDateEntry)
+          TextFormField(
+            controller: packageCtrl,
+            readOnly: true,
+            decoration: _inputDeco(
+              '',
+              crmColors,
+            ).copyWith(helperText: 'Same package on this selected date.'),
+          )
+        else
+          DropdownButtonFormField<String>(
+            initialValue: currentValue,
+            items: [
+              const DropdownMenuItem(value: '', child: Text('Custom Package')),
+              ...availablePackages.map(
+                (package) => DropdownMenuItem(
+                  value: package.id,
+                  child: Text(package.name),
+                ),
               ),
-            ),
-          ],
-          onChanged: (value) => onPackageChanged(value ?? ''),
-          decoration: _inputDeco('', crmColors),
-        ),
+            ],
+            onChanged: (value) => onPackageChanged(value ?? ''),
+            decoration: _inputDeco('', crmColors),
+          ),
         if (asyncPackages.isLoading)
           const Padding(
             padding: EdgeInsets.only(top: 8),
@@ -2645,62 +2901,37 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
-  static Widget _buildDriverDropdown(
-    BuildContext context,
-    CrmTheme crmColors,
-    List<Employee> availableDrivers,
-    ValueNotifier<String> selectedDriverId,
-    TextEditingController driverCtrl,
-  ) {
-    final currentValue =
-        availableDrivers.any((driver) => driver.id == selectedDriverId.value)
-        ? selectedDriverId.value
-        : null;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'DRIVER',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: crmColors.textSecondary,
-            letterSpacing: 1.2,
+  static Widget _typeChip(
+    String label,
+    String value,
+    ValueNotifier<String> state,
+    Color color, [
+    bool enabled = true,
+  ]) {
+    final isSelected = state.value == value;
+    return InkWell(
+      onTap: enabled ? () => state.value = value : null,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.4,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? color : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isSelected ? color : color.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              color: isSelected ? Colors.black : color,
+            ),
           ),
         ),
-        4.h,
-        DropdownButtonFormField<String>(
-          key: ValueKey(
-            'booking-driver-${currentValue ?? 'none'}-${availableDrivers.map((driver) => driver.id).join(',')}',
-          ),
-          initialValue: currentValue,
-          items: availableDrivers
-              .map(
-                (driver) => DropdownMenuItem(
-                  value: driver.id,
-                  child: Text(
-                    driver.phone.isEmpty
-                        ? driver.name
-                        : '${driver.name} (${driver.phone})',
-                  ),
-                ),
-              )
-              .toList(),
-          onChanged: (value) {
-            selectedDriverId.value = value ?? '';
-            final selected = availableDrivers.cast<Employee?>().firstWhere(
-              (driver) => driver?.id == value,
-              orElse: () => null,
-            );
-            driverCtrl.text = selected?.name ?? '';
-          },
-          decoration: _inputDeco(
-            driverCtrl.text.isEmpty ? 'Select driver' : driverCtrl.text,
-            crmColors,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -2843,6 +3074,42 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  static List<DateTime> _replaceBookingDate(
+    List<DateTime> dates,
+    DateTime? originalDate,
+    DateTime replacementDate,
+  ) {
+    if (dates.isEmpty) {
+      return <DateTime>[replacementDate];
+    }
+
+    if (originalDate == null) {
+      return <DateTime>[replacementDate];
+    }
+
+    final updatedDates = dates.map((date) {
+      final matchesOriginal =
+          date.year == originalDate.year &&
+          date.month == originalDate.month &&
+          date.day == originalDate.day;
+      return matchesOriginal ? replacementDate : date;
+    }).toList()..sort((a, b) => a.compareTo(b));
+
+    final uniqueDates = <DateTime>[];
+    for (final date in updatedDates) {
+      final exists = uniqueDates.any(
+        (item) =>
+            item.year == date.year &&
+            item.month == date.month &&
+            item.day == date.day,
+      );
+      if (!exists) {
+        uniqueDates.add(DateTime(date.year, date.month, date.day));
+      }
+    }
+    return uniqueDates;
   }
 
   static List<BookingAddon> _normalizedAddons(List<BookingAddon> addons) {
