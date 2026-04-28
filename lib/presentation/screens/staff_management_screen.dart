@@ -19,11 +19,16 @@ class StaffManagementScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
+    final currentCategory = useState('creative');
     final pageState = useState(1);
     const pageSize = 20;
     final asyncEmployees = ref.watch(
       paginatedEmployeesProvider(
-        ListPageParams(page: pageState.value, limit: pageSize),
+        ListPageParams(
+          page: pageState.value,
+          limit: pageSize,
+          category: currentCategory.value,
+        ),
       ),
     );
     final asyncRegions = ref.watch(regionsProvider);
@@ -42,6 +47,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       var artistRole = employee?.artistRole ?? presetRole ?? 'artist';
       var status = employee?.status ?? 'active';
       var regionId = employee?.regionId ?? '';
+      var category = employee?.category ?? currentCategory.value;
 
       await showDialog(
         context: context,
@@ -180,6 +186,28 @@ class StaffManagementScreen extends HookConsumerWidget {
                         },
                         decoration: const InputDecoration(labelText: 'Status'),
                       ),
+                      16.h,
+                      DropdownButtonFormField<String>(
+                        initialValue: category,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'creative',
+                            child: Text('Creative Staff'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'administrative',
+                            child: Text('Administrative Staff'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => category = value);
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Staff Category',
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -203,6 +231,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           phone: phoneCtrl.text.trim(),
                           status: status,
                           regionId: regionId,
+                          category: category,
                         );
                     ref.invalidate(employeesProvider);
                     ref.invalidate(paginatedEmployeesProvider);
@@ -219,7 +248,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       );
     }
 
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
@@ -282,6 +311,30 @@ class StaffManagementScreen extends HookConsumerWidget {
             ],
           ),
         ],
+        24.h,
+        Container(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
+          ),
+          child: TabBar(
+            onTap: (index) {
+              currentCategory.value =
+                  index == 0 ? 'creative' : 'administrative';
+              pageState.value = 1;
+            },
+            tabs: const [
+              Tab(text: 'Creative Staff'),
+              Tab(text: 'Administrative Staff'),
+            ],
+            labelColor: crmColors.primary,
+            unselectedLabelColor: crmColors.textSecondary,
+            indicatorColor: crmColors.primary,
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+          ),
+        ),
         24.h,
         Expanded(
           child: asyncEmployees.when(
@@ -355,9 +408,7 @@ class StaffManagementScreen extends HookConsumerWidget {
             totalPages: response.totalPages,
             totalItems: response.totalItems,
             currentItemCount: response.items.length,
-            onPrevious: response.page > 1
-                ? () => pageState.value -= 1
-                : null,
+            onPrevious: response.page > 1 ? () => pageState.value -= 1 : null,
             onNext: response.page < response.totalPages
                 ? () => pageState.value += 1
                 : null,
@@ -365,6 +416,11 @@ class StaffManagementScreen extends HookConsumerWidget {
           orElse: () => const SizedBox.shrink(),
         ),
       ],
+    );
+
+    return DefaultTabController(
+      length: 2,
+      child: body,
     );
   }
 

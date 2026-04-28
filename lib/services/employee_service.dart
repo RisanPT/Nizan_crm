@@ -21,6 +21,7 @@ final paginatedEmployeesProvider =
       return ref.watch(employeeServiceProvider).getPaginatedEmployees(
             page: params.page,
             limit: params.limit,
+            category: params.category,
           );
     });
 
@@ -44,11 +45,16 @@ class EmployeeService {
   Future<PaginatedListResponse<Employee>> getPaginatedEmployees({
     int page = 1,
     int limit = 20,
+    String? category,
   }) async {
     try {
+      final Map<String, dynamic> queryParams = {'page': page, 'limit': limit};
+      if (category != null) {
+        queryParams['category'] = category;
+      }
       final response = await _dio.get(
         '/employees',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: queryParams,
       );
       return PaginatedListResponse.fromJson(
         response.data as Map<String, dynamic>,
@@ -69,6 +75,7 @@ class EmployeeService {
     required String phone,
     required String status,
     required String regionId,
+    required String category,
   }) async {
     try {
       final payload = {
@@ -80,6 +87,7 @@ class EmployeeService {
         'phone': phone,
         'status': status,
         'regionId': regionId,
+        'category': category,
       };
 
       final response = id != null && id.isNotEmpty

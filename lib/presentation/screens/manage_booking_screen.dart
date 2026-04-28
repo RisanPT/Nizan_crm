@@ -1337,20 +1337,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                             final updatedBooking =
                                 buildCurrentBookingSnapshot();
 
+                            Booking? savedBooking;
                             try {
-                              final savedBooking = await ref
+                              savedBooking = await ref
                                   .read(bookingProvider.notifier)
                                   .updateBooking(updatedBooking);
-                              if (context.mounted) {
-                                await showPrintDialog(savedBooking);
-                                if (context.mounted) {
-                                  if (context.canPop()) {
-                                    context.pop();
-                                  } else {
-                                    context.go('/calendar');
-                                  }
-                                }
-                              }
                             } catch (error) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1361,6 +1352,34 @@ class ManageBookingScreen extends HookConsumerWidget {
                                     backgroundColor: Colors.red,
                                   ),
                                 );
+                              }
+                              return;
+                            }
+
+                            if (!context.mounted) {
+                              return;
+                            }
+
+                            try {
+                              await showPrintDialog(savedBooking);
+                            } catch (error) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'Booking saved, but WhatsApp action failed: $error',
+                                    ),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              }
+                            }
+
+                            if (context.mounted) {
+                              if (context.canPop()) {
+                                context.pop();
+                              } else {
+                                context.go('/calendar');
                               }
                             }
                           },

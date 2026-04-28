@@ -168,6 +168,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                           phone: phoneCtrl.text.trim(),
                           status: status,
                           regionId: regionId,
+                          category: 'administrative',
                         );
                     ref.invalidate(employeesProvider);
                     ref.invalidate(paginatedEmployeesProvider);

@@ -10,6 +10,7 @@ class Employee {
   final String status;
   final String regionId;
   final String regionName;
+  final String category;
 
   const Employee({
     required this.id,
@@ -23,6 +24,7 @@ class Employee {
     required this.status,
     required this.regionId,
     required this.regionName,
+    required this.category,
   });
 
   factory Employee.fromJson(Map<String, dynamic> json) {
@@ -46,6 +48,7 @@ class Employee {
       regionName: region is Map<String, dynamic>
           ? (region['name'] as String? ?? '')
           : '',
+      category: json['category'] as String? ?? 'creative',
     );
   }
 
@@ -60,6 +63,7 @@ class Employee {
       'phone': phone,
       'status': status,
       'regionId': regionId,
+      'category': category,
     };
   }
 }
