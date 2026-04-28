@@ -113,6 +113,13 @@ class Sidebar extends StatelessWidget {
                   onTap: () => context.go('/sales'),
                 ),
                 _SidebarItem(
+                  icon: Icons.account_balance_wallet_outlined,
+                  title: 'Artist Finance',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/finance'),
+                  onTap: () => context.go('/finance'),
+                ),
+                _SidebarItem(
                   icon: Icons.local_shipping_outlined,
                   title: 'Fleet',
                   isCollapsed: isCollapsed,

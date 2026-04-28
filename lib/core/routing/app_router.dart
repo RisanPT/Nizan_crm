@@ -21,6 +21,7 @@ import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
 import '../../presentation/screens/fuel_expenses_screen.dart';
+import '../../presentation/screens/artist_finance_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -104,6 +105,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Fleet Drivers';
           } else if (state.uri.path == '/fleet/fuel') {
             title = 'Fleet Expenses';
+          } else if (state.uri.path == '/finance') {
+            title = 'Artist Finance';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
           }
@@ -188,6 +191,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               bookingId: state.pathParameters['id'] ?? '1042',
               bookingEntryId: state.uri.queryParameters['entry'],
             ),
+          ),
+          GoRoute(
+            path: '/finance',
+            builder: (context, state) => const ArtistFinanceScreen(),
           ),
           GoRoute(
             path: '/settings',
