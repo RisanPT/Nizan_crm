@@ -65,6 +65,7 @@ class UserService {
     required String password,
     required String role,
     required bool active,
+    String? employeeId,
   }) async {
     try {
       final response = await _dio.post(
@@ -75,6 +76,8 @@ class UserService {
           'password': password,
           'role': role,
           'active': active,
+          if (employeeId != null && employeeId.isNotEmpty)
+            'employeeId': employeeId,
         },
       );
 
@@ -91,6 +94,7 @@ class UserService {
     required String role,
     required bool active,
     String? password,
+    String? employeeId,
   }) async {
     try {
       final response = await _dio.put(
@@ -101,6 +105,9 @@ class UserService {
           'role': role,
           'active': active,
           if (password != null && password.trim().isNotEmpty) 'password': password,
+          'employeeId': (employeeId != null && employeeId.isNotEmpty)
+              ? employeeId
+              : null,
         },
       );
 

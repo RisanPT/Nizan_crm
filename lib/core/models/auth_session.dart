@@ -6,6 +6,8 @@ class AuthSession {
   final String name;
   final String email;
   final String role;
+  /// The Employee record linked to this user (set for artist accounts).
+  final String employeeId;
 
   const AuthSession({
     required this.token,
@@ -13,6 +15,7 @@ class AuthSession {
     required this.name,
     required this.email,
     required this.role,
+    this.employeeId = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +25,7 @@ class AuthSession {
       'name': name,
       'email': email,
       'role': role,
+      'employeeId': employeeId,
     },
   };
 
@@ -36,6 +40,7 @@ class AuthSession {
       name: user['name'] as String? ?? '',
       email: user['email'] as String? ?? '',
       role: user['role'] as String? ?? '',
+      employeeId: user['employeeId'] as String? ?? '',
     );
   }
 

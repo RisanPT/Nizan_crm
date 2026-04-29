@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../core/auth/app_role.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/crm_user.dart';
 import '../../core/models/list_page_params.dart';
@@ -8,6 +9,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
+import '../../services/employee_service.dart';
 import '../../services/user_service.dart';
 
 class SettingsScreen extends HookConsumerWidget {
@@ -26,6 +28,8 @@ class SettingsScreen extends HookConsumerWidget {
     );
     final auth = ref.read(authControllerProvider);
     final isMobile = ResponsiveBuilder.isMobile(context);
+    // ✅ Watched at build level — valid Riverpod usage
+    final asyncEmployees = ref.watch(employeesProvider);
 
     Future<void> openUserDialog([CrmUser? user]) async {
       final nameCtrl = TextEditingController(text: user?.name ?? '');
@@ -33,28 +37,44 @@ class SettingsScreen extends HookConsumerWidget {
       final passwordCtrl = TextEditingController();
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
+      var selEmployeeId = user?.employeeId ?? '';
 
       await showDialog(
         context: context,
         builder: (dialogContext) {
           return StatefulBuilder(
             builder: (context, setState) {
+              // employees already fetched at build level — safe to use here
+              final employees = asyncEmployees.value ?? [];
+              final artists = employees
+                  .where((e) => e.artistRole != 'driver')
+                  .toList();
+
               return AlertDialog(
-                title: Text(user == null ? 'Add CRM User' : 'Edit CRM User'),
+                title: Text(user == null ? 'Add System User' : 'Edit System User'),
                 content: SizedBox(
-                  width: 420,
+                  width: 460,
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // ── Basic Info ──────────────────────────────────────
                         TextField(
                           controller: nameCtrl,
-                          decoration: const InputDecoration(labelText: 'Name'),
+                          decoration: const InputDecoration(
+                            labelText: 'Full Name *',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
                         ),
                         16.h,
                         TextField(
                           controller: emailCtrl,
-                          decoration: const InputDecoration(labelText: 'Email'),
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: const InputDecoration(
+                            labelText: 'Email (login) *',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
                         ),
                         16.h,
                         TextField(
@@ -62,37 +82,134 @@ class SettingsScreen extends HookConsumerWidget {
                           obscureText: true,
                           decoration: InputDecoration(
                             labelText: user == null
-                                ? 'Password'
-                                : 'New Password (Optional)',
+                                ? 'Password *'
+                                : 'New Password (leave blank to keep)',
+                            prefixIcon: const Icon(Icons.lock_outline),
                           ),
                         ),
                         16.h,
+
+                        // ── Role ────────────────────────────────────────────
                         DropdownButtonFormField<String>(
                           initialValue: role,
-                          decoration: const InputDecoration(labelText: 'Role'),
+                          decoration: const InputDecoration(
+                            labelText: 'Role *',
+                            prefixIcon: Icon(Icons.badge_outlined),
+                          ),
                           items: const [
                             DropdownMenuItem(
-                              value: 'manager',
-                              child: Text('Manager'),
+                              value: 'admin',
+                              child: _RoleItem(
+                                label: 'Admin',
+                                sub: 'Full access to everything',
+                                color: Colors.deepPurple,
+                              ),
                             ),
                             DropdownMenuItem(
-                              value: 'admin',
-                              child: Text('Admin'),
+                              value: 'manager',
+                              child: _RoleItem(
+                                label: 'Manager',
+                                sub: 'Full access (default)',
+                                color: Colors.indigo,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'crm',
+                              child: _RoleItem(
+                                label: 'CRM Team',
+                                sub: 'Clients, Calendar, Booking',
+                                color: Colors.blue,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'sales',
+                              child: _RoleItem(
+                                label: 'Sales',
+                                sub: 'Sales & Invoices only',
+                                color: Colors.teal,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'artist',
+                              child: _RoleItem(
+                                label: 'Artist',
+                                sub: 'Log own collections & expenses',
+                                color: Colors.orange,
+                              ),
+                            ),
+                            DropdownMenuItem(
+                              value: 'accounts',
+                              child: _RoleItem(
+                                label: 'Accounts',
+                                sub: 'Verify artist finance entries',
+                                color: Colors.green,
+                              ),
                             ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
-                              setState(() => role = value);
+                              setState(() {
+                                role = value;
+                                // Clear employee link if switching away from artist
+                                if (value != 'artist') selEmployeeId = '';
+                              });
                             }
                           },
                         ),
+
+                        // ── Employee link (only for artist role) ────────────
+                        if (role == 'artist') ...[
+                          16.h,
+                          if (asyncEmployees.isLoading)
+                            const LinearProgressIndicator()
+                          else if (asyncEmployees.hasError)
+                            const Text('Could not load artists')
+                          else
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: 'Link to Employee Profile *',
+                                prefixIcon: Icon(Icons.link_outlined),
+                                helperText:
+                                    'Their data will be scoped to this employee',
+                              ),
+                              value: selEmployeeId.isEmpty ? null : selEmployeeId,
+                              items: artists
+                                  .map(
+                                    (e) => DropdownMenuItem(
+                                      value: e.id,
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(e.name),
+                                          Text(
+                                            e.specialization.isNotEmpty
+                                                ? e.specialization
+                                                : e.artistRole,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (v) =>
+                                  setState(() => selEmployeeId = v ?? ''),
+                            ),
+                        ],
+
                         16.h,
+                        // ── Active toggle ───────────────────────────────────
                         SwitchListTile(
                           value: active,
                           contentPadding: EdgeInsets.zero,
                           title: const Text('Active Access'),
                           subtitle: const Text(
-                            'Inactive users cannot log in to the CRM.',
+                            'Inactive users cannot log in.',
                           ),
                           onChanged: (value) => setState(() => active = value),
                         ),
@@ -110,7 +227,8 @@ class SettingsScreen extends HookConsumerWidget {
                       final name = nameCtrl.text.trim();
                       final email = emailCtrl.text.trim();
                       final password = passwordCtrl.text.trim();
-                      final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                      final emailRegex =
+                          RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
                       if (name.isEmpty || email.isEmpty) {
                         _showMessage(context, 'Name and email are required');
@@ -121,7 +239,14 @@ class SettingsScreen extends HookConsumerWidget {
                         return;
                       }
                       if (user == null && password.isEmpty) {
-                        _showMessage(context, 'Password is required for new users');
+                        _showMessage(
+                            context, 'Password is required for new users');
+                        return;
+                      }
+                      if (role == 'artist' && selEmployeeId.isEmpty) {
+                        _showMessage(
+                            context,
+                            'Please link this user to an Employee profile');
                         return;
                       }
 
@@ -134,6 +259,8 @@ class SettingsScreen extends HookConsumerWidget {
                             password: password,
                             role: role,
                             active: active,
+                            employeeId:
+                                role == 'artist' ? selEmployeeId : null,
                           );
                         } else {
                           await service.updateUser(
@@ -143,6 +270,8 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             password: password.isEmpty ? null : password,
+                            employeeId:
+                                role == 'artist' ? selEmployeeId : null,
                           );
                         }
 
@@ -154,11 +283,13 @@ class SettingsScreen extends HookConsumerWidget {
                         if (!dialogContext.mounted) return;
                         _showMessage(
                           dialogContext,
-                          error.toString().replaceFirst('Exception: ', ''),
+                          error
+                              .toString()
+                              .replaceFirst('Exception: ', ''),
                         );
                       }
                     },
-                    child: const Text('Save'),
+                    child: Text(user == null ? 'Create User' : 'Save Changes'),
                   ),
                 ],
               );
@@ -261,6 +392,10 @@ class SettingsScreen extends HookConsumerWidget {
                         Expanded(
                           flex: 2,
                           child: _HeaderText('Role'),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: _HeaderText('Linked Employee'),
                         ),
                         Expanded(
                           flex: 2,
@@ -406,7 +541,7 @@ class _DesktopUserRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
         border: Border(
           bottom: BorderSide(color: context.crmColors.border),
@@ -419,18 +554,39 @@ class _DesktopUserRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(user.name, style: Theme.of(context).textTheme.titleMedium),
+                Text(user.name,
+                    style: Theme.of(context).textTheme.titleSmall),
                 4.h,
                 Text(
                   user.email,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.crmColors.textSecondary,
                       ),
                 ),
               ],
             ),
           ),
-          Expanded(flex: 2, child: Text(user.role)),
+          Expanded(flex: 2, child: _RoleBadge(role: user.role)),
+          Expanded(
+            flex: 2,
+            child: user.employeeId.isNotEmpty
+                ? Row(
+                    children: [
+                      const Icon(Icons.link, size: 14, color: Colors.green),
+                      4.w,
+                      Flexible(
+                        child: Text(
+                          'Linked',
+                          style: TextStyle(
+                              color: Colors.green.shade700, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  )
+                : Text('—',
+                    style: TextStyle(
+                        color: context.crmColors.textSecondary)),
+          ),
           Expanded(
             flex: 2,
             child: _StatusChip(active: user.active),
@@ -539,6 +695,89 @@ class _StatusChip extends StatelessWidget {
               color: foreground,
               fontWeight: FontWeight.w700,
             ),
+      ),
+    );
+  }
+}
+
+/// Single-line dropdown entry used in the Role dropdown.
+/// Must stay one line — DropdownMenuItem constrains height to 24 px.
+class _RoleItem extends StatelessWidget {
+  const _RoleItem({
+    required this.label,
+    required this.sub,
+    required this.color,
+  });
+
+  final String label;
+  final String sub;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(
+                text: label,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              TextSpan(
+                text: '  $sub',
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+            ],
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+/// Compact role chip shown in the users table.
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.role});
+  final String role;
+
+  static const _meta = {
+    'admin': ('Admin', Colors.deepPurple),
+    'manager': ('Manager', Colors.indigo),
+    'crm': ('CRM', Colors.blue),
+    'sales': ('Sales', Colors.teal),
+    'artist': ('Artist', Colors.orange),
+    'accounts': ('Accounts', Colors.green),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final entry = _meta[role];
+    final label = entry?.$1 ?? role;
+    final color = entry?.$2 ?? Colors.grey;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

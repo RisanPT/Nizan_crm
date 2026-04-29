@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../auth/app_role.dart';
 import '../../presentation/common_widgets/main_layout.dart';
 import '../../presentation/screens/dashboard_screen.dart';
 import '../../presentation/screens/clients_directory_screen.dart';
@@ -41,6 +42,20 @@ DateTime? _parseCalendarFocusDate(String? raw) {
   );
 }
 
+bool _isRouteAllowed(String path, AppRole role) {
+  if (path == '/' || path == '/auth/loading') return role.canSeeDashboard;
+  if (path.startsWith('/client')) return role.canSeeClients;
+  if (path.startsWith('/calendar')) return role.canSeeCalendar;
+  if (path.startsWith('/booking')) return role.canSeeBookings;
+  if (path.startsWith('/services')) return role.canSeeServices;
+  if (path.startsWith('/staff')) return role.canSeeStaff;
+  if (path.startsWith('/sales')) return role.canSeeSales;
+  if (path.startsWith('/finance')) return role.canSeeFinance;
+  if (path.startsWith('/fleet')) return role.canSeeFleet;
+  if (path.startsWith('/settings')) return role.canSeeSettings;
+  return true; // unknown routes — let the 404 handle it
+}
+
 final goRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
 
@@ -61,8 +76,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         return isLoginRoute ? null : '/login';
       }
 
+      // After login, redirect to role-specific home
       if (isLoadingRoute || isLoginRoute) {
-        return '/';
+        final role = AppRole.fromString(auth.session?.role);
+        return role.homeRoute;
+      }
+
+      // Role-based route guards
+      final role = AppRole.fromString(auth.session?.role);
+      if (!_isRouteAllowed(path, role)) {
+        return role.homeRoute;
       }
 
       return null;

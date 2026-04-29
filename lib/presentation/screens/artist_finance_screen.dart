@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import '../../core/auth/app_role.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/artist_collection.dart';
 import '../../core/models/artist_expense.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/collection_service.dart';
@@ -51,15 +53,29 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final tabCtrl = useTabController(initialLength: 2);
+
+    // ── Role + identity ──────────────────────────────────────────────────────
+    final session = ref.watch(authControllerProvider).session;
+    final role = AppRole.fromString(session?.role);
+    final myEmployeeId = session?.employeeId ?? '';
+    final canVerify = role.canVerifyFinance;
+    final isScopedToOwn = role.isScopedToOwnEntries;
+
+    // ── Data providers (scoped or global) ───────────────────────────────────
     final asyncEmployees = ref.watch(employeesProvider);
-    final asyncCollections = ref.watch(collectionsProvider);
-    final asyncExpenses = ref.watch(expensesProvider);
+    final asyncCollections = isScopedToOwn && myEmployeeId.isNotEmpty
+        ? ref.watch(artistCollectionsProvider(myEmployeeId))
+        : ref.watch(collectionsProvider);
+    final asyncExpenses = isScopedToOwn && myEmployeeId.isNotEmpty
+        ? ref.watch(artistExpensesProvider(myEmployeeId))
+        : ref.watch(expensesProvider);
 
     Future<void> addCollectionDialog() async {
       final amountCtrl = TextEditingController();
       final notesCtrl = TextEditingController();
-      var selEmployee = '';
-      var selBooking = '';
+      // Artist accounts auto-fill their own employeeId
+      var selEmployee = isScopedToOwn ? myEmployeeId : '';
+      final selBooking = '';
       var payMode = 'cash';
       var selDate = DateTime.now();
       final formKey = GlobalKey<FormState>();
@@ -82,7 +98,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        DropdownButtonFormField<String>(
+                        // Artist picker — hidden for artist-role (auto-scoped)
+                        if (!isScopedToOwn)
+                          DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'Artist *'),
                           value: selEmployee.isEmpty ? null : selEmployee,
                           items: artists
@@ -167,13 +185,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             bookingId: selBooking.isNotEmpty
                                 ? selBooking
                                 : '000000000000000000000000',
-                            employeeId: selEmployee,
+                            employeeId: selEmployee.isNotEmpty
+                                ? selEmployee
+                                : myEmployeeId,
                             amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
                             date: selDate,
                             paymentMode: payMode,
                             notes: notesCtrl.text.trim(),
                           );
                       ref.invalidate(collectionsProvider);
+                      ref.invalidate(artistCollectionsProvider);
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       if (ctx.mounted) {
@@ -195,7 +216,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     Future<void> addExpenseDialog() async {
       final amountCtrl = TextEditingController();
       final notesCtrl = TextEditingController();
-      var selEmployee = '';
+      var selEmployee = isScopedToOwn ? myEmployeeId : '';
       var selCategory = 'food';
       var selDate = DateTime.now();
       final formKey = GlobalKey<FormState>();
@@ -218,21 +239,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        DropdownButtonFormField<String>(
-                          decoration: const InputDecoration(labelText: 'Artist *'),
-                          value: selEmployee.isEmpty ? null : selEmployee,
-                          items: artists
-                              .map((e) => DropdownMenuItem(
-                                    value: e.id,
-                                    child: Text(e.name),
-                                  ))
-                              .toList(),
-                          validator: (v) =>
-                              (v == null || v.isEmpty) ? 'Select artist' : null,
-                          onChanged: (v) =>
-                              setState(() => selEmployee = v ?? ''),
-                        ),
-                        16.h,
+                        if (!isScopedToOwn)
+                          DropdownButtonFormField<String>(
+                            decoration: const InputDecoration(labelText: 'Artist *'),
+                            value: selEmployee.isEmpty ? null : selEmployee,
+                            items: artists
+                                .map((e) => DropdownMenuItem(
+                                      value: e.id,
+                                      child: Text(e.name),
+                                    ))
+                                .toList(),
+                            validator: (v) =>
+                                (v == null || v.isEmpty) ? 'Select artist' : null,
+                            onChanged: (v) =>
+                                setState(() => selEmployee = v ?? ''),
+                          ),
+                        if (!isScopedToOwn) 16.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'Category'),
                           value: selCategory,
@@ -300,13 +322,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       await ref
                           .read(expenseServiceProvider)
                           .createExpense(
-                            employeeId: selEmployee,
+                            employeeId: selEmployee.isNotEmpty
+                                ? selEmployee
+                                : myEmployeeId,
                             category: selCategory,
                             amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
                             date: selDate,
                             notes: notesCtrl.text.trim(),
                           );
                       ref.invalidate(expensesProvider);
+                      ref.invalidate(artistExpensesProvider);
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       if (ctx.mounted) {
@@ -328,29 +353,25 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     Future<void> verifyItem({
       required String id,
       required bool isCollection,
-      required String action, // 'verified' | 'rejected'
+      required String action,
     }) async {
       try {
+        final verifiedBy = session?.userId ?? '';
         if (isCollection) {
           await ref.read(collectionServiceProvider).verifyCollection(
-                id: id,
-                status: action,
-                verifiedBy: '000000000000000000000000',
-              );
+                id: id, status: action, verifiedBy: verifiedBy);
           ref.invalidate(collectionsProvider);
+          ref.invalidate(artistCollectionsProvider);
         } else {
           await ref.read(expenseServiceProvider).verifyExpense(
-                id: id,
-                status: action,
-                verifiedBy: '000000000000000000000000',
-              );
+                id: id, status: action, verifiedBy: verifiedBy);
           ref.invalidate(expensesProvider);
+          ref.invalidate(artistExpensesProvider);
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString())),
-          );
+            SnackBar(content: Text(e.toString())));
         }
       }
     }
@@ -437,7 +458,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           statusBadge(c.status),
-                          if (c.status == 'pending') ...[
+                          // Verify/Reject buttons only for accounts+admin
+                          if (canVerify && c.status == 'pending') ...[
                             IconButton(
                               tooltip: 'Verify',
                               icon: Icon(Icons.check_circle_outline, color: crm.success),
@@ -522,7 +544,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           statusBadge(e.status),
-                          if (e.status == 'pending') ...[
+                          if (canVerify && e.status == 'pending') ...[
                             IconButton(
                               tooltip: 'Approve',
                               icon: Icon(Icons.check_circle_outline, color: crm.success),
