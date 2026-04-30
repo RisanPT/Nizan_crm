@@ -2,12 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/providers/dio_provider.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
+import '../../core/auth/app_role.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/dashboard_report_service.dart';
 import '../../core/utils/responsive_builder.dart';
+import 'package:fl_chart/fl_chart.dart';
+import '../../services/collection_service.dart';
+import '../../services/expense_service.dart';
+import '../../services/lead_service.dart';
+import '../../core/models/artist_collection.dart';
+import '../../core/models/artist_expense.dart';
+import '../../core/models/lead.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 
@@ -16,13 +26,38 @@ class DashboardScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tabController = useTabController(initialLength: 5);
+    final auth = ref.watch(authControllerProvider);
+    final role = auth.session != null
+        ? AppRole.fromString(auth.session!.role)
+        : AppRole.artist;
+
+    final canSeeCEOReport = role.canSeeCEOReport;
+    final tabController = useTabController(initialLength: canSeeCEOReport ? 6 : 5);
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
     final asyncBookings = ref.watch(bookingProvider);
+    final asyncArtistBookings = role == AppRole.artist
+        ? ref.watch(artistAssignedWorksProvider(1))
+        : null;
+
     final asyncPackages = ref.watch(packagesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
-    final allBookings = asyncBookings.value ?? const <Booking>[];
+    final asyncCollections = ref.watch(collectionsProvider);
+    final asyncExpenses = ref.watch(expensesProvider);
+    final asyncLeads = ref.watch(leadsProvider);
+
+    final allBookings = role == AppRole.artist
+        ? (asyncArtistBookings?.value?.items ?? const <Booking>[])
+        : (asyncBookings.value ?? const <Booking>[]);
+
+    if (role == AppRole.artist) {
+      return _ArtistDashboardView(
+        isDesktop: isDesktop,
+        isTablet: isTablet,
+        allBookings: allBookings,
+        employeeId: auth.session?.employeeId,
+      );
+    }
     final now = DateTime.now();
 
     String monthKey(DateTime value) => '${value.year}-${value.month}';
@@ -71,11 +106,24 @@ class DashboardScreen extends HookConsumerWidget {
         return;
       }
 
+      final reportType = switch (tabController.index) {
+        0 => 'executive',
+        1 => 'sales',
+        2 => 'marketing',
+        3 => 'crm',
+        4 => 'finance',
+        5 => 'ceo_daily',
+        _ => 'executive',
+      };
+
       await downloadDashboardReport(
         month: now,
         bookings: bookings,
         packages: packages,
         employees: employees,
+        reportType: reportType,
+        leads: asyncLeads.value ?? [],
+        collections: asyncCollections.value ?? [],
       );
     }
 
@@ -114,12 +162,13 @@ class DashboardScreen extends HookConsumerWidget {
           dividerColor: Colors.transparent,
           overlayColor: WidgetStateProperty.all(Colors.transparent),
           labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-          tabs: const [
-            Tab(text: 'Executive'),
-            Tab(text: 'Sales'),
-            Tab(text: 'Marketing'),
-            Tab(text: 'CRM'),
-            Tab(text: 'Finance'),
+          tabs: [
+            const Tab(text: 'Executive'),
+            const Tab(text: 'Sales'),
+            const Tab(text: 'Marketing'),
+            const Tab(text: 'CRM'),
+            const Tab(text: 'Finance'),
+            if (canSeeCEOReport) const Tab(text: 'CEO Report'),
           ],
         ),
         8.h,
@@ -143,7 +192,16 @@ class DashboardScreen extends HookConsumerWidget {
               _SalesView(isDesktop: isDesktop),
               _MarketingView(),
               _CRMView(),
-              _FinanceView(),
+              _FinanceView(
+                collections: asyncCollections.value ?? [],
+                expenses: asyncExpenses.value ?? [],
+              ),
+              if (canSeeCEOReport)
+                _CEOReportView(
+                  bookings: allBookings,
+                  collections: asyncCollections.value ?? [],
+                  leads: asyncLeads.value ?? [],
+                ),
             ],
           ),
         ),
@@ -1294,12 +1352,209 @@ class _SalesView extends StatelessWidget {
       padding: const EdgeInsets.only(top: 24),
       child: Column(
         children: [
+          const _QuickLeadEntryCard(),
+          24.h,
           const _SalesPipelineCard(),
           24.h,
           const _SalesConversionCard(),
           24.h,
           const _TopPerformersCard(),
         ],
+      ),
+    );
+  }
+}
+
+class _QuickLeadEntryCard extends HookConsumerWidget {
+  const _QuickLeadEntryCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final nameCtrl = useTextEditingController();
+    final phoneCtrl = useTextEditingController();
+    final locationCtrl = useTextEditingController();
+    final remarksCtrl = useTextEditingController();
+    final enquiryDate = useState(DateTime.now());
+    final status = useState('New');
+    final isSaving = useState(false);
+
+    Future<void> _saveLead() async {
+      if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please fill name and phone')),
+        );
+        return;
+      }
+
+      isSaving.value = true;
+      try {
+        final dio = ref.read(dioProvider);
+        await dio.post('/leads', data: {
+          'name': nameCtrl.text,
+          'phone': phoneCtrl.text,
+          'status': status.value,
+          'source': 'Dashboard',
+          'location': locationCtrl.text,
+          'remarks': remarksCtrl.text,
+          'enquiryDate': enquiryDate.value.toIso8601String(),
+        });
+        
+        nameCtrl.clear();
+        phoneCtrl.clear();
+        locationCtrl.clear();
+        remarksCtrl.clear();
+        status.value = 'New';
+        
+        ref.invalidate(leadsProvider);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Lead added successfully!')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to add lead: $e')),
+          );
+        }
+      } finally {
+        isSaving.value = false;
+      }
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quick Lead Entry',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            8.h,
+            Text(
+              'Quickly record a new potential client inquiry.',
+              style: TextStyle(color: crm.textSecondary, fontSize: 13),
+            ),
+            20.h,
+            if (ResponsiveBuilder.isDesktop(context))
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(labelText: 'Name *', prefixIcon: Icon(Icons.person_outline)),
+                    ),
+                  ),
+                  16.w,
+                  Expanded(
+                    child: TextFormField(
+                      controller: phoneCtrl,
+                      decoration: const InputDecoration(labelText: 'Phone *', prefixIcon: Icon(Icons.phone_outlined)),
+                    ),
+                  ),
+                  16.w,
+                  Expanded(
+                    child: TextFormField(
+                      controller: locationCtrl,
+                      decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.location_on_outlined)),
+                    ),
+                  ),
+                  16.w,
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: enquiryDate.value,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) enquiryDate.value = picked;
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
+                        child: Text('${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}'),
+                      ),
+                    ),
+                  ),
+                  16.w,
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: status.value,
+                      decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
+                      items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (v) => status.value = v!,
+                    ),
+                  ),
+                  24.w,
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: isSaving.value ? null : _saveLead,
+                      icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
+                      label: const Text('Add Lead'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name *', prefixIcon: Icon(Icons.person_outline))),
+                  16.h,
+                  TextFormField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone *', prefixIcon: Icon(Icons.phone_outlined))),
+                  16.h,
+                  TextFormField(controller: locationCtrl, decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.location_on_outlined))),
+                  16.h,
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: enquiryDate.value,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) enquiryDate.value = picked;
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
+                      child: Text('${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}'),
+                    ),
+                  ),
+                  20.h,
+                  DropdownButtonFormField<String>(
+                    value: status.value,
+                    decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
+                    items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (v) => status.value = v!,
+                  ),
+                  20.h,
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: isSaving.value ? null : _saveLead,
+                      icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
+                      label: const Text('Add Lead'),
+                    ),
+                  ),
+                ],
+              ),
+            16.h,
+            TextFormField(
+              controller: remarksCtrl,
+              decoration: const InputDecoration(labelText: 'Remarks', prefixIcon: Icon(Icons.notes)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1330,7 +1585,7 @@ class _CRMView extends StatelessWidget {
         children: [
           const _CustomerSatisfactionCard(),
           24.h,
-          const _RecentPatientActivityCard(),
+          // const _RecentPatientActivityCard(), removed as it was replaced by CEO Report metrics
         ],
       ),
     );
@@ -1338,17 +1593,180 @@ class _CRMView extends StatelessWidget {
 }
 
 class _FinanceView extends StatelessWidget {
+  final List<ArtistCollection> collections;
+  final List<ArtistExpense> expenses;
+
+  const _FinanceView({
+    required this.collections,
+    required this.expenses,
+  });
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 24),
+      padding: const EdgeInsets.all(24),
       child: Column(
         children: [
+          _FinanceChartCard(collections: collections, expenses: expenses),
+          24.h,
           const _RevenueBreakdownCard(),
           24.h,
           const _ExpenseAnalysisCard(),
         ],
       ),
+    );
+  }
+}
+
+class _FinanceChartCard extends StatelessWidget {
+  final List<ArtistCollection> collections;
+  final List<ArtistExpense> expenses;
+
+  const _FinanceChartCard({
+    required this.collections,
+    required this.expenses,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    
+    // Process data for the last 7 days
+    final now = DateTime.now();
+    final last7Days = List.generate(7, (i) => now.subtract(Duration(days: 6 - i)));
+    
+    final dailyData = last7Days.map((date) {
+      final dayCollections = collections.where((c) => 
+        c.date.year == date.year && c.date.month == date.month && c.date.day == date.day
+      ).fold(0.0, (sum, c) => sum + c.amount);
+      
+      final dayExpenses = expenses.where((e) => 
+        e.date.year == date.year && e.date.month == date.month && e.date.day == date.day
+      ).fold(0.0, (sum, e) => sum + e.amount);
+      
+      return (collections: dayCollections, expenses: dayExpenses, date: date);
+    }).toList();
+
+    double maxVal = 0;
+    for (var d in dailyData) {
+      if (d.collections > maxVal) maxVal = d.collections;
+      if (d.expenses > maxVal) maxVal = d.expenses;
+    }
+    if (maxVal == 0) maxVal = 1000;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cash Flow Analysis',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Last 7 days of collections vs expenses',
+                      style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    _legendItem('Collections', crm.success),
+                    16.w,
+                    _legendItem('Expenses', crm.destructive),
+                  ],
+                ),
+              ],
+            ),
+            32.h,
+            SizedBox(
+              height: 250,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxVal * 1.2,
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      getTooltipColor: (_) => crm.sidebar,
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        return BarTooltipItem(
+                          '₹${rod.toY.toStringAsFixed(0)}',
+                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        );
+                      },
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final date = dailyData[value.toInt()].date;
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              '${date.day}/${date.month}',
+                              style: TextStyle(color: crm.textSecondary, fontSize: 10),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  ),
+                  gridData: const FlGridData(show: false),
+                  borderData: FlBorderData(show: false),
+                  barGroups: dailyData.asMap().entries.map((entry) {
+                    return BarChartGroupData(
+                      x: entry.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: entry.value.collections,
+                          color: crm.success,
+                          width: 12,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                        BarChartRodData(
+                          toY: entry.value.expenses,
+                          color: crm.destructive,
+                          width: 12,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legendItem(String label, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        6.w,
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }
@@ -1362,7 +1780,6 @@ class _SalesPipelineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
     return Card(
       child: Padding(
         padding: 24.p,
@@ -1438,7 +1855,7 @@ class _PipelineStep extends StatelessWidget {
         8.h,
         LinearProgressIndicator(
           value: percentage,
-          backgroundColor: color.withOpacity(0.1),
+          backgroundColor: color.withValues(alpha: 0.1),
           valueColor: AlwaysStoppedAnimation<Color>(color),
           minHeight: 12,
           borderRadius: BorderRadius.circular(6),
@@ -1484,7 +1901,6 @@ class _TopPerformersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
     return Card(
       child: Padding(
         padding: 24.p,
@@ -1676,56 +2092,188 @@ class _CustomerSatisfactionCard extends StatelessWidget {
   }
 }
 
-class _RecentPatientActivityCard extends StatelessWidget {
-  const _RecentPatientActivityCard();
+class _CEOReportView extends HookConsumerWidget {
+  final List<Booking> bookings;
+  final List<ArtistCollection> collections;
+  final List<Lead> leads;
+
+  const _CEOReportView({
+    required this.bookings,
+    required this.collections,
+    required this.leads,
+  });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final now = DateTime.now();
+
+    // Data filtering for "Today"
+    final todayBookings = bookings.where((b) => 
+      b.serviceStart.year == now.year && 
+      b.serviceStart.month == now.month && 
+      b.serviceStart.day == now.day
+    ).toList();
+
+    final todayLeads = leads.where((l) => 
+      l.createdAt.year == now.year && 
+      l.createdAt.month == now.month && 
+      l.createdAt.day == now.day
+    ).toList();
+
+    final todayCollections = collections.where((c) => 
+      c.date.year == now.year && 
+      c.date.month == now.month && 
+      c.date.day == now.day &&
+      c.status == 'verified'
+    ).toList();
+
+    // Metrics Calculation
+    final revenueToday = todayCollections.fold(0.0, (sum, c) => sum + c.amount);
+    final totalBookings = todayBookings.length;
+    final avgTicketSize = totalBookings > 0 ? revenueToday / totalBookings : 0.0;
+    final leadsGenerated = todayLeads.length;
+    final convertedLeads = todayLeads.where((l) => l.status.toLowerCase() == 'converted').length;
+    final conversionRate = leadsGenerated > 0 ? (convertedLeads / leadsGenerated) * 100 : 0.0;
+    final lostLeads = todayLeads.where((l) => l.status.toLowerCase() == 'lost').toList();
+    
+    // Slot Utilization (Approximate: assume 10 slots per day per artist, total 5 active artists)
+    const totalSlots = 50; 
+    final slotUtilization = (totalBookings / totalSlots * 100).clamp(0.0, 100.0);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader('📅 DAILY CEO REPORT – Nizan Makeovers', now),
+          24.h,
+          _buildMetricsGrid(context, [
+            _MetricItem('Revenue Today', '₹${revenueToday.toStringAsFixed(0)}', 'Target: ₹50k', crm.success),
+            _MetricItem('Total Bookings', totalBookings.toString(), 'Capacity: $totalSlots', crm.primary),
+            _MetricItem('Avg Ticket Size', '₹${avgTicketSize.toStringAsFixed(0)}', 'Goal: ₹5k', crm.warning),
+            _MetricItem('Leads Generated', leadsGenerated.toString(), 'Target: 20', crm.accent),
+          ]),
+          24.h,
+          _buildMetricsGrid(context, [
+            _MetricItem('Conversions', '${conversionRate.toStringAsFixed(1)}%', 'Goal: 15%', crm.accent),
+            _MetricItem('Lost Leads', lostLeads.length.toString(), 'Follow up!', crm.destructive),
+            _MetricItem('Slot Utilization', '${slotUtilization.toStringAsFixed(1)}%', 'Efficiency', crm.secondary),
+          ]),
+          24.h,
+          _buildReportNotesCard(context, 'Key Issues', Icons.warning_amber_rounded, crm.destructive),
+          16.h,
+          _buildReportNotesCard(context, 'Key Wins', Icons.emoji_events_outlined, crm.success),
+          16.h,
+          _buildReportNotesCard(context, 'Tomorrow Priorities', Icons.list_alt_rounded, crm.primary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, DateTime date) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+        Text(
+          'Report for ${_monthName(date.month)} ${date.day}, ${date.year}',
+          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMetricsGrid(BuildContext context, List<_MetricItem> items) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.5,
+          ),
+          itemCount: items.length,
+          itemBuilder: (context, index) => _buildMetricCard(context, items[index]),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetricCard(BuildContext context, _MetricItem item) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: item.color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: item.color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(item.label, style: TextStyle(color: crm.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
+          4.h,
+          Text(item.value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          4.h,
+          Text(item.subtext, style: TextStyle(color: item.color, fontSize: 10, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReportNotesCard(BuildContext context, String title, IconData icon, Color color) {
+    final crm = context.crmColors;
     return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: crm.border.withValues(alpha: 0.5)),
+      ),
       child: Padding(
-        padding: 24.p,
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Recent Client Activity',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+            Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                12.w,
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.edit_note, size: 20),
+                  onPressed: () {
+                    // TODO: Implement note editing
+                  },
+                ),
+              ],
             ),
-            16.h,
-            _activityItem(context, 'James Wilson', 'Renewed membership', '2 mins ago'),
             const Divider(),
-            _activityItem(context, 'Sarah Smith', 'Requested callback', '15 mins ago'),
-            const Divider(),
-            _activityItem(context, 'Robert Brown', 'Booked event package', '1 hour ago'),
+            8.h,
+            Text(
+              'No ${title.toLowerCase()} recorded for today yet.',
+              style: TextStyle(color: crm.textSecondary, fontStyle: FontStyle.italic),
+            ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _activityItem(BuildContext context, String name, String action, String time) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          CircleAvatar(radius: 4, backgroundColor: context.crmColors.primary),
-          12.w,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(action, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13)),
-              ],
-            ),
-          ),
-          Text(time, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 11)),
-        ],
-      ),
-    );
-  }
+class _MetricItem {
+  final String label;
+  final String value;
+  final String subtext;
+  final Color color;
+
+  _MetricItem(this.label, this.value, this.subtext, this.color);
 }
 
 class _RevenueBreakdownCard extends StatelessWidget {
@@ -1772,7 +2320,7 @@ class _RevenueBreakdownCard extends StatelessWidget {
               CircularProgressIndicator(
                 value: progress,
                 strokeWidth: 8,
-                backgroundColor: color.withOpacity(0.1),
+                backgroundColor: color.withValues(alpha: 0.1),
                 valueColor: AlwaysStoppedAnimation<Color>(color),
               ),
               Center(
@@ -1852,6 +2400,373 @@ class _ExpenseAnalysisCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ArtistDashboardView extends StatelessWidget {
+  const _ArtistDashboardView({
+    required this.isDesktop,
+    required this.isTablet,
+    required this.allBookings,
+    this.employeeId,
+  });
+
+  final bool isDesktop;
+  final bool isTablet;
+  final List<Booking> allBookings;
+  final String? employeeId;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final theme = Theme.of(context);
+    
+    // Bookings are already filtered by employeeId from the backend provider
+    final myBookings = allBookings;
+
+    final now = DateTime.now();
+    final todayBookings = myBookings.where((b) => 
+      b.serviceStart.year == now.year && 
+      b.serviceStart.month == now.month && 
+      b.serviceStart.day == now.day
+    ).toList();
+
+    final upcomingBookings = myBookings.where((b) => b.serviceStart.isAfter(now)).toList()
+      ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+
+    final totalEarnings = myBookings
+        .where((b) => b.status.toLowerCase() == 'completed')
+        .fold<double>(0, (sum, b) => sum + b.totalPrice);
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Section
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [crm.primary, crm.sidebar],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: crm.primary.withValues(alpha: 0.3),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hello, Artist',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          4.h,
+                          Text(
+                            todayBookings.isEmpty 
+                              ? 'No works today' 
+                              : 'You have ${todayBookings.length} tasks',
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.notifications_none, color: Colors.white),
+                    ),
+                  ],
+                ),
+                24.h,
+                const Divider(color: Colors.white24),
+                16.h,
+                Row(
+                  children: [
+                    _HeaderMiniStat(
+                      label: 'Total Collected',
+                      value: '₹${totalEarnings.toStringAsFixed(0)}',
+                    ),
+                    const VerticalDivider(color: Colors.white24, indent: 8, endIndent: 8),
+                    _HeaderMiniStat(
+                      label: 'Pending',
+                      value: '${upcomingBookings.length} Works',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          24.h,
+          Text(
+            'Performance Overview',
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          16.h,
+          SizedBox(
+            height: 140,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              children: [
+                _ModernStatCard(
+                  title: 'Completed',
+                  value: '${myBookings.where((b) => b.status.toLowerCase() == "completed").length}',
+                  icon: Icons.task_alt_rounded,
+                  color: Colors.green,
+                ),
+                16.w,
+                _ModernStatCard(
+                  title: 'In Progress',
+                  value: '${myBookings.where((b) => b.status.toLowerCase() == "confirmed").length}',
+                  icon: Icons.sync_rounded,
+                  color: Colors.blue,
+                ),
+                16.w,
+                _ModernStatCard(
+                  title: 'Assigned',
+                  value: '${myBookings.length}',
+                  icon: Icons.assignment_rounded,
+                  color: crm.primary,
+                ),
+              ],
+            ),
+          ),
+          32.h,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Today\'s Schedule',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              TextButton(
+                onPressed: () => context.go('/works'),
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          12.h,
+          if (todayBookings.isEmpty)
+            _buildEmptyState(context, 'Relax! No assignments for today.')
+          else
+            ...todayBookings.map((b) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _UpcomingBookingTile(booking: b),
+            )),
+          32.h,
+          _ArtistQuickActions(),
+          40.h,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context, String message) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: context.crmColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.crmColors.border),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.event_busy_outlined, size: 48, color: context.crmColors.textSecondary.withValues(alpha: 0.5)),
+          16.h,
+          Text(message, style: TextStyle(color: context.crmColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ArtistQuickActions extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Quick Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            20.h,
+            _QuickActionItem(
+              icon: Icons.calendar_today,
+              title: 'View Calendar',
+              onTap: () => context.go('/works'),
+              color: crm.primary,
+            ),
+            _QuickActionItem(
+              icon: Icons.add_moderator_outlined,
+              title: 'Request Leave',
+              onTap: () => context.go('/leave-requests'),
+              color: Colors.orange,
+            ),
+            _QuickActionItem(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'My Finance',
+              onTap: () => context.go('/finance'),
+              color: Colors.green,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActionItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  final Color color;
+
+  const _QuickActionItem({required this.icon, required this.title, required this.onTap, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: onTap,
+    );
+  }
+}
+
+class _HeaderMiniStat extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _HeaderMiniStat({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        4.h,
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ModernStatCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _ModernStatCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      width: 160,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                title,
+                style: TextStyle(
+                  color: crm.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

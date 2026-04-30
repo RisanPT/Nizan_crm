@@ -14,6 +14,8 @@ class ArtistExpense {
   final String? verifiedByName;
   final DateTime? verifiedAt;
   final DateTime createdAt;
+  final String? ocrStatus;
+  final double? ocrAmountFound;
 
   const ArtistExpense({
     required this.id,
@@ -28,6 +30,8 @@ class ArtistExpense {
     this.verifiedByName,
     this.verifiedAt,
     required this.createdAt,
+    this.ocrStatus,
+    this.ocrAmountFound,
   });
 
   factory ArtistExpense.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,8 @@ class ArtistExpense {
       createdAt:
           DateTime.tryParse(json['createdAt']?.toString() ?? '') ??
           DateTime.now(),
+      ocrStatus: json['ocrStatus'] as String?,
+      ocrAmountFound: (json['ocrAmountFound'] as num?)?.toDouble(),
     );
   }
 }

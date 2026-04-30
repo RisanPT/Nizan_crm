@@ -928,7 +928,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
-                    crmColors.primary.withOpacity(0.05),
+                    crmColors.primary.withValues(alpha: 0.05),
                   ),
                   columns: const [
                     DataColumn(label: _HeaderText('MONTH')),

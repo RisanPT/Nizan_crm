@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../core/auth/app_role.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/crm_user.dart';
 import '../../core/models/list_page_params.dart';
@@ -172,7 +171,7 @@ class SettingsScreen extends HookConsumerWidget {
                                 helperText:
                                     'Their data will be scoped to this employee',
                               ),
-                              value: selEmployeeId.isEmpty ? null : selEmployeeId,
+                              initialValue: selEmployeeId.isEmpty ? null : selEmployeeId,
                               items: artists
                                   .map(
                                     (e) => DropdownMenuItem(

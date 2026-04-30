@@ -34,13 +34,13 @@ enum AppRole {
 
   /// Dashboard overview
   bool get canSeeDashboard =>
-      isFullAccess || this == crm || this == sales || this == accounts;
+      isFullAccess || this == crm || this == sales || this == accounts || this == artist;
 
   /// Clients directory + client profiles
   bool get canSeeClients => isFullAccess || this == crm;
 
-  /// Calendar scheduler
-  bool get canSeeCalendar => isFullAccess || this == crm;
+  /// Calendar scheduler / Works
+  bool get canSeeCalendar => isFullAccess || this == crm || this == artist;
 
   /// Booking requests + manage booking
   bool get canSeeBookings => isFullAccess || this == crm;
@@ -64,6 +64,12 @@ enum AppRole {
   /// Settings (user management etc.)
   bool get canSeeSettings => isFullAccess;
 
+  /// CEO Daily Report
+  bool get canSeeCEOReport => isFullAccess;
+
+  /// Leave requests
+  bool get canSeeLeaveRequests => this == artist || isFullAccess;
+
   // ── Sub-permissions ───────────────────────────────────────────────────────
 
   /// Can verify/reject collections and expenses (accounts team + admin/manager)
@@ -76,13 +82,13 @@ enum AppRole {
   String get homeRoute {
     switch (this) {
       case AppRole.artist:
-        return '/finance';
+        return '/';
       case AppRole.sales:
         return '/sales';
       case AppRole.crm:
         return '/';
       case AppRole.accounts:
-        return '/finance';
+        return '/accounts/artist-collections';
       default:
         return '/';
     }

@@ -14,8 +14,9 @@ Dio dio(Ref ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: apiBaseUrl,
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 3),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
+      sendTimeout: const Duration(seconds: 60),
     ),
   );
 

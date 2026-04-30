@@ -29,12 +29,18 @@ class CollectionService {
     String? status,
     String? bookingId,
     String? employeeId,
+    String? paymentMode,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     try {
       final Map<String, dynamic> query = {};
       if (status != null) query['status'] = status;
       if (bookingId != null) query['bookingId'] = bookingId;
       if (employeeId != null) query['employeeId'] = employeeId;
+      if (paymentMode != null) query['paymentMode'] = paymentMode;
+      if (startDate != null) query['startDate'] = startDate.toIso8601String();
+      if (endDate != null) query['endDate'] = endDate.toIso8601String();
 
       final response = await _dio.get(
         '/collections',
@@ -56,6 +62,7 @@ class CollectionService {
     required DateTime date,
     required String paymentMode,
     String notes = '',
+    String? attachmentUrl,
   }) async {
     try {
       final payload = {
@@ -65,6 +72,7 @@ class CollectionService {
         'date': date.toIso8601String(),
         'paymentMode': paymentMode,
         'notes': notes,
+        'attachmentUrl': attachmentUrl,
       };
       final response = await _dio.post('/collections', data: payload);
       return ArtistCollection.fromJson(response.data as Map<String, dynamic>);

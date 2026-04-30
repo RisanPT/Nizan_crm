@@ -71,7 +71,7 @@ class ClientProfileScreen extends HookConsumerWidget {
                   ),
                   16.h,
                   DropdownButtonFormField<String>(
-                    value: selectedStatus,
+                    initialValue: selectedStatus,
                     items: statuses
                         .map((s) =>
                             DropdownMenuItem(value: s, child: Text(s)))
@@ -220,7 +220,7 @@ class ClientProfileScreen extends HookConsumerWidget {
               children: [
                 CircleAvatar(
                   radius: 48,
-                  backgroundColor: crmColors.primary.withOpacity(0.12),
+                  backgroundColor: crmColors.primary.withValues(alpha: 0.12),
                   child: Text(
                     customer.name.isNotEmpty
                         ? customer.name[0].toUpperCase()
@@ -240,7 +240,7 @@ class ClientProfileScreen extends HookConsumerWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
+                    color: statusColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -523,8 +523,8 @@ class ClientProfileScreen extends HookConsumerWidget {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: isUpcoming
-                      ? crmColors.warning.withOpacity(0.1)
-                      : crmColors.success.withOpacity(0.1),
+                      ? crmColors.warning.withValues(alpha: 0.1)
+                      : crmColors.success.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(

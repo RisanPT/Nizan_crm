@@ -17,6 +17,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _isArtistLogin = false;
   String? _selectedState;
   String? _selectedRegion;
 
@@ -29,7 +30,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    if (!_isArtistLogin) {
+      if (!_formKey.currentState!.validate()) return;
+    } else {
+      // For artist login, we skip state/region validation but still need email/password
+      if (!_formKey.currentState!.validate()) return;
+    }
 
     try {
       await ref
@@ -37,6 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .login(
             email: _emailController.text,
             password: _passwordController.text,
+            // You might need to pass role or something here if backend requires it
           );
     } catch (_) {
       if (!mounted) return;
@@ -56,7 +63,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final crmColors = context.crmColors;
     final theme = Theme.of(context);
     final auth = ref.watch(authControllerProvider);
-    final isDesktop = ResponsiveBuilder.isDesktop(context);
 
     return Scaffold(
       backgroundColor: crmColors.background,
@@ -68,54 +74,108 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             children: [
               Expanded(
                 child: Container(
-                  color: crmColors.sidebar,
-                  child: Center(
-                    child: Container(
-                      width: 320,
-                      height: 320,
-                      padding: 36.px,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(40),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.18),
-                            blurRadius: 42,
-                            offset: const Offset(0, 22),
-                          ),
-                        ],
-                      ),
-                      child: Image.asset(
-                        'assets/images/nizan_logo.png',
-                        fit: BoxFit.contain,
-                      ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        crmColors.sidebar,
+                        crmColors.primary,
+                      ],
                     ),
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: -100,
+                        right: -100,
+                        child: Container(
+                          width: 400,
+                          height: 400,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 280,
+                              height: 280,
+                              padding: 48.px,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(60),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 60,
+                                    offset: const Offset(0, 30),
+                                  ),
+                                ],
+                              ),
+                              child: Image.asset(
+                                'assets/images/nizan_logo.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            48.h,
+                            Text(
+                              'NIZAN MAKEOVERS',
+                              style: theme.textTheme.displaySmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 4,
+                              ),
+                            ),
+                            12.h,
+                            Text(
+                              'ELEVATING BEAUTY STANDARDS',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
               Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    child: Padding(
+                child: Container(
+                  color: crmColors.background,
+                  child: Center(
+                    child: SingleChildScrollView(
                       padding: const EdgeInsets.all(40),
-                      child: _LoginCard(
-                        formKey: _formKey,
-                        emailController: _emailController,
-                        passwordController: _passwordController,
-                        obscurePassword: _obscurePassword,
-                        isSubmitting: auth.isSubmitting,
-                        isDesktop: isDesktop,
-                        selectedState: _selectedState,
-                        selectedRegion: _selectedRegion,
-                        onStateChanged: (val) =>
-                            setState(() => _selectedState = val),
-                        onRegionChanged: (val) =>
-                            setState(() => _selectedRegion = val),
-                        onTogglePassword: () {
-                          setState(() => _obscurePassword = !_obscurePassword);
-                        },
-                        onSubmit: _submit,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: _LoginCard(
+                          formKey: _formKey,
+                          emailController: _emailController,
+                          passwordController: _passwordController,
+                          obscurePassword: _obscurePassword,
+                          isSubmitting: auth.isSubmitting,
+                          isDesktop: true,
+                          isArtistLogin: _isArtistLogin,
+                          selectedState: _selectedState,
+                          selectedRegion: _selectedRegion,
+                          onArtistLoginChanged: (val) =>
+                              setState(() => _isArtistLogin = val),
+                          onStateChanged: (val) =>
+                              setState(() => _selectedState = val),
+                          onRegionChanged: (val) =>
+                              setState(() => _selectedRegion = val),
+                          onTogglePassword: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
+                          onSubmit: _submit,
+                        ),
                       ),
                     ),
                   ),
@@ -134,79 +194,90 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     CrmTheme crmColors,
     AuthController auth,
   ) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: 24.px,
-            decoration: BoxDecoration(
-              color: crmColors.sidebar,
-              borderRadius: BorderRadius.circular(28),
+    return Container(
+      color: crmColors.sidebar,
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(24, 60, 24, 40),
+              child: Column(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 100,
+                    padding: 16.px,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(
+                      'assets/images/nizan_logo.png',
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  24.h,
+                  Text(
+                    'NIZAN MAKEOVERS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4,
+                    ),
+                  ),
+                  8.h,
+                  Text(
+                    'Creative Enterprise Portal',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 132,
-                  height: 132,
-                  padding: 18.px,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 24,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: Image.asset(
-                    'assets/images/nizan_logo.png',
-                    fit: BoxFit.contain,
-                  ),
+            Container(
+              width: double.infinity,
+              constraints: BoxConstraints(
+                minHeight: MediaQuery.of(context).size.height - 250,
+              ),
+              decoration: BoxDecoration(
+                color: crmColors.background,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
+                child: _LoginCard(
+                  formKey: _formKey,
+                  emailController: _emailController,
+                  passwordController: _passwordController,
+                  obscurePassword: _obscurePassword,
+                  isSubmitting: auth.isSubmitting,
+                  isDesktop: false,
+                  isArtistLogin: _isArtistLogin,
+                  selectedState: _selectedState,
+                  selectedRegion: _selectedRegion,
+                  onArtistLoginChanged: (val) => setState(() => _isArtistLogin = val),
+                  onStateChanged: (val) => setState(() => _selectedState = val),
+                  onRegionChanged: (val) => setState(() => _selectedRegion = val),
+                  onTogglePassword: () {
+                    setState(() => _obscurePassword = !_obscurePassword);
+                  },
+                  onSubmit: _submit,
                 ),
-                24.h,
-                Text(
-                  'Welcome back to your booking desk.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                12.h,
-                Text(
-                  'Sign in to manage live CRM requests, client records, and staff planning.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.78),
-                    height: 1.5,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          24.h,
-          _LoginCard(
-            formKey: _formKey,
-            emailController: _emailController,
-            passwordController: _passwordController,
-            obscurePassword: _obscurePassword,
-            isSubmitting: auth.isSubmitting,
-            isDesktop: false,
-            selectedState: _selectedState,
-            selectedRegion: _selectedRegion,
-            onStateChanged: (val) => setState(() => _selectedState = val),
-            onRegionChanged: (val) => setState(() => _selectedRegion = val),
-            onTogglePassword: () {
-              setState(() => _obscurePassword = !_obscurePassword);
-            },
-            onSubmit: _submit,
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -220,8 +291,10 @@ class _LoginCard extends StatelessWidget {
     required this.obscurePassword,
     required this.isSubmitting,
     required this.isDesktop,
+    required this.isArtistLogin,
     required this.selectedState,
     required this.selectedRegion,
+    required this.onArtistLoginChanged,
     required this.onStateChanged,
     required this.onRegionChanged,
     required this.onTogglePassword,
@@ -234,8 +307,10 @@ class _LoginCard extends StatelessWidget {
   final bool obscurePassword;
   final bool isSubmitting;
   final bool isDesktop;
+  final bool isArtistLogin;
   final String? selectedState;
   final String? selectedRegion;
+  final ValueChanged<bool> onArtistLoginChanged;
   final ValueChanged<String?> onStateChanged;
   final ValueChanged<String?> onRegionChanged;
   final VoidCallback onTogglePassword;
@@ -245,18 +320,18 @@ class _LoginCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
-
+    final isMobile = ResponsiveBuilder.isMobile(context);
     return Container(
-      padding: EdgeInsets.all(isDesktop ? 36 : 24),
+      padding: EdgeInsets.all(isMobile ? 28 : 40),
       decoration: BoxDecoration(
         color: crmColors.surface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: crmColors.border),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: crmColors.border.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: crmColors.primary.withValues(alpha: 0.06),
-            blurRadius: 30,
-            offset: const Offset(0, 18),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 40,
+            offset: const Offset(0, 20),
           ),
         ],
       ),
@@ -265,52 +340,79 @@ class _LoginCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Welcome Back',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                _ArtistToggle(
+                  value: isArtistLogin,
+                  onChanged: onArtistLoginChanged,
+                ),
+              ],
+            ),
+            4.h,
             Text(
-              'Sign in',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+              isArtistLogin
+                  ? 'Artist Portal Access'
+                  : 'Administrative CRM Access',
+              style: TextStyle(
+                color: crmColors.primary,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                letterSpacing: 1,
               ),
             ),
-            8.h,
-            Text(
-              'Use your admin account to access the CRM dashboard.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: crmColors.textSecondary,
+            32.h,
+            AnimatedSize(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: Column(
+                children: [
+                  if (!isArtistLogin) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedState,
+                      items: ['Kerala', 'Karnataka']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: onStateChanged,
+                      decoration: const InputDecoration(
+                        labelText: 'Select State',
+                        prefixIcon: Icon(Icons.map_outlined),
+                      ),
+                      validator: (value) =>
+                          value == null ? 'State is required' : null,
+                    ),
+                    16.h,
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedRegion,
+                      items: ['Kochi', 'Calicut']
+                          .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                          .toList(),
+                      onChanged: onRegionChanged,
+                      decoration: const InputDecoration(
+                        labelText: 'Select Region',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                      ),
+                      validator: (value) =>
+                          value == null ? 'Region is required' : null,
+                    ),
+                    16.h,
+                  ],
+                ],
               ),
             ),
-            28.h,
-            DropdownButtonFormField<String>(
-              value: selectedState,
-              items: ['Kerala', 'Karnataka']
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                  .toList(),
-              onChanged: onStateChanged,
-              decoration: const InputDecoration(
-                labelText: 'Select State',
-                prefixIcon: Icon(Icons.map_outlined),
-              ),
-              validator: (value) => value == null ? 'State is required' : null,
-            ),
-            16.h,
-            DropdownButtonFormField<String>(
-              value: selectedRegion,
-              items: ['Kochi', 'Calicut']
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                  .toList(),
-              onChanged: onRegionChanged,
-              decoration: const InputDecoration(
-                labelText: 'Select Region',
-                prefixIcon: Icon(Icons.location_on_outlined),
-              ),
-              validator: (value) => value == null ? 'Region is required' : null,
-            ),
-            16.h,
             TextFormField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.username],
               decoration: const InputDecoration(
-                labelText: 'Email address',
+                labelText: 'Email Address',
                 prefixIcon: Icon(Icons.mail_outline),
               ),
               validator: (value) {
@@ -348,23 +450,91 @@ class _LoginCard extends StatelessWidget {
                 return null;
               },
             ),
-            24.h,
+            32.h,
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              height: 56,
+              child: ElevatedButton(
                 onPressed: isSubmitting ? null : onSubmit,
-                icon: Icon(
-                  isSubmitting ? Icons.hourglass_top : Icons.login_rounded,
-                ),
-                label: Text(
-                  isSubmitting ? 'Signing in...' : 'Access CRM',
-                ),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  backgroundColor: crmColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
+                child: isSubmitting
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isArtistLogin ? 'ENTER ARTIST PORTAL' : 'ACCESS CRM DESK',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.5,
+                              fontSize: 14,
+                            ),
+                          ),
+                          12.w,
+                          const Icon(Icons.arrow_forward_rounded, size: 18),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtistToggle extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ArtistToggle({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: value ? crm.primary.withValues(alpha: 0.15) : crm.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: value ? crm.primary.withValues(alpha: 0.3) : crm.border,
+            width: 1.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              value ? Icons.brush_rounded : Icons.person_outline_rounded,
+              size: 16,
+              color: value ? crm.primary : crm.textSecondary,
+            ),
+            8.w,
+            Text(
+              'ARTIST',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+                color: value ? crm.primary : crm.textSecondary,
+                letterSpacing: 1.2,
               ),
             ),
           ],

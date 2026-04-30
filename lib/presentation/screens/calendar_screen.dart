@@ -10,6 +10,8 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/blocked_date_service.dart';
 import '../../services/employee_service.dart';
+import '../../core/auth/app_role.dart';
+import '../../core/providers/auth_provider.dart';
 
 class CalendarScreen extends HookConsumerWidget {
   const CalendarScreen({super.key, this.initialFocusDate});
@@ -35,6 +37,7 @@ class CalendarScreen extends HookConsumerWidget {
     return _serviceColors['default']!;
   }
 
+  // ignore: unused_element
   static Color _bgForService(String service) {
     final s = service.toLowerCase();
     if (s.contains('makeup') || s.contains('bridal')) {
@@ -139,11 +142,46 @@ class CalendarScreen extends HookConsumerWidget {
     return groups;
   }
 
+  Widget _buildCompactPaymentInfo({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
+
+    final auth = ref.watch(authControllerProvider);
+    final role = auth.session != null
+        ? AppRole.fromString(auth.session!.role)
+        : AppRole.artist;
+    final isArtist = role == AppRole.artist;
+    final artistEmployeeId = auth.session?.employeeId;
 
     // All bookings from provider
     final asyncBookings = ref.watch(bookingProvider);
@@ -174,7 +212,7 @@ class CalendarScreen extends HookConsumerWidget {
     final weekStart = useState<DateTime>(currentWeekMonday);
     final monthFocus = useState<DateTime>(DateTime(now.year, now.month, 1));
     final viewMode = useState<String>('Month');
-    final selectedArtistFilter = useState<String>('all');
+    final selectedArtistFilter = useState<String>(isArtist ? (artistEmployeeId ?? 'all') : 'all');
 
     final weekDays = List.generate(
       7,
@@ -483,23 +521,6 @@ class CalendarScreen extends HookConsumerWidget {
       );
     }
 
-    Widget buildDayDialogChip(String label) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: crmColors.secondary.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: crmColors.primary,
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          ),
-        ),
-      );
-    }
 
     Future<void> openDayBookingsDialog(
       DateTime day,
@@ -641,21 +662,14 @@ class CalendarScreen extends HookConsumerWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Container(
-                                        width: 52,
-                                        height: 52,
+                                        width: 4,
+                                        height: 48,
                                         decoration: BoxDecoration(
-                                          color: crmColors.secondary,
-                                          borderRadius:
-                                              BorderRadius.circular(18),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Text(
-                                          booking.initials,
-                                          style: TextStyle(
-                                            color: crmColors.primary,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
+                                          color: _colorForService(
+                                            entry.service,
                                           ),
+                                          borderRadius:
+                                              BorderRadius.circular(2),
                                         ),
                                       ),
                                       16.w,
@@ -664,83 +678,55 @@ class CalendarScreen extends HookConsumerWidget {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Row(
-                                              children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    entry.service,
-                                                    style: theme
-                                                        .textTheme
-                                                        .titleMedium
-                                                        ?.copyWith(
-                                                          fontWeight:
-                                                              FontWeight.w800,
-                                                        ),
-                                                  ),
-                                                ),
-                                                Text(
-                                                  '₹${entry.advanceAmount.toStringAsFixed(0)}',
-                                                  style: TextStyle(
-                                                    color: crmColors.primary,
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 16,
-                                                  ),
-                                                ),
-                                              ],
+                                            Text(
+                                              entry.summaryLabel,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
                                             ),
-                                            10.h,
-                                            Wrap(
-                                              spacing: 8,
-                                              runSpacing: 8,
-                                              children: [
-                                                buildDayDialogChip(
-                                                  entry.eventSlot.trim().isEmpty
-                                                      ? 'Open Slot'
-                                                      : entry.eventSlot.trim(),
-                                                ),
-                                                buildDayDialogChip(
-                                                  '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
-                                                ),
-                                                buildDayDialogChip(
-                                                  booking.customerName,
-                                                ),
-                                              ],
+                                            4.h,
+                                            Text(
+                                              '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
+                                              style: TextStyle(
+                                                color:
+                                                    crmColors.textSecondary,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            8.h,
+                                            Text(
+                                              artistName,
+                                              style: TextStyle(
+                                                color: crmColors.primary,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
                                             ),
                                             12.h,
                                             Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
-                                                Expanded(
-                                                  child: Text(
-                                                    artistName,
-                                                    style: TextStyle(
-                                                      color: crmColors
-                                                          .textSecondary,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                                  ),
+                                                _buildCompactPaymentInfo(
+                                                  label: 'Total',
+                                                  value:
+                                                      '₹${booking.totalPrice.toStringAsFixed(0)}',
+                                                  color:
+                                                      crmColors.textPrimary,
                                                 ),
-                                                Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Text(
-                                                      'Open booking',
-                                                      style: TextStyle(
-                                                        color:
-                                                            crmColors.primary,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                      ),
-                                                    ),
-                                                    6.w,
-                                                    Icon(
-                                                      Icons.arrow_forward_ios,
-                                                      size: 14,
-                                                      color:
-                                                          crmColors.primary,
-                                                    ),
-                                                  ],
+                                                _buildCompactPaymentInfo(
+                                                  label: 'Advance',
+                                                  value:
+                                                      '₹${booking.advanceAmount.toStringAsFixed(0)}',
+                                                  color: crmColors.success,
+                                                ),
+                                                _buildCompactPaymentInfo(
+                                                  label: 'Balance',
+                                                  value:
+                                                      '₹${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(0)}',
+                                                  color: (booking.totalPrice - booking.advanceAmount - booking.discountAmount) > 0 ? crmColors.destructive : crmColors.success,
                                                 ),
                                               ],
                                             ),
@@ -911,7 +897,7 @@ class CalendarScreen extends HookConsumerWidget {
                 ],
               ),
             ),
-            if (!isMobile) ...[
+            if (!isMobile && !isArtist) ...[
               OutlinedButton.icon(
                 onPressed: manageBlockedDates,
                 icon: const Icon(Icons.calendar_month_outlined, size: 18),
@@ -935,38 +921,48 @@ class CalendarScreen extends HookConsumerWidget {
         ),
         if (isMobile) ...[
           16.h,
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: manageBlockedDates,
-                  icon: Icon(Icons.calendar_month, size: 18),
-                  label: const Text('Blocked'),
-                ),
-              ),
-              16.w,
-              Expanded(
-                child: _buildArtistFilter(
-                  context,
-                  crmColors,
-                  activeArtists,
-                  selectedArtistFilter,
-                ),
-              ),
-              16.w,
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => context.push('/booking/add'),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('New Booking'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: crmColors.primary,
-                    foregroundColor: Colors.white,
+          if (isArtist)
+            _buildArtistFilter(
+              context,
+              crmColors,
+              activeArtists,
+              selectedArtistFilter,
+              isArtist,
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: manageBlockedDates,
+                    icon: const Icon(Icons.calendar_month, size: 18),
+                    label: const Text('Blocked'),
                   ),
                 ),
-              ),
-            ],
-          ),
+                16.w,
+                Expanded(
+                  child: _buildArtistFilter(
+                    context,
+                    crmColors,
+                    activeArtists,
+                    selectedArtistFilter,
+                    isArtist,
+                  ),
+                ),
+                16.w,
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => context.push('/booking/add'),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('New Booking'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: crmColors.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
         24.h,
         // ── Calendar card ─────────────────────────────────────────────--
@@ -1039,6 +1035,7 @@ class CalendarScreen extends HookConsumerWidget {
                             crmColors,
                             activeArtists,
                             selectedArtistFilter,
+                            isArtist,
                           ),
                           16.w,
                           SegmentedButton<String>(
@@ -1096,6 +1093,7 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _mobileDay(
                             context,
                             crmColors,
+                            isArtist,
                             [
                                 ...filteredCalendarBookings.where(
                                 (b) => b.isOnDate(selectedDay),
@@ -1146,6 +1144,7 @@ class CalendarScreen extends HookConsumerWidget {
   Widget _mobileDay(
     BuildContext context,
     CrmTheme crmColors,
+    bool isArtist,
     List<Booking> bookings,
     DateTime day,
   ) {
@@ -1164,16 +1163,18 @@ class CalendarScreen extends HookConsumerWidget {
                 'No bookings for this day',
                 style: TextStyle(color: crmColors.textSecondary),
               ),
-              8.h,
-              ElevatedButton.icon(
-                onPressed: () => context.push('/booking/add'),
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text('New Booking'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: crmColors.primary,
-                  foregroundColor: Colors.white,
+              if (!isArtist) ...[
+                8.h,
+                ElevatedButton.icon(
+                  onPressed: () => context.push('/booking/add'),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('New Booking'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: crmColors.primary,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -1190,57 +1191,108 @@ class CalendarScreen extends HookConsumerWidget {
         final b = entry.booking;
         final isAssigned = entry.assignedStaff
             .cast<BookingAssignment?>()
-            .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
+            .any((assignment) =>
+                assignment != null && assignment.artistName.trim().isNotEmpty);
         final borderColor = isAssigned
             ? _colorForService(entry.service)
             : const Color(0xFF8E9BAE);
+        final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
 
         return GestureDetector(
           onTap: () => context.push(
             '/booking/manage/${b.id}?entry=${Uri.encodeComponent(entry.id)}',
           ),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _bgForService(entry.service),
-              borderRadius: BorderRadius.circular(8),
-              border: Border(
-                left: BorderSide(color: borderColor, width: 4),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.summaryLabel,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      4.h,
-                      Text(
-                        '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
-                        style: TextStyle(
-                          color: crmColors.textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      4.h,
-                      Text(
-                        _artistLabelForEntry(entry),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: isAssigned ? crmColors.textPrimary : crmColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: crmColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
-                Icon(Icons.chevron_right, color: crmColors.textSecondary),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: borderColor,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    12.w,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            entry.summaryLabel,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          4.h,
+                          Text(
+                            '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
+                            style: TextStyle(
+                              color: crmColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: borderColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        entry.service.toUpperCase(),
+                        style: TextStyle(
+                          color: borderColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                16.h,
+                const Divider(height: 1),
+                12.h,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildCompactPaymentInfo(
+                      label: 'Total',
+                      value: '₹${b.totalPrice.toStringAsFixed(0)}',
+                      color: crmColors.textPrimary,
+                    ),
+                    _buildCompactPaymentInfo(
+                      label: 'Advance',
+                      value: '₹${b.advanceAmount.toStringAsFixed(0)}',
+                      color: crmColors.success,
+                    ),
+                    _buildCompactPaymentInfo(
+                      label: 'Balance',
+                      value: '₹${balance.toStringAsFixed(0)}',
+                      color: balance > 0 ? crmColors.destructive : crmColors.success,
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1443,7 +1495,32 @@ class CalendarScreen extends HookConsumerWidget {
     CrmTheme crmColors,
     List<Employee> activeArtists,
     ValueNotifier<String> selectedArtistFilter,
+    bool isArtist,
   ) {
+    if (isArtist) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: crmColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: crmColors.primary.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.person_pin_outlined, size: 18, color: crmColors.primary),
+            8.w,
+            Text(
+              'My Works',
+              style: TextStyle(
+                color: crmColors.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     return PopupMenuButton<String>(
       tooltip: 'Filter by artist',
       onSelected: (value) => selectedArtistFilter.value = value,

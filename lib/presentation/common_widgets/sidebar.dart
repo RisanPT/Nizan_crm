@@ -11,12 +11,24 @@ class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
   final bool fleetUserCollapsed;
   final ValueChanged<bool> onFleetExpandToggle;
+  final bool accountsExpanded;
+  final bool accountsUserCollapsed;
+  final ValueChanged<bool> onAccountsExpandToggle;
+  final bool salesExpanded;
+  final bool salesUserCollapsed;
+  final ValueChanged<bool> onSalesExpandToggle;
 
   const Sidebar({
     super.key,
     required this.fleetExpanded,
     required this.fleetUserCollapsed,
     required this.onFleetExpandToggle,
+    required this.accountsExpanded,
+    required this.accountsUserCollapsed,
+    required this.onAccountsExpandToggle,
+    required this.salesExpanded,
+    required this.salesUserCollapsed,
+    required this.onSalesExpandToggle,
   });
 
   @override
@@ -27,14 +39,22 @@ class Sidebar extends ConsumerWidget {
     final isTablet = ResponsiveBuilder.isTablet(context);
     final currentPath = GoRouterState.of(context).uri.path;
     final isFleetRoute = currentPath.startsWith('/fleet');
+    final isAccountsRoute = currentPath.startsWith('/accounts');
+    final isSalesRoute = currentPath.startsWith('/sales');
     final isCollapsed = isTablet && !isMobile;
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
+    final effectiveAccountsExpanded =
+        !isCollapsed && (accountsExpanded || (isAccountsRoute && !accountsUserCollapsed));
+    final effectiveSalesExpanded =
+        !isCollapsed && (salesExpanded || (isSalesRoute && !salesUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session
     final session = ref.watch(authControllerProvider).session;
-    final role = AppRole.fromString(session?.role);
+    final role = session != null
+        ? AppRole.fromString(session.role)
+        : AppRole.artist;
 
     return Container(
       width: width,
@@ -49,13 +69,8 @@ class Sidebar extends ConsumerWidget {
             child: ListView(
               padding: 16.p,
               children: [
-                // ── CRM SECTION ──────────────────────────────────────────────
-                if (role.canSeeDashboard || role.canSeeClients ||
-                    role.canSeeCalendar || role.canSeeBookings) ...[
-                  _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
-                  8.h,
-                ],
-                if (role.canSeeDashboard)
+                if (role == AppRole.artist) ...[
+                  // ── ARTIST VIEW ───────────────────────────────────────────
                   _SidebarItem(
                     icon: Icons.dashboard_outlined,
                     title: 'Dashboard',
@@ -63,148 +78,267 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/',
                     onTap: () => context.go('/'),
                   ),
-                if (role.canSeeClients)
                   _SidebarItem(
-                    icon: Icons.people_outline,
-                    title: 'Clients',
+                    icon: Icons.event_note_outlined,
+                    title: 'My Works',
                     isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/client'),
-                    onTap: () => context.go('/clients'),
+                    isSelected: currentPath == '/works',
+                    onTap: () => context.go('/works'),
                   ),
-                if (role.canSeeCalendar)
                   _SidebarItem(
-                    icon: Icons.calendar_month,
-                    title: 'Calendar',
+                    icon: Icons.calendar_today_outlined,
+                    title: 'Leave Request',
                     isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/calendar'),
-                    onTap: () => context.go('/calendar'),
+                    isSelected: currentPath == '/leave-requests',
+                    onTap: () => context.go('/leave-requests'),
                   ),
-                if (role.canSeeBookings)
-                  _SidebarItem(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Booking',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/booking'),
-                    onTap: () => context.go('/booking/requests'),
-                  ),
-
-                // ── ERP SECTION ──────────────────────────────────────────────
-                if (role.canSeeServices || role.canSeeStaff ||
-                    role.canSeeSales || role.canSeeFinance || role.canSeeFleet) ...[
-                  32.h,
-                  _buildSectionTitle('ERP', isCollapsed: isCollapsed, theme: theme),
-                  8.h,
-                ],
-                if (role.canSeeServices) ...[
-                  _SidebarItem(
-                    icon: Icons.design_services_outlined,
-                    title: 'Services',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/services'),
-                    onTap: () => context.go('/services'),
-                  ),
-                ],
-                if (role.canSeeStaff)
-                  _SidebarItem(
-                    icon: Icons.badge_outlined,
-                    title: 'Staff Management',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/staff'),
-                    onTap: () => context.go('/staff'),
-                  ),
-                if (role.canSeeSales)
-                  _SidebarItem(
-                    icon: Icons.bar_chart_outlined,
-                    title: 'Sales & Invoices',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/sales'),
-                    onTap: () => context.go('/sales'),
-                  ),
-                if (role.canSeeFinance)
                   _SidebarItem(
                     icon: Icons.account_balance_wallet_outlined,
-                    title: 'Artist Finance',
+                    title: 'Finance & Claims',
                     isCollapsed: isCollapsed,
                     isSelected: currentPath.startsWith('/finance'),
                     onTap: () => context.go('/finance'),
                   ),
-                if (role.canSeeFleet) ...[
-                  _SidebarItem(
-                    icon: Icons.local_shipping_outlined,
-                    title: 'Fleet',
-                    isCollapsed: isCollapsed,
-                    isSelected: isFleetRoute,
-                    trailing: isCollapsed
-                        ? null
-                        : Icon(
-                            effectiveFleetExpanded
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                    onTap: () {
-                      onFleetExpandToggle(!fleetExpanded || fleetUserCollapsed);
-                    },
-                  ),
-                  if (!isCollapsed && effectiveFleetExpanded) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(left: 14),
-                      child: _SidebarItem(
-                        icon: Icons.directions_car_outlined,
-                        title: 'Cars',
-                        isCollapsed: false,
-                        isSelected: currentPath == '/fleet/vehicles',
-                        onTap: () => context.go('/fleet/vehicles'),
-                      ),
+                ] else ...[
+                  // ── STANDARD/ADMIN VIEW ────────────────────────────────────
+                  // ── CRM SECTION ──────────────────────────────────────────────
+                  if (role.canSeeDashboard || role.canSeeClients ||
+                      role.canSeeCalendar || role.canSeeBookings) ...[
+                    _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
+                    8.h,
+                  ],
+                  if (role.canSeeDashboard)
+                    _SidebarItem(
+                      icon: Icons.dashboard_outlined,
+                      title: 'Dashboard',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/',
+                      onTap: () => context.go('/'),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 14),
-                      child: _SidebarItem(
-                        icon: Icons.badge_outlined,
-                        title: 'Drivers',
-                        isCollapsed: false,
-                        isSelected: currentPath == '/fleet/drivers',
-                        onTap: () => context.go('/fleet/drivers'),
-                      ),
+                  if (role.canSeeClients)
+                    _SidebarItem(
+                      icon: Icons.people_outline,
+                      title: 'Clients',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/client'),
+                      onTap: () => context.go('/clients'),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 14),
-                      child: _SidebarItem(
-                        icon: Icons.local_gas_station_outlined,
-                        title: 'Expenses',
-                        isCollapsed: false,
-                        isSelected: currentPath == '/fleet/fuel',
-                        onTap: () => context.go('/fleet/fuel'),
-                      ),
+                  if (role.canSeeCalendar)
+                    _SidebarItem(
+                      icon: Icons.calendar_month,
+                      title: 'Calendar',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/calendar',
+                      onTap: () => context.go('/calendar'),
+                    ),
+                  if (role.canSeeBookings)
+                    _SidebarItem(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Booking',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/booking'),
+                      onTap: () => context.go('/booking/requests'),
+                    ),
+
+                  // ── ERP SECTION ──────────────────────────────────────────────
+                  if (role.canSeeServices || role.canSeeStaff ||
+                      role.canSeeSales || role.canSeeFinance || role.canSeeFleet) ...[
+                    32.h,
+                    _buildSectionTitle('ERP', isCollapsed: isCollapsed, theme: theme),
+                    8.h,
+                  ],
+                  if (role.canSeeServices) ...[
+                    _SidebarItem(
+                      icon: Icons.design_services_outlined,
+                      title: 'Services',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/services'),
+                      onTap: () => context.go('/services'),
                     ),
                   ],
-                ],
+                  if (role.canSeeStaff)
+                    _SidebarItem(
+                      icon: Icons.badge_outlined,
+                      title: 'Staff Management',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/staff'),
+                      onTap: () => context.go('/staff'),
+                    ),
+                  if (role.canSeeSales) ...[
+                    _SidebarItem(
+                      icon: Icons.bar_chart_outlined,
+                      title: 'Sales',
+                      isCollapsed: isCollapsed,
+                      isSelected: isSalesRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveSalesExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () {
+                        onSalesExpandToggle(!salesExpanded || salesUserCollapsed);
+                      },
+                    ),
+                    if (!isCollapsed && effectiveSalesExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Invoices & Bookings',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/sales',
+                          onTap: () => context.go('/sales'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.person_add_alt_1_outlined,
+                          title: 'Leads Data Entry',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/sales/leads',
+                          onTap: () => context.go('/sales/leads'),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (role.canSeeFinance) ...[
+                    _SidebarItem(
+                      icon: Icons.account_balance,
+                      title: 'Accounts',
+                      isCollapsed: isCollapsed,
+                      isSelected: isAccountsRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveAccountsExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () {
+                        onAccountsExpandToggle(!accountsExpanded || accountsUserCollapsed);
+                      },
+                    ),
+                    if (!isCollapsed && effectiveAccountsExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.account_balance_wallet_outlined,
+                          title: 'Artist Collections',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/accounts/artist-collections',
+                          onTap: () => context.go('/accounts/artist-collections'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.receipt_outlined,
+                          title: 'Artist Finance',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/finance',
+                          onTap: () => context.go('/finance'),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (role.canSeeFleet) ...[
+                    _SidebarItem(
+                      icon: Icons.local_shipping_outlined,
+                      title: 'Fleet',
+                      isCollapsed: isCollapsed,
+                      isSelected: isFleetRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveFleetExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () {
+                        onFleetExpandToggle(!fleetExpanded || fleetUserCollapsed);
+                      },
+                    ),
+                    if (!isCollapsed && effectiveFleetExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.directions_car_outlined,
+                          title: 'Cars',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/vehicles',
+                          onTap: () => context.go('/fleet/vehicles'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.badge_outlined,
+                          title: 'Drivers',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/drivers',
+                          onTap: () => context.go('/fleet/drivers'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.local_gas_station_outlined,
+                          title: 'Expenses',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/fuel',
+                          onTap: () => context.go('/fleet/fuel'),
+                        ),
+                      ),
+                    ],
+                  ],
 
-                // ── BUSINESS SECTION ─────────────────────────────────────────
-                32.h,
-                _buildSectionTitle('BUSINESS', isCollapsed: isCollapsed, theme: theme),
-                8.h,
-                _SidebarItem(
-                  icon: Icons.campaign_outlined,
-                  title: 'Marketing',
-                  isCollapsed: isCollapsed,
-                ),
-                _SidebarItem(
-                  icon: Icons.analytics_outlined,
-                  title: 'Reports & Analytics',
-                  isCollapsed: isCollapsed,
-                ),
-                if (role.canSeeSettings)
-                  _SidebarItem(
-                    icon: Icons.settings_outlined,
-                    title: 'Settings',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath.startsWith('/settings'),
-                    onTap: () => context.go('/settings'),
-                  ),
+                  // ── BUSINESS SECTION ─────────────────────────────────────────
+                  if (role.canSeeSettings || role.isFullAccess) ...[
+                    32.h,
+                    _buildSectionTitle('BUSINESS', isCollapsed: isCollapsed, theme: theme),
+                    8.h,
+                    _SidebarItem(
+                      icon: Icons.campaign_outlined,
+                      title: 'Marketing',
+                      isCollapsed: isCollapsed,
+                    ),
+                    _SidebarItem(
+                      icon: Icons.analytics_outlined,
+                      title: 'Reports & Analytics',
+                      isCollapsed: isCollapsed,
+                    ),
+                    if (role.canSeeSettings)
+                      _SidebarItem(
+                        icon: Icons.settings_outlined,
+                        title: 'Settings',
+                        isCollapsed: isCollapsed,
+                        isSelected: currentPath.startsWith('/settings'),
+                        onTap: () => context.go('/settings'),
+                      ),
+                  ],
+                ],
               ],
             ),
           ),
+          // ── BOTTOM SECTION ─────────────────────────────────────────────────
+          const Divider(height: 1, color: Colors.white12),
+          Padding(
+            padding: 16.p,
+            child: _SidebarItem(
+              icon: Icons.account_circle_outlined,
+              title: 'My Profile',
+              isCollapsed: isCollapsed,
+              isSelected: currentPath == '/profile',
+              onTap: () => context.go('/profile'),
+            ),
+          ),
+          16.h,
         ],
       ),
     );

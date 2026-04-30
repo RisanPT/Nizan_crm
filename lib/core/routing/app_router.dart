@@ -23,6 +23,11 @@ import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
 import '../../presentation/screens/fuel_expenses_screen.dart';
 import '../../presentation/screens/artist_finance_screen.dart';
+import '../../presentation/screens/leave_request_screen.dart';
+import '../../presentation/screens/profile_screen.dart';
+import '../../presentation/screens/artist_works_screen.dart';
+import '../../presentation/screens/accounts_collections_screen.dart';
+import '../../presentation/screens/sales_leads_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -122,14 +127,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Staff Management';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
+          } else if (state.uri.path == '/sales/leads') {
+            title = 'Leads Management';
           } else if (state.uri.path == '/fleet/vehicles') {
             title = 'Fleet Vehicles';
           } else if (state.uri.path == '/fleet/drivers') {
             title = 'Fleet Drivers';
           } else if (state.uri.path == '/fleet/fuel') {
             title = 'Fleet Expenses';
+          } else if (state.uri.path == '/accounts/artist-collections') {
+            title = 'Artist Collections';
           } else if (state.uri.path == '/finance') {
             title = 'Artist Finance';
+          } else if (state.uri.path == '/works') {
+            title = 'My Works';
+          } else if (state.uri.path == '/leave-requests') {
+            title = 'Leave Requests';
+          } else if (state.uri.path == '/profile') {
+            title = 'My Profile';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
           }
@@ -163,6 +178,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             ),
           ),
           GoRoute(
+            path: '/works',
+            builder: (context, state) => const ArtistWorksScreen(),
+          ),
+          GoRoute(
+            path: '/leave-requests',
+            builder: (context, state) => const LeaveRequestScreen(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (context, state) => const ProfileScreen(),
+          ),
+          GoRoute(
             path: '/services',
             builder: (context, state) => const ServicesManagementScreen(),
           ),
@@ -189,6 +216,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const SalesBookingsScreen(),
           ),
           GoRoute(
+            path: '/sales/leads',
+            builder: (context, state) => const SalesLeadsScreen(),
+          ),
+          GoRoute(
             path: '/fleet/vehicles',
             builder: (context, state) => const FleetVehiclesScreen(),
           ),
@@ -199,6 +230,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/fleet/fuel',
             builder: (context, state) => const FuelExpensesScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/artist-collections',
+            builder: (context, state) => const AccountsCollectionsScreen(),
           ),
           GoRoute(
             path: '/booking/add',

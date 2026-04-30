@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../services/booking_service.dart';
 import '../models/booking.dart';
+import 'auth_provider.dart';
 
 part 'booking_provider.g.dart';
 
@@ -12,6 +13,7 @@ class PaginatedBookingsParams {
   final String search;
   final bool duplicatesOnly;
   final String? financialYear;
+  final String? employeeId;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -19,6 +21,7 @@ class PaginatedBookingsParams {
     this.search = '',
     this.duplicatesOnly = false,
     this.financialYear,
+    this.employeeId,
   });
 
   @override
@@ -28,12 +31,13 @@ class PaginatedBookingsParams {
         other.limit == limit &&
         other.search == search &&
         other.duplicatesOnly == duplicatesOnly &&
-        other.financialYear == financialYear;
+        other.financialYear == financialYear &&
+        other.employeeId == employeeId;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(page, limit, search, duplicatesOnly, financialYear);
+  int get hashCode => Object.hash(
+      page, limit, search, duplicatesOnly, financialYear, employeeId);
 }
 
 final paginatedBookingsProvider =
@@ -48,8 +52,41 @@ final paginatedBookingsProvider =
         search: params.search,
         duplicatesOnly: params.duplicatesOnly,
         financialYear: params.financialYear,
+        employeeId: params.employeeId,
       );
     });
+
+final artistAssignedWorksProvider =
+    FutureProvider.family<PaginatedBookingsResponse, int>((ref, page) async {
+  final auth = ref.watch(authControllerProvider);
+  final employeeId = auth.session?.employeeId ?? '';
+
+  if (employeeId.isEmpty) {
+    return const PaginatedBookingsResponse(
+      items: [],
+      page: 1,
+      limit: 20,
+      totalItems: 0,
+      totalPages: 1,
+      summary: BookingPageSummary(
+        totalSales: 0,
+        totalAdvance: 0,
+        completedCount: 0,
+        cancelledCount: 0,
+      ),
+    );
+  }
+
+  return ref.watch(
+    paginatedBookingsProvider(
+      PaginatedBookingsParams(
+        page: page,
+        limit: 20,
+        employeeId: employeeId,
+      ),
+    ).future,
+  );
+});
 
 @riverpod
 class BookingNotifier extends _$BookingNotifier {

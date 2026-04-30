@@ -5,6 +5,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:web/web.dart' as web;
 
+import '../models/artist_collection.dart';
+import '../models/lead.dart';
 import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
@@ -14,6 +16,9 @@ Future<void> downloadDashboardReport({
   required List<Booking> bookings,
   required List<ServicePackage> packages,
   required List<Employee> employees,
+  String reportType = 'executive',
+  List<Lead> leads = const [],
+  List<ArtistCollection> collections = const [],
 }) async {
   final pdf = pw.Document();
   final report = _buildReport(month, bookings, packages, employees);
@@ -27,53 +32,94 @@ Future<void> downloadDashboardReport({
           bold: pw.Font.helveticaBold(),
         ),
       ),
-      build: (context) => [
-        pw.Text(
-          'Nizan CRM Dashboard Report',
-          style: pw.TextStyle(
-            fontSize: 24,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColors.blueGrey900,
-          ),
-        ),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          'Reporting Month: ${_monthLabel(month)}',
-          style: const pw.TextStyle(
-            fontSize: 12,
-            color: PdfColors.blueGrey700,
-          ),
-        ),
-        pw.SizedBox(height: 18),
-        pw.Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          children: [
-            _metricCard('Total Works', '${report.totalWorks}'),
-            _metricCard('Completed Works', '${report.completedWorks}'),
-            _metricCard('Cancelled Works', '${report.cancelledWorks}'),
-            _metricCard(
-              'Forecast Amount',
-              'INR ${report.forecastAmount.toStringAsFixed(0)}',
+      build: (context) {
+        final title = switch (reportType) {
+          'sales' => 'Nizan CRM Sales Report',
+          'marketing' => 'Nizan CRM Marketing Report',
+          'crm' => 'Nizan CRM Client Relations Report',
+          'finance' => 'Nizan CRM Finance Report',
+          'ceo_daily' => 'DAILY CEO REPORT – Nizan Makeovers',
+          _ => 'Nizan CRM Executive Overview',
+        };
+
+        return [
+          pw.Text(
+            title,
+            style: pw.TextStyle(
+              fontSize: 24,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.blueGrey900,
             ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            'Reporting Period: ${_monthLabel(month)}',
+            style: const pw.TextStyle(
+              fontSize: 12,
+              color: PdfColors.blueGrey700,
+            ),
+          ),
+          pw.SizedBox(height: 18),
+          
+          if (reportType == 'executive' || reportType == 'sales') ...[
+            pw.Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _metricCard('Total Works', '${report.totalWorks}'),
+                _metricCard('Completed Works', '${report.completedWorks}'),
+                _metricCard('Cancelled Works', '${report.cancelledWorks}'),
+                _metricCard(
+                  'Forecast Amount',
+                  'INR ${report.forecastAmount.toStringAsFixed(0)}',
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Daily Revenue Overview'),
+            _dailyRevenueTable(report.dailyRevenue),
           ],
-        ),
-        pw.SizedBox(height: 22),
-        _sectionTitle('Daily Revenue Overview'),
-        _dailyRevenueTable(report.dailyRevenue),
-        pw.SizedBox(height: 22),
-        _sectionTitle('Top Services'),
-        _serviceTable(report.topServices),
-        pw.SizedBox(height: 22),
-        _sectionTitle('Top Staff'),
-        _staffTable(report.topStaff),
-        pw.SizedBox(height: 22),
-        _sectionTitle('Pending Booking Requests'),
-        _bookingTable(report.pendingBookings),
-        pw.SizedBox(height: 22),
-        _sectionTitle('Upcoming Bookings'),
-        _bookingTable(report.upcomingBookings),
-      ],
+
+          if (reportType == 'executive' || reportType == 'marketing') ...[
+            pw.SizedBox(height: 22),
+            _sectionTitle('Top Services Performance'),
+            _serviceTable(report.topServices),
+          ],
+
+          if (reportType == 'executive' || reportType == 'crm') ...[
+            pw.SizedBox(height: 22),
+            _sectionTitle('Top Staff Performance'),
+            _staffTable(report.topStaff),
+          ],
+
+          if (reportType == 'executive' || reportType == 'sales' || reportType == 'crm') ...[
+            pw.SizedBox(height: 22),
+            _sectionTitle('Pending Booking Requests'),
+            _bookingTable(report.pendingBookings),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Upcoming Bookings'),
+            _bookingTable(report.upcomingBookings),
+          ],
+          
+          if (reportType == 'finance') ...[
+             pw.SizedBox(height: 22),
+             _sectionTitle('Financial Summary'),
+             _dailyRevenueTable(report.dailyRevenue),
+             pw.SizedBox(height: 22),
+             _sectionTitle('Expense Overview'),
+             pw.Text('Detailed expense breakdown is available in the Accounts module.'),
+          ],
+
+          if (reportType == 'ceo_daily') ...[
+            pw.SizedBox(height: 22),
+            _sectionTitle('Daily Performance Metrics'),
+            _metricCard('Total Leads', '${leads.length}'),
+            pw.SizedBox(height: 12),
+            _sectionTitle('Recent Collections'),
+            _bookingTable(report.upcomingBookings), // Using upcoming as proxy for recent activity in this summary
+          ]
+        ];
+      },
     ),
   );
 
@@ -81,7 +127,7 @@ Future<void> downloadDashboardReport({
   _downloadPdf(
     bytes,
     fileName:
-        'dashboard-report-${month.year}-${month.month.toString().padLeft(2, '0')}.pdf',
+        '${reportType}-report-${month.year}-${month.month.toString().padLeft(2, '0')}.pdf',
   );
 }
 
