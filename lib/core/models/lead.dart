@@ -7,6 +7,7 @@ class Lead {
   final String location;
   final String leadType;
   final DateTime enquiryDate;
+  final DateTime? bookedDate;
   final String status;
   final String reason;
   final String remarks;
@@ -22,6 +23,7 @@ class Lead {
     required this.location,
     required this.leadType,
     required this.enquiryDate,
+    this.bookedDate,
     required this.status,
     required this.reason,
     required this.remarks,
@@ -41,6 +43,9 @@ class Lead {
       enquiryDate: json['enquiryDate'] != null
           ? DateTime.parse(json['enquiryDate'] as String)
           : DateTime.now(),
+      bookedDate: json['bookedDate'] != null
+          ? DateTime.parse(json['bookedDate'] as String)
+          : null,
       status: json['status'] as String? ?? 'New',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
@@ -63,6 +68,7 @@ class Lead {
       'location': location,
       'leadType': leadType,
       'enquiryDate': enquiryDate.toIso8601String(),
+      'bookedDate': bookedDate?.toIso8601String(),
       'status': status,
       'reason': reason,
       'remarks': remarks,

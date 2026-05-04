@@ -1376,6 +1376,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
     final locationCtrl = useTextEditingController();
     final remarksCtrl = useTextEditingController();
     final enquiryDate = useState(DateTime.now());
+    final bookedDate = useState<DateTime?>(null);
     final status = useState('New');
     final isSaving = useState(false);
 
@@ -1398,12 +1399,15 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
           'location': locationCtrl.text,
           'remarks': remarksCtrl.text,
           'enquiryDate': enquiryDate.value.toIso8601String(),
+          'bookedDate': bookedDate.value?.toIso8601String(),
         });
         
         nameCtrl.clear();
         phoneCtrl.clear();
         locationCtrl.clear();
         remarksCtrl.clear();
+        enquiryDate.value = DateTime.now();
+        bookedDate.value = null;
         status.value = 'New';
         
         ref.invalidate(leadsProvider);
@@ -1525,6 +1529,22 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
                       child: Text('${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}'),
+                    ),
+                  ),
+                  16.h,
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: bookedDate.value ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) bookedDate.value = picked;
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Booked Date', prefixIcon: Icon(Icons.bookmark_added_outlined)),
+                      child: Text(bookedDate.value != null ? '${bookedDate.value!.day}/${bookedDate.value!.month}/${bookedDate.value!.year}' : 'Not Booked'),
                     ),
                   ),
                   20.h,

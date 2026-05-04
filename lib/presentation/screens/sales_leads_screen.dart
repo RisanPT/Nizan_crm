@@ -63,6 +63,7 @@ class _QuickAddLeadCard extends HookConsumerWidget {
     final reasonCtrl = useTextEditingController();
     final remarksCtrl = useTextEditingController();
     final enquiryDate = useState(DateTime.now());
+    final bookedDate = useState<DateTime?>(null);
     final status = useState('New');
     final isSaving = useState(false);
 
@@ -83,6 +84,7 @@ class _QuickAddLeadCard extends HookConsumerWidget {
           'location': locationCtrl.text,
           'leadType': leadTypeCtrl.text,
           'enquiryDate': enquiryDate.value.toIso8601String(),
+          'bookedDate': bookedDate.value?.toIso8601String(),
           'status': status.value,
           'reason': reasonCtrl.text,
           'remarks': remarksCtrl.text,
@@ -94,6 +96,7 @@ class _QuickAddLeadCard extends HookConsumerWidget {
         reasonCtrl.clear();
         remarksCtrl.clear();
         enquiryDate.value = DateTime.now();
+        bookedDate.value = null;
         status.value = 'New';
         
         ref.invalidate(leadsProvider);
@@ -164,6 +167,24 @@ class _QuickAddLeadCard extends HookConsumerWidget {
                     child: InputDecorator(
                       decoration: const InputDecoration(labelText: 'Date Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
                       child: Text(_fmt(enquiryDate.value)),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 200,
+                  child: InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: bookedDate.value ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) bookedDate.value = picked;
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Booked Date', prefixIcon: Icon(Icons.bookmark_added_outlined)),
+                      child: Text(bookedDate.value != null ? _fmt(bookedDate.value!) : 'Not Booked'),
                     ),
                   ),
                 ),
@@ -280,20 +301,22 @@ class _LeadsTable extends StatelessWidget {
           child: Table(
             columnWidths: const {
               0: FixedColumnWidth(100),
-              1: FixedColumnWidth(180),
-              2: FixedColumnWidth(120),
-              3: FixedColumnWidth(140),
-              4: FixedColumnWidth(120),
-              5: FixedColumnWidth(140),
-              6: FixedColumnWidth(120),
-              7: FixedColumnWidth(140),
-              8: FixedColumnWidth(250),
+              1: FixedColumnWidth(100),
+              2: FixedColumnWidth(180),
+              3: FixedColumnWidth(120),
+              4: FixedColumnWidth(140),
+              5: FixedColumnWidth(120),
+              6: FixedColumnWidth(140),
+              7: FixedColumnWidth(120),
+              8: FixedColumnWidth(140),
+              9: FixedColumnWidth(250),
             },
             children: [
               TableRow(
                 decoration: BoxDecoration(color: crm.background, borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
                 children: const [
                   _HeaderCell('DATE'),
+                  _HeaderCell('BOOKED'),
                   _HeaderCell('Name'),
                   _HeaderCell('Enquired For'),
                   _HeaderCell('Phone'),
@@ -306,10 +329,12 @@ class _LeadsTable extends StatelessWidget {
               ),
               ...leads.map((lead) {
                 final d = lead.createdAt;
+                final bd = lead.bookedDate;
                 final ed = lead.enquiryDate;
                 return TableRow(
                   children: [
                     _DataCell('${d.day}/${d.month}/${d.year}'),
+                    _DataCell(bd != null ? '${bd.day}/${bd.month}/${bd.year}' : '-'),
                     _DataCell(lead.name, bold: true),
                     _DataCell('${ed.day}/${ed.month}/${ed.year}'),
                     _DataCell(lead.phone),
