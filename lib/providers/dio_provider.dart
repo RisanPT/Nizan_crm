@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../core/providers/auth_provider.dart';
@@ -16,7 +17,7 @@ Dio dio(Ref ref) {
       baseUrl: apiBaseUrl,
       connectTimeout: const Duration(seconds: 60),
       receiveTimeout: const Duration(seconds: 60),
-      sendTimeout: const Duration(seconds: 60),
+      sendTimeout: kIsWeb ? null : const Duration(seconds: 60),
     ),
   );
 

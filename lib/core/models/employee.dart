@@ -11,6 +11,7 @@ class Employee {
   final String regionId;
   final String regionName;
   final String category;
+  final String profileImage;
 
   const Employee({
     required this.id,
@@ -25,6 +26,7 @@ class Employee {
     required this.regionId,
     required this.regionName,
     required this.category,
+    this.profileImage = '',
   });
 
   factory Employee.fromJson(Map<String, dynamic> json) {
@@ -49,6 +51,7 @@ class Employee {
           ? (region['name'] as String? ?? '')
           : '',
       category: json['category'] as String? ?? 'creative',
+      profileImage: json['profileImage'] as String? ?? '',
     );
   }
 
@@ -64,6 +67,7 @@ class Employee {
       'status': status,
       'regionId': regionId,
       'category': category,
+      'profileImage': profileImage,
     };
   }
 }

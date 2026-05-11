@@ -34,16 +34,16 @@ enum AppRole {
 
   /// Dashboard overview
   bool get canSeeDashboard =>
-      isFullAccess || this == crm || this == sales || this == accounts || this == artist;
+      isFullAccess || this == crm || this == accounts || this == artist;
 
   /// Clients directory + client profiles
-  bool get canSeeClients => isFullAccess || this == crm;
+  bool get canSeeClients => isFullAccess || this == crm || this == sales;
 
   /// Calendar scheduler / Works
-  bool get canSeeCalendar => isFullAccess || this == crm || this == artist;
+  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales;
 
   /// Booking requests + manage booking
-  bool get canSeeBookings => isFullAccess || this == crm;
+  bool get canSeeBookings => isFullAccess || this == crm || this == sales;
 
   /// Services management (packages, regions, addons)
   bool get canSeeServices => isFullAccess;

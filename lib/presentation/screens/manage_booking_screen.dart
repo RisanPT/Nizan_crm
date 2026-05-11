@@ -137,6 +137,12 @@ class ManageBookingScreen extends HookConsumerWidget {
           : _formatDateOnly(canonicalBookingDate),
     );
 
+    final bookedDateCtrl = useTextEditingController(
+      text: booking?.createdAt == null
+          ? ''
+          : _formatDateOnly(booking!.createdAt!),
+    );
+
     final startTimeCtrl = useTextEditingController(
       text: selectedDisplayEntry != null
           ? _fmt(selectedDisplayEntry.serviceStart)
@@ -228,6 +234,9 @@ class ManageBookingScreen extends HookConsumerWidget {
           bookingDateCtrl.text = canonicalBookingDate == null
               ? ''
               : _formatDateOnly(canonicalBookingDate);
+          bookedDateCtrl.text = booking.createdAt == null
+              ? ''
+              : _formatDateOnly(booking.createdAt!);
           startTimeCtrl.text = _fmt(
             selectedDisplayEntry?.serviceStart ?? booking.serviceStart,
           );
@@ -780,6 +789,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         staffInstructions: staffNeedsCtrl.text.trim(),
         internalRemarks: remarksCtrl.text.trim(),
         contentCreationRequired: contentRequired.value,
+        createdAt: _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,
         bookingDate: parsedBookingDate,
         selectedDates: normalizedBookingDates,
         serviceStart: _mergeDateAndTime(
@@ -978,7 +988,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                               ),
                               _buildField(
                                 context,
-                                'BOOKING DATE',
+                                'EVENT DATE',
                                 bookingDateCtrl,
                                 readOnly: true,
                                 onTap: () async {
@@ -1002,6 +1012,35 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 },
                                 suffixIcon: const Icon(
                                   Icons.calendar_today_outlined,
+                                  size: 18,
+                                ),
+                              ),
+                              _buildField(
+                                context,
+                                'BOOKED DATE',
+                                bookedDateCtrl,
+                                readOnly: true,
+                                onTap: () async {
+                                  final initialDate =
+                                      _parseDateInput(
+                                        bookedDateCtrl.text.trim(),
+                                      ) ??
+                                      booking.createdAt ??
+                                      DateTime.now();
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: initialDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2035),
+                                  );
+                                  if (picked != null) {
+                                    bookedDateCtrl.text = _formatDateOnly(
+                                      picked,
+                                    );
+                                  }
+                                },
+                                suffixIcon: const Icon(
+                                  Icons.bookmark_added_outlined,
                                   size: 18,
                                 ),
                               ),

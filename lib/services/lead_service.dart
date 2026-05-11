@@ -19,8 +19,18 @@ class LeadService {
   Future<List<Lead>> getLeads() async {
     try {
       final response = await _dio.get('/leads');
-      final data = response.data as List;
-      return data.map((item) => Lead.fromJson(item as Map<String, dynamic>)).toList();
+      final data = response.data;
+      
+      List leadsList;
+      if (data is Map) {
+        leadsList = (data['data'] ?? data['leads'] ?? data['items'] ?? []) as List;
+      } else if (data is List) {
+        leadsList = data;
+      } else {
+        leadsList = [];
+      }
+      
+      return leadsList.map((item) => Lead.fromJson(item as Map<String, dynamic>)).toList();
     } on DioException catch (e) {
       throw Exception('Failed to load leads: ${e.message}');
     }

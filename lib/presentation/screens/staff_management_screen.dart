@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/list_page_params.dart';
@@ -10,6 +11,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
+import 'staff_details_screen.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
   const StaffManagementScreen({super.key});
@@ -19,15 +21,16 @@ class StaffManagementScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final currentCategory = useState('creative');
     final pageState = useState(1);
     const pageSize = 20;
+
+    // Hardcode category to 'creative' as we removed administrative staff
     final asyncEmployees = ref.watch(
       paginatedEmployeesProvider(
         ListPageParams(
           page: pageState.value,
           limit: pageSize,
-          category: currentCategory.value,
+          category: 'creative',
         ),
       ),
     );
@@ -47,26 +50,29 @@ class StaffManagementScreen extends HookConsumerWidget {
       var artistRole = employee?.artistRole ?? presetRole ?? 'artist';
       var status = employee?.status ?? 'active';
       var regionId = employee?.regionId ?? '';
-      var category = employee?.category ?? currentCategory.value;
+      var category = 'creative'; // hardcoded
 
       await showDialog(
         context: context,
         builder: (dialogContext) {
           final regions = asyncRegions.value ?? const <ServiceRegion>[];
           final regionItems = <DropdownMenuItem<String>>[
-            const DropdownMenuItem(value: '', child: Text('Any / All')),
+            const DropdownMenuItem(value: '', child: Text('Any / All', overflow: TextOverflow.ellipsis)),
             ...regions.map(
               (region) =>
-                  DropdownMenuItem(value: region.id, child: Text(region.name)),
+                  DropdownMenuItem(value: region.id, child: Text(region.name, overflow: TextOverflow.ellipsis)),
             ),
           ];
 
           return StatefulBuilder(
             builder: (context, setState) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               title: Text(
                 employee == null
                     ? (presetRole == 'driver' ? 'Add Driver' : 'Add Staff')
                     : 'Edit Staff',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               content: SizedBox(
                 width: 420,
@@ -90,6 +96,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              isExpanded: true,
                               initialValue: type,
                               items: const [
                                 DropdownMenuItem(
@@ -114,6 +121,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           16.w,
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              isExpanded: true,
                               initialValue: regionId,
                               items: regionItems,
                               onChanged: (value) {
@@ -130,6 +138,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: artistRole,
                         items: const [
                           DropdownMenuItem(
@@ -139,10 +148,6 @@ class StaffManagementScreen extends HookConsumerWidget {
                           DropdownMenuItem(
                             value: 'assistant',
                             child: Text('Assistant'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'driver',
-                            child: Text('Driver'),
                           ),
                         ],
                         onChanged: (value) {
@@ -168,6 +173,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: status,
                         items: const [
                           DropdownMenuItem(
@@ -185,28 +191,6 @@ class StaffManagementScreen extends HookConsumerWidget {
                           }
                         },
                         decoration: const InputDecoration(labelText: 'Status'),
-                      ),
-                      16.h,
-                      DropdownButtonFormField<String>(
-                        initialValue: category,
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'creative',
-                            child: Text('Creative Staff'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'administrative',
-                            child: Text('Administrative Staff'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => category = value);
-                          }
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Staff Category',
-                        ),
                       ),
                     ],
                   ),
@@ -248,7 +232,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       );
     }
 
-    final body = Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
@@ -259,13 +243,13 @@ class StaffManagementScreen extends HookConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Artists / Staff / Drivers',
+                    'Artists & Staff',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    'Manage artists, assistants, drivers, type, region, and staff details.',
+                    'Manage artists, assistants, and their service regions.',
                     style: TextStyle(color: crmColors.textSecondary),
                   ),
                 ],
@@ -274,12 +258,6 @@ class StaffManagementScreen extends HookConsumerWidget {
             if (!isMobile)
               Row(
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: () => openStaffDialog(null, 'driver'),
-                    icon: const Icon(Icons.local_taxi_outlined, size: 18),
-                    label: const Text('Add Driver'),
-                  ),
-                  16.w,
                   ElevatedButton.icon(
                     onPressed: () => openStaffDialog(),
                     icon: const Icon(Icons.add, size: 18),
@@ -294,14 +272,6 @@ class StaffManagementScreen extends HookConsumerWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => openStaffDialog(null, 'driver'),
-                  icon: const Icon(Icons.local_taxi_outlined, size: 18),
-                  label: const Text('Add Driver'),
-                ),
-              ),
-              16.w,
-              Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () => openStaffDialog(),
                   icon: const Icon(Icons.add, size: 18),
@@ -311,30 +281,6 @@ class StaffManagementScreen extends HookConsumerWidget {
             ],
           ),
         ],
-        24.h,
-        Container(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
-          ),
-          child: TabBar(
-            onTap: (index) {
-              currentCategory.value =
-                  index == 0 ? 'creative' : 'administrative';
-              pageState.value = 1;
-            },
-            tabs: const [
-              Tab(text: 'Creative Staff'),
-              Tab(text: 'Administrative Staff'),
-            ],
-            labelColor: crmColors.primary,
-            unselectedLabelColor: crmColors.textSecondary,
-            indicatorColor: crmColors.primary,
-            indicatorSize: TabBarIndicatorSize.tab,
-            dividerColor: Colors.transparent,
-          ),
-        ),
         24.h,
         Expanded(
           child: asyncEmployees.when(
@@ -349,53 +295,38 @@ class StaffManagementScreen extends HookConsumerWidget {
               final employees = response.items;
               if (employees.isEmpty) {
                 return Center(
-                  child: Text(
-                    'No staff found.',
-                    style: TextStyle(color: crmColors.textSecondary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people,
+                          size: 64, color: theme.dividerColor),
+                      16.h,
+                      Text(
+                        'No staff found.',
+                        style: TextStyle(
+                            color: crmColors.textSecondary, fontSize: 16),
+                      ),
+                    ],
                   ),
                 );
               }
 
-              return Card(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth:
-                          MediaQuery.of(context).size.width -
-                          (isMobile ? 32 : 300),
-                    ),
-                    child: SingleChildScrollView(
-                      child: DataTable(
-                        columnSpacing: 28,
-                        headingTextStyle: TextStyle(
-                          color: crmColors.textSecondary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                        columns: const [
-                          DataColumn(label: Text('NAME')),
-                          DataColumn(label: Text('TYPE')),
-                          DataColumn(label: Text('LEVEL')),
-                          DataColumn(label: Text('ROLE')),
-                          DataColumn(label: Text('PHONE')),
-                          DataColumn(label: Text('STATUS')),
-                          DataColumn(label: Text('ACTIONS')),
-                        ],
-                        rows: employees
-                            .map(
-                              (employee) => _buildStaffRow(
-                                context,
-                                ref,
-                                employee,
-                                onEdit: () => openStaffDialog(employee),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  ),
+              return GridView.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isMobile ? 1 : 3,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  mainAxisExtent: 160,
                 ),
+                itemCount: employees.length,
+                itemBuilder: (context, index) {
+                  return _buildStaffCard(
+                    context,
+                    ref,
+                    employees[index],
+                    onEdit: () => openStaffDialog(employees[index]),
+                  );
+                },
               );
             },
           ),
@@ -417,119 +348,237 @@ class StaffManagementScreen extends HookConsumerWidget {
         ),
       ],
     );
-
-    return DefaultTabController(
-      length: 2,
-      child: body,
-    );
   }
 
-  DataRow _buildStaffRow(
+  Widget _buildStaffCard(
     BuildContext context,
     WidgetRef ref,
     Employee employee, {
     required VoidCallback onEdit,
   }) {
+    final theme = Theme.of(context);
     final crmColors = context.crmColors;
     final isArtist = employee.artistRole == 'artist';
-    final isDriver = employee.artistRole == 'driver';
     final isActive = employee.status == 'active';
-    final levelLabel = isArtist
-        ? 'Artist'
-        : isDriver
-        ? 'Driver'
-        : 'Assistant';
-    final levelColor = isArtist
-        ? crmColors.accent
-        : isDriver
-        ? Colors.indigo
-        : crmColors.primary;
+    final levelLabel = isArtist ? 'Artist' : 'Assistant';
+    final levelColor = isArtist ? crmColors.accent : crmColors.primary;
     final levelBackground = isArtist
         ? crmColors.accent.withValues(alpha: 0.12)
-        : isDriver
-        ? Colors.indigo.withValues(alpha: 0.10)
         : crmColors.primary.withValues(alpha: 0.10);
 
-    return DataRow(
-      cells: [
-        DataCell(
-          Text(
-            employee.name,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        DataCell(
-          Text(
-            employee.type,
-            style: TextStyle(
-              color: employee.type == 'in-house'
-                  ? crmColors.accent
-                  : crmColors.textSecondary,
-              fontWeight: FontWeight.bold,
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => StaffDetailsScreen(employee: employee),
             ),
-          ),
-        ),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: levelBackground,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              levelLabel,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: levelColor,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Text(employee.specialization.isEmpty ? '-' : employee.specialization),
-        ),
-        DataCell(Text(employee.phone.isEmpty ? '-' : employee.phone)),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isActive
-                  ? crmColors.success.withValues(alpha: 0.12)
-                  : crmColors.destructive.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              isActive ? 'Active' : 'Inactive',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: isActive ? crmColors.success : crmColors.destructive,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextButton(onPressed: onEdit, child: const Text('Edit')),
-              TextButton(
-                onPressed: () async {
-                  await ref
-                      .read(employeeServiceProvider)
-                      .deleteEmployee(employee.id);
-                  ref.invalidate(employeesProvider);
-                  ref.invalidate(paginatedEmployeesProvider);
-                },
-                style: TextButton.styleFrom(
-                  foregroundColor: crmColors.destructive,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  backgroundImage: employee.profileImage.isNotEmpty
+                      ? NetworkImage(employee.profileImage)
+                      : null,
+                  child: employee.profileImage.isEmpty
+                      ? Text(
+                          employee.name.isNotEmpty
+                              ? employee.name.substring(0, 1).toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        )
+                      : null,
                 ),
-                child: const Text('Delete'),
+                12.w,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        employee.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      4.h,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: levelBackground,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              levelLabel,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: levelColor,
+                              ),
+                            ),
+                          ),
+                          if (employee.type == 'in-house') ...[
+                            8.w,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: crmColors.accent.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'In-House',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: crmColors.accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'delete') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete Staff'),
+                          content: Text(
+                              'Are you sure you want to delete ${employee.name}?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: crmColors.destructive),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await ref
+                            .read(employeeServiceProvider)
+                            .deleteEmployee(employee.id);
+                        ref.invalidate(employeesProvider);
+                        ref.invalidate(paginatedEmployeesProvider);
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete,
+                              size: 16, color: crmColors.destructive),
+                          const SizedBox(width: 8),
+                          Text('Delete',
+                              style: TextStyle(color: crmColors.destructive)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const Spacer(),
+            if (employee.specialization.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.work_outline,
+                      size: 14, color: crmColors.textSecondary),
+                  6.w,
+                  Expanded(
+                    child: Text(
+                      employee.specialization,
+                      style: TextStyle(
+                          color: crmColors.textSecondary, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
+              6.h,
             ],
-          ),
+            if (employee.phone.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.phone_outlined,
+                      size: 14, color: crmColors.textSecondary),
+                  6.w,
+                  Text(
+                    employee.phone,
+                    style:
+                        TextStyle(color: crmColors.textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+              6.h,
+            ],
+            Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 14, color: crmColors.textSecondary),
+                6.w,
+                Text(
+                  isActive ? 'Active' : 'Inactive',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isActive ? crmColors.success : crmColors.destructive,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
+      ),
     );
   }
 }

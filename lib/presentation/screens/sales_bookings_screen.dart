@@ -11,6 +11,7 @@ import '../../core/utils/dashboard_report_service.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
+import '../widgets/export_sales_report_dialog.dart';
 
 class SalesBookingsScreen extends HookConsumerWidget {
   const SalesBookingsScreen({super.key});
@@ -26,7 +27,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final searchQuery = useState('');
     final duplicatesOnly = useState(false);
     final isMonthlyView = useState(false);
-    final selectedFY = useState<String>('2025-26');
+    final selectedFY = useState<String>('2026-27');
     const pageSize = 20;
 
     final financialYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
@@ -41,6 +42,85 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
     );
+    final asyncAllBookings = ref.watch(bookingProvider);
+    final allBookings = asyncAllBookings.value ?? const <Booking>[];
+
+    final now = DateTime.now();
+    final todaysScheduled = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day).length;
+    final newBookingsToday = allBookings.where((b) {
+      final d = b.createdAt ?? b.bookingDate;
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).length;
+    final todaysCompleted = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day && b.status.toLowerCase() == 'completed').length;
+    
+    final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
+    final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
+    final fyBookings = allBookings.where((b) => !b.bookingDate.isBefore(currentFYStart) && !b.bookingDate.isAfter(currentFYEnd));
+    final totalRevenueFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
+
+    final todaysRevenue = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day && b.status.toLowerCase() != 'cancelled').fold<double>(0, (sum, b) => sum + b.totalPrice);
+    final totalActive = allBookings.where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'completed').length;
+
+    final totalSalesValue = allBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
+    final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.advanceAmount : sum);
+    final completedOverall = allBookings.where((b) => b.status.toLowerCase() == 'completed').length;
+    final cancelledOverall = allBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
+
+    String formatK(double value) {
+      if (value >= 1000) {
+        return '${(value / 1000).toStringAsFixed(1)}K';
+      }
+      return value.toStringAsFixed(0);
+    }
+
+    Future<void> exportReport() async {
+      final packages = ref.read(packagesProvider).value;
+      final employees = ref.read(employeesProvider).value;
+
+      if (packages == null || employees == null) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please wait until dashboard data finishes loading.'),
+          ),
+        );
+        return;
+      }
+
+      showDialog(
+        context: context,
+        builder: (context) => ExportSalesReportDialog(
+          onTodayReport: () => downloadDashboardReport(
+            month: DateTime.now(),
+            bookings: allBookings,
+            packages: packages,
+            employees: employees,
+            reportType: 'ceo_daily',
+          ),
+          onDailyPerformance: () => downloadDashboardReport(
+            month: DateTime.now(),
+            bookings: allBookings,
+            packages: packages,
+            employees: employees,
+            reportType: 'sales',
+          ),
+          onExecutiveSummary: () => downloadDashboardReport(
+            month: DateTime.now(),
+            bookings: allBookings,
+            packages: packages,
+            employees: employees,
+            reportType: 'executive',
+          ),
+          onFullLedger: () => downloadDashboardReport(
+            month: DateTime.now(),
+            bookings: allBookings,
+            packages: packages,
+            employees: employees,
+            reportType: 'crm',
+          ),
+        ),
+      );
+    }
 
     useEffect(() {
       selectedIds.value = <String>{};
@@ -121,111 +201,193 @@ class SalesBookingsScreen extends HookConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Sales & Invoices',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              8.h,
-              Text(
-                'All bookings with financial status, advance tracking, and invoice-ready totals.',
-                style: TextStyle(color: crmColors.textSecondary, fontSize: 15),
-              ),
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  DropdownButton<String>(
-                    value: selectedFY.value,
-                    onChanged: (val) {
-                      if (val != null) selectedFY.value = val;
-                    },
-                    items: financialYears.map((fy) {
-                      return DropdownMenuItem(
-                        value: fy,
-                        child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      );
-                    }).toList(),
-                    style: TextStyle(color: crmColors.primary, fontSize: 16),
-                    underline: Container(height: 2, color: crmColors.primary),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sales & Invoices',
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        8.h,
+                        Text(
+                          'Manage your bookings, track payments, and generate sales reports.',
+                          style: TextStyle(color: crmColors.textSecondary, fontSize: 15),
+                        ),
+                      ],
+                    ),
                   ),
-                  20.w,
-                  SegmentedButton<bool>(
-                    segments: const [
-                      ButtonSegment(
-                        value: false,
-                        label: Text('List View'),
-                        icon: Icon(Icons.list),
-                      ),
-                      ButtonSegment(
-                        value: true,
-                        label: Text('Monthly Summary'),
-                        icon: Icon(Icons.calendar_month),
-                      ),
-                    ],
-                    selected: {isMonthlyView.value},
-                    onSelectionChanged: (val) {
-                      isMonthlyView.value = val.first;
-                    },
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E293B), // Dark slate blue from image
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    ),
+                    onPressed: exportReport,
+                    icon: const Icon(Icons.auto_awesome, size: 18),
+                    label: const Text('Export Reports', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
               24.h,
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(
-                    width: isMobile ? double.infinity : 360,
-                    child: TextFormField(
-                      controller: searchCtrl,
-                      onFieldSubmitted: (value) {
-                        final trimmed = value.trim();
-                        searchQuery.value = trimmed;
-                        if (trimmed.isEmpty) {
-                          searchCtrl.clear();
-                        }
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  int columns = isMobile ? 1 : 4;
+                  double spacing = 16.0;
+                  double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      _StatCardWithIcon(
+                        title: "Today's Bookings",
+                        value: '$todaysScheduled',
+                        subtitle: 'Scheduled events',
+                        icon: Icons.calendar_today,
+                        color: Colors.blue,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "New Bookings",
+                        value: '$newBookingsToday',
+                        subtitle: 'Sales today',
+                        icon: Icons.post_add,
+                        color: Colors.orange,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Today's Completed",
+                        value: '$todaysCompleted',
+                        subtitle: 'Successfully closed',
+                        icon: Icons.check_circle_outline,
+                        color: Colors.green,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Total Revenue",
+                        value: '₹${formatK(totalRevenueFY)}',
+                        subtitle: 'Current FY',
+                        icon: Icons.monetization_on_outlined,
+                        color: Colors.amber.shade700,
+                        width: itemWidth,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              24.h,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: crmColors.border),
+                ),
+                child: Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    DropdownButton<String>(
+                      value: selectedFY.value,
+                      onChanged: (val) {
+                        if (val != null) selectedFY.value = val;
                       },
-                      decoration: InputDecoration(
-                        hintText:
-                            'Search by client, phone, package, region or booking no...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: searchQuery.value.isEmpty
-                            ? IconButton(
-                                onPressed: () =>
-                                    searchQuery.value = searchCtrl.text.trim(),
-                                icon: const Icon(Icons.search),
-                              )
-                            : Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    onPressed: () => searchQuery.value =
-                                        searchCtrl.text.trim(),
-                                    icon: const Icon(Icons.search),
-                                  ),
-                                  IconButton(
-                                    onPressed: () {
-                                      searchCtrl.clear();
-                                      searchQuery.value = '';
-                                    },
-                                    icon: const Icon(Icons.close),
-                                  ),
-                                ],
-                              ),
+                      items: financialYears.map((fy) {
+                        return DropdownMenuItem(
+                          value: fy,
+                          child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        );
+                      }).toList(),
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: false,
+                          label: Text('List View'),
+                          icon: Icon(Icons.check),
+                        ),
+                        ButtonSegment(
+                          value: true,
+                          label: Text('Monthly Summary'),
+                          icon: Icon(Icons.bar_chart),
+                        ),
+                      ],
+                      selected: {isMonthlyView.value},
+                      onSelectionChanged: (val) {
+                        isMonthlyView.value = val.first;
+                      },
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
                       ),
                     ),
-                  ),
-                  FilterChip(
-                    selected: duplicatesOnly.value,
-                    onSelected: (value) => duplicatesOnly.value = value,
-                    avatar: const Icon(Icons.copy_all_outlined, size: 18),
-                    label: const Text('Duplicates only'),
-                  ),
-                ],
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    SizedBox(
+                      width: isMobile ? double.infinity : 300,
+                      child: TextFormField(
+                        controller: searchCtrl,
+                        onFieldSubmitted: (value) {
+                          final trimmed = value.trim();
+                          searchQuery.value = trimmed;
+                          if (trimmed.isEmpty) {
+                            searchCtrl.clear();
+                          }
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Search clients, packages...',
+                          hintStyle: TextStyle(color: crmColors.textSecondary, fontSize: 14),
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          suffixIcon: searchQuery.value.isEmpty
+                              ? IconButton(
+                                  onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                  icon: const Icon(Icons.search, size: 20),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                      icon: const Icon(Icons.search, size: 20),
+                                    ),
+                                    IconButton(
+                                      onPressed: () {
+                                        searchCtrl.clear();
+                                        searchQuery.value = '';
+                                      },
+                                      icon: const Icon(Icons.close, size: 20),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    OutlinedButton.icon(
+                      onPressed: () => duplicatesOnly.value = !duplicatesOnly.value,
+                      icon: const Icon(Icons.copy_all_outlined, size: 18),
+                      label: const Text('Duplicates'),
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: duplicatesOnly.value ? crmColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+                        side: BorderSide(color: duplicatesOnly.value ? crmColors.primary : Colors.transparent),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               20.h,
               Row(
@@ -243,7 +405,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ),
                     Text(
                       'Select all',
-                      style: TextStyle(color: crmColors.textSecondary),
+                      style: TextStyle(color: crmColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                   ],
                   const Spacer(),
@@ -265,35 +427,100 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 ],
               ),
               24.h,
-              Wrap(
-                spacing: 16,
-                runSpacing: 16,
-                children: [
-                  _MetricCard(
-                    label: 'Total Bookings',
-                    value: '${response.totalItems}',
-                  ),
-                  _MetricCard(
-                    label: 'Sales Value',
-                    value: '₹${_money(response.summary.totalSales)}',
-                  ),
-                  _MetricCard(
-                    label: 'Advance Collected',
-                    value: '₹${_money(response.summary.totalAdvance)}',
-                  ),
-                  _MetricCard(
-                    label: 'Completed',
-                    value: '${response.summary.completedCount}',
-                  ),
-                  _MetricCard(
-                    label: 'Cancelled',
-                    value: '${response.summary.cancelledCount}',
-                  ),
-                  _MetricCard(
-                    label: 'Duplicate Entries',
-                    value: '${response.duplicateItems}',
-                  ),
-                ],
+              Text(
+                'Performance Overview',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              16.h,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  int columns = isMobile ? 2 : 4;
+                  double spacing = 16.0;
+                  double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      _StatCardWithIcon(
+                        title: "Today's Bookings",
+                        value: '$newBookingsToday',
+                        icon: Icons.calendar_today,
+                        color: Colors.indigo,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Today's Completed",
+                        value: '$todaysCompleted',
+                        icon: Icons.check_circle_outline,
+                        color: Colors.teal,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Today's Revenue",
+                        value: '₹${_money(todaysRevenue)}',
+                        icon: Icons.monetization_on_outlined,
+                        color: Colors.amber.shade600,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Total Active",
+                        value: '$totalActive',
+                        icon: Icons.auto_graph,
+                        color: Colors.pinkAccent,
+                        width: itemWidth,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              24.h,
+              Text(
+                'General Summary',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              16.h,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  int columns = isMobile ? 2 : 4;
+                  double spacing = 16.0;
+                  double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      _StatCardNoIcon(
+                        title: 'Total Sales Value',
+                        value: '₹${_money(totalSalesValue)}',
+                        subtitle: 'Across all bookings',
+                        subtitleColor: crmColors.textSecondary,
+                        width: itemWidth,
+                      ),
+                      _StatCardNoIcon(
+                        title: 'Advance Collected',
+                        value: '₹${_money(advanceCollectedFY)}',
+                        subtitle: 'Current financial year',
+                        subtitleColor: Colors.teal,
+                        width: itemWidth,
+                      ),
+                      _StatCardNoIcon(
+                        title: 'Completed Overall',
+                        value: '$completedOverall',
+                        subtitle: 'Successfully delivered',
+                        subtitleColor: Colors.green,
+                        width: itemWidth,
+                      ),
+                      _StatCardNoIcon(
+                        title: 'Cancelled',
+                        value: '$cancelledOverall',
+                        subtitle: 'Bookings lost',
+                        subtitleColor: Colors.red,
+                        width: itemWidth,
+                      ),
+                    ],
+                  );
+                },
               ),
               24.h,
               if (duplicatesOnly.value)
@@ -359,7 +586,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                     flex: 2,
                                     child: _HeaderText('Booking'),
                                   ),
-                                  Expanded(flex: 2, child: _HeaderText('Date')),
+                                  Expanded(flex: 2, child: _HeaderText('Booked Date')),
+                                  Expanded(flex: 2, child: _HeaderText('Event Date')),
                                   Expanded(flex: 2, child: _HeaderText('Client')),
                                   Expanded(
                                     flex: 2,
@@ -418,44 +646,100 @@ class SalesBookingsScreen extends HookConsumerWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
-  final String label;
+class _StatCardWithIcon extends StatelessWidget {
+  final String title;
   final String value;
+  final String? subtitle;
+  final IconData icon;
+  final Color color;
+  final double width;
 
-  const _MetricCard({required this.label, required this.value});
+  const _StatCardWithIcon({
+    required this.title,
+    required this.value,
+    this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.width,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
     return Container(
-      width: 220,
-      padding: const EdgeInsets.all(18),
+      width: width,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: crmColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: crmColors.border),
+        color: context.crmColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.crmColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          16.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(title, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
+                4.h,
+                Text(value, style: TextStyle(color: context.crmColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
+                if (subtitle != null) ...[
+                  4.h,
+                  Text(subtitle!, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCardNoIcon extends StatelessWidget {
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color subtitleColor;
+  final double width;
+
+  const _StatCardNoIcon({
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.subtitleColor,
+    required this.width,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: context.crmColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.crmColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: crmColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1,
-            ),
-          ),
-          10.h,
-          Text(
-            value,
-            style: TextStyle(
-              color: crmColors.textPrimary,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Text(title, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
+          8.h,
+          Text(value, style: TextStyle(color: context.crmColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
+          8.h,
+          Text(subtitle, style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -591,7 +875,17 @@ class _DesktopBookingRow extends StatelessWidget {
             Expanded(
               flex: 2,
               child: Text(
-                _formatDate(booking.bookingDate),
+                _formatDate(booking.createdAt ?? booking.bookingDate),
+                style: TextStyle(
+                  color: crmColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                _formatDate(booking.serviceStart),
                 style: TextStyle(
                   color: crmColors.textSecondary,
                   fontWeight: FontWeight.w600,

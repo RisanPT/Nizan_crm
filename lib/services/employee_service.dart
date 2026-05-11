@@ -33,8 +33,18 @@ class EmployeeService {
   Future<List<Employee>> getEmployees() async {
     try {
       final response = await _dio.get('/employees');
-      final data = response.data as List;
-      return data
+      final data = response.data;
+      
+      List employeesList;
+      if (data is Map) {
+        employeesList = (data['data'] ?? data['items'] ?? data['employees'] ?? []) as List;
+      } else if (data is List) {
+        employeesList = data;
+      } else {
+        employeesList = [];
+      }
+      
+      return employeesList
           .map((item) => Employee.fromJson(item as Map<String, dynamic>))
           .toList();
     } on DioException catch (e) {
@@ -76,6 +86,7 @@ class EmployeeService {
     required String status,
     required String regionId,
     required String category,
+    String? profileImage,
   }) async {
     try {
       final payload = {
@@ -89,6 +100,10 @@ class EmployeeService {
         'regionId': regionId,
         'category': category,
       };
+
+      if (profileImage != null) {
+        payload['profileImage'] = profileImage;
+      }
 
       final response = id != null && id.isNotEmpty
           ? await _dio.put('/employees/$id', data: payload)

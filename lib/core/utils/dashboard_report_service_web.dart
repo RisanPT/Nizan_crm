@@ -38,7 +38,7 @@ Future<void> downloadDashboardReport({
           'marketing' => 'Nizan CRM Marketing Report',
           'crm' => 'Nizan CRM Client Relations Report',
           'finance' => 'Nizan CRM Finance Report',
-          'ceo_daily' => 'DAILY CEO REPORT – Nizan Makeovers',
+          'ceo_daily' => 'DAILY SALES REPORT | Nizan Makeovers',
           _ => 'Nizan CRM Executive Overview',
         };
 
@@ -53,7 +53,9 @@ Future<void> downloadDashboardReport({
           ),
           pw.SizedBox(height: 6),
           pw.Text(
-            'Reporting Period: ${_monthLabel(month)}',
+            reportType == 'ceo_daily' 
+                ? 'Report Date: ${_dateLabel(DateTime.now())}' 
+                : 'Reporting Period: ${_monthLabel(month)}',
             style: const pw.TextStyle(
               fontSize: 12,
               color: PdfColors.blueGrey700,
@@ -114,9 +116,12 @@ Future<void> downloadDashboardReport({
             pw.SizedBox(height: 22),
             _sectionTitle('Daily Performance Metrics'),
             _metricCard('Total Leads', '${leads.length}'),
-            pw.SizedBox(height: 12),
+            pw.SizedBox(height: 22),
             _sectionTitle('Recent Collections'),
-            _bookingTable(report.upcomingBookings), // Using upcoming as proxy for recent activity in this summary
+            _bookingTable(report.todaysBookings),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Detailed Sales Records'),
+            _bookingTable(report.todaysBookings),
           ]
         ];
       },
@@ -244,12 +249,13 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
 
 pw.Widget _bookingTable(List<Booking> rows) {
   return pw.TableHelper.fromTextArray(
-    headers: const ['Client', 'Service', 'Date', 'Status', 'Amount'],
+    headers: const ['Client', 'Service', 'Booked Day', 'Event Date', 'Status', 'Amount'],
     data: rows
         .map(
           (booking) => [
             booking.customerName,
             booking.service,
+            booking.createdAt != null ? _dateLabel(booking.createdAt!) : _dateLabel(booking.bookingDate),
             _dateLabel(booking.serviceStart),
             booking.status,
             'INR ${booking.totalPrice.toStringAsFixed(0)}',
@@ -359,6 +365,15 @@ _DashboardReport _buildReport(
       .toList()
     ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
 
+  final todaysBookings = bookings.where((booking) {
+    final bookedDate = booking.createdAt ?? booking.bookingDate;
+    final now = DateTime.now();
+    return bookedDate.year == now.year &&
+        bookedDate.month == now.month &&
+        bookedDate.day == now.day;
+  }).toList()
+    ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+
   return _DashboardReport(
     totalWorks: activeBookings.length,
     completedWorks: completedWorks,
@@ -369,6 +384,7 @@ _DashboardReport _buildReport(
     dailyRevenue: dailyRevenue,
     pendingBookings: pendingBookings.take(10).toList(),
     upcomingBookings: upcomingBookings.take(10).toList(),
+    todaysBookings: todaysBookings,
   );
 }
 
@@ -426,6 +442,7 @@ class _DashboardReport {
   final List<_DailyRevenueMetric> dailyRevenue;
   final List<Booking> pendingBookings;
   final List<Booking> upcomingBookings;
+  final List<Booking> todaysBookings;
 
   const _DashboardReport({
     required this.totalWorks,
@@ -437,6 +454,7 @@ class _DashboardReport {
     required this.dailyRevenue,
     required this.pendingBookings,
     required this.upcomingBookings,
+    required this.todaysBookings,
   });
 }
 

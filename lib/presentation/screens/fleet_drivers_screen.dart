@@ -10,6 +10,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
 import '../common_widgets/paginated_footer.dart';
+import 'staff_details_screen.dart';
 
 class FleetDriversScreen extends HookConsumerWidget {
   const FleetDriversScreen({super.key});
@@ -49,7 +50,10 @@ class FleetDriversScreen extends HookConsumerWidget {
             ...regions.map(
               (region) => DropdownMenuItem(
                 value: region.id,
-                child: Text(region.name),
+                child: Text(
+                  region.name,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
           ];
@@ -81,6 +85,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                         children: [
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              isExpanded: true,
                               initialValue: type,
                               items: const [
                                 DropdownMenuItem(
@@ -103,6 +108,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                           16.w,
                           Expanded(
                             child: DropdownButtonFormField<String>(
+                              isExpanded: true,
                               initialValue: hasSelectedRegion ? regionId : '',
                               items: regionOptions,
                               onChanged: (value) {
@@ -131,6 +137,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: status,
                         items: const [
                           DropdownMenuItem(
@@ -271,68 +278,22 @@ class FleetDriversScreen extends HookConsumerWidget {
                 );
               }
 
-              return Card(
-                child: ListView.separated(
-                  itemCount: drivers.length,
-                  separatorBuilder: (context, index) =>
-                      Divider(height: 1, color: crmColors.border),
-                  itemBuilder: (context, index) {
-                    final driver = drivers[index];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: crmColors.warning.withValues(
-                          alpha: 0.12,
-                        ),
-                        child: Icon(
-                          Icons.badge_outlined,
-                          color: crmColors.warning,
-                        ),
-                      ),
-                      title: Text(
-                        driver.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        [
-                          driver.phone,
-                          driver.regionName,
-                          driver.specialization,
-                        ].where((item) => item.isNotEmpty).join(' • '),
-                      ),
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          Text(
-                            driver.status.toUpperCase(),
-                            style: TextStyle(
-                              color: driver.status == 'active'
-                                  ? crmColors.success
-                                  : crmColors.textSecondary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () => openDriverDialog(driver),
-                            child: const Text('Edit'),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              await ref
-                                  .read(employeeServiceProvider)
-                                  .deleteEmployee(driver.id);
-                              ref.invalidate(employeesProvider);
-                              ref.invalidate(paginatedEmployeesProvider);
-                            },
-                            style: TextButton.styleFrom(
-                              foregroundColor: crmColors.destructive,
-                            ),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+              return GridView.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isMobile ? 1 : 3,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  mainAxisExtent: 160,
                 ),
+                itemCount: drivers.length,
+                itemBuilder: (context, index) {
+                  return _buildDriverCard(
+                    context,
+                    ref,
+                    drivers[index],
+                    onEdit: () => openDriverDialog(drivers[index]),
+                  );
+                },
               );
             },
           ),
@@ -370,6 +331,232 @@ class FleetDriversScreen extends HookConsumerWidget {
           orElse: () => const SizedBox.shrink(),
         ),
       ],
+    );
+  }
+
+  Widget _buildDriverCard(
+    BuildContext context,
+    WidgetRef ref,
+    Employee employee, {
+    required VoidCallback onEdit,
+  }) {
+    final theme = Theme.of(context);
+    final crmColors = context.crmColors;
+    final isActive = employee.status == 'active';
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => StaffDetailsScreen(employee: employee),
+            ),
+          );
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                  backgroundImage: employee.profileImage.isNotEmpty
+                      ? NetworkImage(employee.profileImage)
+                      : null,
+                  child: employee.profileImage.isEmpty
+                      ? Text(
+                          employee.name.isNotEmpty
+                              ? employee.name.substring(0, 1).toUpperCase()
+                              : '?',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        )
+                      : null,
+                ),
+                12.w,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        employee.name,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      4.h,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: crmColors.warning.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Driver',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: crmColors.warning,
+                              ),
+                            ),
+                          ),
+                          if (employee.type == 'in-house') ...[
+                            8.w,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: crmColors.accent.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'In-House',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: crmColors.accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (value) async {
+                    if (value == 'edit') {
+                      onEdit();
+                    } else if (value == 'delete') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete Driver'),
+                          content: Text(
+                              'Are you sure you want to delete ${employee.name}?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(true),
+                              style: TextButton.styleFrom(
+                                  foregroundColor: crmColors.destructive),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await ref
+                            .read(employeeServiceProvider)
+                            .deleteEmployee(employee.id);
+                        ref.invalidate(employeesProvider);
+                        ref.invalidate(paginatedEmployeesProvider);
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, size: 16),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete,
+                              size: 16, color: crmColors.destructive),
+                          const SizedBox(width: 8),
+                          Text('Delete',
+                              style: TextStyle(color: crmColors.destructive)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const Spacer(),
+            if (employee.regionName.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined,
+                      size: 14, color: crmColors.textSecondary),
+                  6.w,
+                  Expanded(
+                    child: Text(
+                      employee.regionName,
+                      style: TextStyle(
+                          color: crmColors.textSecondary, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              6.h,
+            ],
+            if (employee.phone.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.phone_outlined,
+                      size: 14, color: crmColors.textSecondary),
+                  6.w,
+                  Text(
+                    employee.phone,
+                    style:
+                        TextStyle(color: crmColors.textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+              6.h,
+            ],
+            Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    size: 14, color: crmColors.textSecondary),
+                6.w,
+                Text(
+                  isActive ? 'Active' : 'Inactive',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isActive ? crmColors.success : crmColors.destructive,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      ),
     );
   }
 }

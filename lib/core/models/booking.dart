@@ -356,6 +356,7 @@ class Booking {
   final List<BookingAssignment> assignedStaff;
   final List<BookingAddon> addons;
   final List<BookingItem> bookingItems;
+  final DateTime? createdAt;
 
   const Booking({
     required this.id,
@@ -397,6 +398,7 @@ class Booking {
     this.assignedStaff = const [],
     this.addons = const [],
     this.bookingItems = const [],
+    this.createdAt,
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -634,6 +636,9 @@ class Booking {
           .whereType<Map<String, dynamic>>()
           .map(BookingItem.fromJson)
           .toList(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String).toLocal()
+          : null,
     );
   }
 
@@ -677,6 +682,7 @@ class Booking {
       'assignedStaff': assignedStaff.map((item) => item.toJson()).toList(),
       'addons': addons.map((item) => item.toJson()).toList(),
       'bookingItems': bookingItems.map((item) => item.toJson()).toList(),
+      'createdAt': createdAt?.toIso8601String(),
     };
   }
 
@@ -720,6 +726,7 @@ class Booking {
     List<BookingAssignment>? assignedStaff,
     List<BookingAddon>? addons,
     List<BookingItem>? bookingItems,
+    DateTime? createdAt,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -763,6 +770,7 @@ class Booking {
       assignedStaff: assignedStaff ?? this.assignedStaff,
       addons: addons ?? this.addons,
       bookingItems: bookingItems ?? this.bookingItems,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }
