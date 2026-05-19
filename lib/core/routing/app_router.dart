@@ -16,6 +16,7 @@ import '../../presentation/screens/add_service_screen.dart';
 import '../../presentation/screens/regions_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
+import '../../presentation/screens/accounts_budget_screen.dart';
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sales_bookings_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
@@ -108,7 +109,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         navigatorKey: shellNavigatorKey,
         builder: (context, state, child) {
           // Provide appropriate title based on route
-          String title = 'Nizan Makeovers';
+          String title = 'Team N Makeovers';
           if (state.uri.path == '/') {
             title = 'Dashboard Overview';
           } else if (state.uri.path == '/clients') {
@@ -234,6 +235,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/artist-collections',
             builder: (context, state) => const AccountsCollectionsScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/budget',
+            builder: (context, state) => const AccountsBudgetScreen(),
           ),
           GoRoute(
             path: '/booking/add',

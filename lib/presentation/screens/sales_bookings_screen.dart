@@ -46,25 +46,38 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final allBookings = asyncAllBookings.value ?? const <Booking>[];
 
     final now = DateTime.now();
-    final todaysScheduled = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day).length;
+    final todaysScheduled = allBookings.where((b) {
+      final d = b.bookingDate;
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).length;
     final newBookingsToday = allBookings.where((b) {
       final d = b.createdAt ?? b.bookingDate;
       return d.year == now.year && d.month == now.month && d.day == now.day;
     }).length;
-    final todaysCompleted = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day && b.status.toLowerCase() == 'completed').length;
+    final todaysCompleted = allBookings.where((b) {
+      final d = b.bookingDate;
+      return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() == 'completed';
+    }).length;
     
     final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
     final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
-    final fyBookings = allBookings.where((b) => !b.bookingDate.isBefore(currentFYStart) && !b.bookingDate.isAfter(currentFYEnd));
+    final fyBookings = allBookings.where((b) {
+      final d = b.createdAt ?? b.bookingDate;
+      return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
+    });
     final totalRevenueFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
 
-    final todaysRevenue = allBookings.where((b) => b.serviceStart.year == now.year && b.serviceStart.month == now.month && b.serviceStart.day == now.day && b.status.toLowerCase() != 'cancelled').fold<double>(0, (sum, b) => sum + b.totalPrice);
+    final todaysRevenue = allBookings.where((b) {
+      final d = b.createdAt ?? b.bookingDate;
+      return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() != 'cancelled';
+    }).fold<double>(0, (sum, b) => sum + b.totalPrice);
     final totalActive = allBookings.where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'completed').length;
 
     final totalSalesValue = allBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
     final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.advanceAmount : sum);
     final completedOverall = allBookings.where((b) => b.status.toLowerCase() == 'completed').length;
     final cancelledOverall = allBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
+    final pendingWorks = allBookings.where((b) => b.status.toLowerCase() == 'pending').length;
 
     String formatK(double value) {
       if (value >= 1000) {
@@ -482,7 +495,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               16.h,
               LayoutBuilder(
                 builder: (context, constraints) {
-                  int columns = isMobile ? 2 : 4;
+                  int columns = isMobile ? 2 : 5;
                   double spacing = 16.0;
                   double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
@@ -502,6 +515,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
                         value: '₹${_money(advanceCollectedFY)}',
                         subtitle: 'Current financial year',
                         subtitleColor: Colors.teal,
+                        width: itemWidth,
+                      ),
+                      _StatCardNoIcon(
+                        title: 'Pending Works',
+                        value: '$pendingWorks',
+                        subtitle: 'Currently active',
+                        subtitleColor: Colors.orange,
                         width: itemWidth,
                       ),
                       _StatCardNoIcon(
@@ -1140,9 +1160,13 @@ String _money(double value) {
 }
 
 String _formatDate(DateTime value) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
   final day = value.day.toString().padLeft(2, '0');
-  final month = value.month.toString().padLeft(2, '0');
-  return '$day/$month/${value.year}';
+  final month = months[value.month - 1];
+  return '$day-$month-${value.year}';
 }
 
 class _MonthlySalesSummaryView extends ConsumerWidget {
@@ -1169,8 +1193,8 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         // Filter bookings for this FY
         final fyBookings = allBookings.where((b) {
-          return !b.bookingDate.isBefore(fyStart) &&
-              !b.bookingDate.isAfter(fyEnd);
+          final d = b.createdAt ?? b.bookingDate;
+          return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
         }).toList();
 
         // Group by month
@@ -1184,10 +1208,11 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         for (final b in fyBookings) {
           int monthIndex;
-          if (b.bookingDate.month >= 4) {
-            monthIndex = b.bookingDate.month - 4;
+          final d = b.createdAt ?? b.bookingDate;
+          if (d.month >= 4) {
+            monthIndex = d.month - 4;
           } else {
-            monthIndex = b.bookingDate.month + 8;
+            monthIndex = d.month + 8;
           }
 
           final stats = monthlyStats[monthIndex]!;

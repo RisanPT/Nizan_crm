@@ -39,7 +39,7 @@ We are pleased to inform you that your booking *#${booking.displayBookingNumber}
 
 Thank you for choosing us! We hope you loved our service. Have a wonderful day!
 
-_Sent via Nizan ERP_
+_Sent via Team N ERP_
 ''';
 }
 

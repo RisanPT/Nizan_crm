@@ -63,7 +63,7 @@ class DashboardScreen extends HookConsumerWidget {
     String monthKey(DateTime value) => '${value.year}-${value.month}';
     final currentMonthKey = monthKey(now);
     final monthBookings = allBookings
-        .where((booking) => monthKey(booking.serviceStart) == currentMonthKey)
+        .where((booking) => monthKey(booking.bookingDate) == currentMonthKey)
         .toList();
 
     final totalWorksInMonth = monthBookings
@@ -2129,11 +2129,10 @@ class _CEOReportView extends HookConsumerWidget {
     final now = DateTime.now();
 
     // Data filtering for "Today"
-    final todayBookings = bookings.where((b) => 
-      b.serviceStart.year == now.year && 
-      b.serviceStart.month == now.month && 
-      b.serviceStart.day == now.day
-    ).toList();
+    final todayBookings = bookings.where((b) {
+      final d = b.createdAt ?? b.bookingDate;
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList();
 
     final todayLeads = leads.where((l) => 
       l.createdAt.year == now.year && 
@@ -2166,7 +2165,7 @@ class _CEOReportView extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('📅 DAILY CEO REPORT – Nizan Makeovers', now),
+          _buildSectionHeader('📅 DAILY CEO REPORT – Team N Makeovers', now),
           24.h,
           _buildMetricsGrid(context, [
             _MetricItem('Revenue Today', '₹${revenueToday.toStringAsFixed(0)}', 'Target: ₹50k', crm.success),

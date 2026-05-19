@@ -244,6 +244,16 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/finance'),
                         ),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.pie_chart_outline,
+                          title: 'Budget Analysis',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/accounts/budget',
+                          onTap: () => context.go('/accounts/budget'),
+                        ),
+                      ),
                     ],
                   ],
                   if (role.canSeeFleet) ...[
@@ -346,6 +356,7 @@ class Sidebar extends ConsumerWidget {
 
   Widget _buildLogo(BuildContext context, {required bool isCollapsed}) {
     final crmColors = context.crmColors;
+    final theme = Theme.of(context);
     return Padding(
       padding: 16.px,
       child: Row(
@@ -360,23 +371,27 @@ class Sidebar extends ConsumerWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Image.asset(
-              'assets/images/nizan_logo.png',
-              width: 32,
-              height: 32,
-              fit: BoxFit.contain,
+              'assets/images/teamn_logo.png',
+              height: 48,
+              width: 48,
             ),
           ),
           if (!isCollapsed) ...[
             12.w,
-            Expanded(
-              child: Text(
-                'Nizan\nMakeovers',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: crmColors.sidebarForeground,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Team N\nMakeovers',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: crmColors.sidebarForeground,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                    fontSize: 16,
+                  ),
                 ),
-              ),
+              ],
             ),
           ],
         ],

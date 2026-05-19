@@ -531,221 +531,430 @@ class CalendarScreen extends HookConsumerWidget {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) {
-          final totalAdvance = entries.fold<double>(
-            0,
-            (sum, entry) => sum + entry.advanceAmount,
-          );
-          return Dialog(
-            insetPadding: const EdgeInsets.all(20),
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 660, maxHeight: 760),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: crmColors.surface,
-                  borderRadius: BorderRadius.circular(32),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.16),
-                      blurRadius: 32,
-                      offset: const Offset(0, 20),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 22, 22),
-                      decoration: BoxDecoration(
-                        color: crmColors.primary,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(32),
+          // Collect unique artists present today (built once, outside StatefulBuilder)
+          final artistsInDay = <String, String>{};
+          final regionsInDay = <String>{};
+          for (final entry in entries) {
+            final primary = _primaryArtistAssignment(entry);
+            if (primary != null && primary.artistName.trim().isNotEmpty) {
+              final key = primary.employeeId.isNotEmpty
+                  ? primary.employeeId
+                  : primary.artistName.toLowerCase();
+              artistsInDay[key] = primary.artistName.trim();
+            }
+            if (entry.booking.region.trim().isNotEmpty) {
+              regionsInDay.add(entry.booking.region.trim());
+            }
+          }
+
+          final sortedRegions = regionsInDay.toList()..sort();
+
+          return StatefulBuilder(
+            builder: (ctx, setFilter) {
+              String filterArtist = 'all';
+              String filterTime = 'all';
+              String filterLocation = 'all';
+
+              return StatefulBuilder(
+                builder: (innerCtx, innerSet) {
+                  // Apply filters
+                  final filtered = entries.where((entry) {
+                    if (filterArtist != 'all') {
+                      final primary = _primaryArtistAssignment(entry);
+                      if (primary == null) return false;
+                      final key = primary.employeeId.isNotEmpty
+                          ? primary.employeeId
+                          : primary.artistName.toLowerCase();
+                      if (key != filterArtist) return false;
+                    }
+                    if (filterLocation != 'all') {
+                      if (entry.booking.region.trim() != filterLocation) {
+                        return false;
+                      }
+                    }
+                    if (filterTime != 'all') {
+                      final hour = entry.serviceStart.hour;
+                      if (filterTime == 'morning' && !(hour >= 5 && hour < 12)) return false;
+                      if (filterTime == 'afternoon' && !(hour >= 12 && hour < 17)) return false;
+                      if (filterTime == 'evening' && !(hour >= 17)) return false;
+                    }
+                    return true;
+                  }).toList();
+
+                  final totalAdvance = filtered.fold<double>(
+                    0,
+                    (sum, e) => sum + e.advanceAmount,
+                  );
+
+                  return Dialog(
+                    insetPadding: const EdgeInsets.all(20),
+                    backgroundColor: Colors.transparent,
+                    elevation: 0,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 660, maxHeight: 840),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: crmColors.surface,
+                          borderRadius: BorderRadius.circular(32),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.16),
+                              blurRadius: 32,
+                              offset: const Offset(0, 20),
+                            ),
+                          ],
                         ),
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '${monthTitle(day)} • ${day.day}',
-                                      style: theme.textTheme.headlineSmall
-                                          ?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                          ),
-                                    ),
-                                    6.h,
-                                    Text(
-                                      '${entries.length} booking${entries.length == 1 ? '' : 's'} scheduled for this day',
-                                      style: const TextStyle(
-                                        color: Colors.white70,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
+                        child: Column(
+                          children: [
+                            // ── Header ──────────────────────────────────────
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(28, 24, 22, 22),
+                              decoration: BoxDecoration(
+                                color: crmColors.primary,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(32),
                                 ),
                               ),
-                              Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(),
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          18.h,
-                          Row(
-                            children: [
-                              Expanded(
-                                child: buildDayDialogMetric(
-                                  label: 'Packages',
-                                  value: '${entries.length}',
-                                ),
-                              ),
-                              12.w,
-                              Expanded(
-                                child: buildDayDialogMetric(
-                                  label: 'Advance',
-                                  value:
-                                      '₹${totalAdvance.toStringAsFixed(0)}',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
-                        child: ListView.separated(
-                          itemCount: entries.length,
-                          separatorBuilder: (_, _) => 12.h,
-                          itemBuilder: (context, index) {
-                            final entry = entries[index];
-                            final booking = entry.booking;
-                            final artistName = _artistLabelForEntry(entry);
-                            return Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.of(dialogContext).pop();
-                                  context.push(
-                                    '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(entry.id)}',
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(24),
-                                child: Container(
-                                  padding: const EdgeInsets.all(18),
-                                  decoration: BoxDecoration(
-                                    color: crmColors.background,
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(
-                                      color: crmColors.border,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                              child: Column(
+                                children: [
+                                  Row(
                                     children: [
-                                      Container(
-                                        width: 4,
-                                        height: 48,
-                                        decoration: BoxDecoration(
-                                          color: _colorForService(
-                                            entry.service,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      16.w,
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              entry.summaryLabel,
+                                              '${monthTitle(day)} • ${day.day}',
+                                              style: theme.textTheme.headlineSmall?.copyWith(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                            6.h,
+                                            Text(
+                                              '${entries.length} booking${entries.length == 1 ? '' : 's'} • ${filtered.length} shown',
                                               style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 16,
-                                              ),
-                                            ),
-                                            4.h,
-                                            Text(
-                                              '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
-                                              style: TextStyle(
-                                                color:
-                                                    crmColors.textSecondary,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                            8.h,
-                                            Text(
-                                              artistName,
-                                              style: TextStyle(
-                                                color: crmColors.primary,
+                                                color: Colors.white70,
                                                 fontWeight: FontWeight.w600,
-                                                fontSize: 13,
                                               ),
-                                            ),
-                                            12.h,
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
-                                              children: [
-                                                _buildCompactPaymentInfo(
-                                                  label: 'Total',
-                                                  value:
-                                                      '₹${booking.totalPrice.toStringAsFixed(0)}',
-                                                  color:
-                                                      crmColors.textPrimary,
-                                                ),
-                                                _buildCompactPaymentInfo(
-                                                  label: 'Advance',
-                                                  value:
-                                                      '₹${booking.advanceAmount.toStringAsFixed(0)}',
-                                                  color: crmColors.success,
-                                                ),
-                                                _buildCompactPaymentInfo(
-                                                  label: 'Balance',
-                                                  value:
-                                                      '₹${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(0)}',
-                                                  color: (booking.totalPrice - booking.advanceAmount - booking.discountAmount) > 0 ? crmColors.destructive : crmColors.success,
-                                                ),
-                                              ],
                                             ),
                                           ],
                                         ),
                                       ),
+                                      Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.12),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: IconButton(
+                                          onPressed: () => Navigator.of(dialogContext).pop(),
+                                          icon: const Icon(Icons.close, color: Colors.white),
+                                        ),
+                                      ),
                                     ],
                                   ),
+                                  18.h,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: buildDayDialogMetric(
+                                          label: 'Shown',
+                                          value: '${filtered.length}',
+                                        ),
+                                      ),
+                                      12.w,
+                                      Expanded(
+                                        child: buildDayDialogMetric(
+                                          label: 'Advance',
+                                          value: '₹${totalAdvance.toStringAsFixed(0)}',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            // ── Filter Bar ──────────────────────────────────
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                              decoration: BoxDecoration(
+                                color: crmColors.background,
+                                border: Border(
+                                  bottom: BorderSide(color: crmColors.border),
                                 ),
                               ),
-                            );
-                          },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (artistsInDay.length > 1) ...[
+                                    Text(
+                                      'FILTER BY ARTIST',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: crmColors.textSecondary,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                    6.h,
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [
+                                          _filterChip(
+                                            label: 'All Artists',
+                                            selected: filterArtist == 'all',
+                                            color: crmColors.primary,
+                                            onTap: () => innerSet(() => filterArtist = 'all'),
+                                          ),
+                                          ...artistsInDay.entries.map(
+                                            (e) => _filterChip(
+                                              label: e.value,
+                                              selected: filterArtist == e.key,
+                                              color: Colors.indigo,
+                                              onTap: () => innerSet(() => filterArtist = e.key),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    10.h,
+                                  ],
+                                  Text(
+                                    'FILTER BY TIME',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: crmColors.textSecondary,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                  6.h,
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        _filterChip(
+                                          label: 'All Day',
+                                          icon: Icons.schedule_outlined,
+                                          selected: filterTime == 'all',
+                                          color: crmColors.primary,
+                                          onTap: () => innerSet(() => filterTime = 'all'),
+                                        ),
+                                        _filterChip(
+                                          label: 'Morning (5–12)',
+                                          icon: Icons.wb_sunny_outlined,
+                                          selected: filterTime == 'morning',
+                                          color: Colors.orange,
+                                          onTap: () => innerSet(() => filterTime = 'morning'),
+                                        ),
+                                        _filterChip(
+                                          label: 'Afternoon (12–5)',
+                                          icon: Icons.wb_cloudy_outlined,
+                                          selected: filterTime == 'afternoon',
+                                          color: Colors.amber.shade700,
+                                          onTap: () => innerSet(() => filterTime = 'afternoon'),
+                                        ),
+                                        _filterChip(
+                                          label: 'Evening (5+)',
+                                          icon: Icons.nights_stay_outlined,
+                                          selected: filterTime == 'evening',
+                                          color: Colors.deepPurple,
+                                          onTap: () => innerSet(() => filterTime = 'evening'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (sortedRegions.length > 1) ...[
+                                    10.h,
+                                    Text(
+                                      'FILTER BY LOCATION',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: crmColors.textSecondary,
+                                        letterSpacing: 1.2,
+                                      ),
+                                    ),
+                                    6.h,
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [
+                                          _filterChip(
+                                            label: 'All Regions',
+                                            selected: filterLocation == 'all',
+                                            color: crmColors.primary,
+                                            onTap: () => innerSet(() => filterLocation = 'all'),
+                                          ),
+                                          ...sortedRegions.map(
+                                            (r) => _filterChip(
+                                              label: r,
+                                              selected: filterLocation == r,
+                                              color: Colors.teal,
+                                              onTap: () => innerSet(() => filterLocation = r),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+
+                            // ── Booking List ────────────────────────────────
+                            Expanded(
+                              child: filtered.isEmpty
+                                  ? Center(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.search_off,
+                                            size: 48,
+                                            color: crmColors.border,
+                                          ),
+                                          12.h,
+                                          Text(
+                                            'No bookings match the filter',
+                                            style: TextStyle(color: crmColors.textSecondary),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : Padding(
+                                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                                      child: ListView.separated(
+                                        itemCount: filtered.length,
+                                        separatorBuilder: (_, __) => 12.h,
+                                        itemBuilder: (ctx, index) {
+                                          final entry = filtered[index];
+                                          final booking = entry.booking;
+                                          final artistName = _artistLabelForEntry(entry);
+                                          return Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              onTap: () {
+                                                Navigator.of(dialogContext).pop();
+                                                context.push(
+                                                  '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(entry.id)}',
+                                                );
+                                              },
+                                              borderRadius: BorderRadius.circular(24),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(18),
+                                                decoration: BoxDecoration(
+                                                  color: crmColors.background,
+                                                  borderRadius: BorderRadius.circular(24),
+                                                  border: Border.all(color: crmColors.border),
+                                                ),
+                                                child: Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Container(
+                                                      width: 4,
+                                                      height: 48,
+                                                      decoration: BoxDecoration(
+                                                        color: _colorForService(entry.service),
+                                                        borderRadius: BorderRadius.circular(2),
+                                                      ),
+                                                    ),
+                                                    16.w,
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            entry.summaryLabel,
+                                                            style: const TextStyle(
+                                                              fontWeight: FontWeight.bold,
+                                                              fontSize: 16,
+                                                            ),
+                                                          ),
+                                                          4.h,
+                                                          Text(
+                                                            '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
+                                                            style: TextStyle(
+                                                              color: crmColors.textSecondary,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
+                                                          8.h,
+                                                          Text(
+                                                            artistName,
+                                                            style: TextStyle(
+                                                              color: crmColors.primary,
+                                                              fontWeight: FontWeight.w600,
+                                                              fontSize: 13,
+                                                            ),
+                                                          ),
+                                                          if (booking.region.trim().isNotEmpty) ...[
+                                                            4.h,
+                                                            Row(
+                                                              children: [
+                                                                Icon(
+                                                                  Icons.location_on_outlined,
+                                                                  size: 14,
+                                                                  color: crmColors.textSecondary,
+                                                                ),
+                                                                4.w,
+                                                                Text(
+                                                                  booking.region.trim(),
+                                                                  style: TextStyle(
+                                                                    color: crmColors.textSecondary,
+                                                                    fontSize: 12,
+                                                                    fontWeight: FontWeight.w500,
+                                                                  ),
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ],
+                                                          12.h,
+                                                          Row(
+                                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                            children: [
+                                                              _buildCompactPaymentInfo(
+                                                                label: 'Total',
+                                                                value: '₹${booking.totalPrice.toStringAsFixed(0)}',
+                                                                color: crmColors.textPrimary,
+                                                              ),
+                                                              _buildCompactPaymentInfo(
+                                                                label: 'Advance',
+                                                                value: '₹${booking.advanceAmount.toStringAsFixed(0)}',
+                                                                color: crmColors.success,
+                                                              ),
+                                                              _buildCompactPaymentInfo(
+                                                                label: 'Balance',
+                                                                value: '₹${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(0)}',
+                                                                color: (booking.totalPrice - booking.advanceAmount - booking.discountAmount) > 0
+                                                                    ? crmColors.destructive
+                                                                    : crmColors.success,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Icon(Icons.chevron_right, color: crmColors.textSecondary),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
+                  );
+                },
+              );
+            },
           );
         },
       );
@@ -1998,6 +2207,48 @@ class CalendarScreen extends HookConsumerWidget {
     final m = dt.minute.toString().padLeft(2, '0');
     final ampm = dt.hour < 12 ? 'AM' : 'PM';
     return '$h:$m $ampm';
+  }
+
+  static Widget _filterChip({
+    required String label,
+    required bool selected,
+    required Color color,
+    required VoidCallback onTap,
+    IconData? icon,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? color : Colors.grey.withValues(alpha: 0.3),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: selected ? color : Colors.grey),
+              5.w,
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? color : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   static List<DateTime> _buildMonthCells(DateTime month) {

@@ -118,13 +118,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ],
                               ),
                               child: Image.asset(
-                                'assets/images/nizan_logo.png',
+                              'assets/images/teamn_logo.png',
                                 fit: BoxFit.contain,
                               ),
                             ),
                             48.h,
                             Text(
-                              'NIZAN MAKEOVERS',
+                              'TEAM N MAKEOVERS',
                               style: theme.textTheme.displaySmall?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
@@ -220,20 +220,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                     child: Image.asset(
-                      'assets/images/nizan_logo.png',
-                      fit: BoxFit.contain,
-                    ),
+                    'assets/images/teamn_logo.png',
+                    fit: BoxFit.contain,
                   ),
-                  24.h,
-                  Text(
-                    'NIZAN MAKEOVERS',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
-                    ),
+                ),
+                24.h,
+                Text(
+                  'TEAM N MAKEOVERS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 4,
                   ),
+                ),
                   8.h,
                   Text(
                     'Creative Enterprise Portal',

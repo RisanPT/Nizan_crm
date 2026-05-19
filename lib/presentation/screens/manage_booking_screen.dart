@@ -19,13 +19,15 @@ import '../../services/booking_service.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 import '../../services/region_service.dart';
+import '../../services/vehicle_service.dart';
+import '../../core/models/vehicle.dart';
 import '../../core/utils/whatsapp_service.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
   final String? bookingEntryId;
 
-  const ManageBookingScreen({
+   ManageBookingScreen({
     super.key,
     required this.bookingId,
     this.bookingEntryId,
@@ -45,6 +47,10 @@ class ManageBookingScreen extends HookConsumerWidget {
     final asyncAddonServices = ref.watch(addonServicesProvider);
     final asyncRegions = ref.watch(regionsProvider);
     final asyncPackages = ref.watch(packagesProvider);
+    final asyncVehicles = ref.watch(vehiclesProvider);
+    final availableVehicles = (asyncVehicles.value ?? const <Vehicle>[])
+        .where((v) => v.status.toLowerCase() == 'active')
+        .toList();
     final availableStaff = (asyncEmployees.value ?? const <Employee>[])
         .where((employee) => employee.status.toLowerCase() == 'active')
         .toList();
@@ -215,8 +221,8 @@ class ManageBookingScreen extends HookConsumerWidget {
       }
 
       final savedAddonTotal =
-          booking?.addons.fold<double>(
-            0,
+          booking?.addons.fold(
+            0.0,
             (sum, addon) => sum + (addon.amount * addon.persons),
           ) ??
           0;
@@ -275,8 +281,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           basePackageAmount.value =
               selectedDisplayEntry?.totalPrice ??
               (() {
-                final savedAddonTotal = booking.addons.fold<double>(
-                  0,
+                final savedAddonTotal = booking.addons.fold(
+                  0.0,
                   (sum, addon) => sum + (addon.amount * addon.persons),
                 );
                 final baseAmount = booking.totalPrice - savedAddonTotal;
@@ -348,8 +354,8 @@ class ManageBookingScreen extends HookConsumerWidget {
     double parseMoney(String value) => double.tryParse(value.trim()) ?? 0;
 
     double addonTotal(List<BookingAddon> items) {
-      return items.fold<double>(
-        0,
+      return items.fold(
+        0.0,
         (sum, addon) => sum + (addon.amount * addon.persons),
       );
     }
@@ -703,8 +709,8 @@ class ManageBookingScreen extends HookConsumerWidget {
       final normalizedAddons = _normalizedAddons(addons.value);
       final subtotal =
           basePackageAmount.value +
-          normalizedAddons.fold<double>(
-            0,
+          normalizedAddons.fold(
+            0.0,
             (sum, addon) => sum + (addon.amount * addon.persons),
           );
       final rawDiscountValue = double.tryParse(discountCtrl.text.trim()) ?? 0;
@@ -1135,6 +1141,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableRegions,
                     selectedRegionId,
                     availableDrivers,
+                    availableVehicles,
                     regionCtrl,
                     mapUrlCtrl,
                     travelModeCtrl,
@@ -1168,6 +1175,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           availableRegions,
                           selectedRegionId,
                           availableDrivers,
+                          availableVehicles,
                           regionCtrl,
                           mapUrlCtrl,
                           travelModeCtrl,
@@ -1205,6 +1213,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   assignments,
                   availableStaff,
                   asyncEmployees,
+                  availableVehicles,
                   temporaryStaffCtrl,
                   assignArtistId,
                   assignRoleCtrl,
@@ -1536,6 +1545,26 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 ),
                               ),
                             ],
+                            if (entry.booking.region.trim().isNotEmpty) ...[
+                              4.h,
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.location_on_outlined,
+                                    size: 14,
+                                    color: crmColors.textSecondary,
+                                  ),
+                                  4.w,
+                                  Text(
+                                    entry.booking.region.trim(),
+                                    style: TextStyle(
+                                      color: crmColors.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1597,6 +1626,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<ServiceRegion> availableRegions,
     ValueNotifier<String> selectedRegionId,
     List<Employee> availableDrivers,
+    List<Vehicle> availableVehicles,
     TextEditingController regionCtrl,
     TextEditingController mapUrlCtrl,
     TextEditingController travelModeCtrl,
@@ -1613,6 +1643,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     return _SectionCard(
       title: 'Logistics & Location',
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           LayoutBuilder(
             builder: (ctx, constraints) {
@@ -1639,7 +1670,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                     mapUrlCtrl,
                     hint: 'Google Maps Link',
                   ),
-                  _buildField(ctx, 'TRAVEL MODE', travelModeCtrl),
+                  _buildField(
+                    ctx,
+                    'TRAVEL MODE',
+                    travelModeCtrl,
+                    hint: 'Car / Flight / Self',
+                  ),
                   _buildField(ctx, 'TRAVEL TIME', travelTimeCtrl),
                   _buildField(
                     ctx,
@@ -1654,6 +1690,78 @@ class ManageBookingScreen extends HookConsumerWidget {
               );
             },
           ),
+          if (availableVehicles.isNotEmpty) ...[
+            24.h,
+            Text(
+              'QUICK FLEET SELECT (TRAVEL)',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: crmColors.textSecondary,
+                letterSpacing: 1.2,
+              ),
+            ),
+            12.h,
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: availableVehicles.map((vehicle) {
+                  final vehicleName = vehicle.name.isNotEmpty ? vehicle.name : vehicle.brand;
+                  final isSelected = travelModeCtrl.text == vehicleName;
+                  return GestureDetector(
+                    onTap: () {
+                      travelModeCtrl.text = vehicleName;
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.indigo.withValues(alpha: 0.1) : crmColors.background,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? Colors.indigo : crmColors.border,
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.directions_car_rounded,
+                            size: 16,
+                            color: isSelected ? Colors.indigo : crmColors.textSecondary,
+                          ),
+                          10.w,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                vehicleName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                                  color: isSelected ? Colors.indigo : crmColors.textPrimary,
+                                ),
+                              ),
+                              if (vehicle.registrationNumber.isNotEmpty)
+                                Text(
+                                  vehicle.registrationNumber,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: crmColors.textSecondary,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
           if (previousArtistWork != null && previousWorkDistanceKm != null) ...[
             16.h,
             Container(
@@ -1827,6 +1935,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     ValueNotifier<List<BookingAssignment>> assignments,
     List<Employee> availableStaff,
     AsyncValue<List<Employee>> asyncEmployees,
+    List<Vehicle> availableVehicles,
     TextEditingController temporaryStaffCtrl,
     ValueNotifier<String?> assignArtistId,
     TextEditingController assignRoleCtrl,
@@ -1913,6 +2022,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableStaff,
                     assignments,
                     asyncEmployees,
+                    availableVehicles,
                     assignArtistId,
                     assignRoleCtrl,
                     assignmentType,
@@ -2060,6 +2170,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<Employee> availableStaff,
     ValueNotifier<List<BookingAssignment>> assignments,
     AsyncValue<List<Employee>> asyncEmployees,
+    List<Vehicle> availableVehicles,
     ValueNotifier<String?> selectedArtistId,
     TextEditingController roleCtrl,
     ValueNotifier<String> assignmentType,
@@ -2209,6 +2320,62 @@ class ManageBookingScreen extends HookConsumerWidget {
               ).copyWith(isDense: true),
             ),
           ],
+          // ── Driver mode: show available cars ─────────────────────────
+          if (isTypeDriver && availableVehicles.isNotEmpty) ...[
+            12.h,
+            Text(
+              'AVAILABLE CARS',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Colors.green.shade700,
+                letterSpacing: 1.2,
+              ),
+            ),
+            8.h,
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: availableVehicles.map((vehicle) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.directions_car_outlined, size: 14, color: Colors.green),
+                      6.w,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            vehicle.name.isNotEmpty ? vehicle.name : vehicle.brand,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          if (vehicle.registrationNumber.isNotEmpty)
+                            Text(
+                              vehicle.registrationNumber,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Colors.green.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
           12.h,
           SizedBox(
             width: double.infinity,
@@ -2248,16 +2415,31 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ),
                 ];
 
+                // After adding a lead → auto-switch to assistant mode
+                if (isTypeLead) {
+                  assignmentType.value = 'assistant';
+                }
+
                 // Clear selection after adding
                 selectedArtistId.value = null;
                 roleCtrl.clear();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: isTypeLead ? Colors.amber : Colors.indigo,
+                backgroundColor: isTypeLead
+                    ? Colors.amber
+                    : isTypeDriver
+                    ? Colors.green
+                    : Colors.indigo,
                 foregroundColor: isTypeLead ? Colors.black : Colors.white,
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              child: Text(isTypeLead ? 'ASSIGN LEAD' : 'ADD TEAM MEMBER'),
+              child: Text(
+                isTypeLead
+                    ? 'ASSIGN LEAD ARTIST'
+                    : isTypeDriver
+                    ? 'ASSIGN DRIVER'
+                    : 'ADD ASSISTANT',
+              ),
             ),
           ),
         ],

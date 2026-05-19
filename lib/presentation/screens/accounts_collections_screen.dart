@@ -181,7 +181,7 @@ class AccountsCollectionsScreen extends ConsumerWidget {
     return Card(
       child: ListView.separated(
         itemCount: items.length,
-        separatorBuilder: (_, ___) => Divider(height: 1, color: crm.border),
+        separatorBuilder: (_, _) => Divider(height: 1, color: crm.border),
         itemBuilder: (context, index) {
           final c = items[index];
           return ListTile(
@@ -291,7 +291,6 @@ class AccountsCollectionsScreen extends ConsumerWidget {
   }
 
   void _showFilterSheet(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
     final asyncEmployees = ref.watch(employeesProvider);
     final filters = ref.watch(collectionFiltersProvider);
 
