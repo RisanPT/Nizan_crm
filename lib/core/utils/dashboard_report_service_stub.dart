@@ -12,6 +12,7 @@ Future<void> downloadDashboardReport({
   String reportType = 'executive',
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
-}) {
+  bool useEventDate = false,
+}) async {
   throw UnsupportedError('Dashboard PDF export is only available on web.');
 }

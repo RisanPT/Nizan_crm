@@ -19,9 +19,10 @@ Future<void> downloadDashboardReport({
   String reportType = 'executive',
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
+  bool useEventDate = false,
 }) async {
   final pdf = pw.Document();
-  final report = _buildReport(month, bookings, packages, employees);
+  final report = _buildReport(month, bookings, packages, employees, useEventDate: useEventDate);
 
   pdf.addPage(
     pw.MultiPage(
@@ -277,11 +278,12 @@ _DashboardReport _buildReport(
   DateTime month,
   List<Booking> bookings,
   List<ServicePackage> packages,
-  List<Employee> employees,
-) {
+  List<Employee> employees, {
+  bool useEventDate = false,
+}) {
   final monthBookings = bookings.where((booking) {
-    final bookedDate = booking.createdAt ?? booking.bookingDate;
-    return bookedDate.year == month.year && bookedDate.month == month.month;
+    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+    return date.year == month.year && date.month == month.month;
   }).toList();
 
   final activeBookings = monthBookings
@@ -348,8 +350,8 @@ _DashboardReport _buildReport(
 
   final dailyMap = <int, _DailyRevenueMetric>{};
   for (final booking in activeBookings) {
-    final bookedDate = booking.createdAt ?? booking.bookingDate;
-    final day = bookedDate.day;
+    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+    final day = date.day;
     final previous = dailyMap[day];
     dailyMap[day] = _DailyRevenueMetric(
       dayLabel: '$day ${_monthShort(month.month)}',
@@ -363,32 +365,32 @@ _DashboardReport _buildReport(
   final pendingBookings = monthBookings
       .where((booking) => booking.status.toLowerCase() == 'pending')
       .toList()
-    ..sort((a, b) => (a.createdAt ?? a.bookingDate).compareTo(b.createdAt ?? b.bookingDate));
+    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
 
   final upcomingBookings = bookings
       .where((booking) {
-        final bookedDate = booking.createdAt ?? booking.bookingDate;
-        return !bookedDate.isBefore(DateTime.now());
+        final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+        return !date.isBefore(DateTime.now());
       })
       .toList()
-    ..sort((a, b) => (a.createdAt ?? a.bookingDate).compareTo(b.createdAt ?? b.bookingDate));
+    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
 
   final todaysBookings = bookings.where((booking) {
-    final bookedDate = booking.createdAt ?? booking.bookingDate;
+    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
     final now = DateTime.now();
-    return bookedDate.year == now.year &&
-        bookedDate.month == now.month &&
-        bookedDate.day == now.day;
+    return date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
   }).toList()
-    ..sort((a, b) => (a.createdAt ?? a.bookingDate).compareTo(b.createdAt ?? b.bookingDate));
+    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
 
   final completedBookingsList = monthBookings
       .where((booking) => booking.status.toLowerCase() == 'completed')
       .toList()
-    ..sort((a, b) => (a.createdAt ?? a.bookingDate).compareTo(b.createdAt ?? b.bookingDate));
+    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
 
   final monthBookingsList = List<Booking>.from(monthBookings)
-    ..sort((a, b) => (a.createdAt ?? a.bookingDate).compareTo(b.createdAt ?? b.bookingDate));
+    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
 
   return _DashboardReport(
     totalWorks: activeBookings.length,

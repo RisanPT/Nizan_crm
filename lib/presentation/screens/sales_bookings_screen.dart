@@ -1273,10 +1273,10 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                         DataCell(Text(stats.completedCount.toString())),
                         DataCell(Text(stats.cancelledCount.toString())),
                         DataCell(
-                          IconButton(
+                          PopupMenuButton<String>(
                             icon: const Icon(Icons.download, size: 20),
                             tooltip: 'Download Monthly Report',
-                            onPressed: () async {
+                            onSelected: (value) async {
                               final asyncPackages = ref.read(packagesProvider);
                               final asyncEmployees = ref.read(employeesProvider);
                               
@@ -1288,14 +1288,26 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                               }
 
                               final reportMonth = DateTime(stats.year, stats.month);
-                              // We use the full allBookings but filter it specifically for the report logic inside service
+                              final useEventDate = value == 'event_date';
+                              
                               await downloadDashboardReport(
                                 month: reportMonth,
                                 bookings: allBookings,
                                 packages: asyncPackages.value!,
                                 employees: asyncEmployees.value!,
+                                useEventDate: useEventDate,
                               );
                             },
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'booking_date',
+                                child: Text('By Booking Date'),
+                              ),
+                              PopupMenuItem(
+                                value: 'event_date',
+                                child: Text('By Event Date'),
+                              ),
+                            ],
                           ),
                         ),
                       ],

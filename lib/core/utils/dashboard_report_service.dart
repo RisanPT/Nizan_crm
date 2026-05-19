@@ -14,6 +14,7 @@ Future<void> downloadDashboardReport({
   String reportType = 'executive',
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
+  bool useEventDate = false,
 }) {
   return impl.downloadDashboardReport(
     month: month,
@@ -23,5 +24,6 @@ Future<void> downloadDashboardReport({
     reportType: reportType,
     leads: leads,
     collections: collections,
+    useEventDate: useEventDate,
   );
 }
