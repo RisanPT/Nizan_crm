@@ -1380,7 +1380,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
     final status = useState('New');
     final isSaving = useState(false);
 
-    Future<void> _saveLead() async {
+    Future<void> saveLead() async {
       if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please fill name and phone')),
@@ -1488,7 +1488,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                   16.w,
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: status.value,
+                      initialValue: status.value,
                       decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
                       items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
                           .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -1500,7 +1500,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                   SizedBox(
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: isSaving.value ? null : _saveLead,
+                      onPressed: isSaving.value ? null : saveLead,
                       icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
                       label: const Text('Add Lead'),
                     ),
@@ -1549,7 +1549,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                   ),
                   20.h,
                   DropdownButtonFormField<String>(
-                    value: status.value,
+                    initialValue: status.value,
                     decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
                     items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
@@ -1561,7 +1561,7 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                     width: double.infinity,
                     height: 52,
                     child: ElevatedButton.icon(
-                      onPressed: isSaving.value ? null : _saveLead,
+                      onPressed: isSaving.value ? null : saveLead,
                       icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
                       label: const Text('Add Lead'),
                     ),

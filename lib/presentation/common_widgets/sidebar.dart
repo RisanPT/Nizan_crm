@@ -17,6 +17,9 @@ class Sidebar extends ConsumerWidget {
   final bool salesExpanded;
   final bool salesUserCollapsed;
   final ValueChanged<bool> onSalesExpandToggle;
+  final bool hrExpanded;
+  final bool hrUserCollapsed;
+  final ValueChanged<bool> onHrExpandToggle;
 
   const Sidebar({
     super.key,
@@ -29,6 +32,9 @@ class Sidebar extends ConsumerWidget {
     required this.salesExpanded,
     required this.salesUserCollapsed,
     required this.onSalesExpandToggle,
+    required this.hrExpanded,
+    required this.hrUserCollapsed,
+    required this.onHrExpandToggle,
   });
 
   @override
@@ -41,6 +47,7 @@ class Sidebar extends ConsumerWidget {
     final isFleetRoute = currentPath.startsWith('/fleet');
     final isAccountsRoute = currentPath.startsWith('/accounts');
     final isSalesRoute = currentPath.startsWith('/sales');
+    final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
     final isCollapsed = isTablet && !isMobile;
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
@@ -48,6 +55,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (accountsExpanded || (isAccountsRoute && !accountsUserCollapsed));
     final effectiveSalesExpanded =
         !isCollapsed && (salesExpanded || (isSalesRoute && !salesUserCollapsed));
+    final effectiveHrExpanded =
+        !isCollapsed && (hrExpanded || (isHrRoute && !hrUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session
@@ -156,14 +165,47 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/services'),
                     ),
                   ],
-                  if (role.canSeeStaff)
+                  if (role.canSeeStaff) ...[
                     _SidebarItem(
-                      icon: Icons.badge_outlined,
-                      title: 'Staff Management',
+                      icon: Icons.groups_outlined,
+                      title: 'HR',
                       isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/staff'),
-                      onTap: () => context.go('/staff'),
+                      isSelected: isHrRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveHrExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () {
+                        onHrExpandToggle(!hrExpanded || hrUserCollapsed);
+                      },
                     ),
+                    if (!isCollapsed && effectiveHrExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.badge_outlined,
+                          title: 'Staff Management',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/staff'),
+                          onTap: () => context.go('/staff'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.event_available_outlined,
+                          title: 'Slot Management',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/hr/slots'),
+                          onTap: () => context.go('/hr/slots'),
+                        ),
+                      ),
+                    ],
+                  ],
                   if (role.canSeeSales) ...[
                     _SidebarItem(
                       icon: Icons.bar_chart_outlined,

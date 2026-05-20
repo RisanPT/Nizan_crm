@@ -9,6 +9,7 @@ import '../../presentation/screens/clients_directory_screen.dart';
 import '../../presentation/screens/client_profile_screen.dart';
 import '../../presentation/screens/calendar_screen.dart';
 import '../../presentation/screens/staff_management_screen.dart';
+import '../../presentation/screens/slot_management_screen.dart';
 import '../../presentation/screens/services_management_screen.dart';
 import '../../presentation/screens/add_booking_screen.dart';
 import '../../presentation/screens/manage_booking_screen.dart';
@@ -126,6 +127,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Add-on Services';
           } else if (state.uri.path == '/staff') {
             title = 'Staff Management';
+          } else if (state.uri.path == '/hr/slots') {
+            title = 'Slot Management';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
           } else if (state.uri.path == '/sales/leads') {
@@ -211,6 +214,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/staff',
             builder: (context, state) => const StaffManagementScreen(),
+          ),
+          GoRoute(
+            path: '/hr/slots',
+            builder: (context, state) => const SlotManagementScreen(),
           ),
           GoRoute(
             path: '/sales',
