@@ -14,7 +14,7 @@ import '../../presentation/screens/services_management_screen.dart';
 import '../../presentation/screens/add_booking_screen.dart';
 import '../../presentation/screens/manage_booking_screen.dart';
 import '../../presentation/screens/add_service_screen.dart';
-import '../../presentation/screens/regions_management_screen.dart';
+import '../../presentation/screens/geographic_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
 import '../../presentation/screens/accounts_budget_screen.dart';
@@ -205,7 +205,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/services/regions',
-            builder: (context, state) => const RegionsManagementScreen(),
+            builder: (context, state) => const GeographicManagementScreen(),
           ),
           GoRoute(
             path: '/services/addons',

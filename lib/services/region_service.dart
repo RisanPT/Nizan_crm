@@ -26,11 +26,17 @@ class RegionService {
 
   RegionService(this._dio);
 
-  Future<List<ServiceRegion>> getRegions({bool activeOnly = false}) async {
+  Future<List<ServiceRegion>> getRegions({
+    bool activeOnly = false,
+    String? stateId,
+  }) async {
     try {
       final response = await _dio.get(
         '/regions',
-        queryParameters: activeOnly ? {'active': 'true'} : null,
+        queryParameters: {
+          if (activeOnly) 'active': 'true',
+          if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
+        },
       );
       final data = response.data as List;
       return data
@@ -45,6 +51,7 @@ class RegionService {
     int page = 1,
     int limit = 20,
     bool activeOnly = false,
+    String? stateId,
   }) async {
     try {
       final response = await _dio.get(
@@ -53,6 +60,7 @@ class RegionService {
           'page': page,
           'limit': limit,
           if (activeOnly) 'active': 'true',
+          if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
         },
       );
       return PaginatedListResponse.fromJson(
@@ -68,12 +76,14 @@ class RegionService {
     String? id,
     required String name,
     required String status,
+    String? stateId,
   }) async {
     try {
       final payload = {
         if (id != null && id.isNotEmpty) 'id': id,
         'name': name,
         'status': status,
+        if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
       };
 
       final response = id != null && id.isNotEmpty

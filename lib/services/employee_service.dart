@@ -87,6 +87,10 @@ class EmployeeService {
     required String regionId,
     required String category,
     String? profileImage,
+    String? zoneId,
+    String? stateId,
+    String? districtId,
+    String? pincodeId,
   }) async {
     try {
       final payload = {
@@ -99,6 +103,10 @@ class EmployeeService {
         'status': status,
         'regionId': regionId,
         'category': category,
+        if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
+        if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
+        if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
+        if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
       };
 
       if (profileImage != null) {

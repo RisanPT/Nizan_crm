@@ -161,8 +161,15 @@ class Sidebar extends ConsumerWidget {
                       icon: Icons.design_services_outlined,
                       title: 'Services',
                       isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/services'),
+                      isSelected: currentPath == '/services',
                       onTap: () => context.go('/services'),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.map_outlined,
+                      title: 'Geographics',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/services/regions'),
+                      onTap: () => context.go('/services/regions'),
                     ),
                   ],
                   if (role.canSeeStaff) ...[

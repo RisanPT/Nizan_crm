@@ -64,6 +64,10 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
           regionId: _employee.regionId,
           category: _employee.category,
           profileImage: imageUrl,
+          zoneId: _employee.zoneId,
+          stateId: _employee.stateId,
+          districtId: _employee.districtId,
+          pincodeId: _employee.pincodeId,
         );
 
         setState(() {
@@ -234,7 +238,26 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     const SizedBox(height: 16),
                     _buildInfoRow(Icons.work, 'Specialization', _employee.specialization.isEmpty ? 'None' : _employee.specialization, crmColors),
                     const SizedBox(height: 16),
-                    _buildInfoRow(Icons.location_on, 'Region', _employee.regionName.isEmpty ? 'Not assigned' : _employee.regionName, crmColors),
+                    _buildInfoRow(
+                      Icons.location_on,
+                      'Assigned Area',
+                      [
+                        if (_employee.zoneName.isNotEmpty) _employee.zoneName,
+                        if (_employee.stateName.isNotEmpty) _employee.stateName,
+                        if (_employee.regionName.isNotEmpty) _employee.regionName,
+                        if (_employee.districtName.isNotEmpty) _employee.districtName,
+                        if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
+                      ].isEmpty
+                          ? 'Not assigned'
+                          : [
+                              if (_employee.zoneName.isNotEmpty) _employee.zoneName,
+                              if (_employee.stateName.isNotEmpty) _employee.stateName,
+                              if (_employee.regionName.isNotEmpty) _employee.regionName,
+                              if (_employee.districtName.isNotEmpty) _employee.districtName,
+                              if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
+                            ].join(' → '),
+                      crmColors,
+                    ),
                   ],
                 ),
               ),

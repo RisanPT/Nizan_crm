@@ -5,12 +5,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/list_page_params.dart';
-import '../../core/models/service_region.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
+import '../../services/zone_service.dart';
+import '../../services/state_service.dart';
+import '../../services/district_service.dart';
+import '../../services/pincode_service.dart';
 import 'staff_details_screen.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
@@ -34,7 +37,11 @@ class StaffManagementScreen extends HookConsumerWidget {
         ),
       ),
     );
+    final asyncZones = ref.watch(zonesProvider);
+    final asyncStates = ref.watch(statesProvider);
     final asyncRegions = ref.watch(regionsProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+    final asyncPincodes = ref.watch(pincodesProvider);
 
     Future<void> openStaffDialog([
       Employee? employee,
@@ -50,19 +57,16 @@ class StaffManagementScreen extends HookConsumerWidget {
       var artistRole = employee?.artistRole ?? presetRole ?? 'artist';
       var status = employee?.status ?? 'active';
       var regionId = employee?.regionId ?? '';
+      var zoneId = employee?.zoneId ?? '';
+      var stateId = employee?.stateId ?? '';
+      var districtId = employee?.districtId ?? '';
+      var pincodeId = employee?.pincodeId ?? '';
       var category = 'creative'; // hardcoded
 
       await showDialog(
         context: context,
         builder: (dialogContext) {
-          final regions = asyncRegions.value ?? const <ServiceRegion>[];
-          final regionItems = <DropdownMenuItem<String>>[
-            const DropdownMenuItem(value: '', child: Text('Any / All', overflow: TextOverflow.ellipsis)),
-            ...regions.map(
-              (region) =>
-                  DropdownMenuItem(value: region.id, child: Text(region.name, overflow: TextOverflow.ellipsis)),
-            ),
-          ];
+
 
           return StatefulBuilder(
             builder: (context, setState) => AlertDialog(
@@ -92,49 +96,140 @@ class StaffManagementScreen extends HookConsumerWidget {
                         ),
                       ),
                       16.h,
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              initialValue: type,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'in-house',
-                                  child: Text('In-House'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'outsource',
-                                  child: Text('Outsource'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() => type = value);
-                                }
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Type',
-                              ),
-                            ),
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: type,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'in-house',
+                            child: Text('In-House'),
                           ),
-                          16.w,
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              initialValue: regionId,
-                              items: regionItems,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() => regionId = value);
-                                }
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Region',
-                              ),
-                            ),
+                          DropdownMenuItem(
+                            value: 'outsource',
+                            child: Text('Outsource'),
                           ),
                         ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => type = value);
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Type',
+                        ),
+                      ),
+                      16.h,
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Location Details',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                      8.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: zoneId.isEmpty ? null : zoneId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Select Zone')),
+                          ...asyncZones.value?.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))) ?? [],
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            zoneId = value ?? '';
+                            stateId = '';
+                            regionId = '';
+                            districtId = '';
+                            pincodeId = '';
+                          });
+                        },
+                        decoration: const InputDecoration(labelText: 'Zone'),
+                      ),
+                      12.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: stateId.isEmpty ? null : stateId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Select State')),
+                          ...asyncStates.value
+                                  ?.where((s) => s.zoneId == zoneId)
+                                  .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))) ??
+                              [],
+                        ],
+                        onChanged: zoneId.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  stateId = value ?? '';
+                                  regionId = '';
+                                  districtId = '';
+                                  pincodeId = '';
+                                });
+                              },
+                        decoration: const InputDecoration(labelText: 'State'),
+                      ),
+                      12.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: regionId.isEmpty ? null : regionId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Select Region')),
+                          ...asyncRegions.value
+                                  ?.where((r) => r.stateId == stateId)
+                                  .map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))) ??
+                              [],
+                        ],
+                        onChanged: stateId.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  regionId = value ?? '';
+                                  districtId = '';
+                                  pincodeId = '';
+                                });
+                              },
+                        decoration: const InputDecoration(labelText: 'Region'),
+                      ),
+                      12.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: districtId.isEmpty ? null : districtId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Select District')),
+                          ...asyncDistricts.value
+                                  ?.where((d) => d.regionId == regionId)
+                                  .map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))) ??
+                              [],
+                        ],
+                        onChanged: regionId.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  districtId = value ?? '';
+                                  pincodeId = '';
+                                });
+                              },
+                        decoration: const InputDecoration(labelText: 'District'),
+                      ),
+                      12.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: pincodeId.isEmpty ? null : pincodeId,
+                        items: [
+                          const DropdownMenuItem(value: null, child: Text('Select Pincode')),
+                          ...asyncPincodes.value
+                                  ?.where((p) => p.districtId == districtId)
+                                  .map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))) ??
+                              [],
+                        ],
+                        onChanged: districtId.isEmpty
+                            ? null
+                            : (value) {
+                                setState(() {
+                                  pincodeId = value ?? '';
+                                });
+                              },
+                        decoration: const InputDecoration(labelText: 'Pincode'),
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
@@ -216,6 +311,10 @@ class StaffManagementScreen extends HookConsumerWidget {
                           status: status,
                           regionId: regionId,
                           category: category,
+                          zoneId: zoneId,
+                          stateId: stateId,
+                          districtId: districtId,
+                          pincodeId: pincodeId,
                         );
                     ref.invalidate(employeesProvider);
                     ref.invalidate(paginatedEmployeesProvider);
@@ -535,6 +634,29 @@ class StaffManagementScreen extends HookConsumerWidget {
                   Expanded(
                     child: Text(
                       employee.specialization,
+                      style: TextStyle(
+                          color: crmColors.textSecondary, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              6.h,
+            ],
+            if (employee.regionName.isNotEmpty || employee.districtName.isNotEmpty) ...[
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined,
+                      size: 14, color: crmColors.textSecondary),
+                  6.w,
+                  Expanded(
+                    child: Text(
+                      [
+                        if (employee.regionName.isNotEmpty) employee.regionName,
+                        if (employee.districtName.isNotEmpty) employee.districtName,
+                        if (employee.pincodeCode.isNotEmpty) employee.pincodeCode,
+                      ].join(', '),
                       style: TextStyle(
                           color: crmColors.textSecondary, fontSize: 13),
                       maxLines: 1,
