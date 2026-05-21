@@ -5,6 +5,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/list_page_params.dart';
+import '../../core/models/zone.dart';
+import '../../core/models/geographic_state.dart';
+import '../../core/models/service_region.dart';
+import '../../core/models/district.dart';
+import '../../core/models/pincode.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
@@ -27,21 +32,53 @@ class StaffManagementScreen extends HookConsumerWidget {
     final pageState = useState(1);
     const pageSize = 20;
 
-    // Hardcode category to 'creative' as we removed administrative staff
+    final mainSearchQuery = useState('');
+    final mainSelectedZoneId = useState('');
+    final mainSelectedStateId = useState('');
+    final mainSelectedRegionId = useState('');
+    final mainSelectedDistrictId = useState('');
+    final mainSelectedPincodeId = useState('');
+
+    final asyncZones = ref.watch(zonesProvider);
+    final asyncStates = ref.watch(statesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+    final asyncPincodes = ref.watch(pincodesProvider);
+
+    final zones = asyncZones.value ?? const <ZoneModel>[];
+    final states = asyncStates.value ?? const <GeographicState>[];
+    final regions = asyncRegions.value ?? const <ServiceRegion>[];
+    final districts = asyncDistricts.value ?? const <District>[];
+    final pincodes = asyncPincodes.value ?? const <Pincode>[];
+
+    final mainAvailableStates = states.where((s) => s.zoneId == mainSelectedZoneId.value).toList();
+    final mainAvailableRegions = regions.where((r) => r.stateId == mainSelectedStateId.value).toList();
+    final mainAvailableDistricts = districts.where((d) => d.regionId == mainSelectedRegionId.value).toList();
+    final mainAvailablePincodes = pincodes.where((p) => p.districtId == mainSelectedDistrictId.value).toList();
+
+    if (asyncZones.isLoading ||
+        asyncStates.isLoading ||
+        asyncRegions.isLoading ||
+        asyncDistricts.isLoading ||
+        asyncPincodes.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     final asyncEmployees = ref.watch(
       paginatedEmployeesProvider(
         ListPageParams(
           page: pageState.value,
           limit: pageSize,
           category: 'creative',
+          search: mainSearchQuery.value,
+          zoneId: mainSelectedZoneId.value,
+          stateId: mainSelectedStateId.value,
+          regionId: mainSelectedRegionId.value,
+          districtId: mainSelectedDistrictId.value,
+          pincodeId: mainSelectedPincodeId.value,
         ),
       ),
     );
-    final asyncZones = ref.watch(zonesProvider);
-    final asyncStates = ref.watch(statesProvider);
-    final asyncRegions = ref.watch(regionsProvider);
-    final asyncDistricts = ref.watch(districtsProvider);
-    final asyncPincodes = ref.watch(pincodesProvider);
 
     Future<void> openStaffDialog([
       Employee? employee,
@@ -381,6 +418,235 @@ class StaffManagementScreen extends HookConsumerWidget {
           ),
         ],
         24.h,
+
+        // Search and Filter Bar
+        Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: crmColors.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.filter_list, size: 18, color: crmColors.textSecondary),
+                    8.w,
+                    const Text(
+                      'Search & Filter Staff',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ],
+                ),
+                12.h,
+                Row(
+                  children: [
+                    // Search Box
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          hintText: 'Search by name, email, phone or specialization...',
+                          isDense: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onChanged: (val) {
+                          mainSearchQuery.value = val;
+                          pageState.value = 1;
+                        },
+                      ),
+                    ),
+                    if (mainSearchQuery.value.isNotEmpty ||
+                        mainSelectedZoneId.value.isNotEmpty ||
+                        mainSelectedStateId.value.isNotEmpty ||
+                        mainSelectedRegionId.value.isNotEmpty ||
+                        mainSelectedDistrictId.value.isNotEmpty ||
+                        mainSelectedPincodeId.value.isNotEmpty) ...[
+                      12.w,
+                      TextButton.icon(
+                        onPressed: () {
+                          mainSearchQuery.value = '';
+                          mainSelectedZoneId.value = '';
+                          mainSelectedStateId.value = '';
+                          mainSelectedRegionId.value = '';
+                          mainSelectedDistrictId.value = '';
+                          mainSelectedPincodeId.value = '';
+                          pageState.value = 1;
+                        },
+                        icon: const Icon(Icons.clear, size: 16),
+                        label: const Text('Clear Filters'),
+                      ),
+                    ],
+                  ],
+                ),
+                12.h,
+                if (isMobile)
+                  Column(
+                    children: [
+                      // Zone Filter
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                        decoration: const InputDecoration(labelText: 'Zone', isDense: true),
+                        items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
+                        onChanged: (val) {
+                          mainSelectedZoneId.value = val ?? '';
+                          mainSelectedStateId.value = '';
+                          mainSelectedRegionId.value = '';
+                          mainSelectedDistrictId.value = '';
+                          mainSelectedPincodeId.value = '';
+                          pageState.value = 1;
+                        },
+                      ),
+                      12.h,
+                      // State Filter
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                        decoration: const InputDecoration(labelText: 'State', isDense: true),
+                        items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                        onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
+                          mainSelectedStateId.value = val ?? '';
+                          mainSelectedRegionId.value = '';
+                          mainSelectedDistrictId.value = '';
+                          mainSelectedPincodeId.value = '';
+                          pageState.value = 1;
+                        },
+                      ),
+                      12.h,
+                      // Region Filter
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                        decoration: const InputDecoration(labelText: 'Region', isDense: true),
+                        items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
+                        onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
+                          mainSelectedRegionId.value = val ?? '';
+                          mainSelectedDistrictId.value = '';
+                          mainSelectedPincodeId.value = '';
+                          pageState.value = 1;
+                        },
+                      ),
+                      12.h,
+                      // District Filter
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                        decoration: const InputDecoration(labelText: 'District', isDense: true),
+                        items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
+                        onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
+                          mainSelectedDistrictId.value = val ?? '';
+                          mainSelectedPincodeId.value = '';
+                          pageState.value = 1;
+                        },
+                      ),
+                      12.h,
+                      // Pincode Filter
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
+                        decoration: const InputDecoration(labelText: 'Pincode', isDense: true),
+                        items: mainAvailablePincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))).toList(),
+                        onChanged: mainSelectedDistrictId.value.isEmpty ? null : (val) {
+                          mainSelectedPincodeId.value = val ?? '';
+                          pageState.value = 1;
+                        },
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    children: [
+                      // Zone Filter
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                          decoration: const InputDecoration(labelText: 'Zone', isDense: true),
+                          items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
+                          onChanged: (val) {
+                            mainSelectedZoneId.value = val ?? '';
+                            mainSelectedStateId.value = '';
+                            mainSelectedRegionId.value = '';
+                            mainSelectedDistrictId.value = '';
+                            mainSelectedPincodeId.value = '';
+                            pageState.value = 1;
+                          },
+                        ),
+                      ),
+                      12.w,
+                      // State Filter
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                          decoration: const InputDecoration(labelText: 'State', isDense: true),
+                          items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
+                          onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
+                            mainSelectedStateId.value = val ?? '';
+                            mainSelectedRegionId.value = '';
+                            mainSelectedDistrictId.value = '';
+                            mainSelectedPincodeId.value = '';
+                            pageState.value = 1;
+                          },
+                        ),
+                      ),
+                      12.w,
+                      // Region Filter
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                          decoration: const InputDecoration(labelText: 'Region', isDense: true),
+                          items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
+                          onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
+                            mainSelectedRegionId.value = val ?? '';
+                            mainSelectedDistrictId.value = '';
+                            mainSelectedPincodeId.value = '';
+                            pageState.value = 1;
+                          },
+                        ),
+                      ),
+                      12.w,
+                      // District Filter
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                          decoration: const InputDecoration(labelText: 'District', isDense: true),
+                          items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
+                          onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
+                            mainSelectedDistrictId.value = val ?? '';
+                            mainSelectedPincodeId.value = '';
+                            pageState.value = 1;
+                          },
+                        ),
+                      ),
+                      12.w,
+                      // Pincode Filter
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
+                          decoration: const InputDecoration(labelText: 'Pincode', isDense: true),
+                          items: mainAvailablePincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))).toList(),
+                          onChanged: mainSelectedDistrictId.value.isEmpty ? null : (val) {
+                            mainSelectedPincodeId.value = val ?? '';
+                            pageState.value = 1;
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+        20.h,
+
         Expanded(
           child: asyncEmployees.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -644,29 +910,40 @@ class StaffManagementScreen extends HookConsumerWidget {
               ),
               6.h,
             ],
-            if (employee.regionName.isNotEmpty || employee.districtName.isNotEmpty) ...[
-              Row(
-                children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 14, color: crmColors.textSecondary),
-                  6.w,
-                  Expanded(
-                    child: Text(
-                      [
-                        if (employee.regionName.isNotEmpty) employee.regionName,
-                        if (employee.districtName.isNotEmpty) employee.districtName,
-                        if (employee.pincodeCode.isNotEmpty) employee.pincodeCode,
-                      ].join(', '),
-                      style: TextStyle(
-                          color: crmColors.textSecondary, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            () {
+              final geoPath = [
+                if (employee.zoneName.isNotEmpty) employee.zoneName,
+                if (employee.stateName.isNotEmpty) employee.stateName,
+                if (employee.regionName.isNotEmpty) employee.regionName,
+                if (employee.districtName.isNotEmpty) employee.districtName,
+                if (employee.pincodeCode.isNotEmpty) employee.pincodeCode,
+              ].join(' › ');
+              if (geoPath.isNotEmpty) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_outlined,
+                            size: 14, color: crmColors.textSecondary),
+                        6.w,
+                        Expanded(
+                          child: Text(
+                            geoPath,
+                            style: TextStyle(
+                                color: crmColors.textSecondary, fontSize: 13),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-              6.h,
-            ],
+                    6.h,
+                  ],
+                );
+              }
+              return const SizedBox.shrink();
+            }(),
             if (employee.phone.isNotEmpty) ...[
               Row(
                 children: [

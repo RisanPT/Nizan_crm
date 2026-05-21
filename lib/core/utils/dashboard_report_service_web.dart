@@ -22,7 +22,13 @@ Future<void> downloadDashboardReport({
   bool useEventDate = false,
 }) async {
   final pdf = pw.Document();
-  final report = _buildReport(month, bookings, packages, employees, useEventDate: useEventDate);
+  final report = _buildReport(
+    month,
+    bookings,
+    packages,
+    employees,
+    useEventDate: useEventDate,
+  );
 
   pdf.addPage(
     pw.MultiPage(
@@ -54,8 +60,8 @@ Future<void> downloadDashboardReport({
           ),
           pw.SizedBox(height: 6),
           pw.Text(
-            reportType == 'ceo_daily' 
-                ? 'Report Date: ${_dateLabel(DateTime.now())}' 
+            reportType == 'ceo_daily'
+                ? 'Report Date: ${_dateLabel(DateTime.now())}'
                 : 'Reporting Period: ${_monthLabel(month)}',
             style: const pw.TextStyle(
               fontSize: 12,
@@ -63,7 +69,7 @@ Future<void> downloadDashboardReport({
             ),
           ),
           pw.SizedBox(height: 18),
-          
+
           if (reportType == 'executive' || reportType == 'sales') ...[
             pw.Wrap(
               spacing: 12,
@@ -95,7 +101,9 @@ Future<void> downloadDashboardReport({
             _staffTable(report.topStaff),
           ],
 
-          if (reportType == 'executive' || reportType == 'sales' || reportType == 'crm') ...[
+          if (reportType == 'executive' ||
+              reportType == 'sales' ||
+              reportType == 'crm') ...[
             pw.SizedBox(height: 22),
             _sectionTitle('Monthly Bookings Ledger'),
             _bookingTable(report.monthBookingsList),
@@ -103,14 +111,16 @@ Future<void> downloadDashboardReport({
             _sectionTitle('Pending Booking Requests'),
             _bookingTable(report.pendingBookings),
           ],
-          
+
           if (reportType == 'finance') ...[
-             pw.SizedBox(height: 22),
-             _sectionTitle('Financial Summary'),
-             _dailyRevenueTable(report.dailyRevenue),
-             pw.SizedBox(height: 22),
-             _sectionTitle('Expense Overview'),
-             pw.Text('Detailed expense breakdown is available in the Accounts module.'),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Financial Summary'),
+            _dailyRevenueTable(report.dailyRevenue),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Expense Overview'),
+            pw.Text(
+              'Detailed expense breakdown is available in the Accounts module.',
+            ),
           ],
 
           if (reportType == 'ceo_daily') ...[
@@ -123,7 +133,7 @@ Future<void> downloadDashboardReport({
             pw.SizedBox(height: 22),
             _sectionTitle('Detailed Sales Records'),
             _bookingTable(report.todaysBookings),
-          ]
+          ],
         ];
       },
     ),
@@ -133,7 +143,7 @@ Future<void> downloadDashboardReport({
   _downloadPdf(
     bytes,
     fileName:
-        '${reportType}-report-${month.year}-${month.month.toString().padLeft(2, '0')}.pdf',
+        '$reportType-report-${month.year}-${month.month.toString().padLeft(2, '0')}.pdf',
   );
 }
 
@@ -233,13 +243,7 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
   return pw.TableHelper.fromTextArray(
     headers: const ['Staff', 'Role', 'Appointments'],
     data: rows
-        .map(
-          (row) => [
-            row.name,
-            row.role,
-            '${row.appointmentsCount}',
-          ],
-        )
+        .map((row) => [row.name, row.role, '${row.appointmentsCount}'])
         .toList(),
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
@@ -250,7 +254,16 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
 
 pw.Widget _bookingTable(List<Booking> rows) {
   return pw.TableHelper.fromTextArray(
-    headers: const ['Client', 'Phone', 'Service', 'Booked', 'Event', 'Status', 'Advance', 'Total'],
+    headers: const [
+      'Client',
+      'Phone',
+      'Service',
+      'Booked',
+      'Event',
+      'Status',
+      'Advance',
+      'Total',
+    ],
     data: rows
         .map(
           (booking) => [
@@ -272,8 +285,6 @@ pw.Widget _bookingTable(List<Booking> rows) {
   );
 }
 
-
-
 _DashboardReport _buildReport(
   DateTime month,
   List<Booking> bookings,
@@ -282,7 +293,9 @@ _DashboardReport _buildReport(
   bool useEventDate = false,
 }) {
   final monthBookings = bookings.where((booking) {
-    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+    final date = useEventDate
+        ? booking.serviceStart
+        : (booking.createdAt ?? booking.bookingDate);
     return date.year == month.year && date.month == month.month;
   }).toList();
 
@@ -301,12 +314,16 @@ _DashboardReport _buildReport(
         0,
         (sum, booking) =>
             sum +
-            (booking.totalPrice - booking.advanceAmount - booking.discountAmount)
+            (booking.totalPrice -
+                    booking.advanceAmount -
+                    booking.discountAmount)
                 .clamp(0, double.infinity),
       );
 
   final packageById = {for (final package in packages) package.id: package};
-  final employeeById = {for (final employee in employees) employee.id: employee};
+  final employeeById = {
+    for (final employee in employees) employee.id: employee,
+  };
 
   final serviceGroups = <String, List<Booking>>{};
   for (final booking in activeBookings) {
@@ -324,8 +341,7 @@ _DashboardReport _buildReport(
       bookingsCount: entry.value.length,
       amount: matchedPackage?.price ?? sample.totalPrice,
     );
-  }).toList()
-    ..sort((a, b) => b.bookingsCount.compareTo(a.bookingsCount));
+  }).toList()..sort((a, b) => b.bookingsCount.compareTo(a.bookingsCount));
 
   final staffStats = <String, _StaffMetric>{};
   for (final booking in activeBookings) {
@@ -336,8 +352,8 @@ _DashboardReport _buildReport(
       final role = employee?.specialization.trim().isNotEmpty == true
           ? employee!.specialization.trim()
           : assignment.works.isNotEmpty
-              ? assignment.works.join(', ')
-              : assignment.role;
+          ? assignment.works.join(', ')
+          : assignment.role;
       staffStats[assignment.employeeId] = _StaffMetric(
         name: employee?.name ?? assignment.artistName,
         role: role.isEmpty ? 'Assigned Staff' : role,
@@ -350,7 +366,9 @@ _DashboardReport _buildReport(
 
   final dailyMap = <int, _DailyRevenueMetric>{};
   for (final booking in activeBookings) {
-    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+    final date = useEventDate
+        ? booking.serviceStart
+        : (booking.createdAt ?? booking.bookingDate);
     final day = date.day;
     final previous = dailyMap[day];
     dailyMap[day] = _DailyRevenueMetric(
@@ -360,37 +378,80 @@ _DashboardReport _buildReport(
     );
   }
   final dailyRevenue = dailyMap.entries.map((entry) => entry.value).toList()
-    ..sort((a, b) => _extractDay(a.dayLabel).compareTo(_extractDay(b.dayLabel)));
+    ..sort(
+      (a, b) => _extractDay(a.dayLabel).compareTo(_extractDay(b.dayLabel)),
+    );
 
-  final pendingBookings = monthBookings
-      .where((booking) => booking.status.toLowerCase() == 'pending')
-      .toList()
-    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
+  final pendingBookings =
+      monthBookings
+          .where((booking) => booking.status.toLowerCase() == 'pending')
+          .toList()
+        ..sort(
+          (a, b) =>
+              (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate))
+                  .compareTo(
+                    useEventDate
+                        ? b.serviceStart
+                        : (b.createdAt ?? b.bookingDate),
+                  ),
+        );
 
-  final upcomingBookings = bookings
-      .where((booking) {
-        final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
+  final upcomingBookings =
+      bookings.where((booking) {
+        final date = useEventDate
+            ? booking.serviceStart
+            : (booking.createdAt ?? booking.bookingDate);
         return !date.isBefore(DateTime.now());
-      })
-      .toList()
-    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
+      }).toList()..sort(
+        (a, b) =>
+            (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate))
+                .compareTo(
+                  useEventDate
+                      ? b.serviceStart
+                      : (b.createdAt ?? b.bookingDate),
+                ),
+      );
 
-  final todaysBookings = bookings.where((booking) {
-    final date = useEventDate ? booking.serviceStart : (booking.createdAt ?? booking.bookingDate);
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
-  }).toList()
-    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
+  final todaysBookings =
+      bookings.where((booking) {
+        final date = useEventDate
+            ? booking.serviceStart
+            : (booking.createdAt ?? booking.bookingDate);
+        final now = DateTime.now();
+        return date.year == now.year &&
+            date.month == now.month &&
+            date.day == now.day;
+      }).toList()..sort(
+        (a, b) =>
+            (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate))
+                .compareTo(
+                  useEventDate
+                      ? b.serviceStart
+                      : (b.createdAt ?? b.bookingDate),
+                ),
+      );
 
-  final completedBookingsList = monthBookings
-      .where((booking) => booking.status.toLowerCase() == 'completed')
-      .toList()
-    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
+  final completedBookingsList =
+      monthBookings
+          .where((booking) => booking.status.toLowerCase() == 'completed')
+          .toList()
+        ..sort(
+          (a, b) =>
+              (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate))
+                  .compareTo(
+                    useEventDate
+                        ? b.serviceStart
+                        : (b.createdAt ?? b.bookingDate),
+                  ),
+        );
 
   final monthBookingsList = List<Booking>.from(monthBookings)
-    ..sort((a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate)).compareTo(useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate)));
+    ..sort(
+      (a, b) => (useEventDate ? a.serviceStart : (a.createdAt ?? a.bookingDate))
+          .compareTo(
+            useEventDate ? b.serviceStart : (b.createdAt ?? b.bookingDate),
+          ),
+    );
 
   return _DashboardReport(
     totalWorks: activeBookings.length,

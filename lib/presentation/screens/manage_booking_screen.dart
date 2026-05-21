@@ -6,7 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
-import '../../core/models/service_region.dart';
+import '../../core/models/district.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/booking_print_service.dart';
@@ -18,7 +18,7 @@ import '../../services/addon_service_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
-import '../../services/region_service.dart';
+import '../../services/district_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../core/models/vehicle.dart';
 import '../../core/utils/whatsapp_service.dart';
@@ -27,7 +27,7 @@ class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
   final String? bookingEntryId;
 
-   ManageBookingScreen({
+  const ManageBookingScreen({
     super.key,
     required this.bookingId,
     this.bookingEntryId,
@@ -45,7 +45,8 @@ class ManageBookingScreen extends HookConsumerWidget {
     final allBookings = asyncBookings.value ?? [];
     final asyncEmployees = ref.watch(employeesProvider);
     final asyncAddonServices = ref.watch(addonServicesProvider);
-    final asyncRegions = ref.watch(regionsProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+    final availableDistricts = asyncDistricts.value ?? const [];
     final asyncPackages = ref.watch(packagesProvider);
     final asyncVehicles = ref.watch(vehiclesProvider);
     final availableVehicles = (asyncVehicles.value ?? const <Vehicle>[])
@@ -64,7 +65,6 @@ class ManageBookingScreen extends HookConsumerWidget {
         (asyncAddonServices.value ?? const <AddonService>[])
             .where((service) => service.status.toLowerCase() == 'active')
             .toList();
-    final availableRegions = asyncRegions.value ?? const <ServiceRegion>[];
     final availablePackages = asyncPackages.value ?? const <ServicePackage>[];
     final Booking? booking = allBookings.cast<Booking?>().firstWhere(
       (b) => b?.id == bookingId,
@@ -105,6 +105,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     final addons = useState<List<BookingAddon>>([]);
     final discountType = useState<String>(booking?.discountType ?? 'inr');
     final selectedRegionId = useState<String>(booking?.regionId ?? '');
+    final selectedDistrictId = useState<String>(booking?.districtId ?? '');
     final isDeleting = useState(false);
     final selectedPackageId = useState<String>(
       selectedDisplayEntry != null && selectedBookingItemIndex >= 0
@@ -194,6 +195,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
     final packageCtrl = useTextEditingController(text: booking?.service ?? '');
     final regionCtrl = useTextEditingController(text: booking?.region ?? '');
+    final districtCtrl = useTextEditingController(
+      text: booking?.district ?? '',
+    );
 
     // CRM-only fields (empty until filled by user)
     final mapUrlCtrl = useTextEditingController();
@@ -307,6 +311,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           contentRequired.value = booking.contentCreationRequired;
           statusState.value = booking.status;
           selectedRegionId.value = booking.regionId;
+          selectedDistrictId.value = booking.districtId;
         }
         return null;
       },
@@ -316,6 +321,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.phone,
         booking?.email,
         booking?.regionId,
+        booking?.districtId,
         booking?.status,
         booking?.mapUrl,
         booking?.travelMode,
@@ -452,7 +458,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     double effectivePackagePrice(ServicePackage package) {
-      return package.effectivePriceForRegion(selectedRegionId.value);
+      return package.effectivePriceForDistrict(selectedDistrictId.value);
     }
 
     void applySelectedPackage(String packageId) {
@@ -485,7 +491,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       },
       [
         selectedPackageId.value,
-        selectedRegionId.value,
+        selectedDistrictId.value,
         availablePackages,
         isExtraDateEntry,
       ],
@@ -583,18 +589,25 @@ class ManageBookingScreen extends HookConsumerWidget {
               ? null
               : _distanceBetweenBookings(previousArtistWork.booking, booking));
 
-    useEffect(() {
-      final selectedRegion = availableRegions.cast<ServiceRegion?>().firstWhere(
-        (region) => region?.id == selectedRegionId.value,
+    District? findDistrictById(String? id) {
+      if (id == null || id.isEmpty) return null;
+      return availableDistricts.cast<District?>().firstWhere(
+        (district) => district?.id == id,
         orElse: () => null,
       );
-      if (selectedRegion != null) {
-        regionCtrl.text = selectedRegion.name;
-      } else if (selectedRegionId.value.isEmpty && booking != null) {
+    }
+
+    useEffect(() {
+      final selectedDistrict = findDistrictById(selectedDistrictId.value);
+      if (selectedDistrict != null) {
+        districtCtrl.text = selectedDistrict.name;
+        regionCtrl.text = selectedDistrict.regionName;
+      } else if (selectedDistrictId.value.isEmpty && booking != null) {
+        districtCtrl.text = booking.district;
         regionCtrl.text = booking.region;
       }
       return null;
-    }, [selectedRegionId.value, availableRegions, booking?.id]);
+    }, [selectedDistrictId.value, availableDistricts, booking?.id]);
 
     if (booking == null) {
       return Center(
@@ -757,6 +770,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? _summarizeBookingItemAssignments(updatedBookingItems)
           : assignments.value;
 
+      final selectedDistrictModel = findDistrictById(selectedDistrictId.value);
       final currentBookingSnapshot = booking.copyWith(
         customerName: nameCtrl.text.trim(),
         packageId: selectedPackageId.value.trim(),
@@ -765,14 +779,16 @@ class ManageBookingScreen extends HookConsumerWidget {
         service: packageCtrl.text.trim().isEmpty
             ? booking.service
             : packageCtrl.text.trim(),
-        regionId: selectedRegionId.value,
+        regionId: selectedDistrictModel?.regionId ?? selectedRegionId.value,
+        districtId: selectedDistrictId.value,
         driverId:
             assignments.value
                 .where((a) => a.roleType == 'driver')
                 .firstOrNull
                 ?.employeeId ??
             '',
-        region: regionCtrl.text.trim(),
+        region: selectedDistrictModel?.regionName ?? regionCtrl.text.trim(),
+        district: districtCtrl.text.trim(),
         driverName:
             assignments.value
                 .where((a) => a.roleType == 'driver')
@@ -795,7 +811,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         staffInstructions: staffNeedsCtrl.text.trim(),
         internalRemarks: remarksCtrl.text.trim(),
         contentCreationRequired: contentRequired.value,
-        createdAt: _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,
+        createdAt:
+            _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,
         bookingDate: parsedBookingDate,
         selectedDates: normalizedBookingDates,
         serviceStart: _mergeDateAndTime(
@@ -1137,11 +1154,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                   _buildLogistics(
                     context,
                     crmColors,
-                    asyncRegions,
-                    availableRegions,
-                    selectedRegionId,
+                    asyncDistricts,
+                    availableDistricts,
+                    selectedDistrictId,
                     availableDrivers,
                     availableVehicles,
+                    districtCtrl,
                     regionCtrl,
                     mapUrlCtrl,
                     travelModeCtrl,
@@ -1171,11 +1189,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                         child: _buildLogistics(
                           context,
                           crmColors,
-                          asyncRegions,
-                          availableRegions,
-                          selectedRegionId,
+                          asyncDistricts,
+                          availableDistricts,
+                          selectedDistrictId,
                           availableDrivers,
                           availableVehicles,
+                          districtCtrl,
                           regionCtrl,
                           mapUrlCtrl,
                           travelModeCtrl,
@@ -1545,7 +1564,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 ),
                               ),
                             ],
-                            if (entry.booking.region.trim().isNotEmpty) ...[
+                            if (entry.booking.district.trim().isNotEmpty ||
+                                entry.booking.region.trim().isNotEmpty) ...[
                               4.h,
                               Row(
                                 children: [
@@ -1555,11 +1575,22 @@ class ManageBookingScreen extends HookConsumerWidget {
                                     color: crmColors.textSecondary,
                                   ),
                                   4.w,
-                                  Text(
-                                    entry.booking.region.trim(),
-                                    style: TextStyle(
-                                      color: crmColors.textSecondary,
-                                      fontSize: 12,
+                                  Expanded(
+                                    child: Text(
+                                      [
+                                        if (entry.booking.district
+                                            .trim()
+                                            .isNotEmpty)
+                                          entry.booking.district.trim(),
+                                        if (entry.booking.region
+                                            .trim()
+                                            .isNotEmpty)
+                                          entry.booking.region.trim(),
+                                      ].join(', '),
+                                      style: TextStyle(
+                                        color: crmColors.textSecondary,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -1622,11 +1653,12 @@ class ManageBookingScreen extends HookConsumerWidget {
   Widget _buildLogistics(
     BuildContext context,
     CrmTheme crmColors,
-    AsyncValue<List<ServiceRegion>> asyncRegions,
-    List<ServiceRegion> availableRegions,
-    ValueNotifier<String> selectedRegionId,
+    AsyncValue<List<District>> asyncDistricts,
+    List<District> availableDistricts,
+    ValueNotifier<String> selectedDistrictId,
     List<Employee> availableDrivers,
     List<Vehicle> availableVehicles,
+    TextEditingController districtCtrl,
     TextEditingController regionCtrl,
     TextEditingController mapUrlCtrl,
     TextEditingController travelModeCtrl,
@@ -1656,12 +1688,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                 crossAxisSpacing: 16,
                 childAspectRatio: narrow ? 4 : 3,
                 children: [
-                  _buildRegionDropdown(
+                  _buildDistrictDropdown(
                     ctx,
                     crmColors,
-                    asyncRegions,
-                    availableRegions,
-                    selectedRegionId,
+                    asyncDistricts,
+                    availableDistricts,
+                    selectedDistrictId,
+                    districtCtrl,
                     regionCtrl,
                   ),
                   _buildField(
@@ -1706,7 +1739,9 @@ class ManageBookingScreen extends HookConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: availableVehicles.map((vehicle) {
-                  final vehicleName = vehicle.name.isNotEmpty ? vehicle.name : vehicle.brand;
+                  final vehicleName = vehicle.name.isNotEmpty
+                      ? vehicle.name
+                      : vehicle.brand;
                   final isSelected = travelModeCtrl.text == vehicleName;
                   return GestureDetector(
                     onTap: () {
@@ -1714,9 +1749,14 @@ class ManageBookingScreen extends HookConsumerWidget {
                     },
                     child: Container(
                       margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
-                        color: isSelected ? Colors.indigo.withValues(alpha: 0.1) : crmColors.background,
+                        color: isSelected
+                            ? Colors.indigo.withValues(alpha: 0.1)
+                            : crmColors.background,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isSelected ? Colors.indigo : crmColors.border,
@@ -1729,7 +1769,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                           Icon(
                             Icons.directions_car_rounded,
                             size: 16,
-                            color: isSelected ? Colors.indigo : crmColors.textSecondary,
+                            color: isSelected
+                                ? Colors.indigo
+                                : crmColors.textSecondary,
                           ),
                           10.w,
                           Column(
@@ -1740,8 +1782,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 vehicleName,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                  color: isSelected ? Colors.indigo : crmColors.textPrimary,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.indigo
+                                      : crmColors.textPrimary,
                                 ),
                               ),
                               if (vehicle.registrationNumber.isNotEmpty)
@@ -2338,22 +2384,33 @@ class ManageBookingScreen extends HookConsumerWidget {
               runSpacing: 8,
               children: availableVehicles.map((vehicle) {
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.directions_car_outlined, size: 14, color: Colors.green),
+                      const Icon(
+                        Icons.directions_car_outlined,
+                        size: 14,
+                        color: Colors.green,
+                      ),
                       6.w,
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            vehicle.name.isNotEmpty ? vehicle.name : vehicle.brand,
+                            vehicle.name.isNotEmpty
+                                ? vehicle.name
+                                : vehicle.brand,
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -3075,24 +3132,32 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
   }
 
-  static Widget _buildRegionDropdown(
+  static Widget _buildDistrictDropdown(
     BuildContext context,
     CrmTheme crmColors,
-    AsyncValue<List<ServiceRegion>> asyncRegions,
-    List<ServiceRegion> availableRegions,
-    ValueNotifier<String> selectedRegionId,
+    AsyncValue<List<District>> asyncDistricts,
+    List<District> availableDistricts,
+    ValueNotifier<String> selectedDistrictId,
+    TextEditingController districtCtrl,
     TextEditingController regionCtrl,
   ) {
     final currentValue =
-        availableRegions.any((region) => region.id == selectedRegionId.value)
-        ? selectedRegionId.value
+        availableDistricts.any(
+          (district) => district.id == selectedDistrictId.value,
+        )
+        ? selectedDistrictId.value
         : null;
+
+    final selectedDistrict = availableDistricts.cast<District?>().firstWhere(
+      (d) => d?.id == selectedDistrictId.value,
+      orElse: () => null,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'LOCATION / REGION',
+          'LOCATION / DISTRICT',
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.bold,
@@ -3101,42 +3166,56 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
         ),
         4.h,
-        if (asyncRegions.isLoading)
+        if (asyncDistricts.isLoading)
           const LinearProgressIndicator(minHeight: 2)
-        else if (asyncRegions.hasError)
+        else if (asyncDistricts.hasError)
           TextFormField(
-            controller: regionCtrl,
-            decoration: _inputDeco('Region', crmColors),
+            controller: districtCtrl,
+            decoration: _inputDeco('District', crmColors),
           )
-        else
+        else ...[
           DropdownButtonFormField<String>(
             key: ValueKey(
-              'booking-region-${currentValue ?? 'none'}-${availableRegions.map((region) => region.id).join(',')}',
+              'booking-district-${currentValue ?? 'none'}-${availableDistricts.map((d) => d.id).join(',')}',
             ),
             initialValue: currentValue,
-            items: availableRegions
+            items: availableDistricts
                 .map(
-                  (region) => DropdownMenuItem(
-                    value: region.id,
-                    child: Text(region.name),
+                  (d) => DropdownMenuItem(
+                    value: d.id,
+                    child: Text('${d.name} (${d.regionName})'),
                   ),
                 )
                 .toList(),
             onChanged: (value) {
-              selectedRegionId.value = value ?? '';
-              final selected = availableRegions
-                  .cast<ServiceRegion?>()
-                  .firstWhere(
-                    (region) => region?.id == value,
-                    orElse: () => null,
-                  );
-              regionCtrl.text = selected?.name ?? '';
+              selectedDistrictId.value = value ?? '';
+              final selected = availableDistricts.cast<District?>().firstWhere(
+                (d) => d?.id == value,
+                orElse: () => null,
+              );
+              districtCtrl.text = selected?.name ?? '';
+              regionCtrl.text = selected?.regionName ?? '';
             },
             decoration: _inputDeco(
-              regionCtrl.text.isEmpty ? 'Select region' : regionCtrl.text,
+              districtCtrl.text.isEmpty ? 'Select district' : districtCtrl.text,
               crmColors,
             ),
           ),
+          if (selectedDistrict != null) ...[
+            6.h,
+            Padding(
+              padding: const EdgeInsets.only(left: 4.0),
+              child: Text(
+                'Region: ${selectedDistrict.regionName}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: crmColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ],
       ],
     );
   }

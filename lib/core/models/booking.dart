@@ -321,6 +321,7 @@ class Booking {
   final String bookingNumber;
   final String packageId;
   final String regionId;
+  final String districtId;
   final String driverId;
   final String customerName;
   final String phone;
@@ -328,6 +329,7 @@ class Booking {
   final bool legacyBooking;
   final String service;
   final String region;
+  final String district;
   final String driverName;
   final String status;
   final String mapUrl;
@@ -363,6 +365,7 @@ class Booking {
     this.bookingNumber = '',
     this.packageId = '',
     this.regionId = '',
+    this.districtId = '',
     this.driverId = '',
     required this.customerName,
     required this.phone,
@@ -370,6 +373,7 @@ class Booking {
     this.legacyBooking = false,
     required this.service,
     this.region = '',
+    this.district = '',
     this.driverName = '',
     this.status = 'pending',
     this.mapUrl = '',
@@ -585,6 +589,7 @@ class Booking {
       bookingNumber: json['bookingNumber'] as String? ?? '',
       packageId: json['packageId'] as String? ?? '',
       regionId: json['regionId'] as String? ?? '',
+      districtId: json['districtId'] as String? ?? '',
       driverId: json['driverId'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
@@ -592,6 +597,7 @@ class Booking {
       legacyBooking: json['legacyBooking'] as bool? ?? false,
       service: json['service'] as String? ?? '',
       region: json['region'] as String? ?? '',
+      district: json['district'] as String? ?? '',
       driverName: json['driverName'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       mapUrl: json['mapUrl'] as String? ?? '',
@@ -648,12 +654,14 @@ class Booking {
       'customerName': customerName,
       'packageId': packageId,
       'regionId': regionId,
+      'districtId': districtId,
       'driverId': driverId,
       'phone': phone,
       'email': email,
       'legacyBooking': legacyBooking,
       'service': service,
       'region': region,
+      'district': district,
       'driverName': driverName,
       'status': status,
       'mapUrl': mapUrl,
@@ -691,6 +699,7 @@ class Booking {
     String? bookingNumber,
     String? packageId,
     String? regionId,
+    String? districtId,
     String? driverId,
     String? customerName,
     String? phone,
@@ -698,6 +707,7 @@ class Booking {
     bool? legacyBooking,
     String? service,
     String? region,
+    String? district,
     String? driverName,
     String? status,
     String? mapUrl,
@@ -733,6 +743,7 @@ class Booking {
       bookingNumber: bookingNumber ?? this.bookingNumber,
       packageId: packageId ?? this.packageId,
       regionId: regionId ?? this.regionId,
+      districtId: districtId ?? this.districtId,
       driverId: driverId ?? this.driverId,
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
@@ -740,6 +751,7 @@ class Booking {
       legacyBooking: legacyBooking ?? this.legacyBooking,
       service: service ?? this.service,
       region: region ?? this.region,
+      district: district ?? this.district,
       driverName: driverName ?? this.driverName,
       status: status ?? this.status,
       mapUrl: mapUrl ?? this.mapUrl,

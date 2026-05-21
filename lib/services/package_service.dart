@@ -63,6 +63,7 @@ class PackageService {
     required double advanceAmount,
     required String description,
     required List<RegionalPrice> regionPrices,
+    required List<DistrictPrice> districtPrices,
   }) async {
     try {
       final payload = {
@@ -72,6 +73,7 @@ class PackageService {
         'advanceAmount': advanceAmount,
         'description': description,
         'regionPrices': regionPrices.map((item) => item.toJson()).toList(),
+        'districtPrices': districtPrices.map((item) => item.toJson()).toList(),
       };
 
       final response = id != null && id.isNotEmpty

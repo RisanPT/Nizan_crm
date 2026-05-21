@@ -22,6 +22,12 @@ final paginatedEmployeesProvider =
             page: params.page,
             limit: params.limit,
             category: params.category,
+            search: params.search,
+            zoneId: params.zoneId,
+            stateId: params.stateId,
+            regionId: params.regionId,
+            districtId: params.districtId,
+            pincodeId: params.pincodeId,
           );
     });
 
@@ -56,12 +62,25 @@ class EmployeeService {
     int page = 1,
     int limit = 20,
     String? category,
+    String? search,
+    String? zoneId,
+    String? stateId,
+    String? regionId,
+    String? districtId,
+    String? pincodeId,
   }) async {
     try {
-      final Map<String, dynamic> queryParams = {'page': page, 'limit': limit};
-      if (category != null) {
-        queryParams['category'] = category;
-      }
+      final Map<String, dynamic> queryParams = {
+        'page': page,
+        'limit': limit,
+        if (category != null) 'category': category,
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
+        if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
+        if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
+        if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
+        if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
+      };
       final response = await _dio.get(
         '/employees',
         queryParameters: queryParams,

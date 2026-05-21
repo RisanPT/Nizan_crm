@@ -15,8 +15,18 @@ class AccountsCollectionsScreen extends ConsumerWidget {
 
   String _fmt(DateTime d) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
   }
@@ -34,7 +44,7 @@ class AccountsCollectionsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    
+
     final asyncCollections = ref.watch(filteredCollectionsProvider);
     final filters = ref.watch(collectionFiltersProvider);
     final canVerify = true; // accounts view
@@ -107,18 +117,33 @@ class AccountsCollectionsScreen extends ConsumerWidget {
         20.h,
         Expanded(
           child: asyncCollections.when(
-            data: (items) => _buildCollectionsList(context, ref, items, crm, theme, canVerify),
+            data: (items) => _buildCollectionsList(
+              context,
+              ref,
+              items,
+              crm,
+              theme,
+              canVerify,
+            ),
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error loading collections: $e')),
+            error: (e, _) =>
+                Center(child: Text('Error loading collections: $e')),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActiveFilters(BuildContext context, WidgetRef ref, CollectionFilters filters) {
-    if (filters.employeeId == null && filters.paymentMode == null && 
-        filters.startDate == null && filters.endDate == null && filters.status == null) {
+  Widget _buildActiveFilters(
+    BuildContext context,
+    WidgetRef ref,
+    CollectionFilters filters,
+  ) {
+    if (filters.employeeId == null &&
+        filters.paymentMode == null &&
+        filters.startDate == null &&
+        filters.endDate == null &&
+        filters.status == null) {
       return const SizedBox.shrink();
     }
 
@@ -129,50 +154,70 @@ class AccountsCollectionsScreen extends ConsumerWidget {
         if (filters.employeeId != null)
           _FilterChip(
             label: 'Artist Selected',
-            onDeleted: () => ref.read(collectionFiltersProvider.notifier).state = 
-                filters.copyWith(employeeId: null),
+            onDeleted: () =>
+                ref.read(collectionFiltersProvider.notifier).state = filters
+                    .copyWith(employeeId: null),
           ),
         if (filters.paymentMode != null)
           _FilterChip(
             label: 'Payment: ${filters.paymentMode!.toUpperCase()}',
-            onDeleted: () => ref.read(collectionFiltersProvider.notifier).state = 
-                filters.copyWith(paymentMode: null),
+            onDeleted: () =>
+                ref.read(collectionFiltersProvider.notifier).state = filters
+                    .copyWith(paymentMode: null),
           ),
         if (filters.startDate != null)
           _FilterChip(
             label: 'From: ${_fmt(filters.startDate!)}',
-            onDeleted: () => ref.read(collectionFiltersProvider.notifier).state = 
-                filters.copyWith(startDate: null),
+            onDeleted: () =>
+                ref.read(collectionFiltersProvider.notifier).state = filters
+                    .copyWith(startDate: null),
           ),
         if (filters.endDate != null)
           _FilterChip(
             label: 'To: ${_fmt(filters.endDate!)}',
-            onDeleted: () => ref.read(collectionFiltersProvider.notifier).state = 
-                filters.copyWith(endDate: null),
+            onDeleted: () =>
+                ref.read(collectionFiltersProvider.notifier).state = filters
+                    .copyWith(endDate: null),
           ),
         if (filters.status != null)
           _FilterChip(
             label: 'Status: ${filters.status!.toUpperCase()}',
-            onDeleted: () => ref.read(collectionFiltersProvider.notifier).state = 
-                filters.copyWith(status: null),
+            onDeleted: () =>
+                ref.read(collectionFiltersProvider.notifier).state = filters
+                    .copyWith(status: null),
           ),
         TextButton(
-          onPressed: () => ref.read(collectionFiltersProvider.notifier).state = CollectionFilters(),
+          onPressed: () => ref.read(collectionFiltersProvider.notifier).state =
+              CollectionFilters(),
           child: const Text('Clear All'),
         ),
       ],
     );
   }
 
-  Widget _buildCollectionsList(BuildContext context, WidgetRef ref, List<ArtistCollection> items, CrmTheme crm, ThemeData theme, bool canVerify) {
+  Widget _buildCollectionsList(
+    BuildContext context,
+    WidgetRef ref,
+    List<ArtistCollection> items,
+    CrmTheme crm,
+    ThemeData theme,
+    bool canVerify,
+  ) {
     if (items.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.account_balance_wallet_outlined, size: 48, color: crm.textSecondary),
+            Icon(
+              Icons.account_balance_wallet_outlined,
+              size: 48,
+              color: crm.textSecondary,
+            ),
             12.h,
-            Text('No collections match your filters', style: TextStyle(color: crm.textSecondary)),
+            Text(
+              'No collections match your filters',
+              style: TextStyle(color: crm.textSecondary),
+            ),
           ],
         ),
       );
@@ -187,7 +232,11 @@ class AccountsCollectionsScreen extends ConsumerWidget {
           return ListTile(
             leading: CircleAvatar(
               backgroundColor: crm.accent.withValues(alpha: 0.15),
-              child: Icon(Icons.account_balance_wallet_outlined, color: crm.accent, size: 18),
+              child: Icon(
+                Icons.account_balance_wallet_outlined,
+                color: crm.accent,
+                size: 18,
+              ),
             ),
             title: Text(
               '${c.booking?.customerName ?? 'Unknown Client'}  •  ${_currency(c.amount)}',
@@ -202,7 +251,9 @@ class AccountsCollectionsScreen extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: _statusColor(c.status, crm).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: _statusColor(c.status, crm).withValues(alpha: 0.4)),
+                border: Border.all(
+                  color: _statusColor(c.status, crm).withValues(alpha: 0.4),
+                ),
               ),
               child: Text(
                 c.status.toUpperCase(),
@@ -220,7 +271,11 @@ class AccountsCollectionsScreen extends ConsumerWidget {
     );
   }
 
-  void _showCollectionDetails(BuildContext context, WidgetRef ref, ArtistCollection c) {
+  void _showCollectionDetails(
+    BuildContext context,
+    WidgetRef ref,
+    ArtistCollection c,
+  ) {
     final crm = context.crmColors;
     showDialog(
       context: context,
@@ -230,16 +285,28 @@ class AccountsCollectionsScreen extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _DetailItem(label: 'Client', value: c.booking?.customerName ?? 'N/A'),
-            _DetailItem(label: 'Booking #', value: c.booking?.bookingNumber ?? 'N/A'),
+            _DetailItem(
+              label: 'Client',
+              value: c.booking?.customerName ?? 'N/A',
+            ),
+            _DetailItem(
+              label: 'Booking #',
+              value: c.booking?.bookingNumber ?? 'N/A',
+            ),
             _DetailItem(label: 'Artist', value: c.employee?.name ?? 'N/A'),
             _DetailItem(label: 'Amount', value: _currency(c.amount)),
             _DetailItem(label: 'Date', value: _fmt(c.date)),
-            _DetailItem(label: 'Payment Mode', value: c.paymentMode.toUpperCase()),
+            _DetailItem(
+              label: 'Payment Mode',
+              value: c.paymentMode.toUpperCase(),
+            ),
             if (c.notes.isNotEmpty) _DetailItem(label: 'Notes', value: c.notes),
             if (c.attachmentUrl != null) ...[
               16.h,
-              const Text('Screenshot:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              const Text(
+                'Screenshot:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              ),
               8.h,
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -248,23 +315,29 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder: (ctx, _, __) => const Center(child: Text('Error loading image')),
+                  errorBuilder: (ctx, _, _) =>
+                      const Center(child: Text('Error loading image')),
                 ),
               ),
             ],
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
           if (c.status == 'pending') ...[
             TextButton(
               onPressed: () async {
                 final session = ref.read(authControllerProvider).session;
-                await ref.read(collectionServiceProvider).verifyCollection(
-                  id: c.id,
-                  status: 'rejected',
-                  verifiedBy: session?.userId ?? '',
-                );
+                await ref
+                    .read(collectionServiceProvider)
+                    .verifyCollection(
+                      id: c.id,
+                      status: 'rejected',
+                      verifiedBy: session?.userId ?? '',
+                    );
                 ref.invalidate(filteredCollectionsProvider);
                 if (ctx.mounted) Navigator.pop(ctx);
               },
@@ -273,15 +346,20 @@ class AccountsCollectionsScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: () async {
                 final session = ref.read(authControllerProvider).session;
-                await ref.read(collectionServiceProvider).verifyCollection(
-                  id: c.id,
-                  status: 'verified',
-                  verifiedBy: session?.userId ?? '',
-                );
+                await ref
+                    .read(collectionServiceProvider)
+                    .verifyCollection(
+                      id: c.id,
+                      status: 'verified',
+                      verifiedBy: session?.userId ?? '',
+                    );
                 ref.invalidate(filteredCollectionsProvider);
                 if (ctx.mounted) Navigator.pop(ctx);
               },
-              style: ElevatedButton.styleFrom(backgroundColor: crm.success, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: crm.success,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Verify'),
             ),
           ],
@@ -313,33 +391,60 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Advanced Filters', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                    const Text(
+                      'Advanced Filters',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close),
+                    ),
                   ],
                 ),
                 24.h,
                 // Artist Filter
                 DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Artist', prefixIcon: Icon(Icons.person_outline)),
+                  decoration: const InputDecoration(
+                    labelText: 'Artist',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
                   initialValue: filters.employeeId,
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('All Artists')),
-                    ...(asyncEmployees.value ?? []).map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))),
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('All Artists'),
+                    ),
+                    ...(asyncEmployees.value ?? []).map(
+                      (e) => DropdownMenuItem(value: e.id, child: Text(e.name)),
+                    ),
                   ],
-                  onChanged: (v) => ref.read(collectionFiltersProvider.notifier).state = filters.copyWith(employeeId: v),
+                  onChanged: (v) =>
+                      ref.read(collectionFiltersProvider.notifier).state =
+                          filters.copyWith(employeeId: v),
                 ),
                 16.h,
                 // Payment Mode
                 DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Payment Mode', prefixIcon: Icon(Icons.payments_outlined)),
+                  decoration: const InputDecoration(
+                    labelText: 'Payment Mode',
+                    prefixIcon: Icon(Icons.payments_outlined),
+                  ),
                   initialValue: filters.paymentMode,
                   items: const [
                     DropdownMenuItem(value: null, child: Text('All Modes')),
                     DropdownMenuItem(value: 'cash', child: Text('Cash')),
                     DropdownMenuItem(value: 'upi', child: Text('UPI')),
-                    DropdownMenuItem(value: 'bank_transfer', child: Text('Bank Transfer')),
+                    DropdownMenuItem(
+                      value: 'bank_transfer',
+                      child: Text('Bank Transfer'),
+                    ),
                   ],
-                  onChanged: (v) => ref.read(collectionFiltersProvider.notifier).state = filters.copyWith(paymentMode: v),
+                  onChanged: (v) =>
+                      ref.read(collectionFiltersProvider.notifier).state =
+                          filters.copyWith(paymentMode: v),
                 ),
                 16.h,
                 // Date Range
@@ -355,13 +460,21 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                             lastDate: DateTime(2100),
                           );
                           if (picked != null) {
-                            ref.read(collectionFiltersProvider.notifier).state = filters.copyWith(startDate: picked);
+                            ref.read(collectionFiltersProvider.notifier).state =
+                                filters.copyWith(startDate: picked);
                             setState(() {});
                           }
                         },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Start Date', prefixIcon: Icon(Icons.calendar_today)),
-                          child: Text(filters.startDate != null ? _fmt(filters.startDate!) : 'Select'),
+                          decoration: const InputDecoration(
+                            labelText: 'Start Date',
+                            prefixIcon: Icon(Icons.calendar_today),
+                          ),
+                          child: Text(
+                            filters.startDate != null
+                                ? _fmt(filters.startDate!)
+                                : 'Select',
+                          ),
                         ),
                       ),
                     ),
@@ -376,13 +489,21 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                             lastDate: DateTime(2100),
                           );
                           if (picked != null) {
-                            ref.read(collectionFiltersProvider.notifier).state = filters.copyWith(endDate: picked);
+                            ref.read(collectionFiltersProvider.notifier).state =
+                                filters.copyWith(endDate: picked);
                             setState(() {});
                           }
                         },
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'End Date', prefixIcon: Icon(Icons.calendar_today)),
-                          child: Text(filters.endDate != null ? _fmt(filters.endDate!) : 'Select'),
+                          decoration: const InputDecoration(
+                            labelText: 'End Date',
+                            prefixIcon: Icon(Icons.calendar_today),
+                          ),
+                          child: Text(
+                            filters.endDate != null
+                                ? _fmt(filters.endDate!)
+                                : 'Select',
+                          ),
                         ),
                       ),
                     ),
@@ -391,15 +512,26 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                 16.h,
                 // Status
                 DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.check_circle_outline)),
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    prefixIcon: Icon(Icons.check_circle_outline),
+                  ),
                   initialValue: filters.status,
                   items: const [
                     DropdownMenuItem(value: null, child: Text('All Status')),
                     DropdownMenuItem(value: 'pending', child: Text('Pending')),
-                    DropdownMenuItem(value: 'verified', child: Text('Verified')),
-                    DropdownMenuItem(value: 'rejected', child: Text('Rejected')),
+                    DropdownMenuItem(
+                      value: 'verified',
+                      child: Text('Verified'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'rejected',
+                      child: Text('Rejected'),
+                    ),
                   ],
-                  onChanged: (v) => ref.read(collectionFiltersProvider.notifier).state = filters.copyWith(status: v),
+                  onChanged: (v) =>
+                      ref.read(collectionFiltersProvider.notifier).state =
+                          filters.copyWith(status: v),
                 ),
                 32.h,
                 SizedBox(
@@ -408,7 +540,9 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                     onPressed: () => Navigator.pop(ctx),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: const Text('Apply Filters'),
                   ),
@@ -439,7 +573,10 @@ class AccountsCollectionsScreen extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Select report parameters:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Text(
+                'Select report parameters:',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
               16.h,
               Row(
                 children: [
@@ -447,7 +584,13 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                     child: DropdownButtonFormField<int>(
                       decoration: const InputDecoration(labelText: 'Month'),
                       initialValue: selMonth,
-                      items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(_getMonthName(i + 1)))),
+                      items: List.generate(
+                        12,
+                        (i) => DropdownMenuItem(
+                          value: i + 1,
+                          child: Text(_getMonthName(i + 1)),
+                        ),
+                      ),
                       onChanged: (v) => setState(() => selMonth = v!),
                     ),
                   ),
@@ -456,7 +599,14 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                     child: DropdownButtonFormField<int>(
                       decoration: const InputDecoration(labelText: 'Year'),
                       initialValue: selYear,
-                      items: [now.year - 1, now.year].map((y) => DropdownMenuItem(value: y, child: Text(y.toString()))).toList(),
+                      items: [now.year - 1, now.year]
+                          .map(
+                            (y) => DropdownMenuItem(
+                              value: y,
+                              child: Text(y.toString()),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) => setState(() => selYear = v!),
                     ),
                   ),
@@ -464,11 +614,19 @@ class AccountsCollectionsScreen extends ConsumerWidget {
               ),
               16.h,
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Artist (Optional)', prefixIcon: Icon(Icons.person_outline)),
+                decoration: const InputDecoration(
+                  labelText: 'Artist (Optional)',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
                 initialValue: selArtist,
                 items: [
-                  const DropdownMenuItem(value: 'all', child: Text('All Artists')),
-                  ...(asyncEmployees.value ?? []).map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))),
+                  const DropdownMenuItem(
+                    value: 'all',
+                    child: Text('All Artists'),
+                  ),
+                  ...(asyncEmployees.value ?? []).map(
+                    (e) => DropdownMenuItem(value: e.id, child: Text(e.name)),
+                  ),
                 ],
                 onChanged: (v) => setState(() => selArtist = v),
               ),
@@ -476,24 +634,47 @@ class AccountsCollectionsScreen extends ConsumerWidget {
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Format'),
                 initialValue: selFormat,
-                items:  [
-                  DropdownMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf, size: 18), 8.w, Text('PDF Document')])),
-                  DropdownMenuItem(value: 'csv', child: Row(children: [Icon(Icons.table_chart, size: 18), 8.w, Text('CSV Spreadsheet')])),
+                items: [
+                  DropdownMenuItem(
+                    value: 'pdf',
+                    child: Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf, size: 18),
+                        8.w,
+                        Text('PDF Document'),
+                      ],
+                    ),
+                  ),
+                  DropdownMenuItem(
+                    value: 'csv',
+                    child: Row(
+                      children: [
+                        Icon(Icons.table_chart, size: 18),
+                        8.w,
+                        Text('CSV Spreadsheet'),
+                      ],
+                    ),
+                  ),
                 ],
                 onChanged: (v) => setState(() => selFormat = v!),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
-                ref.read(reportServiceProvider).downloadFinanceReport(
-                  month: selMonth,
-                  year: selYear,
-                  employeeId: selArtist,
-                  format: selFormat,
-                );
+                ref
+                    .read(reportServiceProvider)
+                    .downloadFinanceReport(
+                      month: selMonth,
+                      year: selYear,
+                      employeeId: selArtist,
+                      format: selFormat,
+                    );
                 Navigator.pop(ctx);
               },
               child: const Text('Download'),
@@ -505,7 +686,20 @@ class AccountsCollectionsScreen extends ConsumerWidget {
   }
 
   String _getMonthName(int m) {
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
     return months[m - 1];
   }
 }
@@ -540,7 +734,13 @@ class _DetailItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 100, child: Text('$label:', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
         ],
       ),

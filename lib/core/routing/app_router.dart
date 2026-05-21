@@ -16,6 +16,7 @@ import '../../presentation/screens/manage_booking_screen.dart';
 import '../../presentation/screens/add_service_screen.dart';
 import '../../presentation/screens/geographic_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
+import '../../presentation/screens/package_detail_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
 import '../../presentation/screens/accounts_budget_screen.dart';
 import '../../presentation/screens/login_screen.dart';
@@ -201,6 +202,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/services/add',
             builder: (context, state) => AddServiceScreen(
               packageId: state.uri.queryParameters['id'],
+            ),
+          ),
+          GoRoute(
+            path: '/services/detail',
+            builder: (context, state) => PackageDetailScreen(
+              packageId: state.uri.queryParameters['id'] ?? '',
             ),
           ),
           GoRoute(
