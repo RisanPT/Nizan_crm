@@ -10,6 +10,11 @@ import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
 import '../../services/user_service.dart';
+import '../../services/zone_service.dart';
+import '../../services/state_service.dart';
+import '../../services/region_service.dart';
+import '../../services/district_service.dart';
+import '../../services/pincode_service.dart';
 
 class SettingsScreen extends HookConsumerWidget {
   const SettingsScreen({super.key});
@@ -29,6 +34,11 @@ class SettingsScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     // ✅ Watched at build level — valid Riverpod usage
     final asyncEmployees = ref.watch(employeesProvider);
+    final asyncZones = ref.watch(zonesProvider);
+    final asyncStates = ref.watch(statesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+    final asyncPincodes = ref.watch(pincodesProvider);
 
     Future<void> openUserDialog([CrmUser? user]) async {
       final nameCtrl = TextEditingController(text: user?.name ?? '');
@@ -37,6 +47,11 @@ class SettingsScreen extends HookConsumerWidget {
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
       var selEmployeeId = user?.employeeId ?? '';
+      var selZoneId = user?.zoneId ?? '';
+      var selStateId = user?.stateId ?? '';
+      var selRegionId = user?.regionId ?? '';
+      var selDistrictId = user?.districtId ?? '';
+      var selPincodeId = user?.pincodeId ?? '';
 
       await showDialog(
         context: context,
@@ -48,6 +63,17 @@ class SettingsScreen extends HookConsumerWidget {
               final artists = employees
                   .where((e) => e.artistRole != 'driver')
                   .toList();
+                  
+              final zones = asyncZones.value ?? [];
+              final allStates = asyncStates.value ?? [];
+              final allRegions = asyncRegions.value ?? [];
+              final allDistricts = asyncDistricts.value ?? [];
+              final allPincodes = asyncPincodes.value ?? [];
+
+              final filteredStates = selZoneId.isEmpty ? allStates : allStates.where((s) => s.zoneId == selZoneId).toList();
+              final filteredRegions = selStateId.isEmpty ? allRegions : allRegions.where((r) => r.stateId == selStateId).toList();
+              final filteredDistricts = selRegionId.isEmpty ? allDistricts : allDistricts.where((d) => d.regionId == selRegionId).toList();
+              final filteredPincodes = selDistrictId.isEmpty ? allPincodes : allPincodes.where((p) => p.districtId == selDistrictId).toList();
 
               return AlertDialog(
                 title: Text(user == null ? 'Add System User' : 'Edit System User'),
@@ -149,59 +175,140 @@ class SettingsScreen extends HookConsumerWidget {
                             if (value != null) {
                               setState(() {
                                 role = value;
-                                // Clear employee link if switching away from artist
-                                if (value != 'artist') selEmployeeId = '';
                               });
                             }
                           },
                         ),
 
-                        // ── Employee link (only for artist role) ────────────
-                        if (role == 'artist') ...[
-                          16.h,
-                          if (asyncEmployees.isLoading)
-                            const LinearProgressIndicator()
-                          else if (asyncEmployees.hasError)
-                            const Text('Could not load artists')
-                          else
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(
-                                labelText: 'Link to Employee Profile *',
-                                prefixIcon: Icon(Icons.link_outlined),
-                                helperText:
-                                    'Their data will be scoped to this employee',
-                              ),
-                              initialValue: selEmployeeId.isEmpty ? null : selEmployeeId,
-                              items: artists
-                                  .map(
-                                    (e) => DropdownMenuItem(
-                                      value: e.id,
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(e.name),
-                                          Text(
-                                            e.specialization.isNotEmpty
-                                                ? e.specialization
-                                                : e.artistRole,
-                                            style: const TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (v) =>
-                                  setState(() => selEmployeeId = v ?? ''),
+                        // ── Employee link ────────────
+                        16.h,
+                        if (asyncEmployees.isLoading)
+                          const LinearProgressIndicator()
+                        else if (asyncEmployees.hasError)
+                          const Text('Could not load employees')
+                        else
+                          DropdownButtonFormField<String>(
+                            decoration: const InputDecoration(
+                              labelText: 'Link to Employee Profile (Optional)',
+                              prefixIcon: Icon(Icons.link_outlined),
+                              helperText:
+                                  'Connects user to an employee profile for geographic limits',
                             ),
-                        ],
+                            value: selEmployeeId.isEmpty ? null : selEmployeeId,
+                            items: employees
+                                .map(
+                                  (e) => DropdownMenuItem(
+                                    value: e.id,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(e.name),
+                                        Text(
+                                          e.specialization.isNotEmpty
+                                              ? e.specialization
+                                              : e.artistRole,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => selEmployeeId = v ?? ''),
+                          ),
 
                         16.h,
+                        // ── Geographic Limits ───────────────────────────────
+                        const Text('Geographic Access', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Text('Assign geographic limits to this user. Leave empty for unrestricted access.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                        8.h,
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Zone Limit', prefixIcon: Icon(Icons.map_outlined)),
+                          value: selZoneId.isEmpty ? null : selZoneId,
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('No Zone Limit')),
+                            ...zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              selZoneId = v ?? '';
+                              selStateId = '';
+                              selRegionId = '';
+                              selDistrictId = '';
+                              selPincodeId = '';
+                            });
+                          },
+                        ),
+                        16.h,
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'State Limit', prefixIcon: Icon(Icons.map_outlined)),
+                          value: selStateId.isEmpty ? null : selStateId,
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('No State Limit')),
+                            ...filteredStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              selStateId = v ?? '';
+                              selRegionId = '';
+                              selDistrictId = '';
+                              selPincodeId = '';
+                            });
+                          },
+                        ),
+                        16.h,
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Region Limit', prefixIcon: Icon(Icons.map_outlined)),
+                          value: selRegionId.isEmpty ? null : selRegionId,
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('No Region Limit')),
+                            ...filteredRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              selRegionId = v ?? '';
+                              selDistrictId = '';
+                              selPincodeId = '';
+                            });
+                          },
+                        ),
+                        16.h,
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'District Limit', prefixIcon: Icon(Icons.map_outlined)),
+                          value: selDistrictId.isEmpty ? null : selDistrictId,
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('No District Limit')),
+                            ...filteredDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              selDistrictId = v ?? '';
+                              selPincodeId = '';
+                            });
+                          },
+                        ),
+                        16.h,
+                        DropdownButtonFormField<String>(
+                          decoration: const InputDecoration(labelText: 'Pincode Limit', prefixIcon: Icon(Icons.map_outlined)),
+                          value: selPincodeId.isEmpty ? null : selPincodeId,
+                          items: [
+                            const DropdownMenuItem(value: '', child: Text('No Pincode Limit')),
+                            ...filteredPincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))),
+                          ],
+                          onChanged: (v) {
+                            setState(() {
+                              selPincodeId = v ?? '';
+                            });
+                          },
+                        ),
+                        16.h,
+
                         // ── Active toggle ───────────────────────────────────
                         SwitchListTile(
                           value: active,
@@ -259,7 +366,12 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             employeeId:
-                                role == 'artist' ? selEmployeeId : null,
+                                selEmployeeId.isEmpty ? null : selEmployeeId,
+                            zoneId: selZoneId.isEmpty ? null : selZoneId,
+                            stateId: selStateId.isEmpty ? null : selStateId,
+                            regionId: selRegionId.isEmpty ? null : selRegionId,
+                            districtId: selDistrictId.isEmpty ? null : selDistrictId,
+                            pincodeId: selPincodeId.isEmpty ? null : selPincodeId,
                           );
                         } else {
                           await service.updateUser(
@@ -270,7 +382,12 @@ class SettingsScreen extends HookConsumerWidget {
                             active: active,
                             password: password.isEmpty ? null : password,
                             employeeId:
-                                role == 'artist' ? selEmployeeId : null,
+                                selEmployeeId.isEmpty ? null : selEmployeeId,
+                            zoneId: selZoneId.isEmpty ? null : selZoneId,
+                            stateId: selStateId.isEmpty ? null : selStateId,
+                            regionId: selRegionId.isEmpty ? null : selRegionId,
+                            districtId: selDistrictId.isEmpty ? null : selDistrictId,
+                            pincodeId: selPincodeId.isEmpty ? null : selPincodeId,
                           );
                         }
 

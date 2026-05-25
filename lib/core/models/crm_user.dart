@@ -5,6 +5,11 @@ class CrmUser {
   final String role;
   final bool active;
   final String employeeId;
+  final String zoneId;
+  final String stateId;
+  final String regionId;
+  final String districtId;
+  final String pincodeId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -15,6 +20,11 @@ class CrmUser {
     required this.role,
     required this.active,
     this.employeeId = '',
+    this.zoneId = '',
+    this.stateId = '',
+    this.regionId = '',
+    this.districtId = '',
+    this.pincodeId = '',
     this.createdAt,
     this.updatedAt,
   });
@@ -27,6 +37,11 @@ class CrmUser {
       role: json['role'] as String? ?? 'manager',
       active: json['active'] as bool? ?? true,
       employeeId: json['employeeId'] as String? ?? '',
+      zoneId: json['zoneId'] as String? ?? '',
+      stateId: json['stateId'] as String? ?? '',
+      regionId: json['regionId'] as String? ?? '',
+      districtId: json['districtId'] as String? ?? '',
+      pincodeId: json['pincodeId'] as String? ?? '',
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
     );
@@ -39,6 +54,11 @@ class CrmUser {
     String? role,
     bool? active,
     String? employeeId,
+    String? zoneId,
+    String? stateId,
+    String? regionId,
+    String? districtId,
+    String? pincodeId,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -49,6 +69,11 @@ class CrmUser {
       role: role ?? this.role,
       active: active ?? this.active,
       employeeId: employeeId ?? this.employeeId,
+      zoneId: zoneId ?? this.zoneId,
+      stateId: stateId ?? this.stateId,
+      regionId: regionId ?? this.regionId,
+      districtId: districtId ?? this.districtId,
+      pincodeId: pincodeId ?? this.pincodeId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

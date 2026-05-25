@@ -48,6 +48,11 @@ class BookingService {
     bool duplicatesOnly = false,
     String? financialYear,
     String? employeeId,
+    String? zoneId,
+    String? stateId,
+    String? regionId,
+    String? districtId,
+    String? pincodeId,
   }) async {
     try {
       final response = await _dio.get(
@@ -61,6 +66,11 @@ class BookingService {
             'financialYear': financialYear,
           if (employeeId != null && employeeId.isNotEmpty)
             'employeeId': employeeId,
+          if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
+          if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
+          if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
+          if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
+          if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
         },
       );
       return PaginatedBookingsResponse.fromJson(

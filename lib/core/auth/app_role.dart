@@ -33,17 +33,16 @@ enum AppRole {
   // ── Section-level permissions ─────────────────────────────────────────────
 
   /// Dashboard overview
-  bool get canSeeDashboard =>
-      isFullAccess || this == crm || this == accounts || this == artist;
+  bool get canSeeDashboard => this == admin || this == artist;
 
   /// Clients directory + client profiles
   bool get canSeeClients => isFullAccess || this == crm || this == sales;
 
   /// Calendar scheduler / Works
-  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales;
+  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts;
 
   /// Booking requests + manage booking
-  bool get canSeeBookings => isFullAccess || this == crm || this == sales;
+  bool get canSeeBookings => isFullAccess || this == crm || this == sales || this == accounts;
 
   /// Services management (packages, regions, addons)
   bool get canSeeServices => isFullAccess;
@@ -86,9 +85,13 @@ enum AppRole {
       case AppRole.sales:
         return '/sales';
       case AppRole.crm:
-        return '/';
+        return '/booking/requests';
       case AppRole.accounts:
         return '/accounts/artist-collections';
+      case AppRole.manager:
+        return '/clients';
+      case AppRole.admin:
+        return '/';
       default:
         return '/';
     }

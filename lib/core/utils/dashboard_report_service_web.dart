@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 import 'dart:js_interop';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:web/web.dart' as web;
@@ -21,6 +23,9 @@ Future<void> downloadDashboardReport({
   List<ArtistCollection> collections = const [],
   bool useEventDate = false,
 }) async {
+  final logoData = await rootBundle.load('assets/images/teamn_logo.png');
+  final logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+
   final pdf = pw.Document();
   final report = _buildReport(
     month,
@@ -50,13 +55,20 @@ Future<void> downloadDashboardReport({
         };
 
         return [
-          pw.Text(
-            title,
-            style: pw.TextStyle(
-              fontSize: 24,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.blueGrey900,
-            ),
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Image(logoImage, width: 40, height: 40),
+              pw.SizedBox(width: 12),
+              pw.Text(
+                title,
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blueGrey900,
+                ),
+              ),
+            ],
           ),
           pw.SizedBox(height: 6),
           pw.Text(

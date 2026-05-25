@@ -18,8 +18,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
   bool _isArtistLogin = false;
-  String? _selectedState;
-  String? _selectedRegion;
 
   @override
   void dispose() {
@@ -30,12 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     FocusScope.of(context).unfocus();
-    if (!_isArtistLogin) {
-      if (!_formKey.currentState!.validate()) return;
-    } else {
-      // For artist login, we skip state/region validation but still need email/password
-      if (!_formKey.currentState!.validate()) return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     try {
       await ref
@@ -163,14 +156,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           isSubmitting: auth.isSubmitting,
                           isDesktop: true,
                           isArtistLogin: _isArtistLogin,
-                          selectedState: _selectedState,
-                          selectedRegion: _selectedRegion,
                           onArtistLoginChanged: (val) =>
                               setState(() => _isArtistLogin = val),
-                          onStateChanged: (val) =>
-                              setState(() => _selectedState = val),
-                          onRegionChanged: (val) =>
-                              setState(() => _selectedRegion = val),
                           onTogglePassword: () {
                             setState(() => _obscurePassword = !_obscurePassword);
                           },
@@ -264,11 +251,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   isSubmitting: auth.isSubmitting,
                   isDesktop: false,
                   isArtistLogin: _isArtistLogin,
-                  selectedState: _selectedState,
-                  selectedRegion: _selectedRegion,
                   onArtistLoginChanged: (val) => setState(() => _isArtistLogin = val),
-                  onStateChanged: (val) => setState(() => _selectedState = val),
-                  onRegionChanged: (val) => setState(() => _selectedRegion = val),
                   onTogglePassword: () {
                     setState(() => _obscurePassword = !_obscurePassword);
                   },
@@ -292,11 +275,7 @@ class _LoginCard extends StatelessWidget {
     required this.isSubmitting,
     required this.isDesktop,
     required this.isArtistLogin,
-    required this.selectedState,
-    required this.selectedRegion,
     required this.onArtistLoginChanged,
-    required this.onStateChanged,
-    required this.onRegionChanged,
     required this.onTogglePassword,
     required this.onSubmit,
   });
@@ -308,11 +287,7 @@ class _LoginCard extends StatelessWidget {
   final bool isSubmitting;
   final bool isDesktop;
   final bool isArtistLogin;
-  final String? selectedState;
-  final String? selectedRegion;
   final ValueChanged<bool> onArtistLoginChanged;
-  final ValueChanged<String?> onStateChanged;
-  final ValueChanged<String?> onRegionChanged;
   final VoidCallback onTogglePassword;
   final Future<void> Function() onSubmit;
 
@@ -369,44 +344,6 @@ class _LoginCard extends StatelessWidget {
               ),
             ),
             32.h,
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: Column(
-                children: [
-                  if (!isArtistLogin) ...[
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedState,
-                      items: ['Kerala', 'Karnataka']
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                          .toList(),
-                      onChanged: onStateChanged,
-                      decoration: const InputDecoration(
-                        labelText: 'Select State',
-                        prefixIcon: Icon(Icons.map_outlined),
-                      ),
-                      validator: (value) =>
-                          value == null ? 'State is required' : null,
-                    ),
-                    16.h,
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedRegion,
-                      items: ['Kochi', 'Calicut']
-                          .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                          .toList(),
-                      onChanged: onRegionChanged,
-                      decoration: const InputDecoration(
-                        labelText: 'Select Region',
-                        prefixIcon: Icon(Icons.location_on_outlined),
-                      ),
-                      validator: (value) =>
-                          value == null ? 'Region is required' : null,
-                    ),
-                    16.h,
-                  ],
-                ],
-              ),
-            ),
             TextFormField(
               controller: emailController,
               keyboardType: TextInputType.emailAddress,

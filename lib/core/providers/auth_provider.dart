@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/auth_session.dart';
+import '../models/employee.dart';
 import '../../services/auth_service.dart';
+import '../../services/employee_service.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -10,6 +12,17 @@ final authControllerProvider = Provider<AuthController>((ref) {
   final controller = AuthController(ref);
   ref.onDispose(controller.dispose);
   return controller;
+});
+
+final currentEmployeeProvider = FutureProvider<Employee?>((ref) async {
+  final session = ref.watch(authControllerProvider).session;
+  if (session == null || session.employeeId.isEmpty) return null;
+  
+  try {
+    return await ref.read(employeeServiceProvider).getEmployeeById(session.employeeId);
+  } catch (_) {
+    return null;
+  }
 });
 
 class AuthController extends ChangeNotifier {

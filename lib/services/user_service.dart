@@ -66,6 +66,11 @@ class UserService {
     required String role,
     required bool active,
     String? employeeId,
+    String? zoneId,
+    String? stateId,
+    String? regionId,
+    String? districtId,
+    String? pincodeId,
   }) async {
     try {
       final response = await _dio.post(
@@ -76,8 +81,12 @@ class UserService {
           'password': password,
           'role': role,
           'active': active,
-          if (employeeId != null && employeeId.isNotEmpty)
-            'employeeId': employeeId,
+          if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
+          if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
+          if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
+          if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
+          if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
+          if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
         },
       );
 
@@ -95,6 +104,11 @@ class UserService {
     required bool active,
     String? password,
     String? employeeId,
+    String? zoneId,
+    String? stateId,
+    String? regionId,
+    String? districtId,
+    String? pincodeId,
   }) async {
     try {
       final response = await _dio.put(
@@ -105,9 +119,12 @@ class UserService {
           'role': role,
           'active': active,
           if (password != null && password.trim().isNotEmpty) 'password': password,
-          'employeeId': (employeeId != null && employeeId.isNotEmpty)
-              ? employeeId
-              : null,
+          'employeeId': (employeeId != null && employeeId.isNotEmpty) ? employeeId : null,
+          'zoneId': (zoneId != null && zoneId.isNotEmpty) ? zoneId : null,
+          'stateId': (stateId != null && stateId.isNotEmpty) ? stateId : null,
+          'regionId': (regionId != null && regionId.isNotEmpty) ? regionId : null,
+          'districtId': (districtId != null && districtId.isNotEmpty) ? districtId : null,
+          'pincodeId': (pincodeId != null && pincodeId.isNotEmpty) ? pincodeId : null,
         },
       );
 

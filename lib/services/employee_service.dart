@@ -5,6 +5,9 @@ import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
 
+import '../core/auth/app_role.dart';
+import '../core/providers/auth_provider.dart';
+
 final employeeServiceProvider = Provider<EmployeeService>((ref) {
   return EmployeeService(ref.watch(dioProvider));
 });
@@ -18,16 +21,35 @@ final paginatedEmployeesProvider =
       ref,
       params,
     ) async {
+      final authSession = ref.watch(authControllerProvider).session;
+      final role = AppRole.fromString(authSession?.role);
+      
+      var zoneId = params.zoneId;
+      var stateId = params.stateId;
+      var regionId = params.regionId;
+      var districtId = params.districtId;
+      var pincodeId = params.pincodeId;
+
+      if (!role.isFullAccess) {
+        if (authSession != null) {
+          if (authSession.zoneId.isNotEmpty) zoneId = authSession.zoneId;
+          if (authSession.stateId.isNotEmpty) stateId = authSession.stateId;
+          if (authSession.regionId.isNotEmpty) regionId = authSession.regionId;
+          if (authSession.districtId.isNotEmpty) districtId = authSession.districtId;
+          if (authSession.pincodeId.isNotEmpty) pincodeId = authSession.pincodeId;
+        }
+      }
+
       return ref.watch(employeeServiceProvider).getPaginatedEmployees(
             page: params.page,
             limit: params.limit,
             category: params.category,
             search: params.search,
-            zoneId: params.zoneId,
-            stateId: params.stateId,
-            regionId: params.regionId,
-            districtId: params.districtId,
-            pincodeId: params.pincodeId,
+            zoneId: zoneId,
+            stateId: stateId,
+            regionId: regionId,
+            districtId: districtId,
+            pincodeId: pincodeId,
           );
     });
 
@@ -55,6 +77,15 @@ class EmployeeService {
           .toList();
     } on DioException catch (e) {
       throw Exception('Failed to load employees: ${e.message}');
+    }
+  }
+
+  Future<Employee> getEmployeeById(String id) async {
+    try {
+      final response = await _dio.get('/employees/$id');
+      return Employee.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception('Failed to load employee: ${e.message}');
     }
   }
 

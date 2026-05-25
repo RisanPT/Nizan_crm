@@ -618,12 +618,8 @@ class Booking {
           ? parsedSelectedDates.first
           : parsedBookingDate,
       selectedDates: parsedSelectedDates,
-      serviceStart: json['serviceStart'] != null
-          ? DateTime.parse(json['serviceStart'] as String).toLocal()
-          : DateTime.now(),
-      serviceEnd: json['serviceEnd'] != null
-          ? DateTime.parse(json['serviceEnd'] as String).toLocal()
-          : DateTime.now(),
+      serviceStart: _parseLocalTime(json['serviceStart'] as String?),
+      serviceEnd: _parseLocalTime(json['serviceEnd'] as String?),
       totalPrice: (json['totalPrice'] as num?)?.toDouble() ?? 0.0,
       advanceAmount: (json['advanceAmount'] as num?)?.toDouble() ?? 0.0,
       discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
@@ -824,6 +820,12 @@ DateTime _parseDateOnlyValue(dynamic raw) {
   }
 
   return DateTime.now();
+}
+
+DateTime _parseLocalTime(String? raw) {
+  if (raw == null || raw.isEmpty) return DateTime.now();
+  final stripped = raw.replaceAll('Z', '');
+  return DateTime.tryParse(stripped) ?? DateTime.now();
 }
 
 String _formatDateOnly(DateTime date) {

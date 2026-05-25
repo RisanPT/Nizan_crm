@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../services/booking_service.dart';
 import '../models/booking.dart';
@@ -14,6 +15,11 @@ class PaginatedBookingsParams {
   final bool duplicatesOnly;
   final String? financialYear;
   final String? employeeId;
+  final String? zoneId;
+  final String? stateId;
+  final String? regionId;
+  final String? districtId;
+  final String? pincodeId;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -22,6 +28,11 @@ class PaginatedBookingsParams {
     this.duplicatesOnly = false,
     this.financialYear,
     this.employeeId,
+    this.zoneId,
+    this.stateId,
+    this.regionId,
+    this.districtId,
+    this.pincodeId,
   });
 
   @override
@@ -32,12 +43,28 @@ class PaginatedBookingsParams {
         other.search == search &&
         other.duplicatesOnly == duplicatesOnly &&
         other.financialYear == financialYear &&
-        other.employeeId == employeeId;
+        other.employeeId == employeeId &&
+        other.zoneId == zoneId &&
+        other.stateId == stateId &&
+        other.regionId == regionId &&
+        other.districtId == districtId &&
+        other.pincodeId == pincodeId;
   }
 
   @override
   int get hashCode => Object.hash(
-      page, limit, search, duplicatesOnly, financialYear, employeeId);
+    page,
+    limit,
+    search,
+    duplicatesOnly,
+    financialYear,
+    employeeId,
+    zoneId,
+    stateId,
+    regionId,
+    districtId,
+    pincodeId,
+  );
 }
 
 final paginatedBookingsProvider =
@@ -45,48 +72,71 @@ final paginatedBookingsProvider =
       ref,
       params,
     ) async {
-      final service = ref.watch(bookingServiceProvider);
-      return service.getPaginatedBookings(
-        page: params.page,
-        limit: params.limit,
-        search: params.search,
-        duplicatesOnly: params.duplicatesOnly,
-        financialYear: params.financialYear,
-        employeeId: params.employeeId,
-      );
+      final authSession = ref.watch(authControllerProvider).session;
+      final role = AppRole.fromString(authSession?.role);
+
+      var zoneId = params.zoneId;
+      var stateId = params.stateId;
+      var regionId = params.regionId;
+      var districtId = params.districtId;
+      var pincodeId = params.pincodeId;
+
+      if (!role.isFullAccess) {
+        if (authSession != null) {
+          if (authSession.zoneId.isNotEmpty) zoneId = authSession.zoneId;
+          if (authSession.stateId.isNotEmpty) stateId = authSession.stateId;
+          if (authSession.regionId.isNotEmpty) regionId = authSession.regionId;
+          if (authSession.districtId.isNotEmpty) districtId = authSession.districtId;
+          if (authSession.pincodeId.isNotEmpty) pincodeId = authSession.pincodeId;
+        }
+      }
+
+      return ref.watch(bookingServiceProvider).getPaginatedBookings(
+            page: params.page,
+            limit: params.limit,
+            search: params.search,
+            duplicatesOnly: params.duplicatesOnly,
+            financialYear: params.financialYear,
+            employeeId: params.employeeId,
+            zoneId: zoneId,
+            stateId: stateId,
+            regionId: regionId,
+            districtId: districtId,
+            pincodeId: pincodeId,
+          );
     });
 
 final artistAssignedWorksProvider =
     FutureProvider.family<PaginatedBookingsResponse, int>((ref, page) async {
-  final auth = ref.watch(authControllerProvider);
-  final employeeId = auth.session?.employeeId ?? '';
+      final auth = ref.watch(authControllerProvider);
+      final employeeId = auth.session?.employeeId ?? '';
 
-  if (employeeId.isEmpty) {
-    return const PaginatedBookingsResponse(
-      items: [],
-      page: 1,
-      limit: 20,
-      totalItems: 0,
-      totalPages: 1,
-      summary: BookingPageSummary(
-        totalSales: 0,
-        totalAdvance: 0,
-        completedCount: 0,
-        cancelledCount: 0,
-      ),
-    );
-  }
+      if (employeeId.isEmpty) {
+        return const PaginatedBookingsResponse(
+          items: [],
+          page: 1,
+          limit: 20,
+          totalItems: 0,
+          totalPages: 1,
+          summary: BookingPageSummary(
+            totalSales: 0,
+            totalAdvance: 0,
+            completedCount: 0,
+            cancelledCount: 0,
+          ),
+        );
+      }
 
-  return ref.watch(
-    paginatedBookingsProvider(
-      PaginatedBookingsParams(
-        page: page,
-        limit: 20,
-        employeeId: employeeId,
-      ),
-    ).future,
-  );
-});
+      return ref.watch(
+        paginatedBookingsProvider(
+          PaginatedBookingsParams(
+            page: page,
+            limit: 20,
+            employeeId: employeeId,
+          ),
+        ).future,
+      );
+    });
 
 @riverpod
 class BookingNotifier extends _$BookingNotifier {
