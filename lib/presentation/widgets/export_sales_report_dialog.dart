@@ -6,6 +6,7 @@ class ExportSalesReportDialog extends StatelessWidget {
   final VoidCallback onDailyPerformance;
   final VoidCallback onExecutiveSummary;
   final VoidCallback onFullLedger;
+  final VoidCallback onForecastReport;
 
   const ExportSalesReportDialog({
     super.key,
@@ -13,6 +14,7 @@ class ExportSalesReportDialog extends StatelessWidget {
     required this.onDailyPerformance,
     required this.onExecutiveSummary,
     required this.onFullLedger,
+    required this.onForecastReport,
   });
 
   @override
@@ -75,6 +77,16 @@ class ExportSalesReportDialog extends StatelessWidget {
               onTap: () {
                 Navigator.pop(context);
                 onExecutiveSummary();
+              },
+            ),
+            12.h,
+            _OptionCard(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Sales Forecast Report',
+              subtitle: 'Expected collections and upcoming payment details.',
+              onTap: () {
+                Navigator.pop(context);
+                onForecastReport();
               },
             ),
             12.h,

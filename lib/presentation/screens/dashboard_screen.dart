@@ -32,7 +32,9 @@ class DashboardScreen extends HookConsumerWidget {
         : AppRole.artist;
 
     final canSeeCEOReport = role.canSeeCEOReport;
-    final tabController = useTabController(initialLength: canSeeCEOReport ? 6 : 5);
+    final tabController = useTabController(
+      initialLength: canSeeCEOReport ? 6 : 5,
+    );
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
     final asyncBookings = ref.watch(bookingProvider);
@@ -56,6 +58,7 @@ class DashboardScreen extends HookConsumerWidget {
         isTablet: isTablet,
         allBookings: allBookings,
         employeeId: auth.session?.employeeId,
+        employeeName: auth.session?.name,
       );
     }
     final now = DateTime.now();
@@ -161,7 +164,10 @@ class DashboardScreen extends HookConsumerWidget {
           indicatorSize: TabBarIndicatorSize.label,
           dividerColor: Colors.transparent,
           overlayColor: WidgetStateProperty.all(Colors.transparent),
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          labelStyle: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
           tabs: [
             const Tab(text: 'Executive'),
             const Tab(text: 'Sales'),
@@ -394,8 +400,9 @@ class _RevenueChartCard extends StatelessWidget {
                                       ),
                                       child: _RevenueBar(
                                         point: point,
-                                        maxRevenue:
-                                            peakRevenue <= 0 ? 1 : peakRevenue,
+                                        maxRevenue: peakRevenue <= 0
+                                            ? 1
+                                            : peakRevenue,
                                       ),
                                     ),
                                   ),
@@ -414,10 +421,7 @@ class _RevenueChartCard extends StatelessWidget {
 }
 
 class _RevenueBar extends StatelessWidget {
-  const _RevenueBar({
-    required this.point,
-    required this.maxRevenue,
-  });
+  const _RevenueBar({required this.point, required this.maxRevenue});
 
   final _RevenuePoint point;
   final double maxRevenue;
@@ -433,9 +437,9 @@ class _RevenueBar extends StatelessWidget {
       children: [
         Text(
           'INR ${point.revenue.toStringAsFixed(0)}',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: crmColors.textSecondary,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: crmColors.textSecondary),
           textAlign: TextAlign.center,
         ),
         8.h,
@@ -448,10 +452,7 @@ class _RevenueBar extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.bottomCenter,
                 end: Alignment.topCenter,
-                colors: [
-                  crmColors.sidebar,
-                  crmColors.primary,
-                ],
+                colors: [crmColors.sidebar, crmColors.primary],
               ),
               boxShadow: [
                 BoxShadow(
@@ -467,18 +468,18 @@ class _RevenueBar extends StatelessWidget {
             child: Text(
               '${point.bookingsCount}',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
         8.h,
         Text(
           point.dayLabel,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: crmColors.textSecondary,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: crmColors.textSecondary),
           textAlign: TextAlign.center,
         ),
       ],
@@ -880,8 +881,9 @@ class _PopularServicesCard extends ConsumerWidget {
                     });
 
                     metrics.sort((a, b) {
-                      final bookingsCompare =
-                          b.bookingsCount.compareTo(a.bookingsCount);
+                      final bookingsCompare = b.bookingsCount.compareTo(
+                        a.bookingsCount,
+                      );
                       if (bookingsCompare != 0) return bookingsCompare;
                       return b.amount.compareTo(a.amount);
                     });
@@ -1015,8 +1017,8 @@ class _TopStaffCard extends ConsumerWidget {
                             employee?.specialization.trim().isNotEmpty == true
                             ? employee!.specialization.trim()
                             : assignment.works.isNotEmpty
-                                ? assignment.works.join(', ')
-                                : assignment.role;
+                            ? assignment.works.join(', ')
+                            : assignment.role;
 
                         stats[assignment.employeeId] = _StaffMetric(
                           employeeId: assignment.employeeId,
@@ -1030,8 +1032,9 @@ class _TopStaffCard extends ConsumerWidget {
 
                     final visibleStaff = stats.values.toList()
                       ..sort((a, b) {
-                        final countCompare =
-                            b.appointmentsCount.compareTo(a.appointmentsCount);
+                        final countCompare = b.appointmentsCount.compareTo(
+                          a.appointmentsCount,
+                        );
                         if (countCompare != 0) return countCompare;
                         return a.name.compareTo(b.name);
                       });
@@ -1352,6 +1355,8 @@ class _SalesView extends StatelessWidget {
       padding: const EdgeInsets.only(top: 24),
       child: Column(
         children: [
+          const _SalesForecastsCard(),
+          24.h,
           const _QuickLeadEntryCard(),
           24.h,
           const _SalesPipelineCard(),
@@ -1359,6 +1364,151 @@ class _SalesView extends StatelessWidget {
           const _SalesConversionCard(),
           24.h,
           const _TopPerformersCard(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalesForecastsCard extends ConsumerWidget {
+  const _SalesForecastsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final asyncBookings = ref.watch(bookingProvider);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Sales & Collection Forecast',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            8.h,
+            Text(
+              'Current month forecast for sales and remaining balance collections.',
+              style: TextStyle(color: crm.textSecondary, fontSize: 13),
+            ),
+            24.h,
+            asyncBookings.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, s) => Text('Error loading data: $e'),
+              data: (bookings) {
+                final now = DateTime.now();
+                String monthKey(DateTime value) =>
+                    '${value.year}-${value.month}';
+                final currentMonthKey = monthKey(now);
+
+                final monthBookings = bookings
+                    .where(
+                      (b) =>
+                          monthKey(b.bookingDate) == currentMonthKey &&
+                          b.status.toLowerCase() != 'cancelled',
+                    )
+                    .toList();
+
+                final forecastSales = monthBookings.fold<double>(
+                  0,
+                  (sum, b) => sum + b.totalPrice,
+                );
+
+                final forecastCollection = monthBookings
+                    .where((b) => b.status.toLowerCase() != 'completed')
+                    .fold<double>(
+                      0,
+                      (sum, b) =>
+                          sum +
+                          (b.totalPrice - b.advanceAmount - b.discountAmount)
+                              .clamp(0, double.infinity),
+                    );
+
+                String money(double amount) =>
+                    'INR ${amount.toStringAsFixed(0)}';
+
+                return Row(
+                  children: [
+                    Expanded(
+                      child: _ForecastStat(
+                        title: 'Forecast Sales',
+                        value: money(forecastSales),
+                        icon: Icons.trending_up,
+                        color: crm.primary,
+                      ),
+                    ),
+                    16.w,
+                    Expanded(
+                      child: _ForecastStat(
+                        title: 'Forecast Collection',
+                        value: money(forecastCollection),
+                        icon: Icons.account_balance_wallet,
+                        color: crm.success,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ForecastStat extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  const _ForecastStat({
+    required this.title,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 20),
+              8.w,
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: crm.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          12.h,
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: crm.textPrimary,
+            ),
+          ),
         ],
       ),
     );
@@ -1391,17 +1541,20 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
       isSaving.value = true;
       try {
         final dio = ref.read(dioProvider);
-        await dio.post('/leads', data: {
-          'name': nameCtrl.text,
-          'phone': phoneCtrl.text,
-          'status': status.value,
-          'source': 'Dashboard',
-          'location': locationCtrl.text,
-          'remarks': remarksCtrl.text,
-          'enquiryDate': enquiryDate.value.toIso8601String(),
-          'bookedDate': bookedDate.value?.toIso8601String(),
-        });
-        
+        await dio.post(
+          '/leads',
+          data: {
+            'name': nameCtrl.text,
+            'phone': phoneCtrl.text,
+            'status': status.value,
+            'source': 'Dashboard',
+            'location': locationCtrl.text,
+            'remarks': remarksCtrl.text,
+            'enquiryDate': enquiryDate.value.toIso8601String(),
+            'bookedDate': bookedDate.value?.toIso8601String(),
+          },
+        );
+
         nameCtrl.clear();
         phoneCtrl.clear();
         locationCtrl.clear();
@@ -1409,9 +1562,9 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
         enquiryDate.value = DateTime.now();
         bookedDate.value = null;
         status.value = 'New';
-        
+
         ref.invalidate(leadsProvider);
-        
+
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Lead added successfully!')),
@@ -1419,9 +1572,9 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to add lead: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed to add lead: $e')));
         }
       } finally {
         isSaving.value = false;
@@ -1450,21 +1603,30 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                   Expanded(
                     child: TextFormField(
                       controller: nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Name *', prefixIcon: Icon(Icons.person_outline)),
+                      decoration: const InputDecoration(
+                        labelText: 'Name *',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
                     ),
                   ),
                   16.w,
                   Expanded(
                     child: TextFormField(
                       controller: phoneCtrl,
-                      decoration: const InputDecoration(labelText: 'Phone *', prefixIcon: Icon(Icons.phone_outlined)),
+                      decoration: const InputDecoration(
+                        labelText: 'Phone *',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
                     ),
                   ),
                   16.w,
                   Expanded(
                     child: TextFormField(
                       controller: locationCtrl,
-                      decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.location_on_outlined)),
+                      decoration: const InputDecoration(
+                        labelText: 'Location',
+                        prefixIcon: Icon(Icons.location_on_outlined),
+                      ),
                     ),
                   ),
                   16.w,
@@ -1480,8 +1642,13 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                         if (picked != null) enquiryDate.value = picked;
                       },
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
-                        child: Text('${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}'),
+                        decoration: const InputDecoration(
+                          labelText: 'Enquired For',
+                          prefixIcon: Icon(Icons.calendar_today_outlined),
+                        ),
+                        child: Text(
+                          '${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}',
+                        ),
                       ),
                     ),
                   ),
@@ -1489,10 +1656,24 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: status.value,
-                      decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
-                      items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                          .toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Status',
+                        prefixIcon: Icon(Icons.info_outline),
+                      ),
+                      items:
+                          [
+                                'New',
+                                'Contacted',
+                                'Qualified',
+                                'Follow-up',
+                                'Converted',
+                                'Lost',
+                              ]
+                              .map(
+                                (s) =>
+                                    DropdownMenuItem(value: s, child: Text(s)),
+                              )
+                              .toList(),
                       onChanged: (v) => status.value = v!,
                     ),
                   ),
@@ -1501,7 +1682,13 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: isSaving.value ? null : saveLead,
-                      icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
+                      icon: isSaving.value
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add),
                       label: const Text('Add Lead'),
                     ),
                   ),
@@ -1510,11 +1697,29 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
             else
               Column(
                 children: [
-                  TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Name *', prefixIcon: Icon(Icons.person_outline))),
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Name *',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                  ),
                   16.h,
-                  TextFormField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone *', prefixIcon: Icon(Icons.phone_outlined))),
+                  TextFormField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone *',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
                   16.h,
-                  TextFormField(controller: locationCtrl, decoration: const InputDecoration(labelText: 'Location', prefixIcon: Icon(Icons.location_on_outlined))),
+                  TextFormField(
+                    controller: locationCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Location',
+                      prefixIcon: Icon(Icons.location_on_outlined),
+                    ),
+                  ),
                   16.h,
                   InkWell(
                     onTap: () async {
@@ -1527,8 +1732,13 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                       if (picked != null) enquiryDate.value = picked;
                     },
                     child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Enquired For', prefixIcon: Icon(Icons.calendar_today_outlined)),
-                      child: Text('${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}'),
+                      decoration: const InputDecoration(
+                        labelText: 'Enquired For',
+                        prefixIcon: Icon(Icons.calendar_today_outlined),
+                      ),
+                      child: Text(
+                        '${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}',
+                      ),
                     ),
                   ),
                   16.h,
@@ -1543,17 +1753,37 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                       if (picked != null) bookedDate.value = picked;
                     },
                     child: InputDecorator(
-                      decoration: const InputDecoration(labelText: 'Booked Date', prefixIcon: Icon(Icons.bookmark_added_outlined)),
-                      child: Text(bookedDate.value != null ? '${bookedDate.value!.day}/${bookedDate.value!.month}/${bookedDate.value!.year}' : 'Not Booked'),
+                      decoration: const InputDecoration(
+                        labelText: 'Booked Date',
+                        prefixIcon: Icon(Icons.bookmark_added_outlined),
+                      ),
+                      child: Text(
+                        bookedDate.value != null
+                            ? '${bookedDate.value!.day}/${bookedDate.value!.month}/${bookedDate.value!.year}'
+                            : 'Not Booked',
+                      ),
                     ),
                   ),
                   20.h,
                   DropdownButtonFormField<String>(
                     initialValue: status.value,
-                    decoration: const InputDecoration(labelText: 'Status', prefixIcon: Icon(Icons.info_outline)),
-                    items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
+                    decoration: const InputDecoration(
+                      labelText: 'Status',
+                      prefixIcon: Icon(Icons.info_outline),
+                    ),
+                    items:
+                        [
+                              'New',
+                              'Contacted',
+                              'Qualified',
+                              'Follow-up',
+                              'Converted',
+                              'Lost',
+                            ]
+                            .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                            )
+                            .toList(),
                     onChanged: (v) => status.value = v!,
                   ),
                   20.h,
@@ -1562,7 +1792,13 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
                     height: 52,
                     child: ElevatedButton.icon(
                       onPressed: isSaving.value ? null : saveLead,
-                      icon: isSaving.value ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.add),
+                      icon: isSaving.value
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.add),
                       label: const Text('Add Lead'),
                     ),
                   ),
@@ -1571,7 +1807,10 @@ class _QuickLeadEntryCard extends HookConsumerWidget {
             16.h,
             TextFormField(
               controller: remarksCtrl,
-              decoration: const InputDecoration(labelText: 'Remarks', prefixIcon: Icon(Icons.notes)),
+              decoration: const InputDecoration(
+                labelText: 'Remarks',
+                prefixIcon: Icon(Icons.notes),
+              ),
             ),
           ],
         ),
@@ -1616,10 +1855,7 @@ class _FinanceView extends StatelessWidget {
   final List<ArtistCollection> collections;
   final List<ArtistExpense> expenses;
 
-  const _FinanceView({
-    required this.collections,
-    required this.expenses,
-  });
+  const _FinanceView({required this.collections, required this.expenses});
 
   @override
   Widget build(BuildContext context) {
@@ -1642,28 +1878,38 @@ class _FinanceChartCard extends StatelessWidget {
   final List<ArtistCollection> collections;
   final List<ArtistExpense> expenses;
 
-  const _FinanceChartCard({
-    required this.collections,
-    required this.expenses,
-  });
+  const _FinanceChartCard({required this.collections, required this.expenses});
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    
+
     // Process data for the last 7 days
     final now = DateTime.now();
-    final last7Days = List.generate(7, (i) => now.subtract(Duration(days: 6 - i)));
-    
+    final last7Days = List.generate(
+      7,
+      (i) => now.subtract(Duration(days: 6 - i)),
+    );
+
     final dailyData = last7Days.map((date) {
-      final dayCollections = collections.where((c) => 
-        c.date.year == date.year && c.date.month == date.month && c.date.day == date.day
-      ).fold(0.0, (sum, c) => sum + c.amount);
-      
-      final dayExpenses = expenses.where((e) => 
-        e.date.year == date.year && e.date.month == date.month && e.date.day == date.day
-      ).fold(0.0, (sum, e) => sum + e.amount);
-      
+      final dayCollections = collections
+          .where(
+            (c) =>
+                c.date.year == date.year &&
+                c.date.month == date.month &&
+                c.date.day == date.day,
+          )
+          .fold(0.0, (sum, c) => sum + c.amount);
+
+      final dayExpenses = expenses
+          .where(
+            (e) =>
+                e.date.year == date.year &&
+                e.date.month == date.month &&
+                e.date.day == date.day,
+          )
+          .fold(0.0, (sum, e) => sum + e.amount);
+
       return (collections: dayCollections, expenses: dayExpenses, date: date);
     }).toList();
 
@@ -1720,7 +1966,10 @@ class _FinanceChartCard extends StatelessWidget {
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
                           '₹${rod.toY.toStringAsFixed(0)}',
-                          const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         );
                       },
                     ),
@@ -1736,15 +1985,24 @@ class _FinanceChartCard extends StatelessWidget {
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               '${date.day}/${date.month}',
-                              style: TextStyle(color: crm.textSecondary, fontSize: 10),
+                              style: TextStyle(
+                                color: crm.textSecondary,
+                                fontSize: 10,
+                              ),
                             ),
                           );
                         },
                       ),
                     ),
-                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
                   ),
                   gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
@@ -1756,13 +2014,17 @@ class _FinanceChartCard extends StatelessWidget {
                           toY: entry.value.collections,
                           color: crm.success,
                           width: 12,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
                         ),
                         BarChartRodData(
                           toY: entry.value.expenses,
                           color: crm.destructive,
                           width: 12,
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
                         ),
                       ],
                     );
@@ -1785,7 +2047,10 @@ class _FinanceChartCard extends StatelessWidget {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         6.w,
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }
@@ -1808,9 +2073,9 @@ class _SalesPipelineCard extends StatelessWidget {
           children: [
             Text(
               'Sales Pipeline Flow',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             16.h,
             const _PipelineStep(
@@ -1869,7 +2134,10 @@ class _PipelineStep extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text(value, style: TextStyle(color: context.crmColors.textSecondary)),
+            Text(
+              value,
+              style: TextStyle(color: context.crmColors.textSecondary),
+            ),
           ],
         ),
         8.h,
@@ -1929,16 +2197,21 @@ class _TopPerformersCard extends StatelessWidget {
           children: [
             Text(
               'Top Sales Performers',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             16.h,
             _performerTile(context, 'Rahul Sharma', '28 Closings', 'INR 1.4M'),
             const Divider(),
             _performerTile(context, 'Anjali Nair', '24 Closings', 'INR 1.1M'),
             const Divider(),
-            _performerTile(context, 'Kevin Peterson', '19 Closings', 'INR 850k'),
+            _performerTile(
+              context,
+              'Kevin Peterson',
+              '19 Closings',
+              'INR 850k',
+            ),
           ],
         ),
       ),
@@ -1957,7 +2230,10 @@ class _TopPerformersCard extends StatelessWidget {
         children: [
           CircleAvatar(
             backgroundColor: context.crmColors.secondary,
-            child: Text(name[0], style: TextStyle(color: context.crmColors.primary)),
+            child: Text(
+              name[0],
+              style: TextStyle(color: context.crmColors.primary),
+            ),
           ),
           16.w,
           Expanded(
@@ -1965,11 +2241,23 @@ class _TopPerformersCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(closings, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 12)),
+                Text(
+                  closings,
+                  style: TextStyle(
+                    color: context.crmColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
-          Text(value, style: TextStyle(color: context.crmColors.primary, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: TextStyle(
+              color: context.crmColors.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -1989,23 +2277,43 @@ class _MarketingCampaignsCard extends StatelessWidget {
           children: [
             Text(
               'Active Campaigns',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             16.h,
-            _campaignItem(context, 'Summer Wedding Promo', '420 Leads', 'INR 12k Spend'),
+            _campaignItem(
+              context,
+              'Summer Wedding Promo',
+              '420 Leads',
+              'INR 12k Spend',
+            ),
             24.h,
-            _campaignItem(context, 'Corporate Event Package', '186 Leads', 'INR 8k Spend'),
+            _campaignItem(
+              context,
+              'Corporate Event Package',
+              '186 Leads',
+              'INR 8k Spend',
+            ),
             24.h,
-            _campaignItem(context, 'Social Media Blast', '1,240 Leads', 'INR 5k Spend'),
+            _campaignItem(
+              context,
+              'Social Media Blast',
+              '1,240 Leads',
+              'INR 5k Spend',
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _campaignItem(BuildContext context, String title, String stats, String spend) {
+  Widget _campaignItem(
+    BuildContext context,
+    String title,
+    String stats,
+    String spend,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2013,11 +2321,23 @@ class _MarketingCampaignsCard extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(spend, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 12)),
+            Text(
+              spend,
+              style: TextStyle(
+                color: context.crmColors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
         8.h,
-        Text(stats, style: TextStyle(color: context.crmColors.primary, fontWeight: FontWeight.w500)),
+        Text(
+          stats,
+          style: TextStyle(
+            color: context.crmColors.primary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         4.h,
         LinearProgressIndicator(
           value: 0.7,
@@ -2043,9 +2363,9 @@ class _LeadSourceDistributionCard extends StatelessWidget {
           children: [
             Text(
               'Lead Sources',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             16.h,
             Row(
@@ -2062,7 +2382,12 @@ class _LeadSourceDistributionCard extends StatelessWidget {
     );
   }
 
-  Widget _sourceItem(BuildContext context, String label, String value, Color color) {
+  Widget _sourceItem(
+    BuildContext context,
+    String label,
+    String value,
+    Color color,
+  ) {
     return Expanded(
       child: Column(
         children: [
@@ -2070,11 +2395,17 @@ class _LeadSourceDistributionCard extends StatelessWidget {
             height: 8,
             width: double.infinity,
             margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(4),
+            ),
           ),
           8.h,
           Text(label, style: const TextStyle(fontSize: 10)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -2134,31 +2465,48 @@ class _CEOReportView extends HookConsumerWidget {
       return d.year == now.year && d.month == now.month && d.day == now.day;
     }).toList();
 
-    final todayLeads = leads.where((l) => 
-      l.createdAt.year == now.year && 
-      l.createdAt.month == now.month && 
-      l.createdAt.day == now.day
-    ).toList();
+    final todayLeads = leads
+        .where(
+          (l) =>
+              l.createdAt.year == now.year &&
+              l.createdAt.month == now.month &&
+              l.createdAt.day == now.day,
+        )
+        .toList();
 
-    final todayCollections = collections.where((c) => 
-      c.date.year == now.year && 
-      c.date.month == now.month && 
-      c.date.day == now.day &&
-      c.status == 'verified'
-    ).toList();
+    final todayCollections = collections
+        .where(
+          (c) =>
+              c.date.year == now.year &&
+              c.date.month == now.month &&
+              c.date.day == now.day &&
+              c.status == 'verified',
+        )
+        .toList();
 
     // Metrics Calculation
     final revenueToday = todayCollections.fold(0.0, (sum, c) => sum + c.amount);
     final totalBookings = todayBookings.length;
-    final avgTicketSize = totalBookings > 0 ? revenueToday / totalBookings : 0.0;
+    final avgTicketSize = totalBookings > 0
+        ? revenueToday / totalBookings
+        : 0.0;
     final leadsGenerated = todayLeads.length;
-    final convertedLeads = todayLeads.where((l) => l.status.toLowerCase() == 'converted').length;
-    final conversionRate = leadsGenerated > 0 ? (convertedLeads / leadsGenerated) * 100 : 0.0;
-    final lostLeads = todayLeads.where((l) => l.status.toLowerCase() == 'lost').toList();
-    
+    final convertedLeads = todayLeads
+        .where((l) => l.status.toLowerCase() == 'converted')
+        .length;
+    final conversionRate = leadsGenerated > 0
+        ? (convertedLeads / leadsGenerated) * 100
+        : 0.0;
+    final lostLeads = todayLeads
+        .where((l) => l.status.toLowerCase() == 'lost')
+        .toList();
+
     // Slot Utilization (Approximate: assume 10 slots per day per artist, total 5 active artists)
-    const totalSlots = 50; 
-    final slotUtilization = (totalBookings / totalSlots * 100).clamp(0.0, 100.0);
+    const totalSlots = 50;
+    final slotUtilization = (totalBookings / totalSlots * 100).clamp(
+      0.0,
+      100.0,
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -2168,23 +2516,73 @@ class _CEOReportView extends HookConsumerWidget {
           _buildSectionHeader('📅 DAILY CEO REPORT – Team N Makeovers', now),
           24.h,
           _buildMetricsGrid(context, [
-            _MetricItem('Revenue Today', '₹${revenueToday.toStringAsFixed(0)}', 'Target: ₹50k', crm.success),
-            _MetricItem('Total Bookings', totalBookings.toString(), 'Capacity: $totalSlots', crm.primary),
-            _MetricItem('Avg Ticket Size', '₹${avgTicketSize.toStringAsFixed(0)}', 'Goal: ₹5k', crm.warning),
-            _MetricItem('Leads Generated', leadsGenerated.toString(), 'Target: 20', crm.accent),
+            _MetricItem(
+              'Revenue Today',
+              '₹${revenueToday.toStringAsFixed(0)}',
+              'Target: ₹50k',
+              crm.success,
+            ),
+            _MetricItem(
+              'Total Bookings',
+              totalBookings.toString(),
+              'Capacity: $totalSlots',
+              crm.primary,
+            ),
+            _MetricItem(
+              'Avg Ticket Size',
+              '₹${avgTicketSize.toStringAsFixed(0)}',
+              'Goal: ₹5k',
+              crm.warning,
+            ),
+            _MetricItem(
+              'Leads Generated',
+              leadsGenerated.toString(),
+              'Target: 20',
+              crm.accent,
+            ),
           ]),
           24.h,
           _buildMetricsGrid(context, [
-            _MetricItem('Conversions', '${conversionRate.toStringAsFixed(1)}%', 'Goal: 15%', crm.accent),
-            _MetricItem('Lost Leads', lostLeads.length.toString(), 'Follow up!', crm.destructive),
-            _MetricItem('Slot Utilization', '${slotUtilization.toStringAsFixed(1)}%', 'Efficiency', crm.secondary),
+            _MetricItem(
+              'Conversions',
+              '${conversionRate.toStringAsFixed(1)}%',
+              'Goal: 15%',
+              crm.accent,
+            ),
+            _MetricItem(
+              'Lost Leads',
+              lostLeads.length.toString(),
+              'Follow up!',
+              crm.destructive,
+            ),
+            _MetricItem(
+              'Slot Utilization',
+              '${slotUtilization.toStringAsFixed(1)}%',
+              'Efficiency',
+              crm.secondary,
+            ),
           ]),
           24.h,
-          _buildReportNotesCard(context, 'Key Issues', Icons.warning_amber_rounded, crm.destructive),
+          _buildReportNotesCard(
+            context,
+            'Key Issues',
+            Icons.warning_amber_rounded,
+            crm.destructive,
+          ),
           16.h,
-          _buildReportNotesCard(context, 'Key Wins', Icons.emoji_events_outlined, crm.success),
+          _buildReportNotesCard(
+            context,
+            'Key Wins',
+            Icons.emoji_events_outlined,
+            crm.success,
+          ),
           16.h,
-          _buildReportNotesCard(context, 'Tomorrow Priorities', Icons.list_alt_rounded, crm.primary),
+          _buildReportNotesCard(
+            context,
+            'Tomorrow Priorities',
+            Icons.list_alt_rounded,
+            crm.primary,
+          ),
         ],
       ),
     );
@@ -2194,10 +2592,16 @@ class _CEOReportView extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+        ),
         Text(
           'Report for ${_monthName(date.month)} ${date.day}, ${date.year}',
-          style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500),
+          style: const TextStyle(
+            color: Colors.grey,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
@@ -2217,7 +2621,8 @@ class _CEOReportView extends HookConsumerWidget {
             childAspectRatio: 1.5,
           ),
           itemCount: items.length,
-          itemBuilder: (context, index) => _buildMetricCard(context, items[index]),
+          itemBuilder: (context, index) =>
+              _buildMetricCard(context, items[index]),
         );
       },
     );
@@ -2236,17 +2641,39 @@ class _CEOReportView extends HookConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(item.label, style: TextStyle(color: crm.textSecondary, fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(
+            item.label,
+            style: TextStyle(
+              color: crm.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           4.h,
-          Text(item.value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(
+            item.value,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
           4.h,
-          Text(item.subtext, style: TextStyle(color: item.color, fontSize: 10, fontWeight: FontWeight.w600)),
+          Text(
+            item.subtext,
+            style: TextStyle(
+              color: item.color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildReportNotesCard(BuildContext context, String title, IconData icon, Color color) {
+  Widget _buildReportNotesCard(
+    BuildContext context,
+    String title,
+    IconData icon,
+    Color color,
+  ) {
     final crm = context.crmColors;
     return Card(
       elevation: 0,
@@ -2263,7 +2690,13 @@ class _CEOReportView extends HookConsumerWidget {
               children: [
                 Icon(icon, color: color, size: 20),
                 12.w,
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.edit_note, size: 20),
@@ -2277,7 +2710,10 @@ class _CEOReportView extends HookConsumerWidget {
             8.h,
             Text(
               'No ${title.toLowerCase()} recorded for today yet.',
-              style: TextStyle(color: crm.textSecondary, fontStyle: FontStyle.italic),
+              style: TextStyle(
+                color: crm.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ],
         ),
@@ -2308,17 +2744,35 @@ class _RevenueBreakdownCard extends StatelessWidget {
           children: [
             Text(
               'Monthly Finance Health',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             24.h,
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _circularStat(context, 'Gross Revenue', 'INR 2.4M', 0.85, Colors.green),
-                _circularStat(context, 'Net Profit', 'INR 840k', 0.35, Colors.blue),
-                _circularStat(context, 'Operating Cost', 'INR 1.2M', 0.5, Colors.orange),
+                _circularStat(
+                  context,
+                  'Gross Revenue',
+                  'INR 2.4M',
+                  0.85,
+                  Colors.green,
+                ),
+                _circularStat(
+                  context,
+                  'Net Profit',
+                  'INR 840k',
+                  0.35,
+                  Colors.blue,
+                ),
+                _circularStat(
+                  context,
+                  'Operating Cost',
+                  'INR 1.2M',
+                  0.5,
+                  Colors.orange,
+                ),
               ],
             ),
           ],
@@ -2327,7 +2781,13 @@ class _RevenueBreakdownCard extends StatelessWidget {
     );
   }
 
-  Widget _circularStat(BuildContext context, String label, String value, double progress, Color color) {
+  Widget _circularStat(
+    BuildContext context,
+    String label,
+    String value,
+    double progress,
+    Color color,
+  ) {
     return Column(
       children: [
         SizedBox(
@@ -2372,9 +2832,9 @@ class _ExpenseAnalysisCard extends StatelessWidget {
           children: [
             Text(
               'Expense Breakdown',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             16.h,
             _expenseItem(context, 'Staff Payroll', 'INR 640,000', 0.6),
@@ -2388,7 +2848,12 @@ class _ExpenseAnalysisCard extends StatelessWidget {
     );
   }
 
-  Widget _expenseItem(BuildContext context, String label, String value, double ratio) {
+  Widget _expenseItem(
+    BuildContext context,
+    String label,
+    String value,
+    double ratio,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2429,30 +2894,36 @@ class _ArtistDashboardView extends StatelessWidget {
     required this.isTablet,
     required this.allBookings,
     this.employeeId,
+    this.employeeName,
   });
 
   final bool isDesktop;
   final bool isTablet;
   final List<Booking> allBookings;
   final String? employeeId;
+  final String? employeeName;
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final theme = Theme.of(context);
-    
+
     // Bookings are already filtered by employeeId from the backend provider
     final myBookings = allBookings;
 
     final now = DateTime.now();
-    final todayBookings = myBookings.where((b) => 
-      b.serviceStart.year == now.year && 
-      b.serviceStart.month == now.month && 
-      b.serviceStart.day == now.day
-    ).toList();
+    final todayBookings = myBookings
+        .where(
+          (b) =>
+              b.serviceStart.year == now.year &&
+              b.serviceStart.month == now.month &&
+              b.serviceStart.day == now.day,
+        )
+        .toList();
 
-    final upcomingBookings = myBookings.where((b) => b.serviceStart.isAfter(now)).toList()
-      ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+    final upcomingBookings =
+        myBookings.where((b) => b.serviceStart.isAfter(now)).toList()
+          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
 
     final totalEarnings = myBookings
         .where((b) => b.status.toLowerCase() == 'completed')
@@ -2493,7 +2964,7 @@ class _ArtistDashboardView extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Hello, Artist',
+                            'Hello, ${employeeName ?? "Artist"}',
                             style: theme.textTheme.titleMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.8),
                               fontWeight: FontWeight.w500,
@@ -2501,9 +2972,9 @@ class _ArtistDashboardView extends StatelessWidget {
                           ),
                           4.h,
                           Text(
-                            todayBookings.isEmpty 
-                              ? 'No works today' 
-                              : 'You have ${todayBookings.length} tasks',
+                            todayBookings.isEmpty
+                                ? 'No works today'
+                                : 'You have ${todayBookings.length} tasks',
                             style: theme.textTheme.headlineSmall?.copyWith(
                               color: Colors.white,
                               fontWeight: FontWeight.w900,
@@ -2518,7 +2989,10 @@ class _ArtistDashboardView extends StatelessWidget {
                         color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.notifications_none, color: Colors.white),
+                      child: const Icon(
+                        Icons.notifications_none,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -2531,7 +3005,11 @@ class _ArtistDashboardView extends StatelessWidget {
                       label: 'Total Collected',
                       value: '₹${totalEarnings.toStringAsFixed(0)}',
                     ),
-                    const VerticalDivider(color: Colors.white24, indent: 8, endIndent: 8),
+                    const VerticalDivider(
+                      color: Colors.white24,
+                      indent: 8,
+                      endIndent: 8,
+                    ),
                     _HeaderMiniStat(
                       label: 'Pending',
                       value: '${upcomingBookings.length} Works',
@@ -2544,25 +3022,29 @@ class _ArtistDashboardView extends StatelessWidget {
           24.h,
           Text(
             'Performance Overview',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
           ),
           16.h,
           SizedBox(
-            height: 140,
+            height: 160,
             child: ListView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
               children: [
                 _ModernStatCard(
                   title: 'Completed',
-                  value: '${myBookings.where((b) => b.status.toLowerCase() == "completed").length}',
+                  value:
+                      '${myBookings.where((b) => b.status.toLowerCase() == "completed").length}',
                   icon: Icons.task_alt_rounded,
                   color: Colors.green,
                 ),
                 16.w,
                 _ModernStatCard(
                   title: 'In Progress',
-                  value: '${myBookings.where((b) => b.status.toLowerCase() == "confirmed").length}',
+                  value:
+                      '${myBookings.where((b) => b.status.toLowerCase() == "confirmed").length}',
                   icon: Icons.sync_rounded,
                   color: Colors.blue,
                 ),
@@ -2582,7 +3064,9 @@ class _ArtistDashboardView extends StatelessWidget {
             children: [
               Text(
                 'Today\'s Schedule',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               TextButton(
                 onPressed: () => context.go('/works'),
@@ -2594,11 +3078,41 @@ class _ArtistDashboardView extends StatelessWidget {
           if (todayBookings.isEmpty)
             _buildEmptyState(context, 'Relax! No assignments for today.')
           else
-            ...todayBookings.map((b) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _UpcomingBookingTile(booking: b),
-            )),
+            ...todayBookings.map(
+              (b) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _ArtistMiniCard(booking: b),
+              ),
+            ),
           32.h,
+          // ── Upcoming (next 3) ─────────────────────────────
+          if (upcomingBookings.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Upcoming',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.go('/works'),
+                  child: const Text('See All'),
+                ),
+              ],
+            ),
+            12.h,
+            ...upcomingBookings
+                .take(3)
+                .map(
+                  (b) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _ArtistMiniCard(booking: b, dimmed: true),
+                  ),
+                ),
+            20.h,
+          ],
           _ArtistQuickActions(),
           40.h,
         ],
@@ -2617,10 +3131,193 @@ class _ArtistDashboardView extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.event_busy_outlined, size: 48, color: context.crmColors.textSecondary.withValues(alpha: 0.5)),
+          Icon(
+            Icons.event_busy_outlined,
+            size: 48,
+            color: context.crmColors.textSecondary.withValues(alpha: 0.5),
+          ),
           16.h,
-          Text(message, style: TextStyle(color: context.crmColors.textSecondary)),
+          Text(
+            message,
+            style: TextStyle(color: context.crmColors.textSecondary),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Artist Mini Card (used on dashboard Today/Upcoming sections)
+// ─────────────────────────────────────────────────────────────────────────────
+class _ArtistMiniCard extends StatelessWidget {
+  final Booking booking;
+  final bool dimmed;
+
+  const _ArtistMiniCard({required this.booking, this.dimmed = false});
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'confirmed':
+        return const Color(0xFF3B82F6);
+      case 'completed':
+        return const Color(0xFF22C55E);
+      case 'pending':
+        return const Color(0xFFF97316);
+      case 'cancelled':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+
+  String _fmtTime(DateTime d) {
+    final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final m = d.minute.toString().padLeft(2, '0');
+    final ap = d.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $ap';
+  }
+
+  String _fmt(DateTime d) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final statusColor = _statusColor(booking.status);
+    final opacity = dimmed ? 0.65 : 1.0;
+
+    return Opacity(
+      opacity: opacity,
+      child: Container(
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+          boxShadow: dimmed
+              ? null
+              : [
+                  BoxShadow(
+                    color: statusColor.withValues(alpha: 0.1),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    statusColor.withValues(alpha: 0.2),
+                    statusColor.withValues(alpha: 0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                booking.initials,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  color: statusColor,
+                ),
+              ),
+            ),
+            16.w,
+
+            // Name + service
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    booking.customerName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  4.h,
+                  Text(
+                    booking.service,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: crm.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            12.w,
+
+            // Time + date
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _fmtTime(booking.serviceStart),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    color: statusColor,
+                  ),
+                ),
+                6.h,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Text(
+                    _fmt(booking.serviceStart),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2636,19 +3333,16 @@ class _ArtistQuickActions extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Quick Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Quick Actions',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             20.h,
             _QuickActionItem(
-              icon: Icons.calendar_today,
-              title: 'View Calendar',
+              icon: Icons.assignment_outlined,
+              title: 'All My Works',
               onTap: () => context.go('/works'),
               color: crm.primary,
-            ),
-            _QuickActionItem(
-              icon: Icons.add_moderator_outlined,
-              title: 'Request Leave',
-              onTap: () => context.go('/leave-requests'),
-              color: Colors.orange,
             ),
             _QuickActionItem(
               icon: Icons.account_balance_wallet_outlined,
@@ -2669,7 +3363,12 @@ class _QuickActionItem extends StatelessWidget {
   final VoidCallback onTap;
   final Color color;
 
-  const _QuickActionItem({required this.icon, required this.title, required this.onTap, required this.color});
+  const _QuickActionItem({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2677,7 +3376,10 @@ class _QuickActionItem extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Container(
         padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Icon(icon, color: color, size: 20),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -2738,17 +3440,24 @@ class _ModernStatCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     return Container(
-      width: 160,
-      padding: const EdgeInsets.all(20),
+      width: 170,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        gradient: LinearGradient(
+          colors: [
+            color.withValues(alpha: 0.12),
+            color.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.05),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -2756,30 +3465,36 @@ class _ModernStatCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+            ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 value,
-                style: const TextStyle(
-                  fontSize: 24,
+                style: TextStyle(
+                  fontSize: 26,
                   fontWeight: FontWeight.w900,
+                  color: color,
                 ),
               ),
+              const SizedBox(height: 4),
               Text(
                 title,
                 style: TextStyle(
                   color: crm.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],

@@ -196,15 +196,15 @@ class PackageDetailScreen extends HookConsumerWidget {
 
               return ValueListenableBuilder<String>(
                 valueListenable: dialogZoneId,
-                builder: (_, zoneIdVal, __) {
+                builder: (_, zoneIdVal, _) {
                   final filteredStates = activeStates.where((s) => s.zoneId == zoneIdVal).toList();
                   return ValueListenableBuilder<String>(
                     valueListenable: dialogStateId,
-                    builder: (_, stateIdVal, __) {
+                    builder: (_, stateIdVal, _) {
                       final filteredRegions = activeRegions.where((r) => r.stateId == stateIdVal).toList();
                       return ValueListenableBuilder<String>(
                         valueListenable: dialogRegionId,
-                        builder: (_, regionIdVal, __) {
+                        builder: (_, regionIdVal, _) {
                           final filteredDistricts = activeDistricts.where((d) => d.regionId == regionIdVal).toList();
                           return AlertDialog(
                             title: Text(isEdit ? 'Edit Price Override' : 'Add Price Override'),

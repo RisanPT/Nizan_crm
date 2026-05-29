@@ -35,9 +35,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     if (role == AppRole.artist) {
       if (location == '/') return 0;
       if (location == '/works') return 1;
-      if (location == '/leave-requests') return 2;
-      if (location == '/finance') return 3;
-      if (location == '/profile') return 4;
+      if (location == '/finance') return 2;
+      if (location == '/profile') return 3;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -53,9 +52,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       switch (index) {
         case 0: context.go('/'); break;
         case 1: context.go('/works'); break;
-        case 2: context.go('/leave-requests'); break;
-        case 3: context.go('/finance'); break;
-        case 4: context.go('/profile'); break;
+        case 2: context.go('/finance'); break;
+        case 3: context.go('/profile'); break;
       }
     } else {
       switch (index) {
@@ -96,11 +94,6 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                     icon: Icon(Icons.event_note_outlined),
                     selectedIcon: Icon(Icons.event_note),
                     label: 'Works',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.calendar_today_outlined),
-                    selectedIcon: Icon(Icons.calendar_today),
-                    label: 'Leaves',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.account_balance_wallet_outlined),

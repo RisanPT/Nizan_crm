@@ -20,13 +20,13 @@ class CalendarScreen extends HookConsumerWidget {
 
   // Maps service names to colors for the calendar blocks
   static const _serviceColors = {
-    'hair': Color(0xFF0B1B3B),
+    'hair': Color(0xFF601A29),
     'makeup': Color(0xFFC9A66B),
     'spa': Color(0xFF0B5B37),
     'bridal': Color(0xFFC9A66B),
-    'grooming': Color(0xFF0B1B3B),
+    'grooming': Color(0xFF601A29),
     'facial': Color(0xFF0B5B37),
-    'default': Color(0xFF0B1B3B),
+    'default': Color(0xFF601A29),
   };
 
   static Color _colorForService(String service) {
@@ -1402,9 +1402,10 @@ class CalendarScreen extends HookConsumerWidget {
             .cast<BookingAssignment?>()
             .any((assignment) =>
                 assignment != null && assignment.artistName.trim().isNotEmpty);
+        final serviceColor = _colorForService(entry.service);
         final borderColor = isAssigned
-            ? _colorForService(entry.service)
-            : const Color(0xFF8E9BAE);
+            ? serviceColor
+            : Color.lerp(serviceColor, Colors.white, 0.55)!;
         final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
 
         return GestureDetector(
@@ -2111,9 +2112,14 @@ class CalendarScreen extends HookConsumerWidget {
         .cast<BookingAssignment?>()
         .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
 
-    final accent = isAssigned 
-        ? _colorForService(bookingEntry.service) 
-        : const Color(0xFF8E9BAE); // Slate gray for unassigned
+    final serviceColor = _colorForService(bookingEntry.service);
+    final pillBg = isAssigned 
+        ? serviceColor 
+        : Color.lerp(serviceColor, Colors.white, 0.82)!;
+
+    final pillTextColor = isAssigned
+        ? Colors.white
+        : serviceColor;
 
     final detailLabel = bookingEntry.eventSlot.trim().isNotEmpty
         ? bookingEntry.eventSlot.trim()
@@ -2136,7 +2142,7 @@ class CalendarScreen extends HookConsumerWidget {
           vertical: compact ? 5 : 6,
         ),
         decoration: BoxDecoration(
-          color: accent,
+          color: pillBg,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
@@ -2144,7 +2150,7 @@ class CalendarScreen extends HookConsumerWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white,
+            color: pillTextColor,
             fontSize: compact ? 11 : 12,
             fontWeight: FontWeight.w700,
           ),

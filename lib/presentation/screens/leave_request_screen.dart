@@ -25,72 +25,106 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
     ];
 
     Future<void> showApplyLeaveDialog() async {
-      await showDialog(
+      await showModalBottomSheet(
         context: context,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          title: Text(
-            'New Leave Request',
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
           ),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(
-                    labelText: 'Leave Type',
-                    prefixIcon: Icon(Icons.category_outlined),
-                  ),
-                  items: ['Sick Leave', 'Personal', 'Vacation', 'Other']
-                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                      .toList(),
-                  onChanged: (v) {},
-                ),
-                16.h,
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Select Date',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
-                    suffixIcon: Icon(Icons.arrow_drop_down),
-                  ),
-                  readOnly: true,
-                  onTap: () => showDatePicker(
-                    context: ctx,
-                    initialDate: DateTime.now(),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 90)),
-                  ),
-                ),
-                16.h,
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Reason for Leave',
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 3,
-                ),
-              ],
-            ),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('CANCEL', style: TextStyle(color: crm.textSecondary, fontWeight: FontWeight.bold)),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(right: 8, bottom: 8),
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('SUBMIT REQUEST'),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  24.h,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: crm.primary.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.beach_access_outlined, size: 24, color: crm.primary),
+                      ),
+                      16.w,
+                      Text('New Leave Request', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                  24.h,
+                  DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Leave Type',
+                      prefixIcon: const Icon(Icons.category_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    items: ['Sick Leave', 'Personal', 'Vacation', 'Other']
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (v) {},
+                  ),
+                  16.h,
+                  TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'Select Date',
+                      prefixIcon: const Icon(Icons.calendar_today_outlined),
+                      suffixIcon: const Icon(Icons.arrow_drop_down),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    readOnly: true,
+                    onTap: () => showDatePicker(
+                      context: ctx,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 90)),
+                    ),
+                  ),
+                  16.h,
+                  TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'Reason for Leave',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    maxLines: 3,
+                  ),
+                  32.h,
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: crm.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('SUBMIT REQUEST', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       );
     }
@@ -157,6 +191,13 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
                     color: crm.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: statusColor.withValues(alpha: 0.08),
+                        blurRadius: 16,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [

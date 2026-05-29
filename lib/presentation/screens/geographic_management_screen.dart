@@ -908,11 +908,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
                     ),
                   ),
                 ),
-                headerRow: const ['Name', 'Zone', 'Status'],
+                headerRow: const ['Name', 'Zone', 'Status', 'Actions'],
                 dataRowBuilder: (s) => [
                   Text(s.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   Text(s.zoneName.isNotEmpty ? s.zoneName : 'None'),
                   _buildStatusChip(s.isActive, crmColors),
+                  _buildActions(
+                    onEdit: () => openStateDialog(s),
+                    onDelete: () async {
+                      await ref.read(stateServiceProvider).deleteState(s.id);
+                      ref.invalidate(statesProvider);
+                      ref.invalidate(paginatedStatesProvider);
+                    },
+                    crmColors: crmColors,
+                  ),
                 ],
                 footer: PaginatedFooter(
                   page: res.page,
@@ -951,34 +960,66 @@ class GeographicManagementScreen extends HookConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                r.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  r.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            _buildStatusChip(r.isActive, crmColors),
-                          ],
-                        ),
-                        8.h,
-                        Text(
-                          'State: ${r.stateName.isNotEmpty ? r.stateName : 'None'}',
-                          style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
-                        ),
+                              _buildStatusChip(r.isActive, crmColors),
+                            ],
+                          ),
+                          8.h,
+                          Text(
+                            'State: ${r.stateName.isNotEmpty ? r.stateName : 'None'}',
+                            style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18),
+                                onPressed: () => openRegionDialog(r),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                              16.w,
+                              IconButton(
+                                icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
+                                onPressed: () async {
+                                  await ref.read(regionServiceProvider).deleteRegion(r.id);
+                                  ref.invalidate(regionsProvider);
+                                  ref.invalidate(paginatedRegionsProvider);
+                                },
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
                 ),
-                headerRow: const ['Name', 'State', 'Status'],
+                headerRow: const ['Name', 'State', 'Status', 'Actions'],
                 dataRowBuilder: (r) => [
                   Text(r.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   Text(r.stateName.isNotEmpty ? r.stateName : 'None'),
                   _buildStatusChip(r.isActive, crmColors),
+                  _buildActions(
+                    onEdit: () => openRegionDialog(r),
+                    onDelete: () async {
+                      await ref.read(regionServiceProvider).deleteRegion(r.id);
+                      ref.invalidate(regionsProvider);
+                      ref.invalidate(paginatedRegionsProvider);
+                    },
+                    crmColors: crmColors,
+                  ),
                 ],
                 footer: PaginatedFooter(
                   page: res.page,
@@ -1017,34 +1058,66 @@ class GeographicManagementScreen extends HookConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                d.name,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  d.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            _buildStatusChip(d.isActive, crmColors),
-                          ],
-                        ),
-                        8.h,
-                        Text(
-                          'Region: ${d.regionName.isNotEmpty ? d.regionName : 'None'}',
-                          style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
-                        ),
+                              _buildStatusChip(d.isActive, crmColors),
+                            ],
+                          ),
+                          8.h,
+                          Text(
+                            'Region: ${d.regionName.isNotEmpty ? d.regionName : 'None'}',
+                            style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18),
+                                onPressed: () => openDistrictDialog(d),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                              16.w,
+                              IconButton(
+                                icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
+                                onPressed: () async {
+                                  await ref.read(districtServiceProvider).deleteDistrict(d.id);
+                                  ref.invalidate(districtsProvider);
+                                  ref.invalidate(paginatedDistrictsProvider);
+                                },
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
                 ),
-                headerRow: const ['Name', 'Region', 'Status'],
+                headerRow: const ['Name', 'Region', 'Status', 'Actions'],
                 dataRowBuilder: (d) => [
                   Text(d.name, style: const TextStyle(fontWeight: FontWeight.w500)),
                   Text(d.regionName.isNotEmpty ? d.regionName : 'None'),
                   _buildStatusChip(d.isActive, crmColors),
+                  _buildActions(
+                    onEdit: () => openDistrictDialog(d),
+                    onDelete: () async {
+                      await ref.read(districtServiceProvider).deleteDistrict(d.id);
+                      ref.invalidate(districtsProvider);
+                      ref.invalidate(paginatedDistrictsProvider);
+                    },
+                    crmColors: crmColors,
+                  ),
                 ],
                 footer: PaginatedFooter(
                   page: res.page,
@@ -1083,34 +1156,66 @@ class GeographicManagementScreen extends HookConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                p.code,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  p.code,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                            ),
-                            _buildStatusChip(p.isActive, crmColors),
-                          ],
-                        ),
-                        8.h,
-                        Text(
-                          'District: ${p.districtName.isNotEmpty ? p.districtName : 'None'}',
-                          style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
-                        ),
+                              _buildStatusChip(p.isActive, crmColors),
+                            ],
+                          ),
+                          8.h,
+                          Text(
+                            'District: ${p.districtName.isNotEmpty ? p.districtName : 'None'}',
+                            style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, size: 18),
+                                onPressed: () => openPincodeDialog(p),
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                              16.w,
+                              IconButton(
+                                icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
+                                onPressed: () async {
+                                  await ref.read(pincodeServiceProvider).deletePincode(p.id);
+                                  ref.invalidate(pincodesProvider);
+                                  ref.invalidate(paginatedPincodesProvider);
+                                },
+                                constraints: const BoxConstraints(),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
                 ),
-                headerRow: const ['Pincode', 'District', 'Status'],
+                headerRow: const ['Pincode', 'District', 'Status', 'Actions'],
                 dataRowBuilder: (p) => [
                   Text(p.code, style: const TextStyle(fontWeight: FontWeight.w500)),
                   Text(p.districtName.isNotEmpty ? p.districtName : 'None'),
                   _buildStatusChip(p.isActive, crmColors),
+                  _buildActions(
+                    onEdit: () => openPincodeDialog(p),
+                    onDelete: () async {
+                      await ref.read(pincodeServiceProvider).deletePincode(p.id);
+                      ref.invalidate(pincodesProvider);
+                      ref.invalidate(paginatedPincodesProvider);
+                    },
+                    crmColors: crmColors,
+                  ),
                 ],
                 footer: PaginatedFooter(
                   page: res.page,

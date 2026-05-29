@@ -95,13 +95,6 @@ class Sidebar extends ConsumerWidget {
                     onTap: () => context.go('/works'),
                   ),
                   _SidebarItem(
-                    icon: Icons.calendar_today_outlined,
-                    title: 'Leave Request',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath == '/leave-requests',
-                    onTap: () => context.go('/leave-requests'),
-                  ),
-                  _SidebarItem(
                     icon: Icons.account_balance_wallet_outlined,
                     title: 'Finance & Claims',
                     isCollapsed: isCollapsed,

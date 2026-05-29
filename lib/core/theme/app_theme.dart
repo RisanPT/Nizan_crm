@@ -4,10 +4,10 @@ import 'crm_theme.dart';
 
 class AppTheme {
   static const _backgroundColor = Color(0xFFFFFFFF);
-  static const _foregroundColor = Color(0xFF0B1B3B);
+  static const _foregroundColor = Color(0xFF601A29);
   static const _borderColor = Color(0x14000000);
   static const _inputColor = Color(0xFFF6F7F9);
-  static const _primaryColor = Color(0xFF0B1B3B);
+  static const _primaryColor = Color(0xFF601A29);
   static const _secondaryColor = Color(0xFFF2EDE4);
   static const _accentColor = Color(0xFFC9A66B);
   static const _surfaceColor = Color(0xFFFFFFFF);
@@ -16,7 +16,7 @@ class AppTheme {
   static const _successColor = Color(0xFF0B5B37);
   static const _warningColor = Color(0xFF6A4B00);
   static const _destructiveColor = Color(0xFF7B1B2A);
-  static const _sidebarColor = Color(0xFF08142A);
+  static const _sidebarColor = Color(0xFF3A101A);
   static const _sidebarForegroundColor = Color(0xFFFFFFFF);
 
   static final crmThemeExtension = CrmTheme(

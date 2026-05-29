@@ -1,11 +1,11 @@
 import 'dart:typed_data';
-import 'dart:js_interop';
-
+import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/services.dart' show rootBundle;
-
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:web/web.dart' as web;
 
 import '../models/artist_collection.dart';
 import '../models/lead.dart';
@@ -170,28 +170,23 @@ Future<void> downloadDashboardReport({
   );
 
   final bytes = await pdf.save();
-  _downloadPdf(
+  await _downloadPdf(
     bytes,
     fileName:
         '$reportType-report-${month.year}-${month.month.toString().padLeft(2, '0')}.pdf',
   );
 }
 
-void _downloadPdf(Uint8List bytes, {required String fileName}) {
-  final blob = web.Blob(
-    [bytes.toJS].toJS,
-    web.BlobPropertyBag(type: 'application/pdf'),
+Future<void> _downloadPdf(Uint8List bytes, {required String fileName}) async {
+  final tempDir = await getTemporaryDirectory();
+  final file = File('${tempDir.path}/$fileName');
+  await file.writeAsBytes(bytes);
+  await Share.shareXFiles(
+    [XFile(file.path)],
+    subject: 'Dashboard Report',
+    text: 'Here is your dashboard report.',
+    sharePositionOrigin: const Rect.fromLTWH(0, 0, 300, 300),
   );
-  final objectUrl = web.URL.createObjectURL(blob);
-  final anchor = web.document.createElement('a') as web.HTMLAnchorElement
-    ..href = objectUrl
-    ..download = fileName
-    ..style.display = 'none';
-
-  web.document.body?.append(anchor);
-  anchor.click();
-  anchor.remove();
-  web.URL.revokeObjectURL(objectUrl);
 }
 
 pw.Widget _metricCard(String label, String value) {

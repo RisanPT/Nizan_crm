@@ -50,10 +50,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       final d = b.bookingDate;
       return d.year == now.year && d.month == now.month && d.day == now.day;
     }).length;
-    final newBookingsToday = allBookings.where((b) {
-      final d = b.createdAt ?? b.bookingDate;
-      return d.year == now.year && d.month == now.month && d.day == now.day;
-    }).length;
+
     final todaysCompleted = allBookings.where((b) {
       final d = b.bookingDate;
       return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() == 'completed';
@@ -65,13 +62,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       final d = b.createdAt ?? b.bookingDate;
       return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
     });
-    final totalRevenueFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
 
-    final todaysRevenue = allBookings.where((b) {
-      final d = b.createdAt ?? b.bookingDate;
-      return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() != 'cancelled';
-    }).fold<double>(0, (sum, b) => sum + b.totalPrice);
-    final totalActive = allBookings.where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'completed').length;
 
     final totalSalesValue = allBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
     final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.advanceAmount : sum);
@@ -79,12 +70,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final cancelledOverall = allBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
     final pendingWorks = allBookings.where((b) => b.status.toLowerCase() == 'pending').length;
 
-    String formatK(double value) {
-      if (value >= 1000) {
-        return '${(value / 1000).toStringAsFixed(1)}K';
-      }
-      return value.toStringAsFixed(0);
-    }
+    final currentMonthKey = '${now.year}-${now.month}';
+    final monthBookings = allBookings.where((b) {
+      return '${b.bookingDate.year}-${b.bookingDate.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled';
+    }).toList();
+
+    final forecastSales = monthBookings.fold<double>(
+      0,
+      (sum, b) => sum + b.totalPrice,
+    );
+
+    final forecastCollection = monthBookings.where((b) => b.status.toLowerCase() != 'completed').fold<double>(
+      0,
+      (sum, b) => sum + (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0, double.infinity),
+    );
+
+
 
     Future<void> exportReport() async {
       final packages = ref.read(packagesProvider).value;
@@ -130,6 +131,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'crm',
+          ),
+          onForecastReport: () => downloadDashboardReport(
+            month: DateTime.now(),
+            bookings: allBookings,
+            packages: packages,
+            employees: employees,
+            reportType: 'forecast',
           ),
         ),
       );
@@ -250,7 +258,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               24.h,
               LayoutBuilder(
                 builder: (context, constraints) {
-                  int columns = isMobile ? 1 : 4;
+                  int columns = isMobile ? 2 : 4;
                   double spacing = 16.0;
                   double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
 
@@ -258,6 +266,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     spacing: spacing,
                     runSpacing: spacing,
                     children: [
+                      _StatCardWithIcon(
+                        title: "Forecast Sales",
+                        value: '₹${_money(forecastSales)}',
+                        subtitle: 'Current Month',
+                        icon: Icons.trending_up,
+                        color: crmColors.primary,
+                        width: itemWidth,
+                      ),
+                      _StatCardWithIcon(
+                        title: "Forecast Collection",
+                        value: '₹${_money(forecastCollection)}',
+                        subtitle: 'Remaining Balance',
+                        icon: Icons.account_balance_wallet,
+                        color: crmColors.success,
+                        width: itemWidth,
+                      ),
                       _StatCardWithIcon(
                         title: "Today's Bookings",
                         value: '$todaysScheduled',
@@ -267,27 +291,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
                         width: itemWidth,
                       ),
                       _StatCardWithIcon(
-                        title: "New Bookings",
-                        value: '$newBookingsToday',
-                        subtitle: 'Sales today',
-                        icon: Icons.post_add,
-                        color: Colors.orange,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
                         title: "Today's Completed",
                         value: '$todaysCompleted',
                         subtitle: 'Successfully closed',
                         icon: Icons.check_circle_outline,
-                        color: Colors.green,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: "Total Revenue",
-                        value: '₹${formatK(totalRevenueFY)}',
-                        subtitle: 'Current FY',
-                        icon: Icons.monetization_on_outlined,
-                        color: Colors.amber.shade700,
+                        color: Colors.teal,
                         width: itemWidth,
                       ),
                     ],
@@ -441,54 +449,6 @@ class SalesBookingsScreen extends HookConsumerWidget {
               ),
               24.h,
               Text(
-                'Performance Overview',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              16.h,
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  int columns = isMobile ? 2 : 4;
-                  double spacing = 16.0;
-                  double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-                  return Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    children: [
-                      _StatCardWithIcon(
-                        title: "Today's Bookings",
-                        value: '$newBookingsToday',
-                        icon: Icons.calendar_today,
-                        color: Colors.indigo,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: "Today's Completed",
-                        value: '$todaysCompleted',
-                        icon: Icons.check_circle_outline,
-                        color: Colors.teal,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: "Today's Revenue",
-                        value: '₹${_money(todaysRevenue)}',
-                        icon: Icons.monetization_on_outlined,
-                        color: Colors.amber.shade600,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: "Total Active",
-                        value: '$totalActive',
-                        icon: Icons.auto_graph,
-                        color: Colors.pinkAccent,
-                        width: itemWidth,
-                      ),
-                    ],
-                  );
-                },
-              ),
-              24.h,
-              Text(
                 'General Summary',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
@@ -503,39 +463,44 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     spacing: spacing,
                     runSpacing: spacing,
                     children: [
-                      _StatCardNoIcon(
+                      _StatCardWithIcon(
                         title: 'Total Sales Value',
                         value: '₹${_money(totalSalesValue)}',
                         subtitle: 'Across all bookings',
-                        subtitleColor: crmColors.textSecondary,
+                        icon: Icons.monetization_on_outlined,
+                        color: Colors.amber.shade700,
                         width: itemWidth,
                       ),
-                      _StatCardNoIcon(
+                      _StatCardWithIcon(
                         title: 'Advance Collected',
                         value: '₹${_money(advanceCollectedFY)}',
                         subtitle: 'Current financial year',
-                        subtitleColor: Colors.teal,
+                        icon: Icons.payments_outlined,
+                        color: Colors.teal,
                         width: itemWidth,
                       ),
-                      _StatCardNoIcon(
+                      _StatCardWithIcon(
                         title: 'Pending Works',
                         value: '$pendingWorks',
                         subtitle: 'Currently active',
-                        subtitleColor: Colors.orange,
+                        icon: Icons.pending_actions,
+                        color: Colors.orange,
                         width: itemWidth,
                       ),
-                      _StatCardNoIcon(
+                      _StatCardWithIcon(
                         title: 'Completed Overall',
                         value: '$completedOverall',
                         subtitle: 'Successfully delivered',
-                        subtitleColor: Colors.green,
+                        icon: Icons.task_alt,
+                        color: Colors.green,
                         width: itemWidth,
                       ),
-                      _StatCardNoIcon(
+                      _StatCardWithIcon(
                         title: 'Cancelled',
                         value: '$cancelledOverall',
                         subtitle: 'Bookings lost',
-                        subtitleColor: Colors.red,
+                        icon: Icons.cancel_outlined,
+                        color: Colors.red,
                         width: itemWidth,
                       ),
                     ],
@@ -691,75 +656,49 @@ class _StatCardWithIcon extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.crmColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.crmColors.border),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          16.w,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(title, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
-                4.h,
-                Text(value, style: TextStyle(color: context.crmColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
-                if (subtitle != null) ...[
-                  4.h,
-                  Text(subtitle!, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-                ],
-              ],
-            ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StatCardNoIcon extends StatelessWidget {
-  final String title;
-  final String value;
-  final String subtitle;
-  final Color subtitleColor;
-  final double width;
-
-  const _StatCardNoIcon({
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.subtitleColor,
-    required this.width,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.crmColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.crmColors.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(title, style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
-          8.h,
-          Text(value, style: TextStyle(color: context.crmColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w800)),
-          8.h,
-          Text(subtitle, style: TextStyle(color: subtitleColor, fontSize: 12, fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              12.w,
+              Expanded(
+                child: Text(
+                  title, 
+                  style: TextStyle(color: context.crmColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          16.h,
+          Text(
+            value, 
+            style: TextStyle(color: context.crmColors.textPrimary, fontSize: 24, fontWeight: FontWeight.w800),
+          ),
+          if (subtitle != null) ...[
+            4.h,
+            Text(
+              subtitle!, 
+              style: TextStyle(color: context.crmColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500),
+            ),
+          ],
         ],
       ),
     );
@@ -1220,6 +1159,9 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
           if (b.status.toLowerCase() != 'cancelled') {
             stats.totalSales += b.totalPrice;
             stats.advanceCollected += b.advanceAmount;
+            if (b.status.toLowerCase() != 'completed') {
+              stats.forecastAmount += (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0, double.infinity);
+            }
           }
           if (b.status.toLowerCase() == 'completed') {
             stats.completedCount++;
@@ -1254,6 +1196,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                     DataColumn(label: _HeaderText('BOOKINGS'), numeric: true),
                     DataColumn(label: _HeaderText('GROSS SALES'), numeric: true),
                     DataColumn(label: _HeaderText('ADVANCE'), numeric: true),
+                    DataColumn(label: _HeaderText('FORECAST'), numeric: true),
                     DataColumn(label: _HeaderText('COMPLETED'), numeric: true),
                     DataColumn(label: _HeaderText('CANCELLED'), numeric: true),
                     DataColumn(label: _HeaderText('ACTION')),
@@ -1270,6 +1213,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                         DataCell(Text(stats.totalBookings.toString())),
                         DataCell(Text('₹${_money(stats.totalSales)}')),
                         DataCell(Text('₹${_money(stats.advanceCollected)}')),
+                        DataCell(Text('₹${_money(stats.forecastAmount)}')),
                         DataCell(Text(stats.completedCount.toString())),
                         DataCell(Text(stats.cancelledCount.toString())),
                         DataCell(
@@ -1349,6 +1293,7 @@ class _MonthStats {
   double advanceCollected = 0;
   int completedCount = 0;
   int cancelledCount = 0;
+  double forecastAmount = 0;
 
   _MonthStats({required this.month, required this.year});
 }
