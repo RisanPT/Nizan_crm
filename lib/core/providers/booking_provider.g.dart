@@ -20,7 +20,7 @@ final class BookingNotifierProvider
         argument: null,
         retry: null,
         name: r'bookingProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -33,7 +33,7 @@ final class BookingNotifierProvider
   BookingNotifier create() => BookingNotifier();
 }
 
-String _$bookingNotifierHash() => r'ab5bbd087d77816242d968fd31b04a92cedc94ff';
+String _$bookingNotifierHash() => r'46b130e6ccdde05d1285d1582ef17cd459a2aba4';
 
 abstract class _$BookingNotifier extends $AsyncNotifier<List<Booking>> {
   FutureOr<List<Booking>> build();

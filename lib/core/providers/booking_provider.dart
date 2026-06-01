@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -67,11 +68,14 @@ class PaginatedBookingsParams {
   );
 }
 
+final bookingsRefreshTriggerProvider = StateProvider<int>((ref) => 0);
+
 final paginatedBookingsProvider =
     FutureProvider.family<PaginatedBookingsResponse, PaginatedBookingsParams>((
       ref,
       params,
     ) async {
+      ref.watch(bookingsRefreshTriggerProvider);
       final authSession = ref.watch(authControllerProvider).session;
       final role = AppRole.fromString(authSession?.role);
 
@@ -138,7 +142,7 @@ final artistAssignedWorksProvider =
       );
     });
 
-@riverpod
+@Riverpod(keepAlive: true)
 class BookingNotifier extends _$BookingNotifier {
   @override
   FutureOr<List<Booking>> build() async {
@@ -196,6 +200,7 @@ class BookingNotifier extends _$BookingNotifier {
     try {
       final createdBooking = await service.createBooking(booking);
       if (ref.mounted) {
+        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
         ref.invalidateSelf();
       }
       return createdBooking;
@@ -219,15 +224,20 @@ class BookingNotifier extends _$BookingNotifier {
 
     try {
       final updatedBooking = await service.updateBooking(booking);
-      state = AsyncData([
-        for (final existing in state.value ?? [])
-          if (existing.id == updatedBooking.id) updatedBooking else existing,
-      ]);
-      ref.invalidateSelf();
+      if (ref.mounted) {
+        state = AsyncData([
+          for (final existing in state.value ?? [])
+            if (existing.id == updatedBooking.id) updatedBooking else existing,
+        ]);
+        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+        ref.invalidateSelf();
+      }
       return updatedBooking;
     } catch (err, stack) {
-      state = previousState;
-      state = AsyncError(err, stack);
+      if (ref.mounted) {
+        state = previousState;
+        state = AsyncError(err, stack);
+      }
       rethrow;
     }
   }
@@ -241,9 +251,14 @@ class BookingNotifier extends _$BookingNotifier {
 
     try {
       await service.deleteBooking(id);
+      if (ref.mounted) {
+        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+      }
     } catch (err, stack) {
-      state = previousState; // Rollback
-      state = AsyncError(err, stack);
+      if (ref.mounted) {
+        state = previousState; // Rollback
+        state = AsyncError(err, stack);
+      }
     }
   }
 

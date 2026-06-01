@@ -889,9 +889,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                             isDeleting.value = true;
                             try {
                               await ref
-                                  .read(bookingServiceProvider)
-                                  .deleteBooking(booking.id);
-                              ref.invalidate(bookingProvider);
+                                  .read(bookingProvider.notifier)
+                                  .removeBooking(booking.id);
 
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(

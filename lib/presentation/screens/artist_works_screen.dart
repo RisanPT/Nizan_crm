@@ -9,6 +9,8 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../services/booking_service.dart';
+import '../../services/addon_service_service.dart';
+import '../../core/models/addon_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Colour helpers
@@ -642,7 +644,7 @@ class _AnimatedWorkCard extends HookWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Expanded Details (shown when card is tapped)
 // ─────────────────────────────────────────────────────────────────────────────
-class _ExpandedDetails extends StatelessWidget {
+class _ExpandedDetails extends ConsumerWidget {
   final Booking booking;
   final double balance;
   final List<String> myWorks;
@@ -654,7 +656,7 @@ class _ExpandedDetails extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
 
     return Column(
@@ -767,6 +769,78 @@ class _ExpandedDetails extends StatelessWidget {
                 14.h,
               ],
 
+              // Add-ons list
+              _DetailLabel('Add-ons'),
+              8.h,
+              if (booking.addons.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    'No add-ons added yet',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: crm.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                )
+              else
+                Column(
+                  children: booking.addons.map((addon) {
+                    final itemTotal = addon.amount * addon.persons;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: crm.background,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: crm.border),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                addon.service,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              2.h,
+                              Text(
+                                '${addon.persons} person(s) • ₹${addon.amount.toStringAsFixed(0)} each',
+                                style: TextStyle(color: crm.textSecondary, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '₹${itemTotal.toStringAsFixed(0)}',
+                            style: TextStyle(fontWeight: FontWeight.w900, color: crm.primary, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              8.h,
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _showAddAddonModal(context, ref, booking),
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add Add-on'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: crm.primary,
+                    side: BorderSide(color: crm.primary.withValues(alpha: 0.5)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+              14.h,
+
               // Payment breakdown
               _DetailLabel('Payment'),
               12.h,
@@ -858,6 +932,276 @@ class _ExpandedDetails extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  void _showAddAddonModal(BuildContext context, WidgetRef ref, Booking booking) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddAddonSheet(booking: booking),
+    );
+  }
+}
+
+class _AddAddonSheet extends ConsumerStatefulWidget {
+  final Booking booking;
+  const _AddAddonSheet({required this.booking});
+
+  @override
+  ConsumerState<_AddAddonSheet> createState() => _AddAddonSheetState();
+}
+
+class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
+  AddonService? _selectedService;
+  int _persons = 1;
+  bool _isLoading = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final theme = Theme.of(context);
+    final asyncAddons = ref.watch(addonServicesProvider);
+
+    return Container(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Add Service Add-on',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: crm.textPrimary,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          16.h,
+          asyncAddons.when(
+            data: (services) {
+              final activeServices = services.where((s) => s.status.toLowerCase() == 'active').toList();
+              if (activeServices.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 20.0),
+                  child: Text('No active add-on services available.'),
+                );
+              }
+
+              // Set default selected if not set
+              if (_selectedService == null) {
+                _selectedService = activeServices.first;
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<AddonService>(
+                    value: _selectedService,
+                    decoration: InputDecoration(
+                      labelText: 'Select Service',
+                      labelStyle: TextStyle(color: crm.textSecondary),
+                      fillColor: crm.background,
+                    ),
+                    items: activeServices.map((service) {
+                      return DropdownMenuItem<AddonService>(
+                        value: service,
+                        child: Text('${service.name} (₹${service.price.toStringAsFixed(0)})'),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _selectedService = val;
+                      });
+                    },
+                  ),
+                  16.h,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Number of Persons',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: crm.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline_rounded),
+                            color: crm.primary,
+                            onPressed: _persons > 1
+                                ? () => setState(() => _persons--)
+                                : null,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Text(
+                              '$_persons',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.add_circle_outline_rounded),
+                            color: crm.primary,
+                            onPressed: () => setState(() => _persons++),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  20.h,
+                  const Divider(),
+                  12.h,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Total Add-on Cost:',
+                        style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                      ),
+                      Text(
+                        '₹${((_selectedService?.price ?? 0) * _persons).toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: crm.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  20.h,
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : () => _confirmAddon(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: crm.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation(Colors.white),
+                              ),
+                            )
+                          : const Text(
+                              'Confirm & Add to Booking',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                    ),
+                  ),
+                ],
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (err, _) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20.0),
+              child: Text('Error loading services: $err'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmAddon(BuildContext context) async {
+    if (_selectedService == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final newAddon = BookingAddon(
+        addonServiceId: _selectedService!.id,
+        service: _selectedService!.name,
+        amount: _selectedService!.price,
+        persons: _persons,
+      );
+
+      final currentBooking = widget.booking;
+      final updatedAddons = [...currentBooking.addons, newAddon];
+      final newTotalPrice = currentBooking.totalPrice + (newAddon.amount * newAddon.persons);
+
+      final updatedBooking = currentBooking.copyWith(
+        addons: updatedAddons,
+        totalPrice: newTotalPrice,
+      );
+
+      await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
+
+      // Invalidate the cache to reload
+      ref.invalidate(paginatedBookingsProvider);
+      ref.invalidate(artistAssignedWorksProvider);
+      ref.invalidate(bookingProvider);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully added "${_selectedService!.name}" x$_persons to the booking.'),
+            backgroundColor: context.crmColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add add-on: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 }
 
@@ -1330,10 +1674,9 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
     }
 
     try {
-      await ref.read(bookingServiceProvider).updateBooking(
+      await ref.read(bookingProvider.notifier).updateBooking(
         widget.booking.copyWith(status: 'completed'),
       );
-      ref.invalidate(artistAssignedWorksProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✓ Work Marked as Completed')),
