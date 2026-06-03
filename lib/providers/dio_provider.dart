@@ -24,8 +24,8 @@ Dio dio(Ref ref) {
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {
-        final auth = ref.read(authControllerProvider);
-        final token = auth.session?.token;
+        final session = ref.read(authSessionProvider);
+        final token = session?.token;
 
         if (token != null && token.isNotEmpty) {
           options.headers['Authorization'] = 'Bearer $token';

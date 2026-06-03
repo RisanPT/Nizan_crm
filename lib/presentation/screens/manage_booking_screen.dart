@@ -112,6 +112,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? booking?.bookingItems[selectedBookingItemIndex].packageId ?? ''
           : booking?.packageId ?? '',
     );
+    // POC = Point of Contact shown on client PDF
+    final selectedPocId = useState<String>(booking?.pocId ?? '');
 
     // Controllers pre-filled from real booking data
     final assignArtistId = useState<String?>(null);
@@ -449,6 +451,17 @@ class ManageBookingScreen extends HookConsumerWidget {
       ],
     );
 
+    // Clear POC if the chosen staff member is removed from assignments
+    useEffect(() {
+      if (selectedPocId.value.isNotEmpty &&
+          !assignments.value.any(
+            (a) => a.employeeId == selectedPocId.value,
+          )) {
+        selectedPocId.value = '';
+      }
+      return null;
+    }, [assignments.value]);
+
     ServicePackage? findPackageById(String? id) {
       if (id == null || id.isEmpty) return null;
       return availablePackages.cast<ServicePackage?>().firstWhere(
@@ -739,6 +752,11 @@ class ManageBookingScreen extends HookConsumerWidget {
         selectedDisplayEntry?.calendarDate,
         parsedBookingDate,
       );
+      // Mirror backend resolveSchedule(): serviceStart uses first date,
+      // serviceEnd uses last date (important for multi-day bookings).
+      final lastBookingDate = normalizedBookingDates.isNotEmpty
+          ? normalizedBookingDates.last
+          : parsedBookingDate;
       final updatedBookingItems =
           selectedBookingItemIndex >= 0 &&
               selectedBookingItemIndex < booking.bookingItems.length
@@ -821,7 +839,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           booking.serviceStart,
         ),
         serviceEnd: _mergeDateAndTime(
-          parsedBookingDate,
+          lastBookingDate,
           endTimeCtrl.text.trim(),
           booking.serviceEnd,
         ),
@@ -834,6 +852,49 @@ class ManageBookingScreen extends HookConsumerWidget {
         assignedStaff: summarizedAssignments,
         addons: normalizedAddons,
         bookingItems: updatedBookingItems,
+        pocId: selectedPocId.value,
+        pocName: () {
+          if (selectedPocId.value.isEmpty) return '';
+          // Prefer live employee data
+          final emp = availableStaff
+              .cast<Employee?>()
+              .firstWhere(
+                (e) => e?.id == selectedPocId.value,
+                orElse: () => null,
+              );
+          if (emp != null) return emp.name.trim();
+          // Fall back to stored assignment name
+          return assignments.value
+                  .cast<BookingAssignment?>()
+                  .firstWhere(
+                    (a) => a?.employeeId == selectedPocId.value,
+                    orElse: () => null,
+                  )
+                  ?.artistName
+                  .trim() ??
+              '';
+        }(),
+        pocPhone: () {
+          if (selectedPocId.value.isEmpty) return '';
+          // Prefer live employee phone (always current)
+          final emp = availableStaff
+              .cast<Employee?>()
+              .firstWhere(
+                (e) => e?.id == selectedPocId.value,
+                orElse: () => null,
+              );
+          if (emp != null && emp.phone.trim().isNotEmpty) return emp.phone.trim();
+          // Fall back to stored assignment phone
+          return assignments.value
+                  .cast<BookingAssignment?>()
+                  .firstWhere(
+                    (a) => a?.employeeId == selectedPocId.value,
+                    orElse: () => null,
+                  )
+                  ?.phone
+                  .trim() ??
+              '';
+        }(),
       );
       return currentBookingSnapshot;
     }
@@ -1236,6 +1297,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   assignArtistId,
                   assignRoleCtrl,
                   assignmentType,
+                  selectedPocId,
                 ),
                 24.h,
 
@@ -1985,6 +2047,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     ValueNotifier<String?> assignArtistId,
     TextEditingController assignRoleCtrl,
     ValueNotifier<String> assignmentType,
+    ValueNotifier<String> selectedPocId,
   ) {
     return _SectionCard(
       title: 'Artist Assignment Flow',
@@ -2029,6 +2092,40 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ...assignments.value.map(
                     (a) => _buildAssignmentBlock(a, crmColors, assignments),
                   ),
+                // ── POC Selector ──────────────────────────────────────────
+                if (assignments.value
+                    .any(
+                      (a) =>
+                          a.roleType.toLowerCase() == 'lead' ||
+                          a.roleType.toLowerCase() == 'assistant',
+                    )
+                ) ...[
+                  24.h,
+                  Text(
+                    'POINT OF CONTACT (CLIENT PDF)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: crmColors.textSecondary,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  8.h,
+                  Text(
+                    'Select who the client should contact. Their name & number will appear on the client PDF.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: crmColors.textSecondary,
+                    ),
+                  ),
+                  12.h,
+                  _buildPocSelector(
+                    context,
+                    crmColors,
+                    assignments,
+                    selectedPocId,
+                  ),
+                ],
               ],
             ),
           ),
@@ -2102,6 +2199,121 @@ class ManageBookingScreen extends HookConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── POC picker ──────────────────────────────────────────────────────────
+  Widget _buildPocSelector(
+    BuildContext context,
+    CrmTheme crmColors,
+    ValueNotifier<List<BookingAssignment>> assignments,
+    ValueNotifier<String> selectedPocId,
+  ) {
+    final pocCandidates = assignments.value
+        .where(
+          (a) =>
+              (a.roleType.toLowerCase() == 'lead' ||
+                  a.roleType.toLowerCase() == 'assistant') &&
+              a.artistName.trim().isNotEmpty,
+        )
+        .toList();
+
+    final currentPoc = pocCandidates
+        .cast<BookingAssignment?>()
+        .firstWhere(
+          (a) => a?.employeeId == selectedPocId.value,
+          orElse: () => null,
+        );
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: currentPoc != null
+              ? Colors.teal.withValues(alpha: 0.5)
+              : crmColors.border,
+          width: currentPoc != null ? 1.5 : 1,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        color: currentPoc != null
+            ? Colors.teal.withValues(alpha: 0.04)
+            : crmColors.surface,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: ButtonTheme(
+          alignedDropdown: true,
+          child: DropdownButton<String>(
+            isExpanded: true,
+            value: currentPoc != null ? selectedPocId.value : '',
+            icon: Icon(
+              Icons.contact_phone_outlined,
+              size: 18,
+              color:
+                  currentPoc != null ? Colors.teal : crmColors.textSecondary,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            borderRadius: BorderRadius.circular(12),
+            items: [
+              DropdownMenuItem<String>(
+                value: '',
+                child: Text(
+                  'No POC selected',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: crmColors.textSecondary,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+              ...pocCandidates.map(
+                (a) => DropdownMenuItem<String>(
+                  value: a.employeeId,
+                  child: Row(
+                    children: [
+                      Icon(
+                        a.roleType.toLowerCase() == 'lead'
+                            ? Icons.star_rounded
+                            : Icons.person_outline,
+                        size: 15,
+                        color: a.roleType.toLowerCase() == 'lead'
+                            ? Colors.amber.shade700
+                            : Colors.indigo,
+                      ),
+                      8.w,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              a.artistName.trim(),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (a.phone.trim().isNotEmpty)
+                              Text(
+                                a.phone.trim(),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: crmColors.textSecondary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            onChanged: (value) {
+              selectedPocId.value = value ?? '';
+            },
+          ),
+        ),
       ),
     );
   }

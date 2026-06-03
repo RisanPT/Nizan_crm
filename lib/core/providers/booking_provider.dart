@@ -76,7 +76,7 @@ final paginatedBookingsProvider =
       params,
     ) async {
       ref.watch(bookingsRefreshTriggerProvider);
-      final authSession = ref.watch(authControllerProvider).session;
+      final authSession = ref.watch(authSessionProvider);
       final role = AppRole.fromString(authSession?.role);
 
       var zoneId = params.zoneId;
@@ -85,7 +85,7 @@ final paginatedBookingsProvider =
       var districtId = params.districtId;
       var pincodeId = params.pincodeId;
 
-      if (!role.isFullAccess) {
+      if (!role.isFullAccess && role != AppRole.artist) {
         if (authSession != null) {
           if (authSession.zoneId.isNotEmpty) zoneId = authSession.zoneId;
           if (authSession.stateId.isNotEmpty) stateId = authSession.stateId;
@@ -112,8 +112,8 @@ final paginatedBookingsProvider =
 
 final artistAssignedWorksProvider =
     FutureProvider.family<PaginatedBookingsResponse, int>((ref, page) async {
-      final auth = ref.watch(authControllerProvider);
-      final employeeId = auth.session?.employeeId ?? '';
+      final authSession = ref.watch(authSessionProvider);
+      final employeeId = authSession?.employeeId ?? '';
 
       if (employeeId.isEmpty) {
         return const PaginatedBookingsResponse(

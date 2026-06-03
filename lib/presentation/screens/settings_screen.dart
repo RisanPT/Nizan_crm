@@ -31,6 +31,7 @@ class SettingsScreen extends HookConsumerWidget {
       ),
     );
     final auth = ref.read(authControllerProvider);
+    final session = ref.watch(authSessionProvider);
     final isMobile = ResponsiveBuilder.isMobile(context);
     // ✅ Watched at build level — valid Riverpod usage
     final asyncEmployees = ref.watch(employeesProvider);
@@ -439,7 +440,7 @@ class SettingsScreen extends HookConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Signed in as ${auth.session?.email ?? ''}',
+                  'Signed in as ${session?.email ?? ''}',
                   style: theme.textTheme.bodyMedium,
                 ),
                 16.h,
@@ -476,7 +477,7 @@ class SettingsScreen extends HookConsumerWidget {
                     children: [
                       ...users.map((user) => _MobileUserCard(
                             user: user,
-                            currentUserId: auth.session?.userId ?? '',
+                            currentUserId: session?.userId ?? '',
                             onEdit: () => openUserDialog(user),
                           )),
                       16.h,
@@ -528,7 +529,7 @@ class SettingsScreen extends HookConsumerWidget {
                     ...users.map(
                       (user) => _DesktopUserRow(
                         user: user,
-                        currentUserId: auth.session?.userId ?? '',
+                        currentUserId: session?.userId ?? '',
                         onEdit: () => openUserDialog(user),
                       ),
                     ),

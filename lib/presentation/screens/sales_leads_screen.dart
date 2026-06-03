@@ -843,7 +843,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
   } else {
     await showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (dialogContext) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: SizedBox(
           width: 700,
@@ -863,7 +863,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                     ),
                     const Spacer(),
                     IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -890,18 +890,18 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
 Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) async {
   final confirmed = await showDialog<bool>(
     context: context,
-    builder: (_) => AlertDialog(
+    builder: (dialogContext) => AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: const Text('Delete Lead'),
       content: Text('Delete lead for "${lead.name}"? This cannot be undone.'),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => Navigator.of(dialogContext).pop(false),
           child: const Text('Cancel'),
         ),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: Colors.red),
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
           child: const Text('Delete'),
         ),
       ],

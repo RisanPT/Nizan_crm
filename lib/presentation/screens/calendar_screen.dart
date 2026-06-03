@@ -176,12 +176,12 @@ class CalendarScreen extends HookConsumerWidget {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
 
-    final auth = ref.watch(authControllerProvider);
-    final role = auth.session != null
-        ? AppRole.fromString(auth.session!.role)
+    final session = ref.watch(authSessionProvider);
+    final role = session != null
+        ? AppRole.fromString(session.role)
         : AppRole.artist;
     final isArtist = role == AppRole.artist;
-    final artistEmployeeId = auth.session?.employeeId;
+    final artistEmployeeId = session?.employeeId;
 
     // All bookings from provider
     final asyncBookings = ref.watch(bookingProvider);

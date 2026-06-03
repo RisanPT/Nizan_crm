@@ -359,6 +359,9 @@ class Booking {
   final List<BookingAddon> addons;
   final List<BookingItem> bookingItems;
   final DateTime? createdAt;
+  final String pocId; // Selected Point of Contact (employeeId from assignedStaff)
+  final String pocName; // POC display name (denormalized for PDF)
+  final String pocPhone; // POC phone number (denormalized for PDF)
 
   const Booking({
     required this.id,
@@ -403,6 +406,9 @@ class Booking {
     this.addons = const [],
     this.bookingItems = const [],
     this.createdAt,
+    this.pocId = '',
+    this.pocName = '',
+    this.pocPhone = '',
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -641,6 +647,9 @@ class Booking {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String).toLocal()
           : null,
+      pocId: json['pocId'] as String? ?? '',
+      pocName: json['pocName'] as String? ?? '',
+      pocPhone: json['pocPhone'] as String? ?? '',
     );
   }
 
@@ -675,8 +684,8 @@ class Booking {
       'contentCreationRequired': contentCreationRequired,
       'bookingDate': _formatDateOnly(bookingDate),
       'selectedDates': selectedDates.map(_formatDateOnly).toList(),
-      'serviceStart': serviceStart.toIso8601String(),
-      'serviceEnd': serviceEnd.toIso8601String(),
+      'serviceStart': serviceStart.toUtc().toIso8601String(),
+      'serviceEnd': serviceEnd.toUtc().toIso8601String(),
       'totalPrice': totalPrice,
       'advanceAmount': advanceAmount,
       'discountAmount': discountAmount,
@@ -687,6 +696,9 @@ class Booking {
       'addons': addons.map((item) => item.toJson()).toList(),
       'bookingItems': bookingItems.map((item) => item.toJson()).toList(),
       'createdAt': createdAt?.toIso8601String(),
+      'pocId': pocId,
+      'pocName': pocName,
+      'pocPhone': pocPhone,
     };
   }
 
@@ -733,6 +745,9 @@ class Booking {
     List<BookingAddon>? addons,
     List<BookingItem>? bookingItems,
     DateTime? createdAt,
+    String? pocId,
+    String? pocName,
+    String? pocPhone,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -779,6 +794,9 @@ class Booking {
       addons: addons ?? this.addons,
       bookingItems: bookingItems ?? this.bookingItems,
       createdAt: createdAt ?? this.createdAt,
+      pocId: pocId ?? this.pocId,
+      pocName: pocName ?? this.pocName,
+      pocPhone: pocPhone ?? this.pocPhone,
     );
   }
 }
@@ -824,8 +842,10 @@ DateTime _parseDateOnlyValue(dynamic raw) {
 
 DateTime _parseLocalTime(String? raw) {
   if (raw == null || raw.isEmpty) return DateTime.now();
-  final stripped = raw.replaceAll('Z', '');
-  return DateTime.tryParse(stripped) ?? DateTime.now();
+  // Always parse as UTC then convert to local so the IST (+5:30) offset is
+  // correctly applied regardless of whether the server appends a 'Z' or not.
+  final normalized = raw.endsWith('Z') ? raw : '${raw}Z';
+  return DateTime.tryParse(normalized)?.toLocal() ?? DateTime.now();
 }
 
 String _formatDateOnly(DateTime date) {

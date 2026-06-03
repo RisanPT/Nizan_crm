@@ -14,8 +14,60 @@ final authControllerProvider = Provider<AuthController>((ref) {
   return controller;
 });
 
+class AuthState {
+  final AuthSession? session;
+  final bool isInitializing;
+  final bool isSubmitting;
+  final String? errorMessage;
+  final bool isAuthenticated;
+
+  const AuthState({
+    required this.session,
+    required this.isInitializing,
+    required this.isSubmitting,
+    required this.errorMessage,
+    required this.isAuthenticated,
+  });
+}
+
+class AuthStateNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    final controller = ref.watch(authControllerProvider);
+    
+    void listener() {
+      state = AuthState(
+        session: controller.session,
+        isInitializing: controller.isInitializing,
+        isSubmitting: controller.isSubmitting,
+        errorMessage: controller.errorMessage,
+        isAuthenticated: controller.isAuthenticated,
+      );
+    }
+    
+    controller.addListener(listener);
+    ref.onDispose(() => controller.removeListener(listener));
+    
+    return AuthState(
+      session: controller.session,
+      isInitializing: controller.isInitializing,
+      isSubmitting: controller.isSubmitting,
+      errorMessage: controller.errorMessage,
+      isAuthenticated: controller.isAuthenticated,
+    );
+  }
+}
+
+final authStateProvider = NotifierProvider<AuthStateNotifier, AuthState>(() {
+  return AuthStateNotifier();
+});
+
+final authSessionProvider = Provider<AuthSession?>((ref) {
+  return ref.watch(authStateProvider).session;
+});
+
 final currentEmployeeProvider = FutureProvider<Employee?>((ref) async {
-  final session = ref.watch(authControllerProvider).session;
+  final session = ref.watch(authSessionProvider);
   if (session == null || session.employeeId.isEmpty) return null;
   
   try {
@@ -85,6 +137,7 @@ class AuthController extends ChangeNotifier {
           .login(email: email, password: password);
 
       _session = session;
+      _ref.invalidate(currentEmployeeProvider);
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(_sessionKey, session.toStorageValue());
     } catch (error) {
@@ -99,6 +152,7 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     _session = null;
     _errorMessage = null;
+    _ref.invalidate(currentEmployeeProvider);
     await _clearPersistedSession();
     notifyListeners();
   }

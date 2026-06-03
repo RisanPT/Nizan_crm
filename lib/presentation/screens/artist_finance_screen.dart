@@ -27,6 +27,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     ('upi', 'UPI'),
     ('bank_transfer', 'Bank Transfer'),
     ('other', 'Other'),
+    ('split', 'Split Payment (Cash + UPI)'),
   ];
 
   static const _expenseCategories = [
@@ -72,7 +73,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final tabCtrl = useTabController(initialLength: 2);
 
     // ── Role + identity ──────────────────────────────────────────────────────
-    final session = ref.watch(authControllerProvider).session;
+    final session = ref.watch(authSessionProvider);
     final role = AppRole.fromString(session?.role);
     final myEmployeeId = session?.employeeId ?? '';
     final canVerify = role.canVerifyFinance;
@@ -134,14 +135,117 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       (sum, item) => sum + item.amount,
     );
 
-    Future<void> addCollectionDialog() async {
+    // ── Split Payment Prompt Dialog ─────────────────────────────────────────
+    Future<bool?> showSplitPaymentDialog(BuildContext ctx) {
+      return showDialog<bool>(
+        context: ctx,
+        barrierDismissible: false,
+        builder: (dCtx) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.call_split_rounded,
+                    color: Colors.orange,
+                    size: 32,
+                  ),
+                ),
+                16.h,
+                Text(
+                  'Split Payment?',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                12.h,
+                Text(
+                  'Did the client pay using another method for the same booking?\n\n'
+                  'Example: ₹5,000 Cash already logged → now add ₹3,000 via UPI.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    height: 1.5,
+                  ),
+                ),
+                24.h,
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(dCtx, false),
+                        child: const Text(
+                          'No, Done',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                    12.w,
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () => Navigator.pop(dCtx, true),
+                        child: const Text(
+                          'Yes, Add More',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    Future<void> addCollectionDialogSplit({
+      required BuildContext context,
+      required WidgetRef ref,
+      required ThemeData theme,
+      required CrmTheme crm,
+      required bool isScopedToOwn,
+      required String myEmployeeId,
+      required AsyncValue<dynamic> asyncEmployees,
+      required List<dynamic> myBookings,
+      String? prefilledBookingId,
+      String? prefilledEmployeeId,
+      DateTime? prefilledDate,
+    }) async {
       final amountCtrl = TextEditingController();
+      final cashAmountCtrl = TextEditingController();
+      final upiAmountCtrl = TextEditingController();
       final notesCtrl = TextEditingController();
-      // Artist accounts auto-fill their own employeeId
-      var selEmployee = isScopedToOwn ? myEmployeeId : '';
-      var selBooking = '';
+      var selEmployee = prefilledEmployeeId ?? (isScopedToOwn ? myEmployeeId : '');
+      var selBooking = prefilledBookingId ?? '';
       var payMode = 'cash';
-      var selDate = DateTime.now();
+      var selDate = prefilledDate ?? DateTime.now();
       XFile? attachmentFile;
       bool isUploading = false;
       final formKey = GlobalKey<FormState>();
@@ -187,6 +291,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                           ),
                           24.h,
+                          if (prefilledBookingId != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: crm.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.call_split, color: crm.primary),
+                                  12.w,
+                                  const Expanded(child: Text("Split payment in progress. Recording a partial amount for the selected booking.")),
+                                ],
+                              ),
+                            ),
                           Row(
                             children: [
                               Container(
@@ -216,7 +336,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             style: TextStyle(fontSize: 13, color: Colors.grey),
                           ),
                           24.h,
-                          // Artist picker — hidden for artist-role (auto-scoped)
                           if (!isScopedToOwn) ...[
                             DropdownButtonFormField<String>(
                               isExpanded: true,
@@ -227,163 +346,129 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              initialValue: selEmployee.isEmpty
-                                  ? null
-                                  : selEmployee,
-                              items: artists
-                                  .map(
-                                    (e) => DropdownMenuItem(
-                                      value: e.id,
-                                      child: Text(e.name),
-                                    ),
-                                  )
-                                  .toList(),
-                              validator: (v) => (v == null || v.isEmpty)
-                                  ? 'Select artist'
-                                  : null,
-                              onChanged: (v) =>
-                                  setState(() => selEmployee = v ?? ''),
+                              value: selEmployee.isEmpty ? null : selEmployee,
+                              items: artists.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+                              validator: (v) => (v == null || v.isEmpty) ? 'Select artist' : null,
+                              onChanged: (v) => setState(() => selEmployee = v ?? ''),
                             ),
                             16.h,
                           ],
-                          // Booking Selector
                           DropdownButtonFormField<String>(
                             isExpanded: true,
-                            itemHeight: 64,
+                            itemHeight: 80,
                             decoration: InputDecoration(
                               labelText: 'Select Booking / Client *',
-                              prefixIcon: const Icon(
-                                Icons.book_online_outlined,
-                              ),
-                              helperText:
-                                  'Only your assigned works are shown here',
+                              prefixIcon: const Icon(Icons.book_online_outlined),
+                              helperText: 'Only your assigned works are shown here',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            initialValue: selBooking.isEmpty
-                                ? null
-                                : selBooking,
-                            items: myBookings.map((b) {
-                              final balance =
-                                  b.totalPrice -
-                                  b.advanceAmount -
-                                  b.discountAmount;
+                            value: selBooking.isEmpty ? null : selBooking,
+                            items: myBookings.map<DropdownMenuItem<String>>((b) {
+                              final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
                               return DropdownMenuItem(
                                 value: b.id,
-                                child: SizedBox(
-                                  height: 64,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        b.customerName,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      Text(
-                                        '${b.service} • ₹${balance.toStringAsFixed(0)} Bal.',
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(b.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
+                                    const SizedBox(height: 4),
+                                    Text('${b.service} • ₹${balance.toStringAsFixed(0)} Bal.', style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                  ],
                                 ),
                               );
                             }).toList(),
-                            validator: (v) => (v == null || v.isEmpty)
-                                ? 'Select a booking'
-                                : null,
-                            onChanged: (v) =>
-                                setState(() => selBooking = v ?? ''),
+                            validator: (v) => (v == null || v.isEmpty) ? 'Select a booking' : null,
+                            onChanged: (v) => setState(() => selBooking = v ?? ''),
                           ),
                           16.h,
-                          TextFormField(
-                            controller: amountCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
+                          if (payMode == 'split') ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: cashAmountCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    decoration: InputDecoration(
+                                      labelText: 'Cash Amount (₹) *',
+                                      prefixIcon: const Icon(Icons.money, size: 18),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onChanged: (v) => setState(() {}),
+                                    validator: (v) {
+                                      final cash = double.tryParse(cashAmountCtrl.text.trim()) ?? 0;
+                                      final upi = double.tryParse(upiAmountCtrl.text.trim()) ?? 0;
+                                      if (cash <= 0 && upi <= 0) return 'Required';
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                                12.w,
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: upiAmountCtrl,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    decoration: InputDecoration(
+                                      labelText: 'UPI Amount (₹) *',
+                                      prefixIcon: const Icon(Icons.phone_android, size: 18),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onChanged: (v) => setState(() {}),
+                                    validator: (v) {
+                                      final cash = double.tryParse(cashAmountCtrl.text.trim()) ?? 0;
+                                      final upi = double.tryParse(upiAmountCtrl.text.trim()) ?? 0;
+                                      if (cash <= 0 && upi <= 0) return 'Required';
+                                      return null;
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: 'Amount Collected (₹) *',
-                              prefixIcon: const Icon(
-                                Icons.currency_rupee,
-                                size: 20,
-                              ),
-                              filled: true,
-                              fillColor: crm.success.withValues(alpha: 0.05),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: crm.success.withValues(alpha: 0.3),
+                          ] else ...[
+                            TextFormField(
+                              controller: amountCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              decoration: InputDecoration(
+                                labelText: 'Amount Collected (₹) *',
+                                prefixIcon: const Icon(Icons.currency_rupee, size: 20),
+                                filled: true,
+                                fillColor: crm.success.withValues(alpha: 0.05),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide(color: crm.success.withValues(alpha: 0.3)),
                                 ),
                               ),
+                              onChanged: (v) => setState(() {}),
+                              validator: (v) => (v == null || v.trim().isEmpty) ? 'Enter amount' : null,
                             ),
-                            onChanged: (v) => setState(() {}),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Enter amount'
-                                : null,
-                          ),
+                          ],
                           16.h,
                           DropdownButtonFormField<String>(
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: 'Payment Mode',
-                              prefixIcon: const Icon(
-                                Icons.payments_outlined,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              prefixIcon: const Icon(Icons.payments_outlined),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            initialValue: payMode,
-                            items: _paymentModes
-                                .map(
-                                  (m) => DropdownMenuItem(
-                                    value: m.$1,
-                                    child: Text(m.$2),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => payMode = v ?? 'cash'),
+                            value: payMode,
+                            items: _paymentModes.map((m) => DropdownMenuItem(value: m.$1, child: Text(m.$2))).toList(),
+                            onChanged: (v) => setState(() => payMode = v ?? 'cash'),
                           ),
                           16.h,
                           InkWell(
                             onTap: () async {
-                              final picked = await showDatePicker(
-                                context: ctx,
-                                initialDate: selDate,
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (picked != null) {
-                                setState(() => selDate = picked);
-                              }
+                              final picked = await showDatePicker(context: ctx, initialDate: selDate, firstDate: DateTime(2020), lastDate: DateTime(2100));
+                              if (picked != null) setState(() => selDate = picked);
                             },
                             borderRadius: BorderRadius.circular(12),
                             child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'Date',
-                                prefixIcon: const Icon(
-                                  Icons.calendar_today_outlined,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
+                              decoration: InputDecoration(labelText: 'Date', prefixIcon: const Icon(Icons.calendar_today_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                               child: Text(_fmt(selDate)),
                             ),
                           ),
@@ -391,77 +476,38 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           TextFormField(
                             controller: notesCtrl,
                             maxLines: 2,
-                            decoration: InputDecoration(
-                              labelText: 'Internal Notes',
-                              prefixIcon: const Icon(Icons.note_alt_outlined),
-                              hintText: 'e.g. Received via GPay from husband',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
+                            decoration: InputDecoration(labelText: 'Internal Notes', prefixIcon: const Icon(Icons.note_alt_outlined), hintText: 'e.g. Received via GPay from husband', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
                           ),
                           16.h,
-                          // Attachment section
-                          if (payMode == 'upi') ...[
-                            const Text(
-                              'UPI Payment Screenshot *',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
+                          if (payMode == 'upi' || (payMode == 'split' && (double.tryParse(upiAmountCtrl.text.trim()) ?? 0) > 0)) ...[
+                            const Text('UPI Payment Screenshot *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             8.h,
                             InkWell(
                               onTap: () async {
                                 final picker = ImagePicker();
                                 final picked = await picker.pickImage(
                                   source: ImageSource.gallery,
+                                  imageQuality: 50,
+                                  maxWidth: 1080,
                                 );
-                                if (picked != null) {
-                                  setState(() => attachmentFile = picked);
-                                }
+                                if (picked != null) setState(() => attachmentFile = picked);
                               },
                               child: Container(
                                 height: 120,
                                 width: double.infinity,
                                 decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: attachmentFile == null
-                                        ? Colors.grey.shade300
-                                        : crm.success,
-                                  ),
+                                  border: Border.all(color: attachmentFile == null ? Colors.grey.shade300 : crm.success),
                                   borderRadius: BorderRadius.circular(12),
                                   color: Colors.grey.shade50,
                                 ),
                                 child: attachmentFile == null
                                     ? const Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            Icons.add_a_photo_outlined,
-                                            color: Colors.grey,
-                                          ),
-                                          Text(
-                                            'Tap to add screenshot',
-                                            style: TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [Icon(Icons.add_a_photo_outlined, color: Colors.grey), Text('Tap to add screenshot', style: TextStyle(color: Colors.grey, fontSize: 12))],
                                       )
                                     : ClipRRect(
                                         borderRadius: BorderRadius.circular(11),
-                                        child: kIsWeb
-                                            ? Image.network(
-                                                attachmentFile!.path,
-                                                fit: BoxFit.cover,
-                                              )
-                                            : Image.file(
-                                                File(attachmentFile!.path),
-                                                fit: BoxFit.cover,
-                                              ),
+                                        child: kIsWeb ? Image.network(attachmentFile!.path, fit: BoxFit.cover) : Image.file(File(attachmentFile!.path), fit: BoxFit.cover),
                                       ),
                               ),
                             ),
@@ -471,32 +517,23 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           SizedBox(
                             width: double.infinity,
                             child: isUploading
-                                ? const Center(
-                                    child: CircularProgressIndicator(),
-                                  )
+                                ? const Center(child: CircularProgressIndicator())
                                 : ElevatedButton(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: crm.success,
                                       foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 16,
-                                      ),
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
+                                          borderRadius: BorderRadius.circular(14)),
                                       elevation: 0,
                                     ),
                                     onPressed: () async {
-                                      if (!formKey.currentState!.validate())
-                                        return;
-
-                                      if (payMode == 'upi' &&
-                                          attachmentFile == null) {
+                                      if (!formKey.currentState!.validate()) return;
+                                      final upiAmt = payMode == 'split' ? (double.tryParse(upiAmountCtrl.text.trim()) ?? 0) : 0.0;
+                                      if ((payMode == 'upi' || (payMode == 'split' && upiAmt > 0)) && attachmentFile == null) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           const SnackBar(
-                                            content: Text(
-                                              'Please upload the UPI payment screenshot',
-                                            ),
+                                            content: Text('Please upload the UPI payment screenshot'),
                                           ),
                                         );
                                         return;
@@ -511,39 +548,108 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               .uploadImage(attachmentFile!);
                                         }
 
-                                        await ref
-                                            .read(collectionServiceProvider)
-                                            .createCollection(
-                                              bookingId: selBooking.isNotEmpty
-                                                  ? selBooking
-                                                  : '000000000000000000000000',
-                                              employeeId: selEmployee.isNotEmpty
-                                                  ? selEmployee
-                                                  : myEmployeeId,
-                                              amount:
-                                                  double.tryParse(
-                                                    amountCtrl.text.trim(),
-                                                  ) ??
-                                                  0,
-                                              date: selDate,
-                                              paymentMode: payMode,
-                                              notes: notesCtrl.text.trim(),
-                                              attachmentUrl: uploadedUrl,
-                                            );
+                                        if (payMode == 'split') {
+                                          final cashAmt = double.tryParse(cashAmountCtrl.text.trim()) ?? 0;
+                                          if (cashAmt > 0) {
+                                            await ref
+                                                .read(collectionServiceProvider)
+                                                .createCollection(
+                                                  bookingId: selBooking.isNotEmpty ? selBooking : '000000000000000000000000',
+                                                  employeeId: selEmployee.isNotEmpty ? selEmployee : myEmployeeId,
+                                                  amount: cashAmt,
+                                                  date: selDate,
+                                                  paymentMode: 'cash',
+                                                  notes: '${notesCtrl.text.trim()} (Split Cash)'.trim(),
+                                                  attachmentUrl: null,
+                                                );
+                                          }
+                                          if (upiAmt > 0) {
+                                            await ref
+                                                .read(collectionServiceProvider)
+                                                .createCollection(
+                                                  bookingId: selBooking.isNotEmpty ? selBooking : '000000000000000000000000',
+                                                  employeeId: selEmployee.isNotEmpty ? selEmployee : myEmployeeId,
+                                                  amount: upiAmt,
+                                                  date: selDate,
+                                                  paymentMode: 'upi',
+                                                  notes: '${notesCtrl.text.trim()} (Split UPI)'.trim(),
+                                                  attachmentUrl: uploadedUrl,
+                                                );
+                                          }
+                                        } else {
+                                          await ref
+                                              .read(collectionServiceProvider)
+                                              .createCollection(
+                                                bookingId: selBooking.isNotEmpty
+                                                    ? selBooking
+                                                    : '000000000000000000000000',
+                                                employeeId: selEmployee.isNotEmpty
+                                                    ? selEmployee
+                                                    : myEmployeeId,
+                                                amount: double.tryParse(
+                                                        amountCtrl.text.trim()) ??
+                                                    0,
+                                                date: selDate,
+                                                paymentMode: payMode,
+                                                notes: notesCtrl.text.trim(),
+                                                attachmentUrl: uploadedUrl,
+                                              );
+                                        }
+
                                         ref.invalidate(collectionsProvider);
-                                        ref.invalidate(
-                                          artistCollectionsProvider,
-                                        );
-                                        if (ctx.mounted) Navigator.pop(ctx);
+                                        ref.invalidate(artistCollectionsProvider);
+
+                                        if (ctx.mounted) {
+                                          if (payMode == 'split') {
+                                            Navigator.pop(ctx);
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Split collection logged successfully!')),
+                                            );
+                                            return;
+                                          }
+
+                                          final savedBookingId =
+                                              selBooking.isNotEmpty
+                                                  ? selBooking
+                                                  : '000000000000000000000000';
+                                          final savedEmployeeId =
+                                              selEmployee.isNotEmpty
+                                                  ? selEmployee
+                                                  : myEmployeeId;
+                                          final savedDate = selDate;
+
+                                          final addMore =
+                                              await showSplitPaymentDialog(ctx);
+                                          if (ctx.mounted) Navigator.pop(ctx);
+
+                                          if (addMore == true &&
+                                              context.mounted) {
+                                            await Future.delayed(const Duration(
+                                                milliseconds: 350));
+                                            if (context.mounted) {
+                                              addCollectionDialogSplit(
+                                                context: context,
+                                                ref: ref,
+                                                theme: theme,
+                                                crm: crm,
+                                                isScopedToOwn: isScopedToOwn,
+                                                myEmployeeId: myEmployeeId,
+                                                asyncEmployees: asyncEmployees,
+                                                myBookings: myBookings,
+                                                prefilledBookingId:
+                                                    savedBookingId,
+                                                prefilledEmployeeId:
+                                                    savedEmployeeId,
+                                                prefilledDate: savedDate,
+                                              );
+                                            }
+                                          }
+                                        }
                                       } catch (e) {
                                         setState(() => isUploading = false);
                                         if (ctx.mounted) {
-                                          ScaffoldMessenger.of(
-                                            ctx,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(e.toString()),
-                                            ),
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(content: Text(e.toString())),
                                           );
                                         }
                                       }
@@ -566,6 +672,19 @@ class ArtistFinanceScreen extends HookConsumerWidget {
             );
           },
         ),
+      );
+    }
+
+    Future<void> addCollectionDialog() {
+      return addCollectionDialogSplit(
+        context: context,
+        ref: ref,
+        theme: theme,
+        crm: crm,
+        isScopedToOwn: isScopedToOwn,
+        myEmployeeId: myEmployeeId,
+        asyncEmployees: asyncEmployees,
+        myBookings: myBookings,
       );
     }
 
@@ -653,7 +772,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              initialValue: selEmployee.isEmpty
+                              value: selEmployee.isEmpty
                                   ? null
                                   : selEmployee,
                               items: artists
@@ -680,7 +799,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            initialValue: selCategory,
+                            value: selCategory,
                             items: _expenseCategories
                                 .map(
                                   (c) => DropdownMenuItem(
@@ -769,7 +888,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'Expense Bill / Receipt *',
+                                      'Bill Attachment *',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         fontSize: 13,
@@ -781,11 +900,11 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         final picker = ImagePicker();
                                         final picked = await picker.pickImage(
                                           source: ImageSource.gallery,
+                                          imageQuality: 50,
+                                          maxWidth: 1080,
                                         );
                                         if (picked != null) {
-                                          setState(
-                                            () => attachmentFile = picked,
-                                          );
+                                          setState(() => attachmentFile = picked);
                                         }
                                       },
                                       child: Container(
@@ -797,9 +916,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                 ? Colors.grey.shade300
                                                 : crm.primary,
                                           ),
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                           color: Colors.grey.shade50,
                                         ),
                                         child: attachmentFile == null
@@ -812,7 +930,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                     color: Colors.grey,
                                                   ),
                                                   Text(
-                                                    'Tap to upload bill',
+                                                    'Tap to upload bill photo',
                                                     style: TextStyle(
                                                       color: Colors.grey,
                                                       fontSize: 12,
@@ -844,7 +962,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               return const SizedBox.shrink();
                             },
                           ),
-                          32.h,
                           SizedBox(
                             width: double.infinity,
                             child: isUploading
@@ -868,15 +985,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         return;
 
                                       final amt =
-                                          double.tryParse(
-                                            amountCtrl.text.trim(),
-                                          ) ??
-                                          0;
+                                          double.tryParse(amountCtrl.text) ?? 0;
                                       if (amt > 100 && attachmentFile == null) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           const SnackBar(
                                             content: Text(
-                                              'Please upload the bill for expenses over ₹100',
+                                              'Bill photo required for amounts > 100',
                                             ),
                                           ),
                                         );

@@ -1,42 +1,1020 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:nizan_crm/providers/dio_provider.dart';
+import '../../core/auth/app_role.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
-import '../../core/auth/app_role.dart';
-import '../../core/providers/auth_provider.dart';
+import '../../core/models/lead.dart';
 import '../../core/providers/booking_provider.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../services/lead_service.dart';
 import '../../core/utils/dashboard_report_service.dart';
 import '../../core/utils/responsive_builder.dart';
-import 'package:fl_chart/fl_chart.dart';
-import '../../services/collection_service.dart';
-import '../../services/expense_service.dart';
-import '../../services/lead_service.dart';
-import '../../core/models/artist_collection.dart';
-import '../../core/models/artist_expense.dart';
-import '../../core/models/lead.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
+import '../../services/collection_service.dart';
+import '../../core/models/artist_collection.dart';
+import '../../core/models/employee.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 
-class DashboardScreen extends HookConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-    final role = auth.session != null
-        ? AppRole.fromString(auth.session!.role)
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  late DateTime _selectedMonth;
+  late List<DateTime> _dropdownMonths;
+
+  int _activeTab = 0; // 0: Operations, 1: Sales
+  String _salesRange = 'Last 30 days'; // 'Last 7 days', 'Last 30 days', 'Last 6 months', 'Custom'
+  bool _compareEnabled = true;
+  DateTimeRange? _customDateRange;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _selectedMonth = DateTime(now.year, now.month, 1);
+    
+    // Generate the last 12 months for the dropdown selection
+    _dropdownMonths = List.generate(12, (index) {
+      return DateTime(now.year, now.month - index, 1);
+    });
+  }
+
+  Map<String, DateTimeRange> _getDateRanges() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    DateTime currentStart;
+    DateTime currentEnd = today;
+    DateTime prevStart;
+    DateTime prevEnd;
+
+    if (_salesRange == 'Last 7 days') {
+      currentStart = today.subtract(const Duration(days: 6));
+      prevStart = currentStart.subtract(const Duration(days: 7));
+      prevEnd = currentStart.subtract(const Duration(days: 1));
+    } else if (_salesRange == 'Last 6 months') {
+      currentStart = DateTime(today.year, today.month - 5, 1);
+      prevStart = DateTime(currentStart.year, currentStart.month - 6, 1);
+      prevEnd = currentStart.subtract(const Duration(days: 1));
+    } else if (_salesRange == 'Custom' && _customDateRange != null) {
+      currentStart = _customDateRange!.start;
+      currentEnd = _customDateRange!.end;
+      final diff = currentEnd.difference(currentStart).inDays + 1;
+      prevStart = currentStart.subtract(Duration(days: diff));
+      prevEnd = currentStart.subtract(const Duration(days: 1));
+    } else {
+      // Default: Last 30 days
+      currentStart = today.subtract(const Duration(days: 29));
+      prevStart = currentStart.subtract(const Duration(days: 30));
+      prevEnd = currentStart.subtract(const Duration(days: 1));
+    }
+
+    return {
+      'current': DateTimeRange(start: currentStart, end: currentEnd),
+      'previous': DateTimeRange(start: prevStart, end: prevEnd),
+    };
+  }
+
+  Map<String, dynamic> _calculateSalesMetrics(List<Booking> bookings, DateTimeRange currentRange, DateTimeRange prevRange) {
+    final currentBookings = bookings.where((b) {
+      final date = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
+      return !date.isBefore(currentRange.start) && !date.isAfter(currentRange.end);
+    }).toList();
+
+    final prevBookings = bookings.where((b) {
+      final date = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
+      return !date.isBefore(prevRange.start) && !date.isAfter(prevRange.end);
+    }).toList();
+
+    final double currentSales = currentBookings.fold(0.0, (sum, b) => sum + b.totalPrice);
+    final int currentOrders = currentBookings.length;
+    final double currentAvgBasket = currentOrders > 0 ? currentSales / currentOrders : 0.0;
+
+    final double prevSales = prevBookings.fold(0.0, (sum, b) => sum + b.totalPrice);
+    final int prevOrders = prevBookings.length;
+    final double prevAvgBasket = prevOrders > 0 ? prevSales / prevOrders : 0.0;
+
+    double salesGrowth = 0.0;
+    if (prevSales > 0) {
+      salesGrowth = ((currentSales - prevSales) / prevSales) * 100;
+    } else if (currentSales > 0) {
+      salesGrowth = 100.0;
+    }
+
+    double ordersGrowth = 0.0;
+    if (prevOrders > 0) {
+      ordersGrowth = ((currentOrders - prevOrders) / prevOrders) * 100;
+    } else if (currentOrders > 0) {
+      ordersGrowth = 100.0;
+    }
+
+    double avgBasketGrowth = 0.0;
+    if (prevAvgBasket > 0) {
+      avgBasketGrowth = ((currentAvgBasket - prevAvgBasket) / prevAvgBasket) * 100;
+    } else if (currentAvgBasket > 0) {
+      avgBasketGrowth = 100.0;
+    }
+
+    return {
+      'currentBookings': currentBookings,
+      'prevBookings': prevBookings,
+      'currentSales': currentSales,
+      'prevSales': prevSales,
+      'salesGrowth': salesGrowth,
+      'currentOrders': currentOrders,
+      'prevOrders': prevOrders,
+      'ordersGrowth': ordersGrowth,
+      'currentAvgBasket': currentAvgBasket,
+      'prevAvgBasket': prevAvgBasket,
+      'avgBasketGrowth': avgBasketGrowth,
+    };
+  }
+
+  List<BarChartGroupData> _buildChartGroups(
+    List<Booking> currentBookings,
+    List<Booking> prevBookings,
+    DateTimeRange currentRange,
+    DateTimeRange prevRange,
+    bool compareEnabled,
+  ) {
+    final List<BarChartGroupData> groups = [];
+    
+    if (_salesRange == 'Last 6 months') {
+      for (int i = 0; i < 6; i++) {
+        final currentMonthStart = DateTime(currentRange.start.year, currentRange.start.month + i, 1);
+        final currentMonthEnd = DateTime(currentMonthStart.year, currentMonthStart.month + 1, 0);
+        
+        final prevMonthStart = DateTime(prevRange.start.year, prevRange.start.month + i, 1);
+        final prevMonthEnd = DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0);
+
+        final double currentVal = currentBookings
+            .where((b) => !b.bookingDate.isBefore(currentMonthStart) && !b.bookingDate.isAfter(currentMonthEnd))
+            .fold(0.0, (sum, b) => sum + b.totalPrice);
+
+        final double prevVal = prevBookings
+            .where((b) => !b.bookingDate.isBefore(prevMonthStart) && !b.bookingDate.isAfter(prevMonthEnd))
+            .fold(0.0, (sum, b) => sum + b.totalPrice);
+
+        groups.add(
+          BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: currentVal,
+                color: const Color(0xFFE05E26), // Orange
+                width: 14,
+                borderRadius: const BorderRadius.all(Radius.circular(2)),
+              ),
+              if (compareEnabled)
+                BarChartRodData(
+                  toY: prevVal,
+                  color: const Color(0xFFD2D5DA), // Grey
+                  width: 14,
+                  borderRadius: const BorderRadius.all(Radius.circular(2)),
+                ),
+            ],
+          ),
+        );
+      }
+    } else {
+      final diffDays = currentRange.end.difference(currentRange.start).inDays + 1;
+      for (int i = 0; i < diffDays; i++) {
+        final currentDate = currentRange.start.add(Duration(days: i));
+        final prevDate = prevRange.start.add(Duration(days: i));
+
+        final double currentVal = currentBookings
+            .where((b) => b.bookingDate.year == currentDate.year && b.bookingDate.month == currentDate.month && b.bookingDate.day == currentDate.day)
+            .fold(0.0, (sum, b) => sum + b.totalPrice);
+
+        final double prevVal = prevBookings
+            .where((b) => b.bookingDate.year == prevDate.year && b.bookingDate.month == prevDate.month && b.bookingDate.day == prevDate.day)
+            .fold(0.0, (sum, b) => sum + b.totalPrice);
+
+        groups.add(
+          BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: currentVal,
+                color: const Color(0xFFE05E26), // Orange
+                width: diffDays > 10 ? 4 : 10,
+                borderRadius: const BorderRadius.all(Radius.circular(2)),
+              ),
+              if (compareEnabled)
+                BarChartRodData(
+                  toY: prevVal,
+                  color: const Color(0xFFD2D5DA), // Grey
+                  width: diffDays > 10 ? 4 : 10,
+                  borderRadius: const BorderRadius.all(Radius.circular(2)),
+                ),
+            ],
+          ),
+        );
+      }
+    }
+    return groups;
+  }
+
+  String _getXAxisLabel(int value, DateTimeRange currentRange) {
+    if (_salesRange == 'Last 6 months') {
+      final monthDate = DateTime(currentRange.start.year, currentRange.start.month + value, 1);
+      return _monthName(monthDate.month).substring(0, 3);
+    } else if (_salesRange == 'Last 7 days') {
+      final date = currentRange.start.add(Duration(days: value));
+      const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdayNames[date.weekday - 1];
+    } else {
+      final date = currentRange.start.add(Duration(days: value));
+      if (value % 5 == 0 || value == 29) {
+        return '${date.day} ${_monthName(date.month).substring(0, 3)}';
+      }
+      return '';
+    }
+  }
+
+  Future<void> _selectCustomRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      initialDateRange: _customDateRange ?? DateTimeRange(
+        start: DateTime.now().subtract(const Duration(days: 30)),
+        end: DateTime.now(),
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _salesRange = 'Custom';
+        _customDateRange = picked;
+      });
+    }
+  }
+
+  String formatInrCurrency(double amount, {bool decimal = false}) {
+    if (amount >= 100000) {
+      final int value = amount.toInt();
+      final formatted = value.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d\d)+(\d)(?!\d))'), (m) => '${m[1]},');
+      return '₹$formatted';
+    }
+    final format = decimal ? amount.toStringAsFixed(2) : amount.toStringAsFixed(0);
+    final parts = format.split('.');
+    final intPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    final decimals = parts.length > 1 ? '.${parts[1]}' : '';
+    return '₹$intPart$decimals';
+  }
+
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    required double growth,
+    required String prevValue,
+    required bool compareEnabled,
+    required double width,
+  }) {
+    final isPositive = growth >= 0;
+    final growthText = '${isPositive ? "↑" : "↓"} ${growth.abs().toStringAsFixed(0)}%';
+    final growthColor = isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444);
+
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF4B5563),
+                ),
+              ),
+              const Icon(Icons.info_outline, size: 14, color: Color(0xFF9CA3AF)),
+            ],
+          ),
+          12.h,
+          Row(
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: GoogleFonts.inter(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF0F172A),
+                    ),
+                  ),
+                ),
+              ),
+              if (compareEnabled) ...[
+                8.w,
+                Text(
+                  growthText,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: growthColor,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          8.h,
+          if (compareEnabled)
+            Text(
+              '$prevValue in previous period',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF6B7280),
+              ),
+            )
+          else
+            const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+
+  Widget buildDateSelector() {
+    final datePills = ['Last 7 days', 'Last 30 days', 'Last 6 months', 'Custom'];
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: datePills.map((range) {
+            final isSelected = _salesRange == range;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: OutlinedButton(
+                onPressed: () {
+                  if (range == 'Custom') {
+                    _selectCustomRange();
+                  } else {
+                    setState(() {
+                      _salesRange = range;
+                    });
+                  }
+                },
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: isSelected ? const Color(0xFFFFF6F0) : Colors.white,
+                  side: BorderSide(
+                    color: isSelected ? const Color(0xFFE05E26) : const Color(0xFFD2D5DA),
+                    width: 1.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+                child: Row(
+                  children: [
+                    if (range == 'Custom') ...[
+                      const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFFE05E26)),
+                      8.w,
+                    ],
+                    Text(
+                      range,
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                        color: isSelected ? const Color(0xFFE05E26) : const Color(0xFF4B5563),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Switch(
+              value: _compareEnabled,
+              onChanged: (val) {
+                setState(() {
+                  _compareEnabled = val;
+                });
+              },
+              activeThumbColor: const Color(0xFF10B981),
+            ),
+            8.w,
+            Text(
+              'Compare with previous period',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF1F2937),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget buildTabBar() {
+    final tabStyles = GoogleFonts.inter(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    );
+
+    final List<String> tabs = ['Operations', 'Sales'];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.grey.withValues(alpha: 0.15),
+            width: 1.0,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: tabs.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final label = entry.value;
+          final isSelected = _activeTab == idx;
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _activeTab = idx;
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 32),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: isSelected ? const Color(0xFFE05E26) : Colors.transparent,
+                    width: 2.0,
+                  ),
+                ),
+              ),
+              child: Text(
+                label,
+                style: tabStyles.copyWith(
+                  color: isSelected ? const Color(0xFFE05E26) : const Color(0xFF7B8694),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget getTabContent(
+    String userName,
+    List<Booking> bookings,
+    List<Lead> leads,
+    List<ArtistCollection> collections,
+    List<Lead> filteredLeads,
+    int enquiriesCount,
+    int bookingsCount,
+    double conversionRate,
+    double growthRate,
+    bool isGrowthPositive,
+    double totalRevenue,
+    double revenueGrowth,
+    bool isRevenueGrowthPositive,
+    String Function(double) formatCurrency,
+    VoidCallback exportReport,
+    CrmTheme crmColors,
+    bool isDesktop,
+    bool isTablet,
+    List<Employee> employees,
+  ) {
+    switch (_activeTab) {
+      case 0:
+        return _buildOperationsTab(context, userName, bookings, leads, collections, filteredLeads, enquiriesCount, bookingsCount, conversionRate, growthRate, isGrowthPositive, totalRevenue, revenueGrowth, isRevenueGrowthPositive, formatCurrency, exportReport, crmColors, isDesktop, isTablet);
+      case 1:
+        return _buildSalesTab(bookings, crmColors, isDesktop);
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildSalesTab(List<Booking> bookings, CrmTheme crmColors, bool isDesktop) {
+    final ranges = _getDateRanges();
+    final currentRange = ranges['current']!;
+    final prevRange = ranges['previous']!;
+
+    final metrics = _calculateSalesMetrics(bookings, currentRange, prevRange);
+    
+    final double currentSales = metrics['currentSales'];
+    final double prevSales = metrics['prevSales'];
+    final double salesGrowth = metrics['salesGrowth'];
+
+    final int currentOrders = metrics['currentOrders'];
+    final int prevOrders = metrics['prevOrders'];
+    final double ordersGrowth = metrics['ordersGrowth'];
+
+    final double currentAvgBasket = metrics['currentAvgBasket'];
+    final double prevAvgBasket = metrics['prevAvgBasket'];
+    final double avgBasketGrowth = metrics['avgBasketGrowth'];
+
+    final List<Booking> currentPeriodBookings = metrics['currentBookings'];
+    final List<Booking> prevPeriodBookings = metrics['prevBookings'];
+
+    final groups = _buildChartGroups(currentPeriodBookings, prevPeriodBookings, currentRange, prevRange, _compareEnabled);
+
+    double maxY = 1000.0;
+    for (final group in groups) {
+      for (final rod in group.barRods) {
+        if (rod.toY > maxY) {
+          maxY = rod.toY;
+        }
+      }
+    }
+    maxY = (maxY * 1.15).roundToDouble();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Sales Dashboard',
+            style: GoogleFonts.inter(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          16.h,
+          buildDateSelector(),
+          24.h,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final double spacing = 16.0;
+              final int columns = isDesktop ? 3 : 1;
+              final double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  _buildKpiCard(
+                    title: 'Sales',
+                    value: formatInrCurrency(currentSales),
+                    growth: salesGrowth,
+                    prevValue: formatInrCurrency(prevSales),
+                    compareEnabled: _compareEnabled,
+                    width: itemWidth,
+                  ),
+                  _buildKpiCard(
+                    title: 'Orders',
+                    value: currentOrders.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},'),
+                    growth: ordersGrowth,
+                    prevValue: prevOrders.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},'),
+                    compareEnabled: _compareEnabled,
+                    width: itemWidth,
+                  ),
+                  _buildKpiCard(
+                    title: 'Avg. basket size',
+                    value: formatInrCurrency(currentAvgBasket, decimal: true),
+                    growth: avgBasketGrowth,
+                    prevValue: formatInrCurrency(prevAvgBasket, decimal: true),
+                    compareEnabled: _compareEnabled,
+                    width: itemWidth,
+                  ),
+                ],
+              );
+            },
+          ),
+          32.h,
+          Card(
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFFE5E7EB)),
+            ),
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Sales by Day',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          8.w,
+                          const Icon(Icons.info_outline, size: 14, color: Color(0xFF9CA3AF)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () {},
+                            icon: const Icon(Icons.show_chart, size: 14, color: Color(0xFF374151)),
+                            label: Text(
+                              'End of day report',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF374151),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                          ),
+                          8.w,
+                          IconButton(
+                            onPressed: () {},
+                            icon: const Icon(Icons.download_outlined, size: 18, color: Color(0xFF374151)),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                                side: const BorderSide(color: Color(0xFFE5E7EB)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  16.h,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sales ($currentOrders)',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF4B5563),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      6.h,
+                      Row(
+                        children: [
+                          Text(
+                            formatInrCurrency(currentSales),
+                            style: GoogleFonts.inter(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                          if (_compareEnabled) ...[
+                            8.w,
+                            Text(
+                              '${salesGrowth >= 0 ? "↑" : "↓"} ${salesGrowth.abs().toStringAsFixed(0)}%',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: salesGrowth >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (_compareEnabled) ...[
+                        4.h,
+                        Text(
+                          '${formatInrCurrency(prevSales)} ($prevOrders) in previous period',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  32.h,
+                  if (groups.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 48),
+                        child: Text(
+                          'No sales data in this period',
+                          style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+                        ),
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      height: 280,
+                      child: BarChart(
+                        BarChartData(
+                          alignment: BarChartAlignment.spaceAround,
+                          maxY: maxY,
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            horizontalInterval: maxY > 10000 ? (maxY / 4).roundToDouble() : 2500,
+                            getDrawingHorizontalLine: (value) => FlLine(
+                              color: Colors.grey.withValues(alpha: 0.1),
+                              strokeWidth: 1,
+                            ),
+                          ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 30,
+                                getTitlesWidget: (value, meta) {
+                                  final label = _getXAxisLabel(value.toInt(), currentRange);
+                                  return SideTitleWidget(
+                                    meta: meta,
+                                    space: 8,
+                                    child: Text(
+                                      label,
+                                      style: GoogleFonts.inter(
+                                        color: const Color(0xFF7B8694),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 45,
+                                getTitlesWidget: (value, meta) {
+                                  if (value == 0) return const SizedBox.shrink();
+                                  return SideTitleWidget(
+                                    meta: meta,
+                                    child: Text(
+                                      value >= 1000 ? '${(value / 1000).toStringAsFixed(0)}k' : value.toStringAsFixed(0),
+                                      style: GoogleFonts.inter(
+                                        color: const Color(0xFF7B8694),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          barTouchData: BarTouchData(
+                            touchTooltipData: BarTouchTooltipData(
+                              getTooltipColor: (group) => const Color(0xFF0F172A),
+                              getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                return BarTooltipItem(
+                                  formatInrCurrency(rod.toY),
+                                  GoogleFonts.inter(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                );
+                              },
+                            ),
+                          ),
+                          barGroups: groups,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationsTab(
+    BuildContext context,
+    String userName,
+    List<Booking> bookings,
+    List<Lead> leads,
+    List<ArtistCollection> collections,
+    List<Lead> filteredLeads,
+    int enquiriesCount,
+    int bookingsCount,
+    double conversionRate,
+    double growthRate,
+    bool isGrowthPositive,
+    double totalRevenue,
+    double revenueGrowth,
+    bool isRevenueGrowthPositive,
+    String Function(double) formatCurrency,
+    VoidCallback exportReport,
+    CrmTheme crmColors,
+    bool isDesktop,
+    bool isTablet,
+  ) {
+    return SingleChildScrollView(
+      padding: 24.p,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DashboardHeader(
+            userName: userName,
+            selectedMonth: _selectedMonth,
+            dropdownMonths: _dropdownMonths,
+            onMonthChanged: (newMonth) {
+              setState(() {
+                _selectedMonth = newMonth;
+              });
+            },
+            onDownloadReport: exportReport,
+          ),
+          32.h,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              int columns = isDesktop ? 5 : (isTablet ? 3 : 1);
+              double spacing = 16.0;
+              double itemWidth =
+                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
+
+              return Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: [
+                  _MetricCard(
+                    title: 'TOTAL ENQUIRIES',
+                    value: enquiriesCount.toString().replaceAllMapped(
+                        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                        (Match m) => '${m[1]},'),
+                    trend: '${filteredLeads.isNotEmpty ? "+100" : "0"}%',
+                    isPositive: true,
+                    sparklineData: const [10, 12, 11, 15, 14, 18, 17, 22],
+                    sparklineColor: const Color(0xFFCBA052),
+                    icon: Icons.people_outline,
+                    gradientColors: [
+                      const Color(0xFFFFFAF3).withValues(alpha: 0.9),
+                      const Color(0xFFFEEAD3).withValues(alpha: 0.7),
+                    ],
+                    width: itemWidth,
+                  ),
+                  _MetricCard(
+                    title: 'TOTAL BOOKINGS',
+                    value: bookingsCount.toString().replaceAllMapped(
+                        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                        (Match m) => '${m[1]},'),
+                    trend: '${bookingsCount > 0 ? "+100" : "0"}%',
+                    isPositive: true,
+                    sparklineData: const [8, 9, 7, 10, 12, 11, 14],
+                    sparklineColor: const Color(0xFFD46A92),
+                    icon: Icons.calendar_month_outlined,
+                    gradientColors: [
+                      const Color(0xFFFFF5F6).withValues(alpha: 0.9),
+                      const Color(0xFFFED7DD).withValues(alpha: 0.7),
+                    ],
+                    width: itemWidth,
+                  ),
+                  _MetricCard(
+                    title: 'CONVERSION RATE',
+                    value: '${conversionRate.toStringAsFixed(1)}%',
+                    trend: '${conversionRate > 0 ? "+100" : "0"}%',
+                    isPositive: true,
+                    sparklineData: const [28, 30, 29, 32, 31, 34],
+                    sparklineColor: const Color(0xFF7A6BB9),
+                    icon: Icons.adjust_outlined,
+                    gradientColors: [
+                      const Color(0xFFF9F7FF).withValues(alpha: 0.9),
+                      const Color(0xFFE8E0FF).withValues(alpha: 0.7),
+                    ],
+                    width: itemWidth,
+                  ),
+                  _MetricCard(
+                    title: 'REVENUE GENERATED',
+                    value: formatCurrency(totalRevenue),
+                    trend: '${isRevenueGrowthPositive ? "+" : ""}${revenueGrowth.toStringAsFixed(1)}%',
+                    isPositive: isRevenueGrowthPositive,
+                    sparklineData: const [5, 6, 7, 9, 8, 11, 12],
+                    sparklineColor: const Color(0xFFCBA052),
+                    icon: Icons.wallet_giftcard_outlined,
+                    gradientColors: [
+                      const Color(0xFFFFFBF0).withValues(alpha: 0.9),
+                      const Color(0xFFFFF0CA).withValues(alpha: 0.7),
+                    ],
+                    width: itemWidth,
+                  ),
+                  _MetricCard(
+                    title: 'MONTHLY GROWTH',
+                    value: '${growthRate.toStringAsFixed(1)}%',
+                    trend: '${isGrowthPositive ? "+" : ""}${growthRate.toStringAsFixed(1)}%',
+                    isPositive: isGrowthPositive,
+                    sparklineData: const [16, 15, 13, 14, 12, 13, 11],
+                    sparklineColor: const Color(0xFF6C96C8),
+                    icon: Icons.trending_up,
+                    gradientColors: [
+                      const Color(0xFFF0F5FF).withValues(alpha: 0.9),
+                      const Color(0xFFD0E0FF).withValues(alpha: 0.7),
+                    ],
+                    width: itemWidth,
+                  ),
+                ],
+              );
+            },
+          ),
+          32.h,
+          if (isDesktop)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _LeadGrowthCard(leads: leads),
+                ),
+                24.w,
+                Expanded(
+                  flex: 1,
+                  child: _LeadSourcesCard(
+                    leads: filteredLeads,
+                  ),
+                ),
+              ],
+            )
+          else
+            Column(
+              children: [
+                _LeadGrowthCard(leads: leads),
+                24.h,
+                _LeadSourcesCard(
+                  leads: filteredLeads,
+                ),
+              ],
+            ),
+          32.h,
+          _EnquiriesByLocationCard(
+            leads: filteredLeads,
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(authSessionProvider);
+    final role = session != null
+        ? AppRole.fromString(session.role)
         : AppRole.artist;
 
-    final canSeeCEOReport = role.canSeeCEOReport;
-    final tabController = useTabController(
-      initialLength: canSeeCEOReport ? 6 : 5,
-    );
     final isDesktop = ResponsiveBuilder.isDesktop(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
+    final crmColors = context.crmColors;
+
     final asyncBookings = ref.watch(bookingProvider);
     final asyncArtistBookings = role == AppRole.artist
         ? ref.watch(artistAssignedWorksProvider(1))
@@ -44,62 +1022,134 @@ class DashboardScreen extends HookConsumerWidget {
 
     final asyncPackages = ref.watch(packagesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
-    final asyncCollections = ref.watch(collectionsProvider);
-    final asyncExpenses = ref.watch(expensesProvider);
     final asyncLeads = ref.watch(leadsProvider);
+    final asyncCollections = ref.watch(collectionsProvider);
 
     final allBookings = role == AppRole.artist
         ? (asyncArtistBookings?.value?.items ?? const <Booking>[])
         : (asyncBookings.value ?? const <Booking>[]);
 
     if (role == AppRole.artist) {
+      if (asyncArtistBookings == null || asyncArtistBookings.isLoading) {
+        return const Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        );
+      }
+      if (asyncArtistBookings.hasError) {
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Text(
+                'Error loading bookings: ${asyncArtistBookings.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          ),
+        );
+      }
       return _ArtistDashboardView(
         isDesktop: isDesktop,
         isTablet: isTablet,
         allBookings: allBookings,
-        employeeId: auth.session?.employeeId,
-        employeeName: auth.session?.name,
+        employeeId: session?.employeeId,
+        employeeName: session?.name,
       );
     }
-    final now = DateTime.now();
 
-    String monthKey(DateTime value) => '${value.year}-${value.month}';
-    final currentMonthKey = monthKey(now);
-    final monthBookings = allBookings
-        .where((booking) => monthKey(booking.bookingDate) == currentMonthKey)
-        .toList();
+    final authSession = session;
+    final userName = authSession?.name ?? 'Aanya';
 
-    final totalWorksInMonth = monthBookings
-        .where((booking) => booking.status.toLowerCase() != 'cancelled')
-        .length;
-    final completedWorksInMonth = monthBookings
-        .where((booking) => booking.status.toLowerCase() == 'completed')
-        .length;
-    final cancelledWorksInMonth = monthBookings
-        .where((booking) => booking.status.toLowerCase() == 'cancelled')
-        .length;
-    final totalForecastAmount = monthBookings
-        .where((booking) => booking.status.toLowerCase() != 'cancelled')
-        .where((booking) => booking.status.toLowerCase() != 'completed')
-        .fold<double>(
-          0,
-          (sum, booking) =>
-              sum +
-              (booking.totalPrice -
-                      booking.advanceAmount -
-                      booking.discountAmount)
-                  .clamp(0, double.infinity),
-        );
+    final bookings = allBookings;
+    final leads = asyncLeads.value ?? const <Lead>[];
+    final collections = asyncCollections.value ?? const <ArtistCollection>[];
 
-    String money(double amount) => 'INR ${amount.toStringAsFixed(0)}';
-    final monthLabel = '${_monthName(now.month)} ${now.year}';
+    // Filter leads and bookings dynamically for the selected month (used in Operations tab)
+    final filteredLeads = leads.where((l) =>
+      l.createdAt.year == _selectedMonth.year && l.createdAt.month == _selectedMonth.month
+    ).toList();
+
+    final filteredBookings = bookings.where((b) =>
+      b.bookingDate.year == _selectedMonth.year && b.bookingDate.month == _selectedMonth.month
+    ).toList();
+
+    final int enquiriesCount = filteredLeads.length;
+    
+    // Converted or booked leads represent bookings count
+    final int bookingsCount = filteredLeads.where((l) => 
+      l.bookedDate != null || 
+      l.status.toLowerCase() == 'converted'
+    ).length;
+    
+    final double conversionRate = enquiriesCount > 0 
+        ? (bookingsCount / enquiriesCount) * 100 
+        : 0.0;
+
+    // Calculate monthly growth dynamically comparing selected month with previous month
+    final prevMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+    final leadsThisMonth = filteredLeads.length;
+    final leadsLastMonth = leads.where((l) => 
+      l.createdAt.year == prevMonth.year && 
+      l.createdAt.month == prevMonth.month
+    ).length;
+
+    double growthRate = 0.0;
+    if (leadsLastMonth > 0) {
+      growthRate = ((leadsThisMonth - leadsLastMonth) / leadsLastMonth) * 100;
+    } else if (leadsThisMonth > 0) {
+      growthRate = 100.0; // infinite growth since last month was 0
+    }
+    final bool isGrowthPositive = growthRate >= 0;
+
+    // Revenue generated from completed bookings in the database for the selected month
+    double totalRevenue = filteredBookings
+        .where((b) => b.status.toLowerCase() == 'completed')
+        .fold<double>(0, (sum, b) => sum + b.totalPrice);
+    
+    if (totalRevenue == 0) {
+      // Fallback to active bookings total price
+      final activeBookingsTotal = filteredBookings
+          .where((b) => b.status.toLowerCase() != 'cancelled')
+          .fold<double>(0, (sum, b) => sum + b.totalPrice);
+      totalRevenue = activeBookingsTotal;
+    }
+
+    // Calculate monthly revenue growth comparing selected month with previous month
+    final prevMonthBookings = bookings.where((b) =>
+      b.bookingDate.year == prevMonth.year && b.bookingDate.month == prevMonth.month
+    ).toList();
+    double prevRevenue = prevMonthBookings
+        .where((b) => b.status.toLowerCase() == 'completed')
+        .fold<double>(0, (sum, b) => sum + b.totalPrice);
+    if (prevRevenue == 0) {
+      prevRevenue = prevMonthBookings
+          .where((b) => b.status.toLowerCase() != 'cancelled')
+          .fold<double>(0, (sum, b) => sum + b.totalPrice);
+    }
+    double revenueGrowth = 0.0;
+    if (prevRevenue > 0) {
+      revenueGrowth = ((totalRevenue - prevRevenue) / prevRevenue) * 100;
+    } else if (totalRevenue > 0) {
+      revenueGrowth = 100.0;
+    }
+    final bool isRevenueGrowthPositive = revenueGrowth >= 0;
+
+    String formatCurrency(double amount) {
+      if (amount >= 100000) {
+        final int value = amount.toInt();
+        return '₹${value.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d\d)+(\d)(?!\d))'), (m) => '${m[1]},')}';
+      }
+      return '₹${amount.toStringAsFixed(0)}';
+    }
 
     Future<void> exportReport() async {
-      final bookings = asyncBookings.value;
       final packages = asyncPackages.value;
       final employees = asyncEmployees.value;
 
-      if (bookings == null || packages == null || employees == null) {
+      if (asyncBookings.value == null || packages == null || employees == null) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -109,111 +1159,52 @@ class DashboardScreen extends HookConsumerWidget {
         return;
       }
 
-      final reportType = switch (tabController.index) {
-        0 => 'executive',
-        1 => 'sales',
-        2 => 'marketing',
-        3 => 'crm',
-        4 => 'finance',
-        5 => 'ceo_daily',
-        _ => 'executive',
-      };
-
       await downloadDashboardReport(
-        month: now,
+        month: _selectedMonth,
         bookings: bookings,
         packages: packages,
         employees: employees,
-        reportType: reportType,
-        leads: asyncLeads.value ?? [],
-        collections: asyncCollections.value ?? [],
+        leads: leads,
+        collections: collections,
+        reportType: 'executive',
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Scaffold(
+      body: Container(
+        color: crmColors.background,
+        child: Column(
           children: [
+            buildTabBar(),
             Expanded(
-              child: Text(
-                'Welcome back, Jessica. Here\'s what\'s happening today.',
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: context.crmColors.textSecondary,
-                ),
+              child: getTabContent(
+                userName,
+                bookings,
+                leads,
+                collections,
+                filteredLeads,
+                enquiriesCount,
+                bookingsCount,
+                conversionRate,
+                growthRate,
+                isGrowthPositive,
+                totalRevenue,
+                revenueGrowth,
+                isRevenueGrowthPositive,
+                formatCurrency,
+                exportReport,
+                crmColors,
+                isDesktop,
+                isTablet,
+                asyncEmployees.value ?? const <Employee>[],
               ),
             ),
-            if (!ResponsiveBuilder.isMobile(context))
-              OutlinedButton.icon(
-                onPressed: exportReport,
-                icon: const Icon(Icons.download, size: 18),
-                label: const Text('Export Report'),
-              ),
           ],
         ),
-        16.h,
-        TabBar(
-          controller: tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          labelColor: context.crmColors.primary,
-          unselectedLabelColor: context.crmColors.textSecondary,
-          indicatorColor: context.crmColors.primary,
-          indicatorWeight: 3,
-          indicatorSize: TabBarIndicatorSize.label,
-          dividerColor: Colors.transparent,
-          overlayColor: WidgetStateProperty.all(Colors.transparent),
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
-          tabs: [
-            const Tab(text: 'Executive'),
-            const Tab(text: 'Sales'),
-            const Tab(text: 'Marketing'),
-            const Tab(text: 'CRM'),
-            const Tab(text: 'Finance'),
-            if (canSeeCEOReport) const Tab(text: 'CEO Report'),
-          ],
-        ),
-        8.h,
-        const Divider(height: 1),
-        Expanded(
-          child: TabBarView(
-            controller: tabController,
-            children: [
-              _ExecutiveView(
-                isDesktop: isDesktop,
-                isTablet: isTablet,
-                monthBookings: monthBookings,
-                monthLabel: monthLabel,
-                totalWorksInMonth: totalWorksInMonth,
-                totalForecastAmount: totalForecastAmount,
-                cancelledWorksInMonth: cancelledWorksInMonth,
-                completedWorksInMonth: completedWorksInMonth,
-                money: money,
-                onExport: exportReport,
-              ),
-              _SalesView(isDesktop: isDesktop),
-              _MarketingView(),
-              _CRMView(),
-              _FinanceView(
-                collections: asyncCollections.value ?? [],
-                expenses: asyncExpenses.value ?? [],
-              ),
-              if (canSeeCEOReport)
-                _CEOReportView(
-                  bookings: allBookings,
-                  collections: asyncCollections.value ?? [],
-                  leads: asyncLeads.value ?? [],
-                ),
-            ],
-          ),
-        ),
-      ],
+      ),
     );
   }
+
 }
 
 String _monthName(int month) {
@@ -234,1279 +1225,294 @@ String _monthName(int month) {
   return months[month - 1];
 }
 
-class _StatCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final String trend;
-  final double width;
+// HEADER WIDGET
+class _DashboardHeader extends StatelessWidget {
+  final String userName;
+  final DateTime selectedMonth;
+  final List<DateTime> dropdownMonths;
+  final ValueChanged<DateTime> onMonthChanged;
+  final VoidCallback onDownloadReport;
 
-  const _StatCard({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.trend,
-    required this.width,
+  const _DashboardHeader({
+    required this.userName,
+    required this.selectedMonth,
+    required this.dropdownMonths,
+    required this.onMonthChanged,
+    required this.onDownloadReport,
   });
 
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: 20.p,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        color: crmColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: 8.p,
-                    decoration: BoxDecoration(
-                      color: crmColors.secondary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, size: 20, color: crmColors.textPrimary),
-                  ),
-                ],
-              ),
-              16.h,
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: crmColors.textPrimary,
-                ),
-              ),
-              8.h,
-              Row(
-                children: [
-                  Icon(Icons.trending_up, size: 16, color: crmColors.success),
-                  4.w,
-                  Expanded(
-                    child: Text(
-                      trend,
-                      style: TextStyle(
-                        color: crmColors.textSecondary,
-                        fontSize: 12,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+    final isMobile = ResponsiveBuilder.isMobile(context);
+
+    final dropdownWidget = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crmColors.border.withValues(alpha: 0.08)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<DateTime>(
+          value: selectedMonth,
+          icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: Color(0xFF7B8694)),
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF0B1B3B),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RevenueChartCard extends StatelessWidget {
-  const _RevenueChartCard({
-    required this.monthBookings,
-    required this.monthLabel,
-    required this.onExport,
-  });
-
-  final List<Booking> monthBookings;
-  final String monthLabel;
-  final Future<void> Function() onExport;
-
-  @override
-  Widget build(BuildContext context) {
-    final chartData = _buildRevenueSeries(monthBookings);
-    final peakRevenue = chartData.fold<double>(
-      0,
-      (max, item) => item.revenue > max ? item.revenue : max,
-    );
-
-    return Card(
-      child: Padding(
-        padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Revenue Overview',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: onExport,
-                  child: const Text('View Report'),
-                ),
-              ],
-            ),
-            16.h,
-            Container(
-              height: 300,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: context.crmColors.background,
-                border: Border.all(color: context.crmColors.border),
-                borderRadius: BorderRadius.circular(8),
+          items: dropdownMonths.map((date) {
+            final label = '${_monthName(date.month)} ${date.year}';
+            return DropdownMenuItem<DateTime>(
+              value: date,
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 14, color: Color(0xFFC59B27)),
+                  8.w,
+                  Text(label),
+                ],
               ),
-              child: chartData.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No revenue data for $monthLabel yet.',
-                        style: TextStyle(
-                          color: context.crmColors.textSecondary,
-                        ),
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Daily revenue and booking count for $monthLabel',
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(
-                                  color: context.crmColors.textSecondary,
-                                ),
-                          ),
-                          20.h,
-                          Expanded(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                for (final point in chartData)
-                                  Expanded(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                      ),
-                                      child: _RevenueBar(
-                                        point: point,
-                                        maxRevenue: peakRevenue <= 0
-                                            ? 1
-                                            : peakRevenue,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ],
+            );
+          }).toList(),
+          onChanged: (newVal) {
+            if (newVal != null) {
+              onMonthChanged(newVal);
+            }
+          },
         ),
       ),
     );
-  }
-}
 
-class _RevenueBar extends StatelessWidget {
-  const _RevenueBar({required this.point, required this.maxRevenue});
-
-  final _RevenuePoint point;
-  final double maxRevenue;
-
-  @override
-  Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
-    final ratio = (point.revenue / maxRevenue).clamp(0.0, 1.0);
-    final barHeight = 26 + (ratio * 132);
+    final downloadButton = ElevatedButton.icon(
+      onPressed: onDownloadReport,
+      icon: const Icon(Icons.download, size: 16),
+      label: const Text('Download Report'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0B1B3B),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        elevation: 0,
+      ),
+    );
 
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'INR ${point.revenue.toStringAsFixed(0)}',
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(color: crmColors.textSecondary),
-          textAlign: TextAlign.center,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Left side greetings
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'STAKEHOLDER ANALYTICS · LIVE',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: crmColors.textSecondary,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  6.h,
+                  RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: isMobile ? 22 : 32,
+                        fontWeight: FontWeight.w400,
+                        color: const Color(0xFF0B1B3B),
+                      ),
+                      children: [
+                        TextSpan(text: 'Good morning, $userName — '),
+                        TextSpan(
+                          text: 'this month, quietly',
+                          style: GoogleFonts.cormorantGaramond(
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFFC59B27),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Right side dropdown on Desktop
+            if (!isMobile)
+              Row(
+                children: [
+                  downloadButton,
+                  16.w,
+                  dropdownWidget,
+                ],
+              ),
+          ],
         ),
-        8.h,
-        Tooltip(
-          message:
-              '${point.dayLabel}\nRevenue: INR ${point.revenue.toStringAsFixed(0)}\nBookings: ${point.bookingsCount}',
-          child: Container(
-            height: barHeight,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [crmColors.sidebar, crmColors.primary],
+
+        // Right side stacked elements on Mobile
+        if (isMobile) ...[
+          16.h,
+          Row(
+            children: [
+              Expanded(
+                child: dropdownWidget,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: crmColors.sidebar.withValues(alpha: 0.16),
-                  blurRadius: 10,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            alignment: Alignment.topCenter,
-            padding: const EdgeInsets.only(top: 7),
-            child: Text(
-              '${point.bookingsCount}',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+              12.w,
+              downloadButton,
+            ],
           ),
-        ),
-        8.h,
-        Text(
-          point.dayLabel,
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: crmColors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
+        ],
       ],
     );
   }
 }
 
-class _UpcomingBookingsCard extends StatelessWidget {
-  const _UpcomingBookingsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
-    return Card(
-      child: Padding(
-        padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Upcoming Bookings',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.go('/calendar'),
-                  child: const Text('View Calendar'),
-                ),
-              ],
-            ),
-            16.h,
-            Consumer(
-              builder: (context, ref, child) {
-                final asyncBookings = ref.watch(bookingProvider);
-
-                return asyncBookings.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, stack) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      'Failed to load appointments.',
-                      style: TextStyle(color: crmColors.textSecondary),
-                    ),
-                  ),
-                  data: (bookings) {
-                    final now = DateTime.now();
-                    final upcomingBookings = [...bookings]
-                      ..retainWhere(
-                        (booking) => !booking.serviceStart.isBefore(now),
-                      )
-                      ..sort(
-                        (a, b) => a.serviceStart.compareTo(b.serviceStart),
-                      );
-
-                    if (upcomingBookings.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.event_available,
-                              size: 40,
-                              color: crmColors.border,
-                            ),
-                            12.h,
-                            Text(
-                              'No upcoming appointments.',
-                              style: TextStyle(color: crmColors.textSecondary),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final visibleBookings = upcomingBookings.take(5).toList();
-
-                    return ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: visibleBookings.length,
-                      separatorBuilder: (context, index) => const Divider(),
-                      itemBuilder: (context, index) {
-                        final booking = visibleBookings[index];
-                        return _UpcomingBookingTile(booking: booking);
-                      },
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PendingBookingRequestsCard extends ConsumerWidget {
-  const _PendingBookingRequestsCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crmColors = context.crmColors;
-    final asyncBookings = ref.watch(bookingProvider);
-
-    return Card(
-      child: Padding(
-        padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Pending Booking Requests',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.go('/booking/requests'),
-                  child: const Text('Open Requests'),
-                ),
-              ],
-            ),
-            16.h,
-            asyncBookings.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, stack) => Text(
-                'Failed to load booking requests.',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-              data: (bookings) {
-                final pendingBookings =
-                    bookings
-                        .where(
-                          (booking) =>
-                              booking.status.toLowerCase() == 'pending',
-                        )
-                        .toList()
-                      ..sort(
-                        (a, b) => a.serviceStart.compareTo(b.serviceStart),
-                      );
-
-                if (pendingBookings.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: crmColors.background,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: crmColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.mark_email_read_outlined,
-                          color: crmColors.textSecondary,
-                          size: 34,
-                        ),
-                        10.h,
-                        Text(
-                          'No pending booking requests right now.',
-                          style: TextStyle(color: crmColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                final visibleBookings = pendingBookings.take(4).toList();
-
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: visibleBookings.length,
-                  separatorBuilder: (context, index) => const Divider(),
-                  itemBuilder: (context, index) {
-                    final booking = visibleBookings[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: CircleAvatar(
-                        backgroundColor: crmColors.secondary,
-                        child: Text(
-                          booking.initials,
-                          style: TextStyle(
-                            color: crmColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        booking.customerName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        '${booking.service} • ${_UpcomingBookingTile._formatDate(booking.serviceStart)} • ${_UpcomingBookingTile._formatTime(booking.serviceStart)}',
-                      ),
-                      trailing: FilledButton.tonal(
-                        onPressed: () => context.go('/booking/requests'),
-                        child: const Text('Review'),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _UpcomingBookingTile extends StatelessWidget {
-  final Booking booking;
-
-  const _UpcomingBookingTile({required this.booking});
-
-  @override
-  Widget build(BuildContext context) {
-    final crmColors = context.crmColors;
-
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      onTap: () => context.push('/booking/manage/${booking.id}'),
-      leading: CircleAvatar(
-        backgroundColor: crmColors.secondary,
-        child: Text(
-          booking.initials,
-          style: TextStyle(
-            color: crmColors.primary,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      title: Text(
-        booking.customerName,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(booking.service),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            _formatTime(booking.serviceStart),
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          4.h,
-          Container(
-            padding: 4.px,
-            decoration: BoxDecoration(
-              color: crmColors.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              _formatDate(booking.serviceStart),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.primary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatTime(DateTime dateTime) {
-    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
-    return '$hour:$minute $period';
-  }
-
-  static String _formatDate(DateTime dateTime) {
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    return '${dateTime.day} ${months[dateTime.month - 1]}';
-  }
-}
-
-class _PopularServicesCard extends ConsumerWidget {
-  const _PopularServicesCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crmColors = context.crmColors;
-    final asyncBookings = ref.watch(bookingProvider);
-    final asyncPackages = ref.watch(packagesProvider);
-
-    return Card(
-      child: Padding(
-        padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Popular Services',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.go('/services'),
-                  child: const Text('View All'),
-                ),
-              ],
-            ),
-            16.h,
-            asyncBookings.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, stack) => Text(
-                'Failed to load service metrics.',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-              data: (bookings) {
-                return asyncPackages.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, stack) => Text(
-                    'Failed to load services.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                  data: (packages) {
-                    final now = DateTime.now();
-                    final monthBookings = bookings.where((booking) {
-                      return booking.serviceStart.year == now.year &&
-                          booking.serviceStart.month == now.month &&
-                          booking.status.toLowerCase() != 'cancelled';
-                    }).toList();
-
-                    final packageById = {
-                      for (final package in packages) package.id: package,
-                    };
-                    final metrics = <_ServiceMetric>[];
-
-                    final grouped = <String, List<Booking>>{};
-                    for (final booking in monthBookings) {
-                      final key = booking.packageId.isNotEmpty
-                          ? booking.packageId
-                          : booking.service.trim().toLowerCase();
-                      grouped.putIfAbsent(key, () => []).add(booking);
-                    }
-
-                    grouped.forEach((key, serviceBookings) {
-                      final sample = serviceBookings.first;
-                      final matchedPackage = packageById[sample.packageId];
-                      final price = matchedPackage?.price ?? sample.totalPrice;
-                      metrics.add(
-                        _ServiceMetric(
-                          name: matchedPackage?.name ?? sample.service,
-                          bookingsCount: serviceBookings.length,
-                          amount: price,
-                          icon: _serviceIcon(
-                            matchedPackage?.name ?? sample.service,
-                          ),
-                        ),
-                      );
-                    });
-
-                    metrics.sort((a, b) {
-                      final bookingsCompare = b.bookingsCount.compareTo(
-                        a.bookingsCount,
-                      );
-                      if (bookingsCompare != 0) return bookingsCompare;
-                      return b.amount.compareTo(a.amount);
-                    });
-
-                    final visibleMetrics = metrics.take(3).toList();
-
-                    if (visibleMetrics.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Text(
-                          'No service bookings yet for this month.',
-                          style: TextStyle(color: crmColors.textSecondary),
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        for (var i = 0; i < visibleMetrics.length; i++) ...[
-                          _buildServiceItem(context, visibleMetrics[i]),
-                          if (i != visibleMetrics.length - 1) const Divider(),
-                        ],
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildServiceItem(BuildContext context, _ServiceMetric metric) {
-    final crmColors = context.crmColors;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Container(
-        padding: 8.p,
-        decoration: BoxDecoration(
-          color: crmColors.secondary,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Icon(metric.icon, color: crmColors.textPrimary),
-      ),
-      title: Text(
-        metric.name,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text('${metric.bookingsCount} bookings this month'),
-      trailing: Text(
-        'INR ${metric.amount.toStringAsFixed(0)}',
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-    );
-  }
-}
-
-class _TopStaffCard extends ConsumerWidget {
-  const _TopStaffCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crmColors = context.crmColors;
-    final asyncBookings = ref.watch(bookingProvider);
-    final asyncEmployees = ref.watch(employeesProvider);
-
-    return Card(
-      child: Padding(
-        padding: 20.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Top Performing Staff',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => context.go('/staff'),
-                  child: const Text('View Team'),
-                ),
-              ],
-            ),
-            16.h,
-            asyncBookings.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, stack) => Text(
-                'Failed to load staff performance.',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-              data: (bookings) {
-                return asyncEmployees.when(
-                  loading: () => const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                  error: (error, stack) => Text(
-                    'Failed to load staff members.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                  data: (employees) {
-                    final now = DateTime.now();
-                    final monthBookings = bookings.where((booking) {
-                      return booking.serviceStart.year == now.year &&
-                          booking.serviceStart.month == now.month &&
-                          booking.status.toLowerCase() != 'cancelled';
-                    }).toList();
-
-                    final employeeById = {
-                      for (final employee in employees) employee.id: employee,
-                    };
-                    final stats = <String, _StaffMetric>{};
-
-                    for (final booking in monthBookings) {
-                      for (final assignment in booking.assignedStaff) {
-                        if (assignment.employeeId.isEmpty) continue;
-                        final employee = employeeById[assignment.employeeId];
-                        final existing = stats[assignment.employeeId];
-                        final role =
-                            employee?.specialization.trim().isNotEmpty == true
-                            ? employee!.specialization.trim()
-                            : assignment.works.isNotEmpty
-                            ? assignment.works.join(', ')
-                            : assignment.role;
-
-                        stats[assignment.employeeId] = _StaffMetric(
-                          employeeId: assignment.employeeId,
-                          name: employee?.name ?? assignment.artistName,
-                          role: role.isEmpty ? 'Assigned Staff' : role,
-                          appointmentsCount:
-                              (existing?.appointmentsCount ?? 0) + 1,
-                        );
-                      }
-                    }
-
-                    final visibleStaff = stats.values.toList()
-                      ..sort((a, b) {
-                        final countCompare = b.appointmentsCount.compareTo(
-                          a.appointmentsCount,
-                        );
-                        if (countCompare != 0) return countCompare;
-                        return a.name.compareTo(b.name);
-                      });
-
-                    if (visibleStaff.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Text(
-                          'No staff assignments yet for this month.',
-                          style: TextStyle(color: crmColors.textSecondary),
-                        ),
-                      );
-                    }
-
-                    final topStaff = visibleStaff.take(3).toList();
-
-                    return Column(
-                      children: [
-                        for (var i = 0; i < topStaff.length; i++) ...[
-                          _buildStaffItem(context, topStaff[i]),
-                          if (i != topStaff.length - 1) const Divider(),
-                        ],
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStaffItem(BuildContext context, _StaffMetric metric) {
-    final crmColors = context.crmColors;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: crmColors.primary,
-        foregroundColor: Colors.white,
-        child: Text(
-          _initialsForName(metric.name),
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      title: Text(
-        metric.name,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Text(metric.role),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            '${metric.appointmentsCount}',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          4.h,
-          Text(
-            metric.appointmentsCount == 1
-                ? '1 appointment'
-                : '${metric.appointmentsCount} appointments',
-            style: TextStyle(fontSize: 12, color: crmColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ServiceMetric {
-  final String name;
-  final int bookingsCount;
-  final double amount;
+// GLASSMORPHIC METRIC CARD
+class _MetricCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final String trend;
+  final bool isPositive;
+  final List<double> sparklineData;
+  final Color sparklineColor;
   final IconData icon;
+  final List<Color> gradientColors;
+  final double width;
 
-  const _ServiceMetric({
-    required this.name,
-    required this.bookingsCount,
-    required this.amount,
+  const _MetricCard({
+    required this.title,
+    required this.value,
+    required this.trend,
+    required this.isPositive,
+    required this.sparklineData,
+    required this.sparklineColor,
     required this.icon,
-  });
-}
-
-class _StaffMetric {
-  final String employeeId;
-  final String name;
-  final String role;
-  final int appointmentsCount;
-
-  const _StaffMetric({
-    required this.employeeId,
-    required this.name,
-    required this.role,
-    required this.appointmentsCount,
-  });
-}
-
-IconData _serviceIcon(String serviceName) {
-  final normalized = serviceName.toLowerCase();
-  if (normalized.contains('hair')) return Icons.cut;
-  if (normalized.contains('spa') || normalized.contains('facial')) {
-    return Icons.spa;
-  }
-  if (normalized.contains('bridal') || normalized.contains('makeover')) {
-    return Icons.auto_awesome;
-  }
-  return Icons.design_services_outlined;
-}
-
-String _initialsForName(String name) {
-  final parts = name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return '?';
-  if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
-  return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-}
-
-List<_RevenuePoint> _buildRevenueSeries(List<Booking> monthBookings) {
-  final grouped = <String, _RevenuePoint>{};
-
-  for (final booking in monthBookings) {
-    if (booking.status.toLowerCase() == 'cancelled') continue;
-    final dayLabel = _UpcomingBookingTile._formatDate(booking.serviceStart);
-    final previous = grouped[dayLabel];
-    grouped[dayLabel] = _RevenuePoint(
-      dayLabel: dayLabel,
-      revenue: (previous?.revenue ?? 0) + booking.totalPrice,
-      bookingsCount: (previous?.bookingsCount ?? 0) + 1,
-      sortDate: DateTime(
-        booking.serviceStart.year,
-        booking.serviceStart.month,
-        booking.serviceStart.day,
-      ),
-    );
-  }
-
-  final series = grouped.values.toList()
-    ..sort((a, b) => a.sortDate.compareTo(b.sortDate));
-
-  if (series.length <= 7) return series;
-  return series.sublist(series.length - 7);
-}
-
-class _RevenuePoint {
-  final String dayLabel;
-  final double revenue;
-  final int bookingsCount;
-  final DateTime sortDate;
-
-  const _RevenuePoint({
-    required this.dayLabel,
-    required this.revenue,
-    required this.bookingsCount,
-    required this.sortDate,
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NEW TAB VIEWS
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _ExecutiveView extends StatelessWidget {
-  final bool isDesktop;
-  final bool isTablet;
-  final List<Booking> monthBookings;
-  final String monthLabel;
-  final dynamic totalWorksInMonth;
-  final dynamic totalForecastAmount;
-  final dynamic cancelledWorksInMonth;
-  final dynamic completedWorksInMonth;
-  final String Function(double) money;
-  final Future<void> Function() onExport;
-
-  const _ExecutiveView({
-    required this.isDesktop,
-    required this.isTablet,
-    required this.monthBookings,
-    required this.monthLabel,
-    required this.totalWorksInMonth,
-    required this.totalForecastAmount,
-    required this.cancelledWorksInMonth,
-    required this.completedWorksInMonth,
-    required this.money,
-    required this.onExport,
+    required this.gradientColors,
+    required this.width,
   });
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 24),
+    return Container(
+      width: width,
+      height: 145,
+      padding: 16.p,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: gradientColors,
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              int columns = isDesktop ? 4 : (isTablet ? 2 : 1);
-              double spacing = 16.0;
-              double itemWidth =
-                  (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  _StatCard(
-                    title: 'Total Works This Month',
-                    value: totalWorksInMonth.toString(),
-                    icon: Icons.event,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Forecast Amount This Month',
-                    value: money(totalForecastAmount),
-                    icon: Icons.account_balance_wallet_outlined,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Cancelled Works',
-                    value: cancelledWorksInMonth.toString(),
-                    icon: Icons.event_busy,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                  _StatCard(
-                    title: 'Completed Works',
-                    value: completedWorksInMonth.toString(),
-                    icon: Icons.task_alt,
-                    trend: monthLabel,
-                    width: itemWidth,
-                  ),
-                ],
-              );
-            },
-          ),
-          24.h,
-          if (isDesktop)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      _RevenueChartCard(
-                        monthBookings: monthBookings,
-                        monthLabel: monthLabel,
-                        onExport: onExport,
-                      ),
-                      24.h,
-                      const _PendingBookingRequestsCard(),
-                      24.h,
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: const _PopularServicesCard()),
-                          24.w,
-                          Expanded(child: const _TopStaffCard()),
-                        ],
-                      ),
-                    ],
-                  ),
+          // Icon and Trend Pill
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: 6.p,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                24.w,
-                Expanded(flex: 1, child: const _UpcomingBookingsCard()),
-              ],
-            )
-          else
-            Column(
-              children: [
-                _RevenueChartCard(
-                  monthBookings: monthBookings,
-                  monthLabel: monthLabel,
-                  onExport: onExport,
+                child: Icon(icon, size: 16, color: const Color(0xFF0B1B3B)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPositive
+                      ? const Color(0xFFE2F3EB)
+                      : const Color(0xFFFDE8E9),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                24.h,
-                const _PendingBookingRequestsCard(),
-                24.h,
-                const _UpcomingBookingsCard(),
-                24.h,
-                if (isTablet)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: const _PopularServicesCard()),
-                      16.w,
-                      Expanded(child: const _TopStaffCard()),
-                    ],
-                  )
-                else ...[
-                  const _PopularServicesCard(),
-                  24.h,
-                  const _TopStaffCard(),
-                ],
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SalesView extends StatelessWidget {
-  final bool isDesktop;
-
-  const _SalesView({required this.isDesktop});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        children: [
-          const _SalesForecastsCard(),
-          24.h,
-          const _QuickLeadEntryCard(),
-          24.h,
-          const _SalesPipelineCard(),
-          24.h,
-          const _SalesConversionCard(),
-          24.h,
-          const _TopPerformersCard(),
-        ],
-      ),
-    );
-  }
-}
-
-class _SalesForecastsCard extends ConsumerWidget {
-  const _SalesForecastsCard();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
-    final asyncBookings = ref.watch(bookingProvider);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Sales & Collection Forecast',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            8.h,
-            Text(
-              'Current month forecast for sales and remaining balance collections.',
-              style: TextStyle(color: crm.textSecondary, fontSize: 13),
-            ),
-            24.h,
-            asyncBookings.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, s) => Text('Error loading data: $e'),
-              data: (bookings) {
-                final now = DateTime.now();
-                String monthKey(DateTime value) =>
-                    '${value.year}-${value.month}';
-                final currentMonthKey = monthKey(now);
-
-                final monthBookings = bookings
-                    .where(
-                      (b) =>
-                          monthKey(b.bookingDate) == currentMonthKey &&
-                          b.status.toLowerCase() != 'cancelled',
-                    )
-                    .toList();
-
-                final forecastSales = monthBookings.fold<double>(
-                  0,
-                  (sum, b) => sum + b.totalPrice,
-                );
-
-                final forecastCollection = monthBookings
-                    .where((b) => b.status.toLowerCase() != 'completed')
-                    .fold<double>(
-                      0,
-                      (sum, b) =>
-                          sum +
-                          (b.totalPrice - b.advanceAmount - b.discountAmount)
-                              .clamp(0, double.infinity),
-                    );
-
-                String money(double amount) =>
-                    'INR ${amount.toStringAsFixed(0)}';
-
-                return Row(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _ForecastStat(
-                        title: 'Forecast Sales',
-                        value: money(forecastSales),
-                        icon: Icons.trending_up,
-                        color: crm.primary,
-                      ),
+                    Icon(
+                      isPositive ? Icons.trending_up : Icons.trending_down,
+                      size: 11,
+                      color: isPositive ? const Color(0xFF0B5B37) : const Color(0xFF7B1B2A),
                     ),
-                    16.w,
-                    Expanded(
-                      child: _ForecastStat(
-                        title: 'Forecast Collection',
-                        value: money(forecastCollection),
-                        icon: Icons.account_balance_wallet,
-                        color: crm.success,
+                    4.w,
+                    Text(
+                      trend,
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isPositive ? const Color(0xFF0B5B37) : const Color(0xFF7B1B2A),
                       ),
                     ),
                   ],
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ForecastStat extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _ForecastStat({
-    required this.title,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: color, size: 20),
-              8.w,
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: crm.textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
                 ),
               ),
             ],
           ),
-          12.h,
+          16.h,
+          // Title
           Text(
-            value,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: crm.textPrimary,
+            title,
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF7B8694),
+              letterSpacing: 0.8,
+            ),
+          ),
+          4.h,
+          // Value and Sparkline Row
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      value,
+                      style: GoogleFonts.inter(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0B1B3B),
+                      ),
+                    ),
+                  ),
+                ),
+                8.w,
+                SizedBox(
+                  width: 60,
+                  height: 30,
+                  child: CustomPaint(
+                    painter: _SparklinePainter(
+                      data: sparklineData,
+                      color: sparklineColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1515,417 +1521,130 @@ class _ForecastStat extends StatelessWidget {
   }
 }
 
-class _QuickLeadEntryCard extends HookConsumerWidget {
-  const _QuickLeadEntryCard();
+// SPARKLINE PAINTER
+class _SparklinePainter extends CustomPainter {
+  final List<double> data;
+  final Color color;
+
+  _SparklinePainter({required this.data, required this.color});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
-    final nameCtrl = useTextEditingController();
-    final phoneCtrl = useTextEditingController();
-    final locationCtrl = useTextEditingController();
-    final remarksCtrl = useTextEditingController();
-    final enquiryDate = useState(DateTime.now());
-    final bookedDate = useState<DateTime?>(null);
-    final status = useState('New');
-    final isSaving = useState(false);
+  void paint(Canvas canvas, Size size) {
+    if (data.length < 2) return;
 
-    Future<void> saveLead() async {
-      if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please fill name and phone')),
-        );
-        return;
-      }
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
 
-      isSaving.value = true;
-      try {
-        final dio = ref.read(dioProvider);
-        await dio.post(
-          '/leads',
-          data: {
-            'name': nameCtrl.text,
-            'phone': phoneCtrl.text,
-            'status': status.value,
-            'source': 'Dashboard',
-            'location': locationCtrl.text,
-            'remarks': remarksCtrl.text,
-            'enquiryDate': enquiryDate.value.toIso8601String(),
-            'bookedDate': bookedDate.value?.toIso8601String(),
-          },
-        );
+    final path = Path();
+    final double stepX = size.width / (data.length - 1);
+    final double minVal = data.reduce((a, b) => a < b ? a : b);
+    final double maxVal = data.reduce((a, b) => a > b ? a : b);
+    final double valRange = maxVal - minVal == 0 ? 1.0 : maxVal - minVal;
 
-        nameCtrl.clear();
-        phoneCtrl.clear();
-        locationCtrl.clear();
-        remarksCtrl.clear();
-        enquiryDate.value = DateTime.now();
-        bookedDate.value = null;
-        status.value = 'New';
-
-        ref.invalidate(leadsProvider);
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Lead added successfully!')),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('Failed to add lead: $e')));
-        }
-      } finally {
-        isSaving.value = false;
-      }
+    double getX(int index) => index * stepX;
+    double getY(double val) {
+      final ratio = (val - minVal) / valRange;
+      return size.height - (ratio * (size.height - 4)) - 2;
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Quick Lead Entry',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            8.h,
-            Text(
-              'Quickly record a new potential client inquiry.',
-              style: TextStyle(color: crm.textSecondary, fontSize: 13),
-            ),
-            20.h,
-            if (ResponsiveBuilder.isDesktop(context))
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: nameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Name *',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: TextFormField(
-                      controller: phoneCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Phone *',
-                        prefixIcon: Icon(Icons.phone_outlined),
-                      ),
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: TextFormField(
-                      controller: locationCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Location',
-                        prefixIcon: Icon(Icons.location_on_outlined),
-                      ),
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: enquiryDate.value,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2100),
-                        );
-                        if (picked != null) enquiryDate.value = picked;
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Enquired For',
-                          prefixIcon: Icon(Icons.calendar_today_outlined),
-                        ),
-                        child: Text(
-                          '${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}',
-                        ),
-                      ),
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: status.value,
-                      decoration: const InputDecoration(
-                        labelText: 'Status',
-                        prefixIcon: Icon(Icons.info_outline),
-                      ),
-                      items:
-                          [
-                                'New',
-                                'Contacted',
-                                'Qualified',
-                                'Follow-up',
-                                'Converted',
-                                'Lost',
-                              ]
-                              .map(
-                                (s) =>
-                                    DropdownMenuItem(value: s, child: Text(s)),
-                              )
-                              .toList(),
-                      onChanged: (v) => status.value = v!,
-                    ),
-                  ),
-                  24.w,
-                  SizedBox(
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: isSaving.value ? null : saveLead,
-                      icon: isSaving.value
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add),
-                      label: const Text('Add Lead'),
-                    ),
-                  ),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  TextFormField(
-                    controller: nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Name *',
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                  ),
-                  16.h,
-                  TextFormField(
-                    controller: phoneCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone *',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  16.h,
-                  TextFormField(
-                    controller: locationCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Location',
-                      prefixIcon: Icon(Icons.location_on_outlined),
-                    ),
-                  ),
-                  16.h,
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: enquiryDate.value,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) enquiryDate.value = picked;
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Enquired For',
-                        prefixIcon: Icon(Icons.calendar_today_outlined),
-                      ),
-                      child: Text(
-                        '${enquiryDate.value.day}/${enquiryDate.value.month}/${enquiryDate.value.year}',
-                      ),
-                    ),
-                  ),
-                  16.h,
-                  InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: bookedDate.value ?? DateTime.now(),
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) bookedDate.value = picked;
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Booked Date',
-                        prefixIcon: Icon(Icons.bookmark_added_outlined),
-                      ),
-                      child: Text(
-                        bookedDate.value != null
-                            ? '${bookedDate.value!.day}/${bookedDate.value!.month}/${bookedDate.value!.year}'
-                            : 'Not Booked',
-                      ),
-                    ),
-                  ),
-                  20.h,
-                  DropdownButtonFormField<String>(
-                    initialValue: status.value,
-                    decoration: const InputDecoration(
-                      labelText: 'Status',
-                      prefixIcon: Icon(Icons.info_outline),
-                    ),
-                    items:
-                        [
-                              'New',
-                              'Contacted',
-                              'Qualified',
-                              'Follow-up',
-                              'Converted',
-                              'Lost',
-                            ]
-                            .map(
-                              (s) => DropdownMenuItem(value: s, child: Text(s)),
-                            )
-                            .toList(),
-                    onChanged: (v) => status.value = v!,
-                  ),
-                  20.h,
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: isSaving.value ? null : saveLead,
-                      icon: isSaving.value
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.add),
-                      label: const Text('Add Lead'),
-                    ),
-                  ),
-                ],
-              ),
-            16.h,
-            TextFormField(
-              controller: remarksCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Remarks',
-                prefixIcon: Icon(Icons.notes),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+    path.moveTo(getX(0), getY(data[0]));
 
-class _MarketingView extends StatelessWidget {
+    for (int i = 0; i < data.length - 1; i++) {
+      final x1 = getX(i);
+      final y1 = getY(data[i]);
+      final x2 = getX(i + 1);
+      final y2 = getY(data[i + 1]);
+
+      final cx1 = x1 + (x2 - x1) / 2.0;
+      final cy1 = y1;
+      final cx2 = x1 + (x2 - x1) / 2.0;
+      final cy2 = y2;
+
+      path.cubicTo(cx1, cy1, cx2, cy2, x2, y2);
+    }
+
+    canvas.drawPath(path, paint);
+  }
+
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        children: [
-          const _MarketingCampaignsCard(),
-          24.h,
-          const _LeadSourceDistributionCard(),
-        ],
-      ),
-    );
-  }
+  bool shouldRepaint(covariant _SparklinePainter oldDelegate) =>
+      oldDelegate.data != data || oldDelegate.color != color;
 }
 
-class _CRMView extends StatelessWidget {
+// LEAD GROWTH BAR CHART CARD
+class _LeadGrowthCard extends StatefulWidget {
+  final List<Lead> leads;
+  const _LeadGrowthCard({required this.leads});
+
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(top: 24),
-      child: Column(
-        children: [
-          const _CustomerSatisfactionCard(),
-          24.h,
-          // const _RecentPatientActivityCard(), removed as it was replaced by CEO Report metrics
-        ],
-      ),
-    );
-  }
+  State<_LeadGrowthCard> createState() => _LeadGrowthCardState();
 }
 
-class _FinanceView extends StatelessWidget {
-  final List<ArtistCollection> collections;
-  final List<ArtistExpense> expenses;
-
-  const _FinanceView({required this.collections, required this.expenses});
+class _LeadGrowthCardState extends State<_LeadGrowthCard> {
+  String _activeTab = 'Monthly';
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          _FinanceChartCard(collections: collections, expenses: expenses),
-          24.h,
-          const _RevenueBreakdownCard(),
-          24.h,
-          const _ExpenseAnalysisCard(),
-        ],
-      ),
-    );
-  }
-}
-
-class _FinanceChartCard extends StatelessWidget {
-  final List<ArtistCollection> collections;
-  final List<ArtistExpense> expenses;
-
-  const _FinanceChartCard({required this.collections, required this.expenses});
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-
-    // Process data for the last 7 days
     final now = DateTime.now();
-    final last7Days = List.generate(
-      7,
-      (i) => now.subtract(Duration(days: 6 - i)),
-    );
+    final bool hasData = widget.leads.isNotEmpty;
+    
+    // Default YTD totals and monthly counts if no data
+    String ytdValue = '0';
+    String trendValue = '0.0%';
+    bool isTrendPositive = true;
+    double maxY = 10.0;
+    
+    List<double> barValues = List.filled(12, 0.0);
 
-    final dailyData = last7Days.map((date) {
-      final dayCollections = collections
-          .where(
-            (c) =>
-                c.date.year == date.year &&
-                c.date.month == date.month &&
-                c.date.day == date.day,
-          )
-          .fold(0.0, (sum, c) => sum + c.amount);
+    if (hasData) {
+      ytdValue = widget.leads.length.toString();
+      
+      // Calculate growth trend
+      final startOfThisMonth = DateTime(now.year, now.month, 1);
+      final startOfLastMonth = DateTime(now.year, now.month - 1, 1);
+      
+      final leadsThisMonth = widget.leads.where((l) => l.createdAt.isAfter(startOfThisMonth)).length;
+      final leadsLastMonth = widget.leads.where((l) => 
+        l.createdAt.isAfter(startOfLastMonth) && 
+        l.createdAt.isBefore(startOfThisMonth)
+      ).length;
 
-      final dayExpenses = expenses
-          .where(
-            (e) =>
-                e.date.year == date.year &&
-                e.date.month == date.month &&
-                e.date.day == date.day,
-          )
-          .fold(0.0, (sum, e) => sum + e.amount);
+      if (leadsLastMonth > 0) {
+        final pct = ((leadsThisMonth - leadsLastMonth) / leadsLastMonth) * 100;
+        trendValue = '${pct >= 0 ? "+" : ""}${pct.toStringAsFixed(1)}%';
+        isTrendPositive = pct >= 0;
+      } else {
+        trendValue = leadsThisMonth > 0 ? '+100.0%' : '0.0%';
+        isTrendPositive = true;
+      }
 
-      return (collections: dayCollections, expenses: dayExpenses, date: date);
-    }).toList();
-
-    double maxVal = 0;
-    for (var d in dailyData) {
-      if (d.collections > maxVal) maxVal = d.collections;
-      if (d.expenses > maxVal) maxVal = d.expenses;
+      // Group leads by month for the current year
+      final monthlyCounts = List<double>.filled(12, 0.0);
+      for (final lead in widget.leads) {
+        if (lead.createdAt.year == now.year) {
+          monthlyCounts[lead.createdAt.month - 1] += 1.0;
+        }
+      }
+      barValues = monthlyCounts;
+      
+      final peak = barValues.reduce((a, b) => a > b ? a : b);
+      maxY = peak > 0 ? peak : 10.0;
     }
-    if (maxVal == 0) maxVal = 1000;
 
     return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: 24.p,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Card Title Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1933,43 +1652,121 @@ class _FinanceChartCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Cash Flow Analysis',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      'Lead growth',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0B1B3B),
                       ),
                     ),
                     Text(
-                      'Last 7 days of collections vs expenses',
-                      style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                      '— twelve months, climbing',
+                      style: GoogleFonts.cormorantGaramond(
+                        fontStyle: FontStyle.italic,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFC25A7C),
+                      ),
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    _legendItem('Collections', crm.success),
-                    16.w,
-                    _legendItem('Expenses', crm.destructive),
-                  ],
+                // Toggle pill segment
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F6F8),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: ['Monthly', 'Weekly', 'Daily'].map((tab) {
+                      final isSelected = tab == _activeTab;
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _activeTab = tab;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.white : Colors.transparent,
+                            borderRadius: BorderRadius.circular(18),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            tab,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              color: isSelected ? const Color(0xFF0B1B3B) : const Color(0xFF7B8694),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ],
             ),
-            32.h,
+            24.h,
+
+            // Cumulative Total Area
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  ytdValue,
+                  style: GoogleFonts.inter(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF0B1B3B),
+                  ),
+                ),
+                8.w,
+                Text(
+                  trendValue,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: isTrendPositive ? const Color(0xFF0B5B37) : const Color(0xFF7B1B2A),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'YTD',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF7B8694),
+                  ),
+                ),
+              ],
+            ),
+            28.h,
+
+            // Bar Chart Area
             SizedBox(
               height: 250,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
-                  maxY: maxVal * 1.2,
+                  maxY: maxY,
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
-                      getTooltipColor: (_) => crm.sidebar,
+                      getTooltipColor: (group) => const Color(0xFF0B1B3B),
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         return BarTooltipItem(
-                          '₹${rod.toY.toStringAsFixed(0)}',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          '${rod.toY.toInt()} leads',
+                          GoogleFonts.inter(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                         );
                       },
                     ),
@@ -1979,56 +1776,39 @@ class _FinanceChartCard extends StatelessWidget {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
+                        reservedSize: 24,
                         getTitlesWidget: (value, meta) {
-                          final date = dailyData[value.toInt()].date;
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              '${date.day}/${date.month}',
-                              style: TextStyle(
-                                color: crm.textSecondary,
-                                fontSize: 10,
-                              ),
-                            ),
+                          const style = TextStyle(color: Color(0xFF7B8694), fontSize: 10, fontWeight: FontWeight.w500);
+                          String text = '';
+                          switch (value.toInt()) {
+                            case 0: text = 'Jan'; break;
+                            case 1: text = 'Feb'; break;
+                            case 2: text = 'Mar'; break;
+                            case 3: text = 'Apr'; break;
+                            case 4: text = 'May'; break;
+                            case 5: text = 'Jun'; break;
+                            case 6: text = 'Jul'; break;
+                            case 7: text = 'Aug'; break;
+                            case 8: text = 'Sep'; break;
+                            case 9: text = 'Oct'; break;
+                            case 10: text = 'Nov'; break;
+                            case 11: text = 'Dec'; break;
+                          }
+                          return SideTitleWidget(
+                            meta: meta,
+                            space: 6,
+                            child: Text(text, style: style),
                           );
                         },
                       ),
                     ),
-                    leftTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(showTitles: false),
-                    ),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                   ),
                   gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
-                  barGroups: dailyData.asMap().entries.map((entry) {
-                    return BarChartGroupData(
-                      x: entry.key,
-                      barRods: [
-                        BarChartRodData(
-                          toY: entry.value.collections,
-                          color: crm.success,
-                          width: 12,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4),
-                          ),
-                        ),
-                        BarChartRodData(
-                          toY: entry.value.expenses,
-                          color: crm.destructive,
-                          width: 12,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(4),
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                  barGroups: List.generate(12, (index) => _makeBarGroup(index, barValues[index], maxY)),
                 ),
               ),
             ),
@@ -2038,72 +1818,234 @@ class _FinanceChartCard extends StatelessWidget {
     );
   }
 
-  Widget _legendItem(String label, Color color) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        6.w,
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+  BarChartGroupData _makeBarGroup(int x, double y, double maxY) {
+    return BarChartGroupData(
+      x: x,
+      barRods: [
+        BarChartRodData(
+          toY: y,
+          color: const Color(0xFFCBA052), // gold
+          width: 18,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+          backDrawRodData: BackgroundBarChartRodData(
+            show: true,
+            toY: maxY,
+            color: const Color(0xFFF1EDE6),
+          ),
         ),
       ],
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UI COMPONENTS FOR TABS
-// ─────────────────────────────────────────────────────────────────────────────
+// LEAD SOURCES DONUT CHART CARD
+class _LeadSourcesCard extends StatelessWidget {
+  final List<Lead> leads;
 
-class _SalesPipelineCard extends StatelessWidget {
-  const _SalesPipelineCard();
+  const _LeadSourcesCard({
+    required this.leads,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final int totalCount = leads.length;
+    final int instagramCount = leads.where((l) => l.source.toLowerCase().contains('instagram')).length;
+    
+    // Web form maps to Web/YouTube
+    final int webFormCount = leads.where((l) => 
+      l.source.toLowerCase().contains('youtube') || 
+      l.source.toLowerCase().contains('web')
+    ).length;
+    
+    final int whatsappCount = leads.where((l) => 
+      l.source.toLowerCase().contains('whatsapp') || 
+      l.source.toLowerCase().contains('chat')
+    ).length;
+    
+    final int callsCount = leads.where((l) => 
+      l.source.toLowerCase().contains('call') || 
+      l.source.toLowerCase().contains('phone')
+    ).length;
+
+    final int otherCount = totalCount - (instagramCount + webFormCount + whatsappCount + callsCount);
+
+    double instagramPct = 0.0;
+    double webFormPct = 0.0;
+    double whatsappPct = 0.0;
+    double callsPct = 0.0;
+    double otherPct = 0.0;
+
+    if (totalCount > 0) {
+      instagramPct = (instagramCount / totalCount) * 100;
+      webFormPct = (webFormCount / totalCount) * 100;
+      whatsappPct = (whatsappCount / totalCount) * 100;
+      callsPct = (callsCount / totalCount) * 100;
+      otherPct = (otherCount / totalCount) * 100;
+    }
+
     return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
         padding: 24.p,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Card Title Header
             Text(
-              'Sales Pipeline Flow',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              'Lead sources',
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: const Color(0xFF0B1B3B),
+              ),
             ),
-            16.h,
-            const _PipelineStep(
-              label: 'Awareness',
-              value: '142 Leads',
-              color: Colors.blue,
-              percentage: 1.0,
+            Text(
+              '— where they really come from',
+              style: GoogleFonts.cormorantGaramond(
+                fontStyle: FontStyle.italic,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFFC25A7C),
+              ),
             ),
-            8.h,
-            const _PipelineStep(
-              label: 'Consideration',
-              value: '86 Qualifed',
-              color: Colors.indigo,
-              percentage: 0.6,
+            28.h,
+
+            // Donut Pie Chart inside a stack
+            Center(
+              child: SizedBox(
+                width: 170,
+                height: 170,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    PieChart(
+                      PieChartData(
+                        sectionsSpace: 3,
+                        centerSpaceRadius: 55,
+                        startDegreeOffset: -90,
+                        sections: totalCount == 0
+                            ? [
+                                PieChartSectionData(
+                                  color: const Color(0xFFF1EDE6), // light grey placeholder for empty chart
+                                  value: 100,
+                                  title: '',
+                                  radius: 20,
+                                ),
+                              ]
+                            : [
+                                PieChartSectionData(
+                                  color: const Color(0xFFD46A92), // instagram (pink)
+                                  value: instagramPct > 0 ? instagramPct : 0.001,
+                                  title: '',
+                                  radius: 20,
+                                ),
+                                PieChartSectionData(
+                                  color: const Color(0xFFCBA052), // web form (gold)
+                                  value: webFormPct > 0 ? webFormPct : 0.001,
+                                  title: '',
+                                  radius: 20,
+                                ),
+                                PieChartSectionData(
+                                  color: const Color(0xFF7A6BB9), // whatsapp (purple)
+                                  value: whatsappPct > 0 ? whatsappPct : 0.001,
+                                  title: '',
+                                  radius: 20,
+                                ),
+                                PieChartSectionData(
+                                  color: const Color(0xFF6C96C8), // calls (blue)
+                                  value: callsPct > 0 ? callsPct : 0.001,
+                                  title: '',
+                                  radius: 20,
+                                ),
+                                if (otherCount > 0)
+                                  PieChartSectionData(
+                                    color: const Color(0xFF7B8694), // other (grey)
+                                    value: otherPct,
+                                    title: '',
+                                    radius: 20,
+                                  ),
+                              ],
+                      ),
+                    ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          totalCount.toString().replaceAllMapped(
+                            RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                            (Match m) => '${m[1]},'
+                          ),
+                          style: GoogleFonts.inter(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0B1B3B),
+                          ),
+                        ),
+                        Text(
+                          'TOTAL LEADS',
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF7B8694),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-            8.h,
-            const _PipelineStep(
-              label: 'Decision',
-              value: '34 Proposals',
-              color: Colors.purple,
-              percentage: 0.24,
-            ),
-            8.h,
-            const _PipelineStep(
-              label: 'Purchase',
-              value: '12 Closed',
-              color: Colors.green,
-              percentage: 0.08,
+            32.h,
+
+            // Legends List
+            Column(
+              children: [
+                _LegendTile(
+                  color: const Color(0xFFD46A92),
+                  icon: Icons.camera_alt_outlined,
+                  name: 'Instagram',
+                  count: instagramCount.toString(),
+                  percentage: '${instagramPct.toStringAsFixed(1)}%',
+                ),
+                const Divider(height: 16),
+                _LegendTile(
+                  color: const Color(0xFFCBA052),
+                  icon: Icons.language_outlined,
+                  name: 'Web form',
+                  count: webFormCount.toString(),
+                  percentage: '${webFormPct.toStringAsFixed(1)}%',
+                ),
+                const Divider(height: 16),
+                _LegendTile(
+                  color: const Color(0xFF7A6BB9),
+                  icon: Icons.chat_bubble_outline_rounded,
+                  name: 'WhatsApp',
+                  count: whatsappCount.toString(),
+                  percentage: '${whatsappPct.toStringAsFixed(1)}%',
+                ),
+                const Divider(height: 16),
+                _LegendTile(
+                  color: const Color(0xFF6C96C8),
+                  icon: Icons.phone_outlined,
+                  name: 'Calls',
+                  count: callsCount.toString(),
+                  percentage: '${callsPct.toStringAsFixed(1)}%',
+                ),
+                if (otherCount > 0) ...[
+                  const Divider(height: 16),
+                  _LegendTile(
+                    color: const Color(0xFF7B8694),
+                    icon: Icons.more_horiz_outlined,
+                    name: 'Other',
+                    count: otherCount.toString(),
+                    percentage: '${otherPct.toStringAsFixed(1)}%',
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -2112,330 +2054,68 @@ class _SalesPipelineCard extends StatelessWidget {
   }
 }
 
-class _PipelineStep extends StatelessWidget {
-  final String label;
-  final String value;
+class _LegendTile extends StatelessWidget {
   final Color color;
-  final double percentage;
+  final IconData icon;
+  final String name;
+  final String count;
+  final String percentage;
 
-  const _PipelineStep({
-    required this.label,
-    required this.value,
+  const _LegendTile({
     required this.color,
+    required this.icon,
+    required this.name,
+    required this.count,
     required this.percentage,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-            Text(
-              value,
-              style: TextStyle(color: context.crmColors.textSecondary),
-            ),
-          ],
-        ),
-        8.h,
-        LinearProgressIndicator(
-          value: percentage,
-          backgroundColor: color.withValues(alpha: 0.1),
-          valueColor: AlwaysStoppedAnimation<Color>(color),
-          minHeight: 12,
-          borderRadius: BorderRadius.circular(6),
-        ),
-      ],
-    );
-  }
-}
-
-class _SalesConversionCard extends StatelessWidget {
-  const _SalesConversionCard();
-
-  @override
-  Widget build(BuildContext context) {
     return Row(
       children: [
+        // Colored Icon
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 12, color: color),
+        ),
+        10.w,
+        // Name
         Expanded(
-          child: _StatCard(
-            title: 'Conversion Rate',
-            value: '14.2%',
-            icon: Icons.trending_up,
-            trend: '+2.4% from last month',
-            width: double.infinity,
-          ),
-        ),
-        16.w,
-        Expanded(
-          child: _StatCard(
-            title: 'Avg. Deal Size',
-            value: 'INR 42,500',
-            icon: Icons.monetization_on_outlined,
-            trend: '+12% from last month',
-            width: double.infinity,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _TopPerformersCard extends StatelessWidget {
-  const _TopPerformersCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: 24.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Top Sales Performers',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            16.h,
-            _performerTile(context, 'Rahul Sharma', '28 Closings', 'INR 1.4M'),
-            const Divider(),
-            _performerTile(context, 'Anjali Nair', '24 Closings', 'INR 1.1M'),
-            const Divider(),
-            _performerTile(
-              context,
-              'Kevin Peterson',
-              '19 Closings',
-              'INR 850k',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _performerTile(
-    BuildContext context,
-    String name,
-    String closings,
-    String value,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: context.crmColors.secondary,
-            child: Text(
-              name[0],
-              style: TextStyle(color: context.crmColors.primary),
+          child: Text(
+            name,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF0B1B3B),
             ),
           ),
-          16.w,
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text(
-                  closings,
-                  style: TextStyle(
-                    color: context.crmColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              color: context.crmColors.primary,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MarketingCampaignsCard extends StatelessWidget {
-  const _MarketingCampaignsCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: 24.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Active Campaigns',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            16.h,
-            _campaignItem(
-              context,
-              'Summer Wedding Promo',
-              '420 Leads',
-              'INR 12k Spend',
-            ),
-            24.h,
-            _campaignItem(
-              context,
-              'Corporate Event Package',
-              '186 Leads',
-              'INR 8k Spend',
-            ),
-            24.h,
-            _campaignItem(
-              context,
-              'Social Media Blast',
-              '1,240 Leads',
-              'INR 5k Spend',
-            ),
-          ],
         ),
-      ),
-    );
-  }
-
-  Widget _campaignItem(
-    BuildContext context,
-    String title,
-    String stats,
-    String spend,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(
-              spend,
-              style: TextStyle(
-                color: context.crmColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        8.h,
+        // Count
         Text(
-          stats,
-          style: TextStyle(
-            color: context.crmColors.primary,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        4.h,
-        LinearProgressIndicator(
-          value: 0.7,
-          backgroundColor: context.crmColors.border,
-          valueColor: AlwaysStoppedAnimation<Color>(context.crmColors.primary),
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ],
-    );
-  }
-}
-
-class _LeadSourceDistributionCard extends StatelessWidget {
-  const _LeadSourceDistributionCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: 24.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Lead Sources',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            16.h,
-            Row(
-              children: [
-                _sourceItem(context, 'Instagram', '45%', Colors.pink),
-                _sourceItem(context, 'Referrals', '25%', Colors.green),
-                _sourceItem(context, 'Website', '20%', Colors.blue),
-                _sourceItem(context, 'Others', '10%', Colors.orange),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sourceItem(
-    BuildContext context,
-    String label,
-    String value,
-    Color color,
-  ) {
-    return Expanded(
-      child: Column(
-        children: [
-          Container(
-            height: 8,
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          8.h,
-          Text(label, style: const TextStyle(fontSize: 10)),
-          Text(
-            value,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CustomerSatisfactionCard extends StatelessWidget {
-  const _CustomerSatisfactionCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _StatCard(
-            title: 'Net Promoter Score',
-            value: '78',
-            icon: Icons.sentiment_very_satisfied,
-            trend: 'High Customer Loyalty',
-            width: double.infinity,
+          count,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF0B1B3B),
           ),
         ),
         16.w,
-        Expanded(
-          child: _StatCard(
-            title: 'Response Time',
-            value: '1.2 hr',
-            icon: Icons.timer,
-            trend: '-14m from yesterday',
-            width: double.infinity,
+        // Percentage
+        SizedBox(
+          width: 45,
+          child: Text(
+            percentage,
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF7B8694),
+            ),
+            textAlign: TextAlign.end,
           ),
         ),
       ],
@@ -2443,451 +2123,473 @@ class _CustomerSatisfactionCard extends StatelessWidget {
   }
 }
 
-class _CEOReportView extends HookConsumerWidget {
-  final List<Booking> bookings;
-  final List<ArtistCollection> collections;
+// ENQUIRIES BY LOCATION MAP CARD
+const Map<String, LatLng> _districtCoordinates = {
+  'kasaragod': LatLng(12.5102, 74.9852),
+  'kannur': LatLng(11.8745, 75.3704),
+  'kozhikode': LatLng(11.2588, 75.7804),
+  'calicut': LatLng(11.2588, 75.7804),
+  'wayanad': LatLng(11.6854, 76.1320),
+  'malappuram': LatLng(11.0722, 76.0740),
+  'palakkad': LatLng(10.7867, 76.6548),
+  'thrissur': LatLng(10.5276, 76.2144),
+  'ernakulam': LatLng(9.9816, 76.2999),
+  'kochi': LatLng(9.9816, 76.2999),
+  'idukki': LatLng(9.8500, 76.9700),
+  'kottayam': LatLng(9.5916, 76.5224),
+  'alappuzha': LatLng(9.4981, 76.3388),
+  'pathanamthitta': LatLng(9.2648, 76.7870),
+  'kollam': LatLng(8.8932, 76.6141),
+  'trivandrum': LatLng(8.5241, 76.9366),
+  'tvm': LatLng(8.5241, 76.9366),
+};
+
+LatLng? _getCoordinates(String location) {
+  final normalized = location.toLowerCase().trim();
+  for (final entry in _districtCoordinates.entries) {
+    if (normalized.contains(entry.key)) {
+      return entry.value;
+    }
+  }
+  return null;
+}
+
+class _EnquiriesByLocationCard extends StatelessWidget {
   final List<Lead> leads;
 
-  const _CEOReportView({
-    required this.bookings,
-    required this.collections,
+  const _EnquiriesByLocationCard({
     required this.leads,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
-    final now = DateTime.now();
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final isDesktop = ResponsiveBuilder.isDesktop(context);
 
-    // Data filtering for "Today"
-    final todayBookings = bookings.where((b) {
-      final d = b.createdAt ?? b.bookingDate;
-      return d.year == now.year && d.month == now.month && d.day == now.day;
-    }).toList();
+    // Group leads by coordinate
+    final Map<LatLng, List<Lead>> groupedLeads = {};
+    for (final lead in leads) {
+      final latLng = _getCoordinates(lead.location);
+      if (latLng != null) {
+        groupedLeads.putIfAbsent(latLng, () => []).add(lead);
+      }
+    }
 
-    final todayLeads = leads
-        .where(
-          (l) =>
-              l.createdAt.year == now.year &&
-              l.createdAt.month == now.month &&
-              l.createdAt.day == now.day,
-        )
-        .toList();
+    final List<Marker> mapMarkers = [];
+    groupedLeads.forEach((latLng, leadList) {
+      final count = leadList.length;
+      if (count > 0) {
+        // Find the canonical name from coordinate keys
+        String name = leadList.first.location;
+        final norm = name.toLowerCase();
+        for (final key in _districtCoordinates.keys) {
+          if (norm.contains(key)) {
+            name = key[0].toUpperCase() + key.substring(1);
+            if (name == 'Tvm') name = 'Trivandrum';
+            if (name == 'Kochi') name = 'Ernakulam';
+            break;
+          }
+        }
 
-    final todayCollections = collections
-        .where(
-          (c) =>
-              c.date.year == now.year &&
-              c.date.month == now.month &&
-              c.date.day == now.day &&
-              c.status == 'verified',
-        )
-        .toList();
+        final isHighlighted = name.toLowerCase().contains('ernakulam') ||
+            name.toLowerCase().contains('kozhikode');
 
-    // Metrics Calculation
-    final revenueToday = todayCollections.fold(0.0, (sum, c) => sum + c.amount);
-    final totalBookings = todayBookings.length;
-    final avgTicketSize = totalBookings > 0
-        ? revenueToday / totalBookings
-        : 0.0;
-    final leadsGenerated = todayLeads.length;
-    final convertedLeads = todayLeads
-        .where((l) => l.status.toLowerCase() == 'converted')
-        .length;
-    final conversionRate = leadsGenerated > 0
-        ? (convertedLeads / leadsGenerated) * 100
-        : 0.0;
-    final lostLeads = todayLeads
-        .where((l) => l.status.toLowerCase() == 'lost')
-        .toList();
-
-    // Slot Utilization (Approximate: assume 10 slots per day per artist, total 5 active artists)
-    const totalSlots = 50;
-    final slotUtilization = (totalBookings / totalSlots * 100).clamp(
-      0.0,
-      100.0,
-    );
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSectionHeader('📅 DAILY CEO REPORT – Team N Makeovers', now),
-          24.h,
-          _buildMetricsGrid(context, [
-            _MetricItem(
-              'Revenue Today',
-              '₹${revenueToday.toStringAsFixed(0)}',
-              'Target: ₹50k',
-              crm.success,
+        mapMarkers.add(
+          Marker(
+            point: latLng,
+            width: 50,
+            height: 50,
+            child: _MapPulsingDot(
+              label: name,
+              count: count,
+              isHighlighted: isHighlighted,
             ),
-            _MetricItem(
-              'Total Bookings',
-              totalBookings.toString(),
-              'Capacity: $totalSlots',
-              crm.primary,
-            ),
-            _MetricItem(
-              'Avg Ticket Size',
-              '₹${avgTicketSize.toStringAsFixed(0)}',
-              'Goal: ₹5k',
-              crm.warning,
-            ),
-            _MetricItem(
-              'Leads Generated',
-              leadsGenerated.toString(),
-              'Target: 20',
-              crm.accent,
-            ),
-          ]),
-          24.h,
-          _buildMetricsGrid(context, [
-            _MetricItem(
-              'Conversions',
-              '${conversionRate.toStringAsFixed(1)}%',
-              'Goal: 15%',
-              crm.accent,
-            ),
-            _MetricItem(
-              'Lost Leads',
-              lostLeads.length.toString(),
-              'Follow up!',
-              crm.destructive,
-            ),
-            _MetricItem(
-              'Slot Utilization',
-              '${slotUtilization.toStringAsFixed(1)}%',
-              'Efficiency',
-              crm.secondary,
-            ),
-          ]),
-          24.h,
-          _buildReportNotesCard(
-            context,
-            'Key Issues',
-            Icons.warning_amber_rounded,
-            crm.destructive,
           ),
-          16.h,
-          _buildReportNotesCard(
-            context,
-            'Key Wins',
-            Icons.emoji_events_outlined,
-            crm.success,
-          ),
-          16.h,
-          _buildReportNotesCard(
-            context,
-            'Tomorrow Priorities',
-            Icons.list_alt_rounded,
-            crm.primary,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, DateTime date) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-        ),
-        Text(
-          'Report for ${_monthName(date.month)} ${date.day}, ${date.year}',
-          style: const TextStyle(
-            color: Colors.grey,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricsGrid(BuildContext context, List<_MetricItem> items) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            crossAxisSpacing: 16,
-            mainAxisSpacing: 16,
-            childAspectRatio: 1.5,
-          ),
-          itemCount: items.length,
-          itemBuilder: (context, index) =>
-              _buildMetricCard(context, items[index]),
         );
-      },
-    );
-  }
+      }
+    });
 
-  Widget _buildMetricCard(BuildContext context, _MetricItem item) {
-    final crm = context.crmColors;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: item.color.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: item.color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            item.label,
-            style: TextStyle(
-              color: crm.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          4.h,
-          Text(
-            item.value,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-          ),
-          4.h,
-          Text(
-            item.subtext,
-            style: TextStyle(
-              color: item.color,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+    String normLoc(Lead l) => l.location.toLowerCase().trim();
+    final int kozhikodeCount = leads.where((l) => normLoc(l).contains('kozhikode') || normLoc(l).contains('calicut')).length;
+    final int malappuramCount = leads.where((l) => normLoc(l).contains('malappuram')).length;
+    final int thrissurCount = leads.where((l) => normLoc(l).contains('thrissur')).length;
+    final int ernakulamCount = leads.where((l) => normLoc(l).contains('ernakulam') || normLoc(l).contains('kochi')).length;
+    final int trivandrumCount = leads.where((l) => normLoc(l).contains('trivandrum') || normLoc(l).contains('tvm')).length;
 
-  Widget _buildReportNotesCard(
-    BuildContext context,
-    String title,
-    IconData icon,
-    Color color,
-  ) {
-    final crm = context.crmColors;
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
+    Widget buildMapWidget() {
+      return ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: crm.border.withValues(alpha: 0.5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: FlutterMap(
+          options: const MapOptions(
+            initialCenter: LatLng(10.5, 76.2), // Center of Kerala
+            initialZoom: 7.2,
+            minZoom: 5.0,
+            maxZoom: 18.0,
+          ),
           children: [
-            Row(
-              children: [
-                Icon(icon, color: color, size: 20),
-                12.w,
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.edit_note, size: 20),
-                  onPressed: () {
-                    // TODO: Implement note editing
-                  },
-                ),
-              ],
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.nizan.crm',
             ),
-            const Divider(),
-            8.h,
-            Text(
-              'No ${title.toLowerCase()} recorded for today yet.',
-              style: TextStyle(
-                color: crm.textSecondary,
-                fontStyle: FontStyle.italic,
-              ),
+            MarkerLayer(
+              markers: mapMarkers,
             ),
           ],
         ),
-      ),
-    );
-  }
-}
+      );
+    }
 
-class _MetricItem {
-  final String label;
-  final String value;
-  final String subtext;
-  final Color color;
-
-  _MetricItem(this.label, this.value, this.subtext, this.color);
-}
-
-class _RevenueBreakdownCard extends StatelessWidget {
-  const _RevenueBreakdownCard();
-
-  @override
-  Widget build(BuildContext context) {
     return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
         padding: 24.p,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Monthly Finance Health',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            24.h,
+            // Card Title Header
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _circularStat(
-                  context,
-                  'Gross Revenue',
-                  'INR 2.4M',
-                  0.85,
-                  Colors.green,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Enquiries by location',
+                      style: GoogleFonts.inter(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0B1B3B),
+                      ),
+                    ),
+                    Text(
+                      '— interactive live map',
+                      style: GoogleFonts.cormorantGaramond(
+                        fontStyle: FontStyle.italic,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFC25A7C),
+                      ),
+                    ),
+                  ],
                 ),
-                _circularStat(
-                  context,
-                  'Net Profit',
-                  'INR 840k',
-                  0.35,
-                  Colors.blue,
-                ),
-                _circularStat(
-                  context,
-                  'Operating Cost',
-                  'INR 1.2M',
-                  0.5,
-                  Colors.orange,
+                // Live Indicator
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFD46A92),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    8.w,
+                    Text(
+                      'Enquiry volume',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFF7B8694),
+                      ),
+                    ),
+                    16.w,
+                    const Icon(Icons.flash_on, size: 12, color: Color(0xFFCBA052)),
+                    4.w,
+                    Text(
+                      'Live',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFFCBA052),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+            12.h,
+            Text(
+              '※ Click any district pin to see details',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: const Color(0xFF7B8694),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            28.h,
+
+            // Content Area split on Desktop
+            if (isDesktop)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Center(
+                      child: Container(
+                        width: 400,
+                        height: 380,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF9F7FF).withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: crmColors.border.withValues(alpha: 0.04)),
+                        ),
+                        child: buildMapWidget(),
+                      ),
+                    ),
+                  ),
+                  48.w,
+                  // Top Performing Cities List
+                  Expanded(
+                    flex: 2,
+                    child: _TopCitiesList(
+                      kozhikode: kozhikodeCount,
+                      ernakulam: ernakulamCount,
+                      malappuram: malappuramCount,
+                      thrissur: thrissurCount,
+                      trivandrum: trivandrumCount,
+                    ),
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    height: 320,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9F7FF).withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: crmColors.border.withValues(alpha: 0.04)),
+                    ),
+                    child: buildMapWidget(),
+                  ),
+                  32.h,
+                  _TopCitiesList(
+                    kozhikode: kozhikodeCount,
+                    ernakulam: ernakulamCount,
+                    malappuram: malappuramCount,
+                    thrissur: thrissurCount,
+                    trivandrum: trivandrumCount,
+                  ),
+                ],
+              ),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _circularStat(
-    BuildContext context,
-    String label,
-    String value,
-    double progress,
-    Color color,
-  ) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 80,
-          width: 80,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              CircularProgressIndicator(
-                value: progress,
-                strokeWidth: 8,
-                backgroundColor: color.withValues(alpha: 0.1),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-              ),
-              Center(
-                child: Text(
-                  '${(progress * 100).toInt()}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+// PULSING INTERACTIVE MAP DOT
+class _MapPulsingDot extends StatefulWidget {
+  final String label;
+  final int count;
+  final bool isHighlighted;
+
+  const _MapPulsingDot({
+    required this.label,
+    required this.count,
+    this.isHighlighted = false,
+  });
+
+  @override
+  State<_MapPulsingDot> createState() => _MapPulsingDotState();
+}
+
+class _MapPulsingDotState extends State<_MapPulsingDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dotColor = widget.isHighlighted ? const Color(0xFFD46A92) : const Color(0xFFCBA052);
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.location_on, color: dotColor),
+                const SizedBox(width: 8),
+                Text(widget.label, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(
+              'Total enquiries from ${widget.label} is currently ${widget.count}.',
+              style: GoogleFonts.inter(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Close', style: TextStyle(color: dotColor)),
               ),
             ],
           ),
-        ),
-        16.h,
-        Text(label, style: const TextStyle(fontSize: 12)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-}
-
-class _ExpenseAnalysisCard extends StatelessWidget {
-  const _ExpenseAnalysisCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: 24.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Expense Breakdown',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+        );
+      },
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Pulse Ring
+          ScaleTransition(
+            scale: Tween<double>(begin: 0.8, end: 2.2).animate(
+              CurvedAnimation(parent: _controller, curve: Curves.easeOut),
             ),
-            16.h,
-            _expenseItem(context, 'Staff Payroll', 'INR 640,000', 0.6),
-            16.h,
-            _expenseItem(context, 'Marketing Ad Spend', 'INR 180,000', 0.2),
-            16.h,
-            _expenseItem(context, 'Operational Utilites', 'INR 120,000', 0.1),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _expenseItem(
-    BuildContext context,
-    String label,
-    String value,
-    double ratio,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        8.h,
-        Container(
-          height: 4,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: context.crmColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: ratio,
-            child: Container(
-              decoration: BoxDecoration(
-                color: context.crmColors.warning,
-                borderRadius: BorderRadius.circular(2),
+            child: FadeTransition(
+              opacity: Tween<double>(begin: 0.6, end: 0.0).animate(
+                CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+              ),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: dotColor,
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
           ),
-        ),
-      ],
+          // Center Solid Circle with Lead Count Badge
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: dotColor.withValues(alpha: 0.4),
+                  blurRadius: 4,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '${widget.count}',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
+// TOP PERFORMING CITIES LIST
+class _TopCitiesList extends StatelessWidget {
+  final int kozhikode;
+  final int ernakulam;
+  final int malappuram;
+  final int thrissur;
+  final int trivandrum;
+
+  const _TopCitiesList({
+    required this.kozhikode,
+    required this.ernakulam,
+    required this.malappuram,
+    required this.thrissur,
+    required this.trivandrum,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final locations = [
+      (name: 'Kozhikode', count: kozhikode, progress: 0.8),
+      (name: 'Ernakulam', count: ernakulam, progress: 0.95),
+      (name: 'Malappuram', count: malappuram, progress: 0.7),
+      (name: 'Thrissur', count: thrissur, progress: 0.65),
+      (name: 'Trivandrum', count: trivandrum, progress: 0.6),
+    ]..sort((a, b) => b.count.compareTo(a.count));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'TOP PERFORMING CITIES',
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF7B8694),
+            letterSpacing: 1.2,
+          ),
+        ),
+        16.h,
+        ...locations.map((loc) {
+          final maxCount = locations.fold<int>(1, (max, l) => l.count > max ? l.count : max);
+          final double ratio = loc.count / maxCount;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      loc.name,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0B1B3B),
+                      ),
+                    ),
+                    Text(
+                      '${loc.count} leads',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF0B1B3B),
+                      ),
+                    ),
+                  ],
+                ),
+                8.h,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: ratio.clamp(0.05, 1.0),
+                    minHeight: 6,
+                    backgroundColor: const Color(0xFFF1EDE6),
+                    valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFCBA052)),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
 class _ArtistDashboardView extends StatelessWidget {
   const _ArtistDashboardView({
     required this.isDesktop,

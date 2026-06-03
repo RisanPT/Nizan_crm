@@ -43,7 +43,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            ref.read(authControllerProvider).errorMessage ??
+            ref.read(authStateProvider).errorMessage ??
                 'Unable to sign in',
           ),
         ),
@@ -55,7 +55,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
     final theme = Theme.of(context);
-    final auth = ref.watch(authControllerProvider);
+    final auth = ref.watch(authStateProvider);
 
     return Scaffold(
       backgroundColor: crmColors.background,
@@ -179,7 +179,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     BuildContext context,
     ThemeData theme,
     CrmTheme crmColors,
-    AuthController auth,
+    AuthState auth,
   ) {
     return Container(
       color: crmColors.sidebar,

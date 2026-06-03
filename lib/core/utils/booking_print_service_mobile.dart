@@ -45,6 +45,8 @@ Future<void> printBookingDetails(
         ),
       ),
       build: (context) {
+        final addonsTotal = booking.addons.fold(0.0, (sum, item) => sum + (item.amount * item.persons));
+        final basePrice = booking.totalPrice - addonsTotal;
         return [
           // Header / Logo
           pw.Row(
@@ -63,7 +65,7 @@ Future<void> printBookingDetails(
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(
-                    variant == BookingPrintVariant.client ? 'Client Confirmation Copy' : 'Artist Copy - Assignment Sheet',
+                    variant == BookingPrintVariant.client ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
                     style: pw.TextStyle(fontSize: 10, color: secondaryColor),
                   ),
                 ],
@@ -106,10 +108,7 @@ Future<void> printBookingDetails(
                 else
                   '${booking.bookingDate.day.toString().padLeft(2, '0')}/${booking.bookingDate.month.toString().padLeft(2, '0')}/${booking.bookingDate.year}'
               ].join(), PdfColors.white),
-              _buildTableRow('Location', [
-                if (booking.district.isNotEmpty) booking.district,
-                if (booking.region.isNotEmpty) booking.region,
-              ].join(', '), lightBg),
+              _buildTableRow('Location', booking.district.isNotEmpty ? booking.district : 'N/A', lightBg),
               if (booking.outfitDetails.isNotEmpty)
                 _buildTableRow('Outfit Details', booking.outfitDetails, PdfColors.white),
             ],
@@ -118,21 +117,107 @@ Future<void> printBookingDetails(
 
           // Variant-specific Details
           if (variant == BookingPrintVariant.client) ...[
-            // Payment Summary
-            pw.Text('Payment Details', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: primaryColor)),
+            // Itemized Invoice Breakdown
+            pw.Text('Invoice & Bill of Supply', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: primaryColor)),
             pw.SizedBox(height: 8),
+            
             pw.Table(
               border: pw.TableBorder.all(color: borderColor),
+              columnWidths: {
+                0: const pw.FlexColumnWidth(3),
+                1: const pw.FlexColumnWidth(1.2),
+                2: const pw.FlexColumnWidth(0.5),
+                3: const pw.FlexColumnWidth(1.5),
+              },
               children: [
-                _buildTableRow('Total Price', 'INR ${booking.totalPrice.toStringAsFixed(2)}', lightBg),
-                _buildTableRow('Advance Paid', 'INR ${booking.advanceAmount.toStringAsFixed(2)}', PdfColors.white),
-                if (booking.discountAmount > 0)
-                  _buildTableRow('Discount Offered', 'INR ${booking.discountAmount.toStringAsFixed(2)}', lightBg),
-                _buildTableRow(
-                  'Remaining Balance Due',
-                  'INR ${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(2)}',
-                  PdfColors.white,
-                  isBold: true,
+                pw.TableRow(
+                  decoration: pw.BoxDecoration(color: primaryColor),
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Service Description', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Rate', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.right),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Qty', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('Amount', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9), textAlign: pw.TextAlign.right),
+                    ),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text(booking.service, style: const pw.TextStyle(fontSize: 9)),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('INR ${basePrice.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('1', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.center),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text('INR ${basePrice.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right),
+                    ),
+                  ],
+                ),
+                ...booking.addons.map((addon) {
+                  final total = addon.amount * addon.persons;
+                  return pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('Add-on: ${addon.service}', style: const pw.TextStyle(fontSize: 9)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('INR ${addon.amount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('${addon.persons}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.center),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.all(6),
+                        child: pw.Text('INR ${total.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 9), textAlign: pw.TextAlign.right),
+                      ),
+                    ],
+                  );
+                }),
+              ],
+            ),
+            pw.SizedBox(height: 12),
+            
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Container(
+                  width: 220,
+                  child: pw.Table(
+                    border: pw.TableBorder.all(color: borderColor),
+                    children: [
+                      _buildTableRow('Subtotal', 'INR ${booking.totalPrice.toStringAsFixed(2)}', lightBg),
+                      if (booking.discountAmount > 0)
+                        _buildTableRow('Discount Offered', 'INR ${booking.discountAmount.toStringAsFixed(2)}', PdfColors.white),
+                      _buildTableRow('Advance Paid', 'INR ${booking.advanceAmount.toStringAsFixed(2)}', lightBg),
+                      _buildTableRow(
+                        'Total Balance Due',
+                        'INR ${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(2)}',
+                        PdfColors.white,
+                        isBold: true,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

@@ -69,7 +69,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final session = ref.watch(authControllerProvider).session;
+    final session = ref.watch(authSessionProvider);
     final role = session != null
         ? AppRole.fromString(session.role)
         : AppRole.artist;

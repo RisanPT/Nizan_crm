@@ -26,7 +26,7 @@ final paginatedCustomersProvider =
       ref,
       params,
     ) async {
-      final authSession = ref.watch(authControllerProvider).session;
+      final authSession = ref.watch(authSessionProvider);
       final role = AppRole.fromString(authSession?.role);
 
       var zoneId = params.zoneId;

@@ -6,8 +6,8 @@ import '../core/providers/auth_provider.dart';
 
 final reportServiceProvider = Provider<ReportService>((ref) {
   final dio = ref.watch(dioProvider);
-  final auth = ref.watch(authControllerProvider);
-  return ReportService(dio, auth.session?.token ?? '');
+  final session = ref.watch(authSessionProvider);
+  return ReportService(dio, session?.token ?? '');
 });
 
 class ReportService {

@@ -330,7 +330,7 @@ class AccountsCollectionsScreen extends ConsumerWidget {
           if (c.status == 'pending') ...[
             TextButton(
               onPressed: () async {
-                final session = ref.read(authControllerProvider).session;
+                final session = ref.read(authSessionProvider);
                 await ref
                     .read(collectionServiceProvider)
                     .verifyCollection(
@@ -345,7 +345,7 @@ class AccountsCollectionsScreen extends ConsumerWidget {
             ),
             ElevatedButton(
               onPressed: () async {
-                final session = ref.read(authControllerProvider).session;
+                final session = ref.read(authSessionProvider);
                 await ref
                     .read(collectionServiceProvider)
                     .verifyCollection(

@@ -60,7 +60,7 @@ class Sidebar extends ConsumerWidget {
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session
-    final session = ref.watch(authControllerProvider).session;
+    final session = ref.watch(authSessionProvider);
     final role = session != null
         ? AppRole.fromString(session.role)
         : AppRole.artist;

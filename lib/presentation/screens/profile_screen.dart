@@ -12,7 +12,7 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final crm = context.crmColors;
-    final session = ref.watch(authControllerProvider).session;
+    final session = ref.watch(authSessionProvider);
     final employeeAsync = ref.watch(currentEmployeeProvider);
 
     return SingleChildScrollView(

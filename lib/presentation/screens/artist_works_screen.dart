@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
@@ -11,6 +12,296 @@ import '../../core/utils/booking_print_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
+
+// Opens a Google Maps URL in the default browser/maps app.
+Future<void> _openMapUrl(String url, BuildContext context) async {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null) return;
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } else if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Could not open Google Maps link.')),
+    );
+  }
+}
+
+// Opens a phone call in the default phone app.
+Future<void> _makePhoneCall(String phoneNumber, BuildContext context) async {
+  final cleanPhone = phoneNumber.replaceAll(RegExp(r'\s+'), '');
+  final uri = Uri.tryParse('tel:$cleanPhone');
+  if (uri == null) return;
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
+  } else if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not launch phone call for $phoneNumber.')),
+    );
+  }
+}
+
+// Opens a WhatsApp chat.
+Future<void> _openWhatsApp(String phoneNumber, BuildContext context) async {
+  var cleanPhone = phoneNumber.replaceAll(RegExp(r'\D'), '');
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = cleanPhone.substring(1);
+  }
+  if (cleanPhone.length == 10) {
+    cleanPhone = '91$cleanPhone';
+  }
+  final uri = Uri.tryParse('https://wa.me/$cleanPhone');
+  if (uri == null) return;
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } else if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not launch WhatsApp for $phoneNumber.')),
+    );
+  }
+}
+
+// Shows a selection sheet for opening WhatsApp for primary or alternative number.
+void _showWhatsAppSelectionBottomSheet(BuildContext context, Booking booking, String primary, String secondary) {
+  final crm = context.crmColors;
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Number for WhatsApp',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: crm.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      booking.customerName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _PhoneOptionTile(
+              number: primary,
+              label: 'Primary Number',
+              icon: Icons.chat_rounded,
+              color: const Color(0xFF25D366),
+              onTap: () {
+                Navigator.pop(context);
+                _openWhatsApp(primary, context);
+              },
+            ),
+            const SizedBox(height: 12),
+            _PhoneOptionTile(
+              number: secondary,
+              label: 'Alternative Number',
+              icon: Icons.chat_bubble_outline_rounded,
+              color: const Color(0xFF25D366),
+              onTap: () {
+                Navigator.pop(context);
+                _openWhatsApp(secondary, context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// Shows a selection sheet for calling primary or alternative number.
+void _showCallSelectionBottomSheet(BuildContext context, Booking booking, String primary, String secondary) {
+  final crm = context.crmColors;
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Number to Call',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: crm.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      booking.customerName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            _PhoneOptionTile(
+              number: primary,
+              label: 'Primary Number',
+              icon: Icons.phone_rounded,
+              color: crm.primary,
+              onTap: () {
+                Navigator.pop(context);
+                _makePhoneCall(primary, context);
+              },
+            ),
+            const SizedBox(height: 12),
+            _PhoneOptionTile(
+              number: secondary,
+              label: 'Alternative Number',
+              icon: Icons.phone_android_rounded,
+              color: const Color(0xFF22C55E),
+              onTap: () {
+                Navigator.pop(context);
+                _makePhoneCall(secondary, context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _PhoneOptionTile extends StatelessWidget {
+  final String number;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _PhoneOptionTile({
+    required this.number,
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: crm.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: crm.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: crm.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    number,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: crm.textSecondary,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Colour helpers
@@ -533,7 +824,7 @@ class _AnimatedWorkCard extends HookWidget {
                       ),
                       14.w,
 
-                      // Name + service
+                      // Name + service + quick actions
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,6 +852,109 @@ class _AnimatedWorkCard extends HookWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (booking.phone.trim().isNotEmpty || booking.mapUrl.isNotEmpty) ...[
+                              8.h,
+                              Row(
+                                children: [
+                                  if (booking.phone.trim().isNotEmpty) ...[
+                                    Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(24),
+                                        onTap: () {
+                                          final primary = booking.phone.trim();
+                                          final secondary = booking.secondaryContact.trim();
+                                          if (secondary.isNotEmpty) {
+                                            _showCallSelectionBottomSheet(context, booking, primary, secondary);
+                                          } else {
+                                            _makePhoneCall(primary, context);
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(7),
+                                          decoration: BoxDecoration(
+                                            color: crm.primary.withValues(alpha: 0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Icon(
+                                            Icons.call_rounded,
+                                            size: 15,
+                                            color: crm.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    6.w,
+                                    Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(24),
+                                        onTap: () {
+                                          final primary = booking.phone.trim();
+                                          final secondary = booking.secondaryContact.trim();
+                                          if (secondary.isNotEmpty) {
+                                            _showWhatsAppSelectionBottomSheet(context, booking, primary, secondary);
+                                          } else {
+                                            _openWhatsApp(primary, context);
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(7),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.chat_outlined,
+                                            size: 15,
+                                            color: Color(0xFF25D366),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (booking.mapUrl.isNotEmpty) ...[
+                                    if (booking.phone.trim().isNotEmpty) 8.w,
+                                    GestureDetector(
+                                      onTap: () => _openMapUrl(booking.mapUrl, context),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF34A853).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(
+                                            color: const Color(0xFF34A853).withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.location_on_rounded,
+                                              size: 10,
+                                              color: Color(0xFF34A853),
+                                            ),
+                                            SizedBox(width: 3),
+                                            Text(
+                                              'MAP',
+                                              style: TextStyle(
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFF34A853),
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -571,7 +965,7 @@ class _AnimatedWorkCard extends HookWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           _StatusChip(status: booking.status),
-                          8.h,
+                          12.h,
                           Icon(
                             isExpanded
                                 ? Icons.keyboard_arrow_up_rounded
@@ -686,6 +1080,134 @@ class _ExpandedDetails extends ConsumerWidget {
             children: [
               WorkTimerWidget(booking: booking),
               12.h,
+              // Contact details
+              if (booking.phone.trim().isNotEmpty || booking.secondaryContact.trim().isNotEmpty) ...[
+                _DetailLabel('Contact Information'),
+                6.h,
+                Row(
+                  children: [
+                    if (booking.phone.trim().isNotEmpty)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _makePhoneCall(booking.phone.trim(), context),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: crm.background,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: crm.border),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.phone_rounded, size: 14, color: crm.primary),
+                                8.w,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Primary Mobile',
+                                        style: TextStyle(fontSize: 10, color: crm.textSecondary),
+                                      ),
+                                      const SizedBox(height: 1),
+                                      Text(
+                                        booking.phone,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: crm.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => _openWhatsApp(booking.phone.trim(), context),
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.chat_outlined,
+                                      size: 14,
+                                      color: Color(0xFF25D366),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (booking.phone.trim().isNotEmpty && booking.secondaryContact.trim().isNotEmpty)
+                      8.w,
+                    if (booking.secondaryContact.trim().isNotEmpty)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _makePhoneCall(booking.secondaryContact.trim(), context),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: crm.background,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: crm.border),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.phone_android_rounded, size: 14, color: const Color(0xFF22C55E)),
+                                8.w,
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Alternative Mobile',
+                                        style: TextStyle(fontSize: 10, color: crm.textSecondary),
+                                      ),
+                                      const SizedBox(height: 1),
+                                      Text(
+                                        booking.secondaryContact,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: crm.textPrimary,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                InkWell(
+                                  onTap: () => _openWhatsApp(booking.secondaryContact.trim(), context),
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.chat_outlined,
+                                      size: 14,
+                                      color: Color(0xFF25D366),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                14.h,
+              ],
               // My assigned tasks
               if (myWorks.isNotEmpty) ...[
                 _DetailLabel('My Assigned Tasks'),
@@ -797,25 +1319,68 @@ class _ExpandedDetails extends ConsumerWidget {
                         border: Border.all(color: crm.border),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                addon.service,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              2.h,
-                              Text(
-                                '${addon.persons} person(s) • ₹${addon.amount.toStringAsFixed(0)} each',
-                                style: TextStyle(color: crm.textSecondary, fontSize: 11),
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  addon.service,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                                2.h,
+                                Text(
+                                  '${addon.persons} person(s) • ₹${addon.amount.toStringAsFixed(0)} each',
+                                  style: TextStyle(color: crm.textSecondary, fontSize: 11),
+                                ),
+                              ],
+                            ),
                           ),
                           Text(
                             '₹${itemTotal.toStringAsFixed(0)}',
                             style: TextStyle(fontWeight: FontWeight.w900, color: crm.primary, fontSize: 13),
+                          ),
+                          12.w,
+                          // Edit Button
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => _showEditAddonModal(context, ref, booking, addon),
+                              child: Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.edit_rounded,
+                                  size: 14,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                          ),
+                          6.w,
+                          // Delete Button
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => _confirmDeleteAddon(context, ref, booking, addon),
+                              child: Container(
+                                padding: const EdgeInsets.all(5),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 14,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -905,20 +1470,18 @@ class _ExpandedDetails extends ConsumerWidget {
                 ),
               ),
 
-              // Map link
+              // Google Maps link
               if (booking.mapUrl.isNotEmpty) ...[
                 14.h,
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      // mapUrl can be launched from here
-                    },
-                    icon: const Icon(Icons.map_rounded, size: 16),
-                    label: const Text('View on Map'),
+                    onPressed: () => _openMapUrl(booking.mapUrl, context),
+                    icon: const Icon(Icons.location_on_rounded, size: 16),
+                    label: const Text('Open in Google Maps'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF3B82F6),
-                      side: const BorderSide(color: Color(0xFF3B82F6)),
+                      foregroundColor: const Color(0xFF34A853),
+                      side: const BorderSide(color: Color(0xFF34A853)),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
@@ -942,11 +1505,83 @@ class _ExpandedDetails extends ConsumerWidget {
       builder: (context) => _AddAddonSheet(booking: booking),
     );
   }
+
+  void _showEditAddonModal(BuildContext context, WidgetRef ref, Booking booking, BookingAddon addon) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AddAddonSheet(booking: booking, existingAddon: addon),
+    );
+  }
+
+  Future<void> _confirmDeleteAddon(BuildContext context, WidgetRef ref, Booking booking, BookingAddon addon) async {
+    final crm = context.crmColors;
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Add-on'),
+        content: Text('Are you sure you want to delete "${addon.service}" from this booking?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+
+    try {
+      final updatedAddons = booking.addons.where((a) => a != addon).toList();
+      final newTotalPrice = booking.totalPrice - (addon.amount * addon.persons);
+
+      final updatedBooking = booking.copyWith(
+        addons: updatedAddons,
+        totalPrice: newTotalPrice,
+      );
+
+      await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
+
+      // Invalidate the cache to reload
+      ref.invalidate(paginatedBookingsProvider);
+      ref.invalidate(artistAssignedWorksProvider);
+      ref.invalidate(bookingProvider);
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Successfully removed "${addon.service}" from the booking.'),
+            backgroundColor: crm.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete add-on: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 }
 
 class _AddAddonSheet extends ConsumerStatefulWidget {
   final Booking booking;
-  const _AddAddonSheet({required this.booking});
+  final BookingAddon? existingAddon;
+  const _AddAddonSheet({required this.booking, this.existingAddon});
 
   @override
   ConsumerState<_AddAddonSheet> createState() => _AddAddonSheetState();
@@ -958,10 +1593,19 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
   bool _isLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.existingAddon != null) {
+      _persons = widget.existingAddon!.persons;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final theme = Theme.of(context);
     final asyncAddons = ref.watch(addonServicesProvider);
+    final isEditing = widget.existingAddon != null;
 
     return Container(
       padding: EdgeInsets.only(
@@ -989,7 +1633,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Add Service Add-on',
+                isEditing ? 'Edit Service Add-on' : 'Add Service Add-on',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w900,
                   color: crm.textPrimary,
@@ -1014,7 +1658,14 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
 
               // Set default selected if not set
               if (_selectedService == null) {
-                _selectedService = activeServices.first;
+                if (isEditing) {
+                  _selectedService = activeServices.firstWhere(
+                    (s) => s.id == widget.existingAddon!.addonServiceId || s.name == widget.existingAddon!.service,
+                    orElse: () => activeServices.first,
+                  );
+                } else {
+                  _selectedService = activeServices.first;
+                }
               }
 
               return Column(
@@ -1121,9 +1772,9 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
                                 valueColor: AlwaysStoppedAnimation(Colors.white),
                               ),
                             )
-                          : const Text(
-                              'Confirm & Add to Booking',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                          : Text(
+                              isEditing ? 'Confirm & Update Booking' : 'Confirm & Add to Booking',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                     ),
                   ),
@@ -1154,6 +1805,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
     });
 
     try {
+      final isEditing = widget.existingAddon != null;
       final newAddon = BookingAddon(
         addonServiceId: _selectedService!.id,
         service: _selectedService!.name,
@@ -1162,8 +1814,27 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
       );
 
       final currentBooking = widget.booking;
-      final updatedAddons = [...currentBooking.addons, newAddon];
-      final newTotalPrice = currentBooking.totalPrice + (newAddon.amount * newAddon.persons);
+      List<BookingAddon> updatedAddons;
+      double newTotalPrice;
+
+      if (isEditing) {
+        // Find the index of the existing addon and replace it
+        final index = currentBooking.addons.indexOf(widget.existingAddon!);
+        updatedAddons = [...currentBooking.addons];
+        if (index != -1) {
+          updatedAddons[index] = newAddon;
+        } else {
+          updatedAddons.add(newAddon);
+        }
+        
+        // Recalculate price: subtract old addon price, add new addon price
+        final oldAddonTotal = widget.existingAddon!.amount * widget.existingAddon!.persons;
+        final newAddonTotal = newAddon.amount * newAddon.persons;
+        newTotalPrice = currentBooking.totalPrice - oldAddonTotal + newAddonTotal;
+      } else {
+        updatedAddons = [...currentBooking.addons, newAddon];
+        newTotalPrice = currentBooking.totalPrice + (newAddon.amount * newAddon.persons);
+      }
 
       final updatedBooking = currentBooking.copyWith(
         addons: updatedAddons,
@@ -1181,7 +1852,11 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully added "${_selectedService!.name}" x$_persons to the booking.'),
+            content: Text(
+              isEditing 
+                  ? 'Successfully updated "${_selectedService!.name}" x$_persons in the booking.'
+                  : 'Successfully added "${_selectedService!.name}" x$_persons to the booking.'
+            ),
             backgroundColor: context.crmColors.success,
           ),
         );
@@ -1190,7 +1865,11 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to add add-on: $e'),
+            content: Text(
+              widget.existingAddon != null
+                  ? 'Failed to update add-on: $e'
+                  : 'Failed to add add-on: $e'
+            ),
             backgroundColor: Colors.red,
           ),
         );

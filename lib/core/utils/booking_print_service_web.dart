@@ -91,15 +91,18 @@ String _buildPrintableHtml(
   BookingDisplayEntry? selectedArtistEntry,
   String artistName = '',
 }) {
-  final artistPages =
-      variant == BookingPrintVariant.artist && relatedArtistEntries.isNotEmpty
-      ? relatedArtistEntries
-      : [
-          if (selectedArtistEntry != null)
-            selectedArtistEntry
-          else
-            booking.displayEntries.first,
-        ];
+  // artistPages is only used for the artist variant.
+  // Avoid calling .first on potentially-empty displayEntries for the client variant.
+  final artistPages = variant == BookingPrintVariant.artist
+      ? (relatedArtistEntries.isNotEmpty
+            ? relatedArtistEntries
+            : [
+                if (selectedArtistEntry != null)
+                  selectedArtistEntry
+                else if (booking.displayEntries.isNotEmpty)
+                  booking.displayEntries.first,
+              ])
+      : const <BookingDisplayEntry>[];
   final pagesHtml = variant == BookingPrintVariant.artist
       ? artistPages
             .map(
@@ -108,6 +111,7 @@ String _buildPrintableHtml(
             )
             .join('\n')
       : '<div class="booking-page">\n${_buildSingleBookingHtml(booking, variant, relatedArtistBookings, relatedArtistEntries, selectedArtistEntry, artistName)}\n</div>';
+
 
   return '''
 <!DOCTYPE html>
@@ -203,14 +207,10 @@ String _buildSingleBookingHtml(
   final entryBookingDate = activeArtistEntry.selectedDates.isNotEmpty
       ? activeArtistEntry.selectedDates.first
       : booking.bookingDate;
-  final entryDiscountAmount = booking.bookingItems.isEmpty
-      ? booking.discountAmount
-      : 0.0;
-  final entryDiscountLabel = booking.bookingItems.isEmpty
-      ? (booking.discountType == 'percent'
-            ? '${booking.discountValue.toStringAsFixed(0)}%'
-            : 'INR ${booking.discountValue.toStringAsFixed(0)}')
-      : 'INR 0';
+  final entryDiscountAmount = booking.discountAmount;
+  final entryDiscountLabel = booking.discountType == 'percent'
+      ? '${booking.discountValue.toStringAsFixed(0)}%'
+      : 'INR ${booking.discountValue.toStringAsFixed(0)}';
   final entryTotalAmount = (booking.bookingItems.isEmpty
           ? activeArtistEntry.totalPrice
           : (activeArtistEntry.totalPrice + addonTotal).clamp(
@@ -528,9 +528,11 @@ String _buildClientConfirmationHtml(Booking booking) {
           a.artistName.trim().isNotEmpty)
       .map((a) {
         final roleLabel = _staffWorkLabel(a);
-        return roleLabel.isNotEmpty
+        final phone = a.phone.trim();
+        final nameWithRole = roleLabel.isNotEmpty
             ? '${a.artistName.trim()} ($roleLabel)'
             : a.artistName.trim();
+        return phone.isNotEmpty ? '$nameWithRole — $phone' : nameWithRole;
       })
       .toList();
   final assistants = assistantList.join(', ');
@@ -541,6 +543,33 @@ String _buildClientConfirmationHtml(Booking booking) {
   final assistantLine = assistants.isNotEmpty
       ? '\n        <div class="client-detail-line"><strong>Assistant Details :</strong> ${_escape(assistants)}</div>'
       : '';
+
+  // ── POC (Point of Contact) line ──────────────────────────────────────────
+  // Prefer the denormalized pocName/pocPhone stored directly on the booking.
+  // Fall back to a lookup from the assignments list for older records.
+  final String pocName;
+  final String pocPhone;
+  if (booking.pocName.trim().isNotEmpty) {
+    pocName = booking.pocName.trim();
+    pocPhone = booking.pocPhone.trim();
+  } else if (booking.pocId.trim().isNotEmpty) {
+    final found = assignments.cast<BookingAssignment?>().firstWhere(
+      (a) => a?.employeeId == booking.pocId,
+      orElse: () => null,
+    );
+    pocName = found?.artistName.trim() ?? '';
+    pocPhone = found?.phone.trim() ?? '';
+  } else {
+    pocName = '';
+    pocPhone = '';
+  }
+
+  final pocLine = pocName.isEmpty
+      ? ''
+      : () {
+          final contact = pocPhone.isNotEmpty ? '$pocName — $pocPhone' : pocName;
+          return '\n        <div class="client-detail-line" style="background:#fff8e1;border-left:3px solid #f59e0b;padding-left:8px;"><strong>Point of Contact :</strong> ${_escape(contact)}</div>';
+        }();
 
   return '''
     <div class="client-confirmation">
@@ -559,12 +588,12 @@ String _buildClientConfirmationHtml(Booking booking) {
         <h3>Basic Details</h3>
         <div class="client-detail-line"><strong>Bride's Name :</strong> ${_escape(booking.customerName)}</div>
         <div class="client-detail-line"><strong>Booking Date :</strong> ${_escape(_formatLongDate(booking.createdAt ?? booking.bookingDate))}</div>
-        <div class="client-detail-line"><strong>Event Date &amp; Time :</strong> ${_escape(_formatLongDate(booking.serviceStart))}</div>
+        <div class="client-detail-line"><strong>Event Date &amp; Time :</strong> ${_escape(_formatLongDate(booking.selectedDates.isNotEmpty ? booking.selectedDates.first : booking.bookingDate))}</div>
         <div class="client-detail-line"><strong>Get Ready Time :</strong> ${_escape('${_formatTime(booking.serviceStart)} - ${_formatTime(booking.serviceEnd)}')}</div>
-        <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.region.isEmpty ? 'To be confirmed' : booking.region)}</div>
+        <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.district.trim().isNotEmpty ? booking.district.trim() : booking.region.trim().isNotEmpty ? booking.region.trim() : 'To be confirmed')}</div>
         <div class="client-detail-line"><strong>Package :</strong> ${_escape(booking.service)}</div>
         <div class="client-detail-line"><strong>Outfit :</strong> ${_escape(outfitSummary)}</div>
-        <div class="client-detail-line"><strong>Add Ons :</strong> ${_escape(addonSummary)}</div>$artistLine$assistantLine
+        <div class="client-detail-line"><strong>Add Ons :</strong> ${_escape(addonSummary)}</div>$artistLine$assistantLine$pocLine
         <div class="client-detail-line"><strong>Phone :</strong> ${_escape(booking.phone)}</div>
         <div class="client-detail-line"><strong>Email :</strong> ${_escape(booking.email)}</div>
       </div>
