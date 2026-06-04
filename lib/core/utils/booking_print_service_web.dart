@@ -213,10 +213,7 @@ String _buildSingleBookingHtml(
       : 'INR ${booking.discountValue.toStringAsFixed(0)}';
   final entryTotalAmount = (booking.bookingItems.isEmpty
           ? activeArtistEntry.totalPrice
-          : (activeArtistEntry.totalPrice + addonTotal).clamp(
-              0,
-              booking.totalPrice,
-            ))
+          : activeArtistEntry.totalPrice + addonTotal)
       .toDouble();
   final entryPackageAmount = _packageAmountFromTotal(
     entryTotalAmount,

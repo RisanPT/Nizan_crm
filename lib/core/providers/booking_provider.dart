@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
@@ -142,6 +143,25 @@ final artistAssignedWorksProvider =
       );
     });
 
+final singleBookingProvider = FutureProvider.autoDispose.family<Booking?, String>((ref, id) async {
+  if (id.isEmpty || id == 'new') return null;
+  
+  await Future.delayed(const Duration(milliseconds: 400));
+  final asyncBookings = ref.read(bookingProvider);
+  final allBookings = asyncBookings.value ?? [];
+  final found = allBookings.cast<Booking?>().firstWhere(
+    (b) => b?.id == id,
+    orElse: () => null,
+  );
+  // DEBUG: log what we found in local cache
+  debugPrint(
+    '[singleBookingProvider] id=$id '
+    'totalPrice=${found?.totalPrice} '
+    'addons=${found?.addons.map((a) => "${a.service}:${a.amount}").toList()}',
+  );
+  return found;
+});
+
 @Riverpod(keepAlive: true)
 class BookingNotifier extends _$BookingNotifier {
   @override
@@ -200,8 +220,8 @@ class BookingNotifier extends _$BookingNotifier {
     try {
       final createdBooking = await service.createBooking(booking);
       if (ref.mounted) {
+        state = AsyncData([...state.value ?? [], createdBooking]);
         ref.read(bookingsRefreshTriggerProvider.notifier).state++;
-        ref.invalidateSelf();
       }
       return createdBooking;
     } catch (err, stack) {
@@ -217,22 +237,26 @@ class BookingNotifier extends _$BookingNotifier {
     final previousState = state;
     final currentBookings = state.value ?? [];
 
+    // Optimistic update immediately with user-provided data
     state = AsyncData([
       for (final existing in currentBookings)
         if (existing.id == booking.id) booking else existing,
     ]);
 
     try {
-      final updatedBooking = await service.updateBooking(booking);
+      // Send to server but keep local data as source of truth.
+      // The server may recalculate totalPrice differently (base only),
+      // so we don't overwrite local state with server response.
+      await service.updateBooking(booking);
       if (ref.mounted) {
+        // Re-apply local booking to make sure state is consistent
         state = AsyncData([
           for (final existing in state.value ?? [])
-            if (existing.id == updatedBooking.id) updatedBooking else existing,
+            if (existing.id == booking.id) booking else existing,
         ]);
         ref.read(bookingsRefreshTriggerProvider.notifier).state++;
-        ref.invalidateSelf();
       }
-      return updatedBooking;
+      return booking;
     } catch (err, stack) {
       if (ref.mounted) {
         state = previousState;

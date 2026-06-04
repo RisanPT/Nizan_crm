@@ -83,6 +83,17 @@ class BookingService {
     }
   }
 
+  Future<Booking> getBookingById(String id) async {
+    try {
+      final response = await _dio.get('/bookings/$id');
+      return Booking.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(
+        'Failed to fetch booking: ${_extractErrorMessage(e, 'Unable to fetch booking.')}',
+      );
+    }
+  }
+
   Future<Booking> createBooking(Booking booking) async {
     try {
       final response = await _dio.post('/bookings', data: booking.toJson());
