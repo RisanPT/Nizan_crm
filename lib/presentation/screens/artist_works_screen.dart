@@ -1252,7 +1252,45 @@ class _ExpandedDetails extends ConsumerWidget {
                 14.h,
               ],
 
-              // Staff instructions
+              // Outfit details
+              if (booking.outfitDetails.isNotEmpty) ...[
+                _DetailLabel('Outfit Details'),
+                6.h,
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F3FF),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.checkroom_rounded,
+                        size: 16,
+                        color: Color(0xFF8B5CF6),
+                      ),
+                      8.w,
+                      Expanded(
+                        child: Text(
+                          booking.outfitDetails,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF4C1D95),
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                14.h,
+              ],
+
               if (booking.staffInstructions.isNotEmpty) ...[
                 _DetailLabel('Instructions'),
                 6.h,

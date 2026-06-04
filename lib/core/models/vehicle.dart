@@ -9,6 +9,7 @@ class Vehicle {
   final String fuelType;
   final String status;
   final String notes;
+  final String ownershipType;
   final Employee? driver;
 
   const Vehicle({
@@ -20,6 +21,7 @@ class Vehicle {
     required this.fuelType,
     required this.status,
     required this.notes,
+    this.ownershipType = 'in_house',
     this.driver,
   });
 
@@ -35,6 +37,7 @@ class Vehicle {
       fuelType: json['fuelType'] as String? ?? 'petrol',
       status: json['status'] as String? ?? 'active',
       notes: json['notes'] as String? ?? '',
+      ownershipType: json['ownershipType'] as String? ?? 'in_house',
       driver: driverJson is Map<String, dynamic>
           ? Employee.fromJson(driverJson)
           : null,

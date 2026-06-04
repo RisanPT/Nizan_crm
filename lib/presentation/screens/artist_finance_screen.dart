@@ -1,10 +1,14 @@
 import 'dart:io';
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../core/utils/image_download_service.dart';
+import 'package:dio/dio.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/artist_collection.dart';
@@ -1135,73 +1139,10 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     }
 
 
-    void showImageDialog(String url) {
+    void showImageDialog(String url, {String? label}) {
       showDialog(
         context: context,
-        builder: (ctx) => Stack(
-          children: [
-            // Frosted glass background
-            Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                child: Container(color: Colors.black.withValues(alpha: 0.6)),
-              ),
-            ),
-            // Content
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => Navigator.pop(ctx),
-                            borderRadius: BorderRadius.circular(50),
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    16.h,
-                    Flexible(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.network(
-                          url,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
+        builder: (ctx) => _ImageViewerDialog(url: url, label: label),
       );
     }
 
@@ -1326,7 +1267,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         date: c.date,
                         actions: actionsList,
                         onAttachmentTap: (c.attachmentUrl != null && c.attachmentUrl!.isNotEmpty)
-                            ? () => showImageDialog(c.attachmentUrl!)
+                            ? () => showImageDialog(c.attachmentUrl!, label: 'collection_screenshot')
                             : null,
                       );
                     },
@@ -1466,7 +1407,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         date: e.date,
                         actions: actionsList,
                         onAttachmentTap: e.receiptImage.isNotEmpty
-                            ? () => showImageDialog(e.receiptImage)
+                            ? () => showImageDialog(e.receiptImage, label: 'expense_bill')
                             : null,
                       );
                     },
@@ -2813,6 +2754,242 @@ class _FinanceEntryCard extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Full-screen Image Viewer with Download & Share
+// ─────────────────────────────────────────────────────────────────────────────
+class _ImageViewerDialog extends StatefulWidget {
+  final String url;
+  final String? label;
+
+  const _ImageViewerDialog({required this.url, this.label});
+
+  @override
+  State<_ImageViewerDialog> createState() => _ImageViewerDialogState();
+}
+
+class _ImageViewerDialogState extends State<_ImageViewerDialog> {
+  bool _isDownloading = false;
+
+  Future<Uint8List?> _fetchImageBytes() async {
+    try {
+      final dio = Dio();
+      final response = await dio.get<List<int>>(
+        widget.url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        return Uint8List.fromList(response.data!);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _fileName() {
+    final base = widget.label ?? 'image';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    return '${base}_$ts.jpg';
+  }
+
+  Future<void> _download() async {
+    if (_isDownloading) return;
+    setState(() => _isDownloading = true);
+    try {
+      final bytes = await _fetchImageBytes();
+      if (bytes == null) throw Exception('Failed to download image');
+      await downloadImage(
+        bytes,
+        _fileName(),
+        subject: 'Download Image',
+        text: widget.label == 'expense_bill'
+            ? 'Expense Bill'
+            : widget.label == 'collection_screenshot'
+            ? 'Collection Screenshot'
+            : 'Image',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Download failed: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  Future<void> _share() async {
+    setState(() => _isDownloading = true);
+    try {
+      final bytes = await _fetchImageBytes();
+      if (bytes == null) throw Exception('Failed to load image for sharing');
+      final xFile = XFile.fromData(bytes, mimeType: 'image/jpeg', name: _fileName());
+      await Share.shareXFiles(
+        [xFile],
+        text: widget.label == 'expense_bill'
+            ? 'Expense Bill'
+            : widget.label == 'collection_screenshot'
+            ? 'Collection Screenshot'
+            : 'Image',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Share failed: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isDownloading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Frosted glass background
+        Positioned.fill(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(color: Colors.black.withValues(alpha: 0.7)),
+            ),
+          ),
+        ),
+        // Content
+        SafeArea(
+          child: Column(
+            children: [
+              // ── Top bar ────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    // Close
+                    _GlassButton(
+                      icon: Icons.close,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    const Spacer(),
+                    // Title
+                    Text(
+                      widget.label == 'expense_bill'
+                          ? 'Expense Bill'
+                          : widget.label == 'collection_screenshot'
+                          ? 'Collection Screenshot'
+                          : 'Image',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    // Share
+                    _GlassButton(
+                      icon: Icons.share_rounded,
+                      onTap: _isDownloading ? null : _share,
+                    ),
+                    const SizedBox(width: 8),
+                    // Download
+                    _isDownloading
+                        ? Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            padding: const EdgeInsets.all(10),
+                            child: const CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : _GlassButton(
+                            icon: Icons.download_rounded,
+                            onTap: _download,
+                          ),
+                  ],
+                ),
+              ),
+              // ── Image ──────────────────────────────
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    scaleEnabled: true,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.network(
+                        widget.url,
+                        fit: BoxFit.contain,
+                        loadingBuilder: (ctx, child, progress) {
+                          if (progress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: progress.expectedTotalBytes != null
+                                  ? progress.cumulativeBytesLoaded /
+                                      progress.expectedTotalBytes!
+                                  : null,
+                              color: Colors.white,
+                            ),
+                          );
+                        },
+                        errorBuilder: (ctx, _, __) => const Center(
+                          child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GlassButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _GlassButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(50),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: onTap == null ? 0.1 : 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+          ),
+          child: Icon(icon, color: onTap == null ? Colors.white38 : Colors.white, size: 20),
         ),
       ),
     );

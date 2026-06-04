@@ -323,6 +323,7 @@ class Booking {
   final String regionId;
   final String districtId;
   final String driverId;
+  final String vehicleId;
   final String customerName;
   final String phone;
   final String email;
@@ -370,6 +371,7 @@ class Booking {
     this.regionId = '',
     this.districtId = '',
     this.driverId = '',
+    this.vehicleId = '',
     required this.customerName,
     required this.phone,
     this.email = '',
@@ -597,6 +599,7 @@ class Booking {
       regionId: json['regionId'] as String? ?? '',
       districtId: json['districtId'] as String? ?? '',
       driverId: json['driverId'] as String? ?? '',
+      vehicleId: json['vehicleId'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
       email: json['email'] as String? ?? '',
@@ -661,6 +664,7 @@ class Booking {
       'regionId': regionId,
       'districtId': districtId,
       'driverId': driverId,
+      'vehicleId': vehicleId,
       'phone': phone,
       'email': email,
       'legacyBooking': legacyBooking,
@@ -709,6 +713,7 @@ class Booking {
     String? regionId,
     String? districtId,
     String? driverId,
+    String? vehicleId,
     String? customerName,
     String? phone,
     String? email,
@@ -756,6 +761,7 @@ class Booking {
       regionId: regionId ?? this.regionId,
       districtId: districtId ?? this.districtId,
       driverId: driverId ?? this.driverId,
+      vehicleId: vehicleId ?? this.vehicleId,
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
       email: email ?? this.email,

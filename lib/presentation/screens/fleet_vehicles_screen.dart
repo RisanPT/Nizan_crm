@@ -40,6 +40,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
       var fuelType = vehicle?.fuelType ?? 'petrol';
       var status = vehicle?.status ?? 'active';
       var driverId = vehicle?.driver?.id ?? '';
+      var ownershipType = vehicle?.ownershipType ?? 'in_house';
 
       await showDialog(
         context: context,
@@ -179,6 +180,28 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
+                        initialValue: ownershipType,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'in_house',
+                            child: Text('In-House'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'rented',
+                            child: Text('Rented'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => ownershipType = value);
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Ownership Type',
+                        ),
+                      ),
+                      16.h,
+                      DropdownButtonFormField<String>(
                         initialValue: status,
                         items: const [
                           DropdownMenuItem(
@@ -228,6 +251,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                           status: status,
                           notes: notesCtrl.text.trim(),
                           driverId: driverId,
+                          ownershipType: ownershipType,
                         );
                     ref.invalidate(vehiclesProvider);
                     ref.invalidate(paginatedVehiclesProvider);
@@ -319,6 +343,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                         [
                           vehicle.brand,
                           vehicle.type.toUpperCase(),
+                          vehicle.ownershipType == 'rented' ? 'RENTED' : 'IN-HOUSE',
                           vehicle.driver?.name.isNotEmpty == true
                               ? 'Driver: ${vehicle.driver!.name}'
                               : 'Unassigned',

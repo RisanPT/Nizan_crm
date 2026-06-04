@@ -59,7 +59,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
     final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
     final fyBookings = allBookings.where((b) {
-      final d = b.createdAt ?? b.bookingDate;
+      final d = b.bookingDate;
       return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
     });
 
@@ -110,6 +110,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'ceo_daily',
+            useEventDate: true,
           ),
           onDailyPerformance: () => downloadDashboardReport(
             month: DateTime.now(),
@@ -117,6 +118,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'sales',
+            useEventDate: true,
           ),
           onExecutiveSummary: () => downloadDashboardReport(
             month: DateTime.now(),
@@ -124,6 +126,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'executive',
+            useEventDate: true,
           ),
           onFullLedger: () => downloadDashboardReport(
             month: DateTime.now(),
@@ -131,6 +134,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'crm',
+            useEventDate: true,
           ),
           onForecastReport: () => downloadDashboardReport(
             month: DateTime.now(),
@@ -138,6 +142,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             packages: packages,
             employees: employees,
             reportType: 'forecast',
+            useEventDate: true,
           ),
         ),
       );
@@ -1132,7 +1137,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         // Filter bookings for this FY
         final fyBookings = allBookings.where((b) {
-          final d = b.createdAt ?? b.bookingDate;
+          final d = b.bookingDate;
           return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
         }).toList();
 
@@ -1147,7 +1152,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         for (final b in fyBookings) {
           int monthIndex;
-          final d = b.createdAt ?? b.bookingDate;
+          final d = b.bookingDate;
           if (d.month >= 4) {
             monthIndex = d.month - 4;
           } else {

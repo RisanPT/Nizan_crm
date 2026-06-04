@@ -69,6 +69,7 @@ class VehicleService {
     required String status,
     required String notes,
     String? driverId,
+    required String ownershipType,
   }) async {
     try {
       final payload = {
@@ -80,6 +81,7 @@ class VehicleService {
         'status': status,
         'notes': notes,
         'driverId': (driverId?.trim().isEmpty ?? true) ? null : driverId,
+        'ownershipType': ownershipType,
       };
 
       final response = id != null && id.isNotEmpty

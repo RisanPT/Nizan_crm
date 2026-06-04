@@ -340,6 +340,16 @@ class Sidebar extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
+                          icon: Icons.assignment_outlined,
+                          title: 'Assignments',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/assignments',
+                          onTap: () => context.go('/fleet/assignments'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
                           icon: Icons.local_gas_station_outlined,
                           title: 'Expenses',
                           isCollapsed: false,

@@ -24,6 +24,7 @@ import '../../presentation/screens/sales_bookings_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
+import '../../presentation/screens/fleet_assignments_screen.dart';
 import '../../presentation/screens/fuel_expenses_screen.dart';
 import '../../presentation/screens/artist_finance_screen.dart';
 import '../../presentation/screens/leave_request_screen.dart';
@@ -138,6 +139,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Fleet Vehicles';
           } else if (state.uri.path == '/fleet/drivers') {
             title = 'Fleet Drivers';
+          } else if (state.uri.path == '/fleet/assignments') {
+            title = 'Fleet Assignments';
           } else if (state.uri.path == '/fleet/fuel') {
             title = 'Fleet Expenses';
           } else if (state.uri.path == '/accounts/artist-collections') {
@@ -241,6 +244,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/fleet/drivers',
             builder: (context, state) => const FleetDriversScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/assignments',
+            builder: (context, state) => const FleetAssignmentsScreen(),
           ),
           GoRoute(
             path: '/fleet/fuel',
