@@ -12,6 +12,14 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 import '../widgets/export_sales_report_dialog.dart';
+import '../../services/zone_service.dart';
+import '../../services/state_service.dart';
+import '../../services/region_service.dart';
+import '../../services/district_service.dart';
+import '../../core/models/geographic_state.dart';
+import '../../core/models/service_region.dart';
+import '../../core/models/district.dart';
+import '../../core/models/zone.dart';
 
 class SalesBookingsScreen extends HookConsumerWidget {
   const SalesBookingsScreen({super.key});
@@ -31,6 +39,33 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final dateBasis = useState<String>('event_date');
     const pageSize = 20;
 
+    final selectedZoneId = useState<String>('');
+    final selectedStateId = useState<String>('');
+    final selectedRegionId = useState<String>('');
+    final selectedDistrictId = useState<String>('');
+
+    final asyncZones = ref.watch(zonesProvider);
+    final asyncStates = ref.watch(statesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+
+    final allZones = asyncZones.value ?? [];
+    final allStates = asyncStates.value ?? [];
+    final allRegions = asyncRegions.value ?? [];
+    final allDistricts = asyncDistricts.value ?? [];
+
+    final filteredStates = selectedZoneId.value.isEmpty
+        ? allStates
+        : allStates.where((s) => s.zoneId == selectedZoneId.value).toList();
+
+    final filteredRegions = selectedStateId.value.isEmpty
+        ? allRegions
+        : allRegions.where((r) => r.stateId == selectedStateId.value).toList();
+
+    final filteredDistricts = selectedRegionId.value.isEmpty
+        ? allDistricts
+        : allDistricts.where((d) => d.regionId == selectedRegionId.value).toList();
+
     final financialYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
 
     final pageParams = PaginatedBookingsParams(
@@ -40,6 +75,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
       duplicatesOnly: duplicatesOnly.value,
       financialYear: selectedFY.value,
       dateBasis: dateBasis.value,
+      zoneId: selectedZoneId.value.isEmpty ? null : selectedZoneId.value,
+      stateId: selectedStateId.value.isEmpty ? null : selectedStateId.value,
+      regionId: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
+      districtId: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
     );
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
@@ -50,32 +89,58 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final now = DateTime.now();
     final useEventDateVal = dateBasis.value == 'event_date';
 
-    final todaysScheduled = allBookings.where((b) {
+    bool bookingMatchesGeoFilters(Booking b) {
+      if (selectedDistrictId.value.isNotEmpty && b.districtId != selectedDistrictId.value) {
+        return false;
+      }
+      if (selectedRegionId.value.isNotEmpty && b.regionId != selectedRegionId.value) {
+        return false;
+      }
+      if (selectedStateId.value.isNotEmpty) {
+        final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == b.regionId, orElse: () => null);
+        if (region == null || region.stateId != selectedStateId.value) {
+          return false;
+        }
+      }
+      if (selectedZoneId.value.isNotEmpty) {
+        final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == b.regionId, orElse: () => null);
+        if (region == null) return false;
+        final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == region.stateId, orElse: () => null);
+        if (state == null || state.zoneId != selectedZoneId.value) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    final geoFilteredAllBookings = allBookings.where(bookingMatchesGeoFilters).toList();
+
+    final todaysScheduled = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return d.year == now.year && d.month == now.month && d.day == now.day;
     }).length;
 
-    final todaysCompleted = allBookings.where((b) {
+    final todaysCompleted = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() == 'completed';
     }).length;
     
     final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
     final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
-    final fyBookings = allBookings.where((b) {
+    final fyBookings = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
     });
 
 
-    final totalSalesValue = allBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
+    final totalSalesValue = geoFilteredAllBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
     final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.advanceAmount : sum);
-    final completedOverall = allBookings.where((b) => b.status.toLowerCase() == 'completed').length;
-    final cancelledOverall = allBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
-    final pendingWorks = allBookings.where((b) => b.status.toLowerCase() == 'pending').length;
+    final completedOverall = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'completed').length;
+    final cancelledOverall = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
+    final pendingWorks = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'pending').length;
 
     final currentMonthKey = '${now.year}-${now.month}';
-    final monthBookings = allBookings.where((b) {
+    final monthBookings = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return '${d.year}-${d.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled';
     }).toList();
@@ -106,20 +171,44 @@ class SalesBookingsScreen extends HookConsumerWidget {
         return;
       }
 
+      final activeFiltersStr = (() {
+        final List<String> parts = [];
+        if (selectedZoneId.value.isNotEmpty) {
+          final zone = allZones.cast<ZoneModel?>().firstWhere((z) => z?.id == selectedZoneId.value, orElse: () => null);
+          if (zone != null) parts.add('Zone: ${zone.name}');
+        }
+        if (selectedStateId.value.isNotEmpty) {
+          final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == selectedStateId.value, orElse: () => null);
+          if (state != null) parts.add('State: ${state.name}');
+        }
+        if (selectedRegionId.value.isNotEmpty) {
+          final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == selectedRegionId.value, orElse: () => null);
+          if (region != null) parts.add('Region: ${region.name}');
+        }
+        if (selectedDistrictId.value.isNotEmpty) {
+          final district = allDistricts.cast<District?>().firstWhere((d) => d?.id == selectedDistrictId.value, orElse: () => null);
+          if (district != null) parts.add('District: ${district.name}');
+        }
+        return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
+      })();
+
       showDialog(
         context: context,
         builder: (dialogCtx) => ExportSalesReportDialog(
           financialYear: selectedFY.value,
+          activeFilters: activeFiltersStr,
           onTodayReport: () => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
               month: DateTime.now(),
-              bookings: allBookings,
+              bookings: geoFilteredAllBookings,
               packages: packages,
               employees: employees,
               reportType: 'ceo_daily',
               useEventDate: useEventDateVal,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
             ),
           ),
           onDailyPerformance: () => _runWithReportLoader(
@@ -127,11 +216,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => downloadDashboardReport(
               month: DateTime.now(),
-              bookings: allBookings,
+              bookings: geoFilteredAllBookings,
               packages: packages,
               employees: employees,
               reportType: 'sales',
               useEventDate: useEventDateVal,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
             ),
           ),
           onExecutiveSummary: () => _runWithReportLoader(
@@ -139,11 +230,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => downloadDashboardReport(
               month: DateTime.now(),
-              bookings: allBookings,
+              bookings: geoFilteredAllBookings,
               packages: packages,
               employees: employees,
               reportType: 'executive',
               useEventDate: useEventDateVal,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
             ),
           ),
           onFullLedger: () => _runWithReportLoader(
@@ -151,11 +244,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => downloadDashboardReport(
               month: DateTime.now(),
-              bookings: allBookings,
+              bookings: geoFilteredAllBookings,
               packages: packages,
               employees: employees,
               reportType: 'crm',
               useEventDate: useEventDateVal,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
             ),
           ),
           onForecastReport: () => _runWithReportLoader(
@@ -163,11 +258,13 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => downloadDashboardReport(
               month: DateTime.now(),
-              bookings: allBookings,
+              bookings: geoFilteredAllBookings,
               packages: packages,
               employees: employees,
               reportType: 'forecast',
               useEventDate: useEventDateVal,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
             ),
           ),
           onAprJunReport: () => _runWithReportLoader(
@@ -178,13 +275,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return downloadDashboardReport(
                 month: DateTime(startYear, 4),
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(startYear, 4, 1),
                 endDate: DateTime(startYear, 6, 30, 23, 59, 59),
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -196,13 +295,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return downloadDashboardReport(
                 month: DateTime(startYear, 7),
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(startYear, 7, 1),
                 endDate: DateTime(startYear, 9, 30, 23, 59, 59),
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -214,13 +315,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return downloadDashboardReport(
                 month: DateTime(startYear, 10),
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(startYear, 10, 1),
                 endDate: DateTime(startYear, 12, 31, 23, 59, 59),
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -232,13 +335,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final endYear = 2000 + int.parse(parts[1]);
               return downloadDashboardReport(
                 month: DateTime(endYear, 1),
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(endYear, 1, 1),
                 endDate: DateTime(endYear, 3, 31, 23, 59, 59),
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -249,13 +354,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final now = DateTime.now();
               return downloadDashboardReport(
                 month: now,
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(now.year, now.month - 6, now.day),
                 endDate: now,
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -266,13 +373,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final now = DateTime.now();
               return downloadDashboardReport(
                 month: now,
-                bookings: allBookings,
+                bookings: geoFilteredAllBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
                 useEventDate: useEventDateVal,
                 startDate: DateTime(now.year - 1, now.month, now.day),
                 endDate: now,
+                districts: allDistricts,
+                activeFilters: activeFiltersStr,
               );
             },
           ),
@@ -488,6 +597,99 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       icon: const Icon(Icons.keyboard_arrow_down),
                     ),
                     if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    // ── Zone Dropdown ──
+                    DropdownButton<String>(
+                      value: selectedZoneId.value.isEmpty ? 'all' : selectedZoneId.value,
+                      onChanged: (val) {
+                        selectedZoneId.value = val == 'all' ? '' : val!;
+                        selectedStateId.value = '';
+                        selectedRegionId.value = '';
+                        selectedDistrictId.value = '';
+                      },
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Zones', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        ...allZones.map((z) => DropdownMenuItem(
+                              value: z.id,
+                              child: Text(z.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            )),
+                      ],
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+
+                    // ── State Dropdown ──
+                    DropdownButton<String>(
+                      value: selectedStateId.value.isEmpty ? 'all' : selectedStateId.value,
+                      onChanged: (val) {
+                        selectedStateId.value = val == 'all' ? '' : val!;
+                        selectedRegionId.value = '';
+                        selectedDistrictId.value = '';
+                      },
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All States', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        ...filteredStates.map((s) => DropdownMenuItem(
+                              value: s.id,
+                              child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            )),
+                      ],
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+
+                    // ── Region Dropdown ──
+                    DropdownButton<String>(
+                      value: selectedRegionId.value.isEmpty ? 'all' : selectedRegionId.value,
+                      onChanged: (val) {
+                        selectedRegionId.value = val == 'all' ? '' : val!;
+                        selectedDistrictId.value = '';
+                      },
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Regions', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        ...filteredRegions.map((r) => DropdownMenuItem(
+                              value: r.id,
+                              child: Text(r.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            )),
+                      ],
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+
+                    // ── District Dropdown ──
+                    DropdownButton<String>(
+                      value: selectedDistrictId.value.isEmpty ? 'all' : selectedDistrictId.value,
+                      onChanged: (val) {
+                        selectedDistrictId.value = val == 'all' ? '' : val!;
+                      },
+                      items: [
+                        const DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Districts', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        ...filteredDistricts.map((d) => DropdownMenuItem(
+                              value: d.id,
+                              child: Text(d.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            )),
+                      ],
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
                     SegmentedButton<bool>(
                       segments: const [
                         ButtonSegment(
@@ -682,6 +884,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 _MonthlySalesSummaryView(
                   financialYear: selectedFY.value,
                   dateBasis: dateBasis.value,
+                  zoneId: selectedZoneId.value,
+                  stateId: selectedStateId.value,
+                  regionId: selectedRegionId.value,
+                  districtId: selectedDistrictId.value,
                 )
               else
                 Container(
@@ -1269,21 +1475,64 @@ String _formatDate(DateTime value) {
 class _MonthlySalesSummaryView extends ConsumerWidget {
   final String financialYear;
   final String dateBasis;
+  final String? zoneId;
+  final String? stateId;
+  final String? regionId;
+  final String? districtId;
 
   const _MonthlySalesSummaryView({
     required this.financialYear,
     required this.dateBasis,
+    this.zoneId,
+    this.stateId,
+    this.regionId,
+    this.districtId,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crmColors = context.crmColors;
     final asyncBookings = ref.watch(bookingProvider);
+    final asyncStates = ref.watch(statesProvider);
+    final asyncRegions = ref.watch(regionsProvider);
+    final asyncZones = ref.watch(zonesProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+
+    final allStates = asyncStates.value ?? [];
+    final allRegions = asyncRegions.value ?? [];
+    final allZones = asyncZones.value ?? [];
+    final allDistricts = asyncDistricts.value ?? [];
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (err, _) => Center(child: Text('Error: $err')),
       data: (allBookings) {
+        bool bookingMatchesGeoFilters(Booking b) {
+          if (districtId != null && districtId!.isNotEmpty && b.districtId != districtId) {
+            return false;
+          }
+          if (regionId != null && regionId!.isNotEmpty && b.regionId != regionId) {
+            return false;
+          }
+          if (stateId != null && stateId!.isNotEmpty) {
+            final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == b.regionId, orElse: () => null);
+            if (region == null || region.stateId != stateId) {
+              return false;
+            }
+          }
+          if (zoneId != null && zoneId!.isNotEmpty) {
+            final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == b.regionId, orElse: () => null);
+            if (region == null) return false;
+            final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == region.stateId, orElse: () => null);
+            if (state == null || state.zoneId != zoneId) {
+              return false;
+            }
+          }
+          return true;
+        }
+
+        final geoFilteredAllBookings = allBookings.where(bookingMatchesGeoFilters).toList();
+
         // Parse FY
         final parts = financialYear.split('-');
         final startYear = int.parse(parts[0]);
@@ -1295,7 +1544,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
         final useEventDate = dateBasis == 'event_date';
 
         // Filter bookings for this FY
-        final fyBookings = allBookings.where((b) {
+        final fyBookings = geoFilteredAllBookings.where((b) {
           final d = useEventDate ? b.bookingDate : (b.createdAt ?? b.bookingDate);
           return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
         }).toList();
@@ -1402,15 +1651,38 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                               final reportMonth = DateTime(stats.year, stats.month);
                               final useEventDate = value == 'event_date';
                               
+                              final activeFiltersStr = (() {
+                                final List<String> parts = [];
+                                if (zoneId != null && zoneId!.isNotEmpty) {
+                                  final zone = allZones.cast<ZoneModel?>().firstWhere((z) => z?.id == zoneId, orElse: () => null);
+                                  if (zone != null) parts.add('Zone: ${zone.name}');
+                                }
+                                if (stateId != null && stateId!.isNotEmpty) {
+                                  final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == stateId, orElse: () => null);
+                                  if (state != null) parts.add('State: ${state.name}');
+                                }
+                                if (regionId != null && regionId!.isNotEmpty) {
+                                  final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == regionId, orElse: () => null);
+                                  if (region != null) parts.add('Region: ${region.name}');
+                                }
+                                if (districtId != null && districtId!.isNotEmpty) {
+                                  final district = allDistricts.cast<District?>().firstWhere((d) => d?.id == districtId, orElse: () => null);
+                                  if (district != null) parts.add('District: ${district.name}');
+                                }
+                                return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
+                              })();
+
                               await _runWithReportLoader(
                                 context: context,
                                 crmColors: crmColors,
                                 action: () => downloadDashboardReport(
                                   month: reportMonth,
-                                  bookings: allBookings,
+                                  bookings: geoFilteredAllBookings,
                                   packages: asyncPackages.value!,
                                   employees: asyncEmployees.value!,
                                   useEventDate: useEventDate,
+                                  districts: allDistricts,
+                                  activeFilters: activeFiltersStr,
                                 ),
                               );
                             },

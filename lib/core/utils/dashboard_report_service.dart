@@ -3,6 +3,7 @@ import '../models/lead.dart';
 import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
+import '../models/district.dart';
 import 'dashboard_report_service_stub.dart'
     if (dart.library.io) 'dashboard_report_service_mobile.dart'
     if (dart.library.html) 'dashboard_report_service_web.dart' as impl;
@@ -18,6 +19,8 @@ Future<void> downloadDashboardReport({
   bool useEventDate = false,
   DateTime? startDate,
   DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
 }) {
   return impl.downloadDashboardReport(
     month: month,
@@ -30,6 +33,8 @@ Future<void> downloadDashboardReport({
     useEventDate: useEventDate,
     startDate: startDate,
     endDate: endDate,
+    districts: districts,
+    activeFilters: activeFilters,
   );
 }
 

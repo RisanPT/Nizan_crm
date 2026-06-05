@@ -3,6 +3,7 @@ import '../models/lead.dart';
 import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
+import '../models/district.dart';
 
 Future<void> downloadDashboardReport({
   required DateTime month,
@@ -15,6 +16,8 @@ Future<void> downloadDashboardReport({
   bool useEventDate = false,
   DateTime? startDate,
   DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
 }) async {
   throw UnsupportedError('Dashboard PDF export is only available on web.');
 }

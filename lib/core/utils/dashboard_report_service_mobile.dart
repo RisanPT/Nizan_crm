@@ -12,6 +12,7 @@ import '../models/lead.dart';
 import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
+import '../models/district.dart';
 
 // Cache for report logo bytes to avoid redundant asset loading
 Uint8List? _cachedLogoBytes;
@@ -27,6 +28,8 @@ Future<void> downloadDashboardReport({
   bool useEventDate = false,
   DateTime? startDate,
   DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
 }) async {
   if (_cachedLogoBytes == null) {
     final logoData = await rootBundle.load('assets/images/teamn_logo.png');
@@ -93,6 +96,17 @@ Future<void> downloadDashboardReport({
               color: PdfColors.blueGrey700,
             ),
           ),
+          if (activeFilters != null && activeFilters.isNotEmpty) ...[
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Active Filters: $activeFilters',
+              style: pw.TextStyle(
+                fontSize: 10,
+                color: PdfColors.blueGrey600,
+                fontStyle: pw.FontStyle.italic,
+              ),
+            ),
+          ],
           pw.SizedBox(height: 18),
 
           if (reportType == 'executive' || reportType == 'sales') ...[
@@ -128,10 +142,10 @@ Future<void> downloadDashboardReport({
             ),
             pw.SizedBox(height: 22),
             _sectionTitle('Pending Collections (Forecast)'),
-            _bookingTable(report.pendingBookings),
+            _bookingTable(report.pendingBookings, districts),
             pw.SizedBox(height: 22),
             _sectionTitle('Upcoming Bookings'),
-            _bookingTable(report.upcomingBookings),
+            _bookingTable(report.upcomingBookings, districts),
           ],
 
           if (reportType == 'executive' || reportType == 'marketing') ...[
@@ -151,7 +165,7 @@ Future<void> downloadDashboardReport({
               reportType == 'crm') ...[
             pw.SizedBox(height: 22),
             _sectionTitle('Monthly Bookings Ledger'),
-            _bookingTable(report.monthBookingsList),
+            _bookingTable(report.monthBookingsList, districts),
           ],
 
           if (reportType == 'finance') ...[
@@ -171,10 +185,10 @@ Future<void> downloadDashboardReport({
             _metricCard('Total Leads', '${leads.length}'),
             pw.SizedBox(height: 22),
             _sectionTitle('Recent Collections'),
-            _bookingTable(report.todaysBookings),
+            _bookingTable(report.todaysBookings, districts),
             pw.SizedBox(height: 22),
             _sectionTitle('Detailed Sales Records'),
-            _bookingTable(report.todaysBookings),
+            _bookingTable(report.todaysBookings, districts),
           ],
         ];
       },
@@ -301,21 +315,39 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
   );
 }
 
-pw.Widget _bookingTable(List<Booking> rows) {
+pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
   final List<List<dynamic>> dataList = rows
       .map<List<dynamic>>(
-        (booking) => <dynamic>[
-          booking.customerName,
-          booking.phone,
-          booking.service,
-          _dateLabel(booking.createdAt ?? booking.bookingDate),
-          _dateLabel(booking.serviceStart),
-          booking.status.toUpperCase(),
-          'INR ${booking.advanceAmount.toStringAsFixed(0)}',
-          'INR ${booking.discountAmount.toStringAsFixed(0)}',
-          'INR ${booking.totalPrice.toStringAsFixed(0)}',
-          'INR ${((booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity)).toStringAsFixed(0)}',
-        ],
+        (booking) {
+          String displayDistrict = booking.district.trim();
+          if (displayDistrict.isEmpty && booking.districtId.isNotEmpty && districts.isNotEmpty) {
+            try {
+              final matched = districts.firstWhere(
+                (d) => d.id == booking.districtId,
+              );
+              if (matched.name.isNotEmpty) {
+                displayDistrict = matched.name.trim();
+              }
+            } catch (_) {}
+          }
+          if (displayDistrict.isEmpty) {
+            displayDistrict = booking.region.trim();
+          }
+
+          return <dynamic>[
+            booking.customerName,
+            booking.phone,
+            booking.service,
+            displayDistrict,
+            _dateLabel(booking.createdAt ?? booking.bookingDate),
+            _dateLabel(booking.serviceStart),
+            booking.status.toUpperCase(),
+            'INR ${booking.advanceAmount.toStringAsFixed(0)}',
+            'INR ${booking.discountAmount.toStringAsFixed(0)}',
+            'INR ${booking.totalPrice.toStringAsFixed(0)}',
+            'INR ${((booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity)).toStringAsFixed(0)}',
+          ];
+        },
       )
       .toList();
 
@@ -326,6 +358,7 @@ pw.Widget _bookingTable(List<Booking> rows) {
     final totalBalance = rows.fold<double>(0.0, (sum, row) => sum + (row.totalPrice - row.advanceAmount - row.discountAmount).clamp(0, double.infinity));
     dataList.add(<dynamic>[
       pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      '',
       '',
       '',
       '',
@@ -343,6 +376,7 @@ pw.Widget _bookingTable(List<Booking> rows) {
       'Client',
       'Phone',
       'Service',
+      'District',
       'Booked',
       'Event',
       'Status',
@@ -353,10 +387,10 @@ pw.Widget _bookingTable(List<Booking> rows) {
     ],
     data: dataList,
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
-    cellStyle: const pw.TextStyle(fontSize: 8),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7),
+    cellStyle: const pw.TextStyle(fontSize: 7),
     headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 6),
   );
 }
 

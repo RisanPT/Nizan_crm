@@ -22,6 +22,7 @@ import '../../services/district_service.dart';
 import '../../services/vehicle_service.dart';
 import '../../core/models/vehicle.dart';
 import '../../core/utils/whatsapp_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
@@ -226,6 +227,7 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     // CRM-only fields (empty until filled by user)
     final mapUrlCtrl = useTextEditingController();
+    useListenable(mapUrlCtrl);
     final travelModeCtrl = useTextEditingController();
     final travelTimeCtrl = useTextEditingController();
     final travelDistanceCtrl = useTextEditingController(
@@ -1814,6 +1816,29 @@ class ManageBookingScreen extends HookConsumerWidget {
                     'MAP URL / COORDINATES',
                     mapUrlCtrl,
                     hint: 'Google Maps Link',
+                    suffixIcon: mapUrlCtrl.text.trim().isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.open_in_new_rounded, color: crmColors.primary),
+                            onPressed: () async {
+                              final text = mapUrlCtrl.text.trim();
+                              Uri? uri;
+                              if (text.startsWith('http://') || text.startsWith('https://')) {
+                                uri = Uri.tryParse(text);
+                              } else {
+                                uri = Uri.tryParse('https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(text)}');
+                              }
+                              if (uri != null && await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              } else {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(content: Text('Could not open map URL.')),
+                                  );
+                                }
+                              }
+                            },
+                          )
+                        : null,
                   ),
                   _buildField(
                     ctx,
@@ -1930,13 +1955,45 @@ class ManageBookingScreen extends HookConsumerWidget {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: crmColors.border),
               ),
-              child: Text(
-                'Previous slot for this artist: ${previousArtistWork.booking.customerName} (${previousArtistWork.service.trim().isEmpty ? 'Work' : previousArtistWork.service}) at ${_fmt(previousArtistWork.serviceStart)}. Distance from previous work to this booking: ${previousWorkDistanceKm.toStringAsFixed(1)} km.',
-                style: TextStyle(
-                  color: crmColors.textSecondary,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Previous slot for this artist: ${previousArtistWork.booking.customerName} (${previousArtistWork.service.trim().isEmpty ? 'Work' : previousArtistWork.service}) at ${_fmt(previousArtistWork.serviceStart)}. Distance from previous work to this booking: ${previousWorkDistanceKm.toStringAsFixed(1)} km.',
+                    style: TextStyle(
+                      color: crmColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                  if (previousArtistWork.booking.mapUrl.trim().isNotEmpty && mapUrlCtrl.text.trim().isNotEmpty) ...[
+                    8.h,
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: crmColors.primary,
+                        side: BorderSide(color: crmColors.primary),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.directions, size: 14),
+                      label: const Text('Open Route in Maps to Calculate Distance'),
+                      onPressed: () async {
+                        final origin = previousArtistWork.booking.mapUrl.trim();
+                        final destination = mapUrlCtrl.text.trim();
+                        final url = 'https://www.google.com/maps/dir/?api=1&origin=${Uri.encodeComponent(origin)}&destination=${Uri.encodeComponent(destination)}';
+                        final uri = Uri.tryParse(url);
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        } else if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Could not open directions link.')),
+                          );
+                        }
+                      },
+                    ),
+                  ],
+                ],
               ),
             ),
           ],
