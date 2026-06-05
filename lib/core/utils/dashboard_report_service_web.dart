@@ -13,6 +13,9 @@ import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
 
+// Cache for report logo bytes to avoid redundant asset loading
+Uint8List? _cachedLogoBytes;
+
 Future<void> downloadDashboardReport({
   required DateTime month,
   required List<Booking> bookings,
@@ -23,8 +26,11 @@ Future<void> downloadDashboardReport({
   List<ArtistCollection> collections = const [],
   bool useEventDate = false,
 }) async {
-  final logoData = await rootBundle.load('assets/images/teamn_logo.png');
-  final logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+  if (_cachedLogoBytes == null) {
+    final logoData = await rootBundle.load('assets/images/teamn_logo.png');
+    _cachedLogoBytes = logoData.buffer.asUint8List();
+  }
+  final logoImage = pw.MemoryImage(_cachedLogoBytes!);
 
   final pdf = pw.Document();
   final report = _buildReport(
@@ -137,9 +143,6 @@ Future<void> downloadDashboardReport({
             pw.SizedBox(height: 22),
             _sectionTitle('Monthly Bookings Ledger'),
             _bookingTable(report.monthBookingsList),
-            pw.SizedBox(height: 22),
-            _sectionTitle('Pending Booking Requests'),
-            _bookingTable(report.pendingBookings),
           ],
 
           if (reportType == 'finance') ...[
@@ -231,17 +234,29 @@ pw.Widget _sectionTitle(String title) {
 }
 
 pw.Widget _dailyRevenueTable(List<_DailyRevenueMetric> rows) {
+  final List<List<dynamic>> dataList = rows
+      .map<List<dynamic>>(
+        (row) => <dynamic>[
+          row.dayLabel,
+          '${row.bookingsCount}',
+          'INR ${row.revenue.toStringAsFixed(0)}',
+        ],
+      )
+      .toList();
+
+  if (rows.isNotEmpty) {
+    final totalBookings = rows.fold<int>(0, (sum, row) => sum + row.bookingsCount);
+    final totalRevenue = rows.fold<double>(0.0, (sum, row) => sum + row.revenue);
+    dataList.add(<dynamic>[
+      pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('$totalBookings', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('INR ${totalRevenue.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+    ]);
+  }
+
   return pw.TableHelper.fromTextArray(
     headers: const ['Day', 'Bookings', 'Revenue'],
-    data: rows
-        .map(
-          (row) => [
-            row.dayLabel,
-            '${row.bookingsCount}',
-            'INR ${row.revenue.toStringAsFixed(0)}',
-          ],
-        )
-        .toList(),
+    data: dataList,
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
     headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
@@ -283,6 +298,36 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
 }
 
 pw.Widget _bookingTable(List<Booking> rows) {
+  final List<List<dynamic>> dataList = rows
+      .map<List<dynamic>>(
+        (booking) => <dynamic>[
+          booking.customerName,
+          booking.phone,
+          booking.service,
+          _dateLabel(booking.createdAt ?? booking.bookingDate),
+          _dateLabel(booking.serviceStart),
+          booking.status.toUpperCase(),
+          'INR ${booking.advanceAmount.toStringAsFixed(0)}',
+          'INR ${booking.totalPrice.toStringAsFixed(0)}',
+        ],
+      )
+      .toList();
+
+  if (rows.isNotEmpty) {
+    final totalAdvance = rows.fold<double>(0.0, (sum, row) => sum + row.advanceAmount);
+    final totalPrice = rows.fold<double>(0.0, (sum, row) => sum + row.totalPrice);
+    dataList.add(<dynamic>[
+      pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      '',
+      '',
+      '',
+      '',
+      '',
+      pw.Text('INR ${totalAdvance.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('INR ${totalPrice.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+    ]);
+  }
+
   return pw.TableHelper.fromTextArray(
     headers: const [
       'Client',
@@ -294,20 +339,7 @@ pw.Widget _bookingTable(List<Booking> rows) {
       'Advance',
       'Total',
     ],
-    data: rows
-        .map(
-          (booking) => [
-            booking.customerName,
-            booking.phone,
-            booking.service,
-            _dateLabel(booking.createdAt ?? booking.bookingDate),
-            _dateLabel(booking.serviceStart),
-            booking.status.toUpperCase(),
-            'INR ${booking.advanceAmount.toStringAsFixed(0)}',
-            'INR ${booking.totalPrice.toStringAsFixed(0)}',
-          ],
-        )
-        .toList(),
+    data: dataList,
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
     headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
     headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
@@ -607,4 +639,148 @@ class _DailyRevenueMetric {
     required this.bookingsCount,
     required this.revenue,
   });
+}
+
+Future<void> downloadLeadsReport({
+  required List<Lead> leads,
+  String statusFilter = 'All',
+  String sourceFilter = 'All',
+  String searchQuery = '',
+}) async {
+  if (_cachedLogoBytes == null) {
+    final logoData = await rootBundle.load('assets/images/teamn_logo.png');
+    _cachedLogoBytes = logoData.buffer.asUint8List();
+  }
+  final logoImage = pw.MemoryImage(_cachedLogoBytes!);
+
+  final pdf = pw.Document();
+
+  // Metrics
+  final totalLeads = leads.length;
+  final convertedLeads = leads.where((l) => l.status.toLowerCase() == 'converted').length;
+  final conversionRate = totalLeads > 0 ? (convertedLeads / totalLeads * 100) : 0.0;
+  
+  final lostLeads = leads.where((l) => l.status.toLowerCase() == 'lost').length;
+  final newLeads = leads.where((l) => l.status.toLowerCase() == 'new').length;
+  final contactedLeads = leads.where((l) => l.status.toLowerCase() == 'contacted').length;
+  final qualifiedLeads = leads.where((l) => l.status.toLowerCase() == 'qualified').length;
+  final followUpLeads = leads.where((l) => l.status.toLowerCase() == 'follow-up').length;
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageTheme: pw.PageTheme(
+        margin: const pw.EdgeInsets.all(28),
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.helvetica(),
+          bold: pw.Font.helveticaBold(),
+        ),
+      ),
+      build: (context) {
+        return [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              pw.Image(logoImage, width: 40, height: 40),
+              pw.SizedBox(width: 12),
+              pw.Text(
+                'Team N CRM Leads Report',
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                  color: PdfColors.blueGrey900,
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            'Report Date: ${_dateLabel(DateTime.now())}',
+            style: const pw.TextStyle(
+              fontSize: 12,
+              color: PdfColors.blueGrey700,
+            ),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'Filters applied - Status: $statusFilter | Source: $sourceFilter${searchQuery.isNotEmpty ? " | Search: '$searchQuery'" : ""}',
+            style: const pw.TextStyle(
+              fontSize: 10,
+              color: PdfColors.blueGrey600,
+            ),
+          ),
+          pw.SizedBox(height: 18),
+
+          // Summary Cards
+          pw.Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _metricCard('Total Leads', '$totalLeads'),
+              _metricCard('Converted Leads', '$convertedLeads'),
+              _metricCard('Conversion Rate', '${conversionRate.toStringAsFixed(1)}%'),
+              _metricCard('New / Contacted', '$newLeads / $contactedLeads'),
+              _metricCard('Qualified / Follow-up', '$qualifiedLeads / $followUpLeads'),
+              _metricCard('Lost Leads', '$lostLeads'),
+            ],
+          ),
+          pw.SizedBox(height: 22),
+
+          _sectionTitle('Leads List'),
+          _leadsTable(leads),
+        ];
+      },
+    ),
+  );
+
+  final bytes = await pdf.save();
+  _downloadPdf(
+    bytes,
+    fileName: 'leads-report-${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}.pdf',
+  );
+}
+
+pw.Widget _leadsTable(List<Lead> rows) {
+  if (rows.isEmpty) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(12),
+      child: pw.Text(
+        'No leads found matching current filters.',
+        style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
+      ),
+    );
+  }
+
+  final List<List<dynamic>> dataList = rows
+      .map<List<dynamic>>(
+        (lead) => <dynamic>[
+          _dateLabel(lead.createdAt),
+          lead.name,
+          lead.phone,
+          lead.source,
+          lead.location,
+          lead.leadType,
+          lead.status.toUpperCase(),
+          lead.remarks,
+        ],
+      )
+      .toList();
+
+  return pw.TableHelper.fromTextArray(
+    headers: const [
+      'Date Created',
+      'Name',
+      'Phone',
+      'Source',
+      'Location',
+      'Type',
+      'Status',
+      'Remarks',
+    ],
+    data: dataList,
+    border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+    cellPadding: const pw.EdgeInsets.all(6),
+    cellAlignment: pw.Alignment.centerLeft,
+  );
 }

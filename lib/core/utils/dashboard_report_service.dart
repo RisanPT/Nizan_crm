@@ -28,3 +28,17 @@ Future<void> downloadDashboardReport({
     useEventDate: useEventDate,
   );
 }
+
+Future<void> downloadLeadsReport({
+  required List<Lead> leads,
+  String statusFilter = 'All',
+  String sourceFilter = 'All',
+  String searchQuery = '',
+}) {
+  return impl.downloadLeadsReport(
+    leads: leads,
+    statusFilter: statusFilter,
+    sourceFilter: sourceFilter,
+    searchQuery: searchQuery,
+  );
+}

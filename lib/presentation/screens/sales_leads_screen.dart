@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/utils/dashboard_report_service.dart';
 import '../../services/lead_service.dart';
 import '../../core/models/lead.dart';
 import '../../providers/dio_provider.dart';
@@ -143,6 +144,11 @@ class SalesLeadsScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final isDesktop = ResponsiveBuilder.isDesktop(context);
 
+    final searchQuery = useState('');
+    final searchCtrl = useTextEditingController();
+    final selectedStatus = useState('All');
+    final selectedSource = useState('All');
+
     return Scaffold(
       body: SingleChildScrollView(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -166,7 +172,228 @@ class SalesLeadsScreen extends HookConsumerWidget {
             asyncLeads.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, stack) => Center(child: Text('Error: $err')),
-              data: (leads) => _LeadsTable(leads: leads, isDesktop: isDesktop),
+              data: (leads) {
+                // Filter leads locally
+                final filteredLeads = leads.where((lead) {
+                  final matchesSearch = searchQuery.value.isEmpty ||
+                      lead.name.toLowerCase().contains(searchQuery.value.toLowerCase()) ||
+                      lead.phone.toLowerCase().contains(searchQuery.value.toLowerCase()) ||
+                      lead.location.toLowerCase().contains(searchQuery.value.toLowerCase());
+                  final matchesStatus = selectedStatus.value == 'All' ||
+                      lead.status.toLowerCase() == selectedStatus.value.toLowerCase();
+                  
+                  final matchesSource = selectedSource.value == 'All' ||
+                      lead.source.toLowerCase() == selectedSource.value.toLowerCase() ||
+                      (selectedSource.value == 'Other' && !_isKnownSource(lead.source));
+                  return matchesSearch && matchesStatus && matchesSource;
+                }).toList();
+
+                Future<void> exportLeadsReport() async {
+                  await _runWithReportLoader(
+                    context: context,
+                    crmColors: crm,
+                    action: () => downloadLeadsReport(
+                      leads: filteredLeads,
+                      statusFilter: selectedStatus.value,
+                      sourceFilter: selectedSource.value,
+                      searchQuery: searchQuery.value,
+                    ),
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Filter Bar
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: crm.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: crm.border),
+                      ),
+                      child: isMobile
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextFormField(
+                                  controller: searchCtrl,
+                                  onFieldSubmitted: (value) => searchQuery.value = value.trim(),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search leads...',
+                                    hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
+                                    prefixIcon: const Icon(Icons.search, size: 20),
+                                    border: InputBorder.none,
+                                    enabledBorder: InputBorder.none,
+                                    focusedBorder: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                    suffixIcon: searchQuery.value.isEmpty
+                                        ? IconButton(
+                                            onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                            icon: const Icon(Icons.search, size: 20),
+                                          )
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                                icon: const Icon(Icons.search, size: 20),
+                                              ),
+                                              IconButton(
+                                                onPressed: () {
+                                                  searchCtrl.clear();
+                                                  searchQuery.value = '';
+                                                },
+                                                icon: const Icon(Icons.close, size: 20),
+                                              ),
+                                            ],
+                                          ),
+                                  ),
+                                ),
+                                const Divider(),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    DropdownButton<String>(
+                                      value: selectedStatus.value,
+                                      onChanged: (val) {
+                                        if (val != null) selectedStatus.value = val;
+                                      },
+                                      items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
+                                        return DropdownMenuItem(
+                                          value: s,
+                                          child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        );
+                                      }).toList(),
+                                      style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                      underline: const SizedBox(),
+                                      icon: const Icon(Icons.keyboard_arrow_down),
+                                    ),
+                                    DropdownButton<String>(
+                                      value: selectedSource.value,
+                                      onChanged: (val) {
+                                        if (val != null) selectedSource.value = val;
+                                      },
+                                      items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
+                                        return DropdownMenuItem(
+                                          value: s,
+                                          child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        );
+                                      }).toList(),
+                                      style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                      underline: const SizedBox(),
+                                      icon: const Icon(Icons.keyboard_arrow_down),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                ElevatedButton.icon(
+                                  onPressed: exportLeadsReport,
+                                  icon: const Icon(Icons.download_rounded, size: 18),
+                                  label: const Text('Export Leads'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: crm.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: TextFormField(
+                                    controller: searchCtrl,
+                                    onFieldSubmitted: (value) => searchQuery.value = value.trim(),
+                                    decoration: InputDecoration(
+                                      hintText: 'Search leads (name, phone, location)...',
+                                      hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
+                                      prefixIcon: const Icon(Icons.search, size: 20),
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                                      suffixIcon: searchQuery.value.isEmpty
+                                          ? IconButton(
+                                              onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                              icon: const Icon(Icons.search, size: 20),
+                                            )
+                                          : Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                IconButton(
+                                                  onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                                  icon: const Icon(Icons.search, size: 20),
+                                                ),
+                                                IconButton(
+                                                  onPressed: () {
+                                                    searchCtrl.clear();
+                                                    searchQuery.value = '';
+                                                  },
+                                                  icon: const Icon(Icons.close, size: 20),
+                                                ),
+                                              ],
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                                Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
+                                DropdownButton<String>(
+                                  value: selectedStatus.value,
+                                  onChanged: (val) {
+                                    if (val != null) selectedStatus.value = val;
+                                  },
+                                  items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
+                                    return DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    );
+                                  }).toList(),
+                                  style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                  underline: const SizedBox(),
+                                  icon: const Icon(Icons.keyboard_arrow_down),
+                                ),
+                                Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
+                                DropdownButton<String>(
+                                  value: selectedSource.value,
+                                  onChanged: (val) {
+                                    if (val != null) selectedSource.value = val;
+                                  },
+                                  items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
+                                    return DropdownMenuItem(
+                                      value: s,
+                                      child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    );
+                                  }).toList(),
+                                  style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                  underline: const SizedBox(),
+                                  icon: const Icon(Icons.keyboard_arrow_down),
+                                ),
+                                const SizedBox(width: 16),
+                                ElevatedButton.icon(
+                                  onPressed: exportLeadsReport,
+                                  icon: const Icon(Icons.download_rounded, size: 18),
+                                  label: const Text('Export Leads'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: crm.primary,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    elevation: 0,
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                    20.h,
+                    _LeadsTable(leads: filteredLeads, isDesktop: isDesktop),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -1293,5 +1520,85 @@ class _StatusBadge extends StatelessWidget {
         style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
+  }
+}
+
+Future<void> _runWithReportLoader({
+  required BuildContext context,
+  required CrmTheme crmColors,
+  required Future<void> Function() action,
+}) async {
+  NavigatorState? dialogNavigator;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      dialogNavigator = Navigator.of(dialogContext);
+      return Dialog(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(crmColors.primary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Generating Report',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: crmColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Please wait while the PDF is prepared...',
+                  style: TextStyle(
+                    color: crmColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  // Yield frame to render loading dialog
+  await Future.delayed(const Duration(milliseconds: 100));
+
+  try {
+    await action();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate report: $e'),
+          backgroundColor: crmColors.destructive,
+        ),
+      );
+    }
+  } finally {
+    if (dialogNavigator != null && dialogNavigator!.mounted) {
+      dialogNavigator!.pop();
+    }
   }
 }

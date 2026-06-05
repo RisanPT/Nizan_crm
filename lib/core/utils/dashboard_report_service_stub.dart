@@ -16,3 +16,12 @@ Future<void> downloadDashboardReport({
 }) async {
   throw UnsupportedError('Dashboard PDF export is only available on web.');
 }
+
+Future<void> downloadLeadsReport({
+  required List<Lead> leads,
+  String statusFilter = 'All',
+  String sourceFilter = 'All',
+  String searchQuery = '',
+}) async {
+  throw UnsupportedError('Leads PDF export is only available on web.');
+}

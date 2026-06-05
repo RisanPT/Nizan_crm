@@ -351,7 +351,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 ),
                               ),
                               value: selEmployee.isEmpty ? null : selEmployee,
-                              items: artists.map((e) => DropdownMenuItem(value: e.id, child: Text(e.name))).toList(),
+                              items: artists.map<DropdownMenuItem<String>>((e) => DropdownMenuItem<String>(value: e.id, child: Text(e.name))).toList(),
                               validator: (v) => (v == null || v.isEmpty) ? 'Select artist' : null,
                               onChanged: (v) => setState(() => selEmployee = v ?? ''),
                             ),
@@ -371,7 +371,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             value: selBooking.isEmpty ? null : selBooking,
                             items: myBookings.map<DropdownMenuItem<String>>((b) {
                               final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
-                              return DropdownMenuItem(
+                              return DropdownMenuItem<String>(
                                 value: b.id,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -461,7 +461,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             value: payMode,
-                            items: _paymentModes.map((m) => DropdownMenuItem(value: m.$1, child: Text(m.$2))).toList(),
+                            items: _paymentModes.map<DropdownMenuItem<String>>((m) => DropdownMenuItem<String>(value: m.$1, child: Text(m.$2))).toList(),
                             onChanged: (v) => setState(() => payMode = v ?? 'cash'),
                           ),
                           16.h,
@@ -780,8 +780,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   ? null
                                   : selEmployee,
                               items: artists
-                                  .map(
-                                    (e) => DropdownMenuItem(
+                                  .map<DropdownMenuItem<String>>(
+                                    (e) => DropdownMenuItem<String>(
                                       value: e.id,
                                       child: Text(e.name),
                                     ),
@@ -805,8 +805,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                             value: selCategory,
                             items: _expenseCategories
-                                .map(
-                                  (c) => DropdownMenuItem(
+                                .map<DropdownMenuItem<String>>(
+                                  (c) => DropdownMenuItem<String>(
                                     value: c.$1,
                                     child: Text(c.$2),
                                   ),
@@ -1869,37 +1869,41 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 ),
                               ),
                             ),
-                            8.w,
-                            // By Artist
-                            Expanded(
-                              child: InkWell(
-                                onTap: () => dialogSetState(() => selectedType = 'artist'),
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  height: 55,
-                                  decoration: BoxDecoration(
-                                    color: selectedType == 'artist' ? crm.primary.withValues(alpha: 0.05) : crm.secondary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: selectedType == 'artist' ? crm.primary : crm.border, width: 1.5),
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.groups_outlined, size: 20, color: selectedType == 'artist' ? crm.primary : crm.textSecondary),
-                                      4.h,
-                                      Text(
-                                        'By Artist',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: selectedType == 'artist' ? crm.primary : crm.textPrimary,
+                            if (isScopedToOwn)
+                              const Spacer()
+                            else ...[
+                              8.w,
+                              // By Artist
+                              Expanded(
+                                child: InkWell(
+                                  onTap: () => dialogSetState(() => selectedType = 'artist'),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    height: 55,
+                                    decoration: BoxDecoration(
+                                      color: selectedType == 'artist' ? crm.primary.withValues(alpha: 0.05) : crm.secondary.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(color: selectedType == 'artist' ? crm.primary : crm.border, width: 1.5),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.groups_outlined, size: 20, color: selectedType == 'artist' ? crm.primary : crm.textSecondary),
+                                        4.h,
+                                        Text(
+                                          'By Artist',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: selectedType == 'artist' ? crm.primary : crm.textPrimary,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                         16.h,
@@ -1922,9 +1926,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 ),
                                 value: selectedMonth,
-                                items: List.generate(
+                                items: List<DropdownMenuItem<int>>.generate(
                                   12,
-                                  (i) => DropdownMenuItem(
+                                  (i) => DropdownMenuItem<int>(
                                     value: i + 1,
                                     child: Text(_getMonthName(i + 1), style: const TextStyle(fontSize: 12)),
                                   ),
@@ -1941,7 +1945,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 ),
                                 value: selectedYear,
                                 items: [DateTime.now().year - 1, DateTime.now().year]
-                                    .map((y) => DropdownMenuItem(
+                                    .map<DropdownMenuItem<int>>((y) => DropdownMenuItem<int>(
                                           value: y,
                                           child: Text(y.toString(), style: const TextStyle(fontSize: 12)),
                                         ))
@@ -1960,13 +1964,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
                             value: selectedArtist,
-                            items: [
-                              const DropdownMenuItem(
+                            items: <DropdownMenuItem<String>>[
+                              const DropdownMenuItem<String>(
                                 value: 'all',
                                 child: Text('All Artists', style: TextStyle(fontSize: 12)),
                               ),
-                              ...(asyncEmployees.value ?? []).map(
-                                (e) => DropdownMenuItem(
+                              ...(asyncEmployees.value ?? []).map<DropdownMenuItem<String>>(
+                                (e) => DropdownMenuItem<String>(
                                   value: e.id,
                                   child: Text(e.name, style: const TextStyle(fontSize: 12)),
                                 ),
@@ -2025,7 +2029,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   await ref.read(reportServiceProvider).downloadFinanceReport(
                                     month: selectedMonth,
                                     year: selectedYear,
-                                    employeeId: selectedType == 'artist' ? selectedArtist : 'all',
+                                    employeeId: isScopedToOwn
+                                        ? myEmployeeId
+                                        : (selectedType == 'artist' ? selectedArtist : 'all'),
                                     format: selectedFormat,
                                   );
                                   if (ctx.mounted) {

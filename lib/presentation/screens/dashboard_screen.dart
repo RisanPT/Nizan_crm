@@ -1159,14 +1159,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return;
       }
 
-      await downloadDashboardReport(
-        month: _selectedMonth,
-        bookings: bookings,
-        packages: packages,
-        employees: employees,
-        leads: leads,
-        collections: collections,
-        reportType: 'executive',
+      await _runWithReportLoader(
+        context: context,
+        crmColors: crmColors,
+        action: () => downloadDashboardReport(
+          month: _selectedMonth,
+          bookings: bookings,
+          packages: packages,
+          employees: employees,
+          leads: leads,
+          collections: collections,
+          reportType: 'executive',
+        ),
       );
     }
 
@@ -3204,5 +3208,85 @@ class _ModernStatCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+Future<void> _runWithReportLoader({
+  required BuildContext context,
+  required CrmTheme crmColors,
+  required Future<void> Function() action,
+}) async {
+  NavigatorState? dialogNavigator;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      dialogNavigator = Navigator.of(dialogContext);
+      return Dialog(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(crmColors.primary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Generating Report',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: crmColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Please wait while the PDF is prepared...',
+                  style: TextStyle(
+                    color: crmColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  // Yield frame to render loading dialog
+  await Future.delayed(const Duration(milliseconds: 100));
+
+  try {
+    await action();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate report: $e'),
+          backgroundColor: crmColors.destructive,
+        ),
+      );
+    }
+  } finally {
+    if (dialogNavigator != null && dialogNavigator!.mounted) {
+      dialogNavigator!.pop();
+    }
   }
 }

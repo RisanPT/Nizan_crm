@@ -53,6 +53,7 @@ class BookingService {
     String? regionId,
     String? districtId,
     String? pincodeId,
+    String? dateBasis,
   }) async {
     try {
       final response = await _dio.get(
@@ -71,6 +72,7 @@ class BookingService {
           if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
           if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
           if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
+          if (dateBasis != null && dateBasis.isNotEmpty) 'dateBasis': dateBasis,
         },
       );
       return PaginatedBookingsResponse.fromJson(

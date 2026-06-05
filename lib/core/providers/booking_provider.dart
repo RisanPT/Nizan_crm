@@ -22,6 +22,7 @@ class PaginatedBookingsParams {
   final String? regionId;
   final String? districtId;
   final String? pincodeId;
+  final String? dateBasis;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -35,6 +36,7 @@ class PaginatedBookingsParams {
     this.regionId,
     this.districtId,
     this.pincodeId,
+    this.dateBasis,
   });
 
   @override
@@ -50,7 +52,8 @@ class PaginatedBookingsParams {
         other.stateId == stateId &&
         other.regionId == regionId &&
         other.districtId == districtId &&
-        other.pincodeId == pincodeId;
+        other.pincodeId == pincodeId &&
+        other.dateBasis == dateBasis;
   }
 
   @override
@@ -66,6 +69,7 @@ class PaginatedBookingsParams {
     regionId,
     districtId,
     pincodeId,
+    dateBasis,
   );
 }
 
@@ -108,6 +112,7 @@ final paginatedBookingsProvider =
             regionId: regionId,
             districtId: districtId,
             pincodeId: pincodeId,
+            dateBasis: params.dateBasis,
           );
     });
 

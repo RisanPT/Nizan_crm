@@ -28,6 +28,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final duplicatesOnly = useState(false);
     final isMonthlyView = useState(false);
     final selectedFY = useState<String>('2026-27');
+    final dateBasis = useState<String>('event_date');
     const pageSize = 20;
 
     final financialYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
@@ -38,6 +39,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       search: searchQuery.value,
       duplicatesOnly: duplicatesOnly.value,
       financialYear: selectedFY.value,
+      dateBasis: dateBasis.value,
     );
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
@@ -46,20 +48,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final allBookings = asyncAllBookings.value ?? const <Booking>[];
 
     final now = DateTime.now();
+    final useEventDateVal = dateBasis.value == 'event_date';
+
     final todaysScheduled = allBookings.where((b) {
-      final d = b.bookingDate;
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return d.year == now.year && d.month == now.month && d.day == now.day;
     }).length;
 
     final todaysCompleted = allBookings.where((b) {
-      final d = b.bookingDate;
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() == 'completed';
     }).length;
     
     final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
     final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
     final fyBookings = allBookings.where((b) {
-      final d = b.bookingDate;
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
     });
 
@@ -72,7 +76,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
     final currentMonthKey = '${now.year}-${now.month}';
     final monthBookings = allBookings.where((b) {
-      return '${b.bookingDate.year}-${b.bookingDate.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled';
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+      return '${d.year}-${d.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled';
     }).toList();
 
     final forecastSales = monthBookings.fold<double>(
@@ -103,46 +108,66 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
       showDialog(
         context: context,
-        builder: (context) => ExportSalesReportDialog(
-          onTodayReport: () => downloadDashboardReport(
-            month: DateTime.now(),
-            bookings: allBookings,
-            packages: packages,
-            employees: employees,
-            reportType: 'ceo_daily',
-            useEventDate: true,
+        builder: (dialogCtx) => ExportSalesReportDialog(
+          onTodayReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: DateTime.now(),
+              bookings: allBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'ceo_daily',
+              useEventDate: useEventDateVal,
+            ),
           ),
-          onDailyPerformance: () => downloadDashboardReport(
-            month: DateTime.now(),
-            bookings: allBookings,
-            packages: packages,
-            employees: employees,
-            reportType: 'sales',
-            useEventDate: true,
+          onDailyPerformance: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: DateTime.now(),
+              bookings: allBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'sales',
+              useEventDate: useEventDateVal,
+            ),
           ),
-          onExecutiveSummary: () => downloadDashboardReport(
-            month: DateTime.now(),
-            bookings: allBookings,
-            packages: packages,
-            employees: employees,
-            reportType: 'executive',
-            useEventDate: true,
+          onExecutiveSummary: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: DateTime.now(),
+              bookings: allBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'executive',
+              useEventDate: useEventDateVal,
+            ),
           ),
-          onFullLedger: () => downloadDashboardReport(
-            month: DateTime.now(),
-            bookings: allBookings,
-            packages: packages,
-            employees: employees,
-            reportType: 'crm',
-            useEventDate: true,
+          onFullLedger: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: DateTime.now(),
+              bookings: allBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'crm',
+              useEventDate: useEventDateVal,
+            ),
           ),
-          onForecastReport: () => downloadDashboardReport(
-            month: DateTime.now(),
-            bookings: allBookings,
-            packages: packages,
-            employees: employees,
-            reportType: 'forecast',
-            useEventDate: true,
+          onForecastReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: DateTime.now(),
+              bookings: allBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'forecast',
+              useEventDate: useEventDateVal,
+            ),
           ),
         ),
       );
@@ -157,7 +182,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       pageState.value = 1;
       selectedIds.value = <String>{};
       return null;
-    }, [searchQuery.value, duplicatesOnly.value, selectedFY.value]);
+    }, [searchQuery.value, duplicatesOnly.value, selectedFY.value, dateBasis.value]);
 
     Future<void> deleteBookings(
       List<String> bookingIds,
@@ -331,6 +356,26 @@ class SalesBookingsScreen extends HookConsumerWidget {
                           child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
                         );
                       }).toList(),
+                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                      underline: const SizedBox(),
+                      icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    DropdownButton<String>(
+                      value: dateBasis.value,
+                      onChanged: (val) {
+                        if (val != null) dateBasis.value = val;
+                      },
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'event_date',
+                          child: Text('By Event Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        DropdownMenuItem(
+                          value: 'booking_date',
+                          child: Text('By Booking Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
                       style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                       underline: const SizedBox(),
                       icon: const Icon(Icons.keyboard_arrow_down),
@@ -529,6 +574,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               if (isMonthlyView.value)
                 _MonthlySalesSummaryView(
                   financialYear: selectedFY.value,
+                  dateBasis: dateBasis.value,
                 )
               else
                 Container(
@@ -1115,8 +1161,12 @@ String _formatDate(DateTime value) {
 
 class _MonthlySalesSummaryView extends ConsumerWidget {
   final String financialYear;
+  final String dateBasis;
 
-  const _MonthlySalesSummaryView({required this.financialYear});
+  const _MonthlySalesSummaryView({
+    required this.financialYear,
+    required this.dateBasis,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1135,9 +1185,11 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
         final fyStart = DateTime(startYear, 4, 1);
         final fyEnd = DateTime(endYear, 3, 31, 23, 59, 59);
 
+        final useEventDate = dateBasis == 'event_date';
+
         // Filter bookings for this FY
         final fyBookings = allBookings.where((b) {
-          final d = b.bookingDate;
+          final d = useEventDate ? b.bookingDate : (b.createdAt ?? b.bookingDate);
           return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
         }).toList();
 
@@ -1152,7 +1204,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         for (final b in fyBookings) {
           int monthIndex;
-          final d = b.bookingDate;
+          final d = useEventDate ? b.bookingDate : (b.createdAt ?? b.bookingDate);
           if (d.month >= 4) {
             monthIndex = d.month - 4;
           } else {
@@ -1161,6 +1213,8 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
           final stats = monthlyStats[monthIndex]!;
           stats.totalBookings++;
+          final packageCount = b.bookingItems.isEmpty ? 1 : b.bookingItems.length;
+          stats.totalPackages += packageCount;
           if (b.status.toLowerCase() != 'cancelled') {
             stats.totalSales += b.totalPrice;
             stats.advanceCollected += b.advanceAmount;
@@ -1199,6 +1253,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                   columns: const [
                     DataColumn(label: _HeaderText('MONTH')),
                     DataColumn(label: _HeaderText('BOOKINGS'), numeric: true),
+                    DataColumn(label: _HeaderText('PACKAGE COUNT'), numeric: true),
                     DataColumn(label: _HeaderText('GROSS SALES'), numeric: true),
                     DataColumn(label: _HeaderText('ADVANCE'), numeric: true),
                     DataColumn(label: _HeaderText('FORECAST'), numeric: true),
@@ -1216,6 +1271,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                           ),
                         ),
                         DataCell(Text(stats.totalBookings.toString())),
+                        DataCell(Text(stats.totalPackages.toString())),
                         DataCell(Text('₹${_money(stats.totalSales)}')),
                         DataCell(Text('₹${_money(stats.advanceCollected)}')),
                         DataCell(Text('₹${_money(stats.forecastAmount)}')),
@@ -1239,12 +1295,16 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
                               final reportMonth = DateTime(stats.year, stats.month);
                               final useEventDate = value == 'event_date';
                               
-                              await downloadDashboardReport(
-                                month: reportMonth,
-                                bookings: allBookings,
-                                packages: asyncPackages.value!,
-                                employees: asyncEmployees.value!,
-                                useEventDate: useEventDate,
+                              await _runWithReportLoader(
+                                context: context,
+                                crmColors: crmColors,
+                                action: () => downloadDashboardReport(
+                                  month: reportMonth,
+                                  bookings: allBookings,
+                                  packages: asyncPackages.value!,
+                                  employees: asyncEmployees.value!,
+                                  useEventDate: useEventDate,
+                                ),
                               );
                             },
                             itemBuilder: (context) => const [
@@ -1294,6 +1354,7 @@ class _MonthStats {
   final int month;
   final int year;
   int totalBookings = 0;
+  int totalPackages = 0;
   double totalSales = 0;
   double advanceCollected = 0;
   int completedCount = 0;
@@ -1312,6 +1373,22 @@ class _FYPerformanceChart extends StatelessWidget {
     required this.financialYear,
   });
 
+  String _formatAmount(double amount) {
+    if (amount >= 10000000) {
+      return '₹${(amount / 10000000).toStringAsFixed(1)}Cr';
+    } else if (amount >= 100000) {
+      return '₹${(amount / 100000).toStringAsFixed(1)}L';
+    } else if (amount >= 1000) {
+      return '₹${(amount / 1000).toStringAsFixed(0)}k';
+    }
+    return '₹${amount.toStringAsFixed(0)}';
+  }
+
+  String _monthNameShort(int month) {
+    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return names[month - 1];
+  }
+
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
@@ -1319,6 +1396,7 @@ class _FYPerformanceChart extends StatelessWidget {
       0,
       (max, s) => s.totalSales > max ? s.totalSales : max,
     );
+    final double displayMaxSales = maxSales <= 0 ? 100000.0 : maxSales;
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -1351,20 +1429,93 @@ class _FYPerformanceChart extends StatelessWidget {
           ),
           24.h,
           SizedBox(
-            height: 300,
+            height: 320,
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: stats.map((s) {
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: _MonthlyBarStack(
-                      stats: s,
-                      maxSales: maxSales <= 0 ? 1 : maxSales,
-                    ),
+              children: [
+                // Y-Axis Labels
+                Container(
+                  width: 75,
+                  margin: const EdgeInsets.only(bottom: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(5, (index) {
+                      final val = displayMaxSales * (1 - index / 4);
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 12),
+                        child: Text(
+                          _formatAmount(val),
+                          style: TextStyle(
+                            color: crmColors.textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      );
+                    }),
                   ),
-                );
-              }).toList(),
+                ),
+                // Chart Area
+                Expanded(
+                  child: Stack(
+                    children: [
+                      // Gridlines
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: List.generate(5, (index) {
+                            return Container(
+                              height: 1,
+                              color: crmColors.border.withValues(alpha: 0.15),
+                            );
+                          }),
+                        ),
+                      ),
+                      // Bars
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: stats.map((s) {
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: _MonthlyBarStack(
+                                  stats: s,
+                                  maxSales: displayMaxSales,
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      // Month Labels at the bottom
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Row(
+                          children: stats.map((s) {
+                            return Expanded(
+                              child: Center(
+                                child: Text(
+                                  _monthNameShort(s.month),
+                                  style: TextStyle(
+                                    color: crmColors.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -1414,47 +1565,32 @@ class _MonthlyBarStack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    final salesRatio = (stats.totalSales / maxSales).clamp(0.0, 1.0);
-    final advanceRatio = (stats.advanceCollected / maxSales).clamp(0.0, 1.0);
+    final salesRatio = stats.totalSales / maxSales;
+    final advanceRatio = stats.advanceCollected / maxSales;
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _Bar(
-                heightRatio: salesRatio,
-                color: crmColors.primary,
-                tooltip: 'Sales: ₹${stats.totalSales.toStringAsFixed(0)}',
-              ),
-              4.w,
-              _Bar(
-                heightRatio: advanceRatio,
-                color: crmColors.sidebar,
-                tooltip: 'Advance: ₹${stats.advanceCollected.toStringAsFixed(0)}',
-              ),
-            ],
+          child: _Bar(
+            heightRatio: salesRatio,
+            color: crmColors.primary,
+            tooltip: 'Sales: ₹${stats.totalSales.toStringAsFixed(0)}',
+            value: stats.totalSales,
           ),
         ),
-        8.h,
-        Text(
-          _monthNameShort(stats.month),
-          style: TextStyle(
-            color: crmColors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
+        4.w,
+        Expanded(
+          child: _Bar(
+            heightRatio: advanceRatio,
+            color: crmColors.sidebar,
+            tooltip: 'Advance: ₹${stats.advanceCollected.toStringAsFixed(0)}',
+            value: stats.advanceCollected,
           ),
         ),
       ],
     );
-  }
-
-  String _monthNameShort(int month) {
-    const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return names[month - 1];
   }
 }
 
@@ -1462,35 +1598,128 @@ class _Bar extends StatelessWidget {
   final double heightRatio;
   final Color color;
   final String tooltip;
+  final double value;
 
   const _Bar({
     required this.heightRatio,
     required this.color,
     required this.tooltip,
+    required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
+    final showBar = value > 0;
+
     return Tooltip(
       message: tooltip,
       child: FractionallySizedBox(
-        heightFactor: heightRatio.clamp(0.05, 1.0),
+        heightFactor: showBar ? heightRatio.clamp(0.01, 1.0) : 0.0,
         child: Container(
-          width: 12,
+          constraints: const BoxConstraints(minWidth: 16, maxWidth: 32),
           decoration: BoxDecoration(
             color: color,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+            boxShadow: showBar
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.3),
+                      blurRadius: 6,
+                      offset: const Offset(0, -2),
+                    ),
+                  ]
+                : null,
             gradient: LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
               colors: [
                 color,
-                color.withValues(alpha: 0.7),
+                color.withValues(alpha: 0.8),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+Future<void> _runWithReportLoader({
+  required BuildContext context,
+  required CrmTheme crmColors,
+  required Future<void> Function() action,
+}) async {
+  NavigatorState? dialogNavigator;
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (BuildContext dialogContext) {
+      dialogNavigator = Navigator.of(dialogContext);
+      return Dialog(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(crmColors.primary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Generating Report',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: crmColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Please wait while the PDF is prepared...',
+                  style: TextStyle(
+                    color: crmColors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  // Yield frame to render loading dialog
+  await Future.delayed(const Duration(milliseconds: 100));
+
+  try {
+    await action();
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate report: $e'),
+          backgroundColor: crmColors.destructive,
+        ),
+      );
+    }
+  } finally {
+    if (dialogNavigator != null && dialogNavigator!.mounted) {
+      dialogNavigator!.pop();
+    }
   }
 }
