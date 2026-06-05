@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/booking_provider.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
@@ -731,7 +732,7 @@ class _SectionLabel extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Animated Work Card  (boarding-pass / stacked style)
 // ─────────────────────────────────────────────────────────────────────────────
-class _AnimatedWorkCard extends HookWidget {
+class _AnimatedWorkCard extends ConsumerWidget {
   final Booking booking;
   final int index;
   final bool isExpanded;
@@ -749,7 +750,7 @@ class _AnimatedWorkCard extends HookWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final statusColor = _statusColor(booking.status);
     final balance =
@@ -757,9 +758,13 @@ class _AnimatedWorkCard extends HookWidget {
             .clamp(0, double.infinity)
             .toDouble();
 
+    // Get the logged in artist's employeeId to only show their assigned works
+    final authSession = ref.watch(authSessionProvider);
+    final employeeId = authSession?.employeeId ?? '';
+
     // My assigned works for this booking
     final myWorks = booking.assignedStaff
-        .where((s) => s.works.isNotEmpty)
+        .where((s) => (employeeId.isEmpty || s.employeeId == employeeId) && s.works.isNotEmpty)
         .expand((s) => s.works)
         .toSet()
         .toList();

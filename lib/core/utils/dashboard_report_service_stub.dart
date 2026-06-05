@@ -13,6 +13,8 @@ Future<void> downloadDashboardReport({
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
   bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
 }) async {
   throw UnsupportedError('Dashboard PDF export is only available on web.');
 }

@@ -104,14 +104,38 @@ class CalendarScreen extends HookConsumerWidget {
     final groupLabels = <String, String>{};
     final groupTypes = <String, bool>{};
     for (final entry in bookings) {
-      final assignedArtist = _primaryArtistAssignment(entry);
-      final label = _artistLabelForEntry(entry);
-      final key = assignedArtist != null
-          ? 'artist:${assignedArtist.employeeId.isNotEmpty ? assignedArtist.employeeId : assignedArtist.artistName.trim().toLowerCase()}'
-          : 'entry:${entry.id}';
-      grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
-      groupLabels[key] = label;
-      groupTypes[key] = assignedArtist != null;
+      final isCancelled = entry.booking.status.toLowerCase() == 'cancelled';
+      final isCompleted = entry.booking.status.toLowerCase() == 'completed';
+
+      if (isCancelled) {
+        // Cancelled bookings are treated individually to show red with client name
+        final key = 'cancelled:${entry.id}';
+        grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
+        groupLabels[key] = entry.booking.customerName.trim();
+        groupTypes[key] = false;
+      } else {
+        final assignedArtist = _primaryArtistAssignment(entry);
+        String label = _artistLabelForEntry(entry);
+        
+        if (isCompleted) {
+          // If completed, ensure the label is the artist name if assigned, or fallback
+          final fallbackAssignment = entry.assignedStaff
+              .cast<BookingAssignment?>()
+              .firstWhere(
+                (assignment) =>
+                    assignment != null && assignment.artistName.trim().isNotEmpty,
+                orElse: () => null,
+              );
+          label = fallbackAssignment?.artistName.trim() ?? 'Not Assigned';
+        }
+
+        final key = assignedArtist != null
+            ? 'artist:${assignedArtist.employeeId.isNotEmpty ? assignedArtist.employeeId : assignedArtist.artistName.trim().toLowerCase()}'
+            : 'entry:${entry.id}';
+        grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
+        groupLabels[key] = label;
+        groupTypes[key] = assignedArtist != null;
+      }
     }
 
     final groups = grouped.entries
@@ -533,7 +557,7 @@ class CalendarScreen extends HookConsumerWidget {
         builder: (dialogContext) {
           // Collect unique artists present today (built once, outside StatefulBuilder)
           final artistsInDay = <String, String>{};
-          final regionsInDay = <String>{};
+          final districtsInDay = <String>{};
           for (final entry in entries) {
             final primary = _primaryArtistAssignment(entry);
             if (primary != null && primary.artistName.trim().isNotEmpty) {
@@ -542,12 +566,12 @@ class CalendarScreen extends HookConsumerWidget {
                   : primary.artistName.toLowerCase();
               artistsInDay[key] = primary.artistName.trim();
             }
-            if (entry.booking.region.trim().isNotEmpty) {
-              regionsInDay.add(entry.booking.region.trim());
+            if (entry.booking.district.trim().isNotEmpty) {
+              districtsInDay.add(entry.booking.district.trim());
             }
           }
 
-          final sortedRegions = regionsInDay.toList()..sort();
+          final sortedDistricts = districtsInDay.toList()..sort();
 
           return StatefulBuilder(
             builder: (ctx, setFilter) {
@@ -568,7 +592,7 @@ class CalendarScreen extends HookConsumerWidget {
                       if (key != filterArtist) return false;
                     }
                     if (filterLocation != 'all') {
-                      if (entry.booking.region.trim() != filterLocation) {
+                      if (entry.booking.district.trim() != filterLocation) {
                         return false;
                       }
                     }
@@ -766,7 +790,7 @@ class CalendarScreen extends HookConsumerWidget {
                                       ],
                                     ),
                                   ),
-                                  if (sortedRegions.length > 1) ...[
+                                  if (sortedDistricts.length > 1) ...[
                                     10.h,
                                     Text(
                                       'FILTER BY LOCATION',
@@ -783,17 +807,17 @@ class CalendarScreen extends HookConsumerWidget {
                                       child: Row(
                                         children: [
                                           _filterChip(
-                                            label: 'All Regions',
+                                            label: 'All Districts',
                                             selected: filterLocation == 'all',
                                             color: crmColors.primary,
                                             onTap: () => innerSet(() => filterLocation = 'all'),
                                           ),
-                                          ...sortedRegions.map(
-                                            (r) => _filterChip(
-                                              label: r,
-                                              selected: filterLocation == r,
+                                          ...sortedDistricts.map(
+                                            (d) => _filterChip(
+                                              label: d,
+                                              selected: filterLocation == d,
                                               color: Colors.teal,
-                                              onTap: () => innerSet(() => filterLocation = r),
+                                              onTap: () => innerSet(() => filterLocation = d),
                                             ),
                                           ),
                                         ],
@@ -890,7 +914,7 @@ class CalendarScreen extends HookConsumerWidget {
                                                               fontSize: 13,
                                                             ),
                                                           ),
-                                                          if (booking.region.trim().isNotEmpty) ...[
+                                                          if (booking.district.trim().isNotEmpty) ...[
                                                             4.h,
                                                             Row(
                                                               children: [
@@ -901,7 +925,7 @@ class CalendarScreen extends HookConsumerWidget {
                                                                 ),
                                                                 4.w,
                                                                 Text(
-                                                                  booking.region.trim(),
+                                                                  booking.district.trim(),
                                                                   style: TextStyle(
                                                                     color: crmColors.textSecondary,
                                                                     fontSize: 12,
@@ -2108,18 +2132,32 @@ class CalendarScreen extends HookConsumerWidget {
     final bookingEntry = group.bookings.first;
     final booking = bookingEntry.booking;
     
-    final isAssigned = bookingEntry.assignedStaff
-        .cast<BookingAssignment?>()
-        .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
+    final isCancelled = booking.status.toLowerCase() == 'cancelled';
+    final isCompleted = booking.status.toLowerCase() == 'completed';
 
-    final serviceColor = _colorForService(bookingEntry.service);
-    final pillBg = isAssigned 
-        ? serviceColor 
-        : Color.lerp(serviceColor, Colors.white, 0.82)!;
+    Color pillBg;
+    Color pillTextColor;
 
-    final pillTextColor = isAssigned
-        ? Colors.white
-        : serviceColor;
+    if (isCancelled) {
+      pillBg = const Color(0xFFEF4444); // Red
+      pillTextColor = Colors.white;
+    } else if (isCompleted) {
+      pillBg = const Color(0xFF22C55E); // Green
+      pillTextColor = Colors.white;
+    } else {
+      final isAssigned = bookingEntry.assignedStaff
+          .cast<BookingAssignment?>()
+          .any((assignment) => assignment != null && assignment.artistName.trim().isNotEmpty);
+
+      final serviceColor = _colorForService(bookingEntry.service);
+      pillBg = isAssigned 
+          ? serviceColor 
+          : Color.lerp(serviceColor, Colors.white, 0.82)!;
+
+      pillTextColor = isAssigned
+          ? Colors.white
+          : serviceColor;
+    }
 
     final detailLabel = bookingEntry.eventSlot.trim().isNotEmpty
         ? bookingEntry.eventSlot.trim()

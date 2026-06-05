@@ -109,6 +109,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       showDialog(
         context: context,
         builder: (dialogCtx) => ExportSalesReportDialog(
+          financialYear: selectedFY.value,
           onTodayReport: () => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
@@ -168,6 +169,112 @@ class SalesBookingsScreen extends HookConsumerWidget {
               reportType: 'forecast',
               useEventDate: useEventDateVal,
             ),
+          ),
+          onAprJunReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final parts = selectedFY.value.split('-');
+              final startYear = int.parse(parts[0]);
+              return downloadDashboardReport(
+                month: DateTime(startYear, 4),
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(startYear, 4, 1),
+                endDate: DateTime(startYear, 6, 30, 23, 59, 59),
+              );
+            },
+          ),
+          onJulSepReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final parts = selectedFY.value.split('-');
+              final startYear = int.parse(parts[0]);
+              return downloadDashboardReport(
+                month: DateTime(startYear, 7),
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(startYear, 7, 1),
+                endDate: DateTime(startYear, 9, 30, 23, 59, 59),
+              );
+            },
+          ),
+          onOctDecReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final parts = selectedFY.value.split('-');
+              final startYear = int.parse(parts[0]);
+              return downloadDashboardReport(
+                month: DateTime(startYear, 10),
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(startYear, 10, 1),
+                endDate: DateTime(startYear, 12, 31, 23, 59, 59),
+              );
+            },
+          ),
+          onJanMarReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final parts = selectedFY.value.split('-');
+              final endYear = 2000 + int.parse(parts[1]);
+              return downloadDashboardReport(
+                month: DateTime(endYear, 1),
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(endYear, 1, 1),
+                endDate: DateTime(endYear, 3, 31, 23, 59, 59),
+              );
+            },
+          ),
+          onSixMonthsReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final now = DateTime.now();
+              return downloadDashboardReport(
+                month: now,
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(now.year, now.month - 6, now.day),
+                endDate: now,
+              );
+            },
+          ),
+          onOneYearReport: () => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () {
+              final now = DateTime.now();
+              return downloadDashboardReport(
+                month: now,
+                bookings: allBookings,
+                packages: packages,
+                employees: employees,
+                reportType: 'sales',
+                useEventDate: useEventDateVal,
+                startDate: DateTime(now.year - 1, now.month, now.day),
+                endDate: now,
+              );
+            },
           ),
         ),
       );

@@ -25,6 +25,8 @@ Future<void> downloadDashboardReport({
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
   bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
 }) async {
   if (_cachedLogoBytes == null) {
     final logoData = await rootBundle.load('assets/images/teamn_logo.png');
@@ -39,6 +41,8 @@ Future<void> downloadDashboardReport({
     packages,
     employees,
     useEventDate: useEventDate,
+    startDate: startDate,
+    endDate: endDate,
   );
 
   pdf.addPage(
@@ -81,7 +85,9 @@ Future<void> downloadDashboardReport({
           pw.Text(
             reportType == 'ceo_daily'
                 ? 'Report Date: ${_dateLabel(DateTime.now())}'
-                : 'Reporting Period: ${_monthLabel(month)}',
+                : (startDate != null && endDate != null)
+                    ? 'Reporting Period: ${_dateLabel(startDate)} - ${_dateLabel(endDate)}'
+                    : 'Reporting Period: ${_monthLabel(month)}',
             style: const pw.TextStyle(
               fontSize: 12,
               color: PdfColors.blueGrey700,
@@ -94,13 +100,16 @@ Future<void> downloadDashboardReport({
               spacing: 12,
               runSpacing: 12,
               children: [
-                _metricCard('Total Works', '${report.totalWorks}'),
-                _metricCard('Completed Works', '${report.completedWorks}'),
-                _metricCard('Cancelled Works', '${report.cancelledWorks}'),
+                _metricCard('Total Sales', 'INR ${report.totalSales.toStringAsFixed(0)}'),
+                _metricCard('Advance Collected', 'INR ${report.totalAdvance.toStringAsFixed(0)}'),
+                _metricCard('Total Discounts', 'INR ${report.totalDiscount.toStringAsFixed(0)}'),
                 _metricCard(
                   'Forecast Amount',
                   'INR ${report.forecastAmount.toStringAsFixed(0)}',
                 ),
+                _metricCard('Total Works', '${report.totalWorks}'),
+                _metricCard('Completed Works', '${report.completedWorks}'),
+                _metricCard('Cancelled Works', '${report.cancelledWorks}'),
               ],
             ),
             pw.SizedBox(height: 22),
@@ -303,14 +312,18 @@ pw.Widget _bookingTable(List<Booking> rows) {
           _dateLabel(booking.serviceStart),
           booking.status.toUpperCase(),
           'INR ${booking.advanceAmount.toStringAsFixed(0)}',
+          'INR ${booking.discountAmount.toStringAsFixed(0)}',
           'INR ${booking.totalPrice.toStringAsFixed(0)}',
+          'INR ${((booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity)).toStringAsFixed(0)}',
         ],
       )
       .toList();
 
   if (rows.isNotEmpty) {
     final totalAdvance = rows.fold<double>(0.0, (sum, row) => sum + row.advanceAmount);
+    final totalDiscount = rows.fold<double>(0.0, (sum, row) => sum + row.discountAmount);
     final totalPrice = rows.fold<double>(0.0, (sum, row) => sum + row.totalPrice);
+    final totalBalance = rows.fold<double>(0.0, (sum, row) => sum + (row.totalPrice - row.advanceAmount - row.discountAmount).clamp(0, double.infinity));
     dataList.add(<dynamic>[
       pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       '',
@@ -319,7 +332,9 @@ pw.Widget _bookingTable(List<Booking> rows) {
       '',
       '',
       pw.Text('INR ${totalAdvance.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('INR ${totalDiscount.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('INR ${totalPrice.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('INR ${totalBalance.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
     ]);
   }
 
@@ -332,13 +347,16 @@ pw.Widget _bookingTable(List<Booking> rows) {
       'Event',
       'Status',
       'Advance',
+      'Discount',
       'Total',
+      'Balance',
     ],
     data: dataList,
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+    cellStyle: const pw.TextStyle(fontSize: 8),
     headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-    cellPadding: const pw.EdgeInsets.all(8),
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
   );
 }
 
@@ -348,11 +366,16 @@ _DashboardReport _buildReport(
   List<ServicePackage> packages,
   List<Employee> employees, {
   bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
 }) {
   final monthBookings = bookings.where((booking) {
     final date = useEventDate
         ? booking.serviceStart
         : (booking.createdAt ?? booking.bookingDate);
+    if (startDate != null && endDate != null) {
+      return !date.isBefore(startDate) && !date.isAfter(endDate);
+    }
     return date.year == month.year && date.month == month.month;
   }).toList();
 
@@ -376,6 +399,9 @@ _DashboardReport _buildReport(
                     booking.discountAmount)
                 .clamp(0, double.infinity),
       );
+  final totalSales = activeBookings.fold<double>(0, (sum, b) => sum + b.totalPrice);
+  final totalDiscount = activeBookings.fold<double>(0, (sum, b) => sum + b.discountAmount);
+  final totalAdvance = activeBookings.fold<double>(0, (sum, b) => sum + b.advanceAmount);
 
   final packageById = {for (final package in packages) package.id: package};
   final employeeById = {
@@ -421,23 +447,25 @@ _DashboardReport _buildReport(
   final topStaff = staffStats.values.toList()
     ..sort((a, b) => b.appointmentsCount.compareTo(a.appointmentsCount));
 
-  final dailyMap = <int, _DailyRevenueMetric>{};
+  final dailyMap = <String, _DailyRevenueMetric>{};
+  final isMultiMonth = startDate != null && endDate != null;
   for (final booking in activeBookings) {
     final date = useEventDate
         ? booking.serviceStart
         : (booking.createdAt ?? booking.bookingDate);
-    final day = date.day;
-    final previous = dailyMap[day];
-    dailyMap[day] = _DailyRevenueMetric(
-      dayLabel: '$day ${_monthShort(month.month)}',
+    final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final previous = dailyMap[key];
+    dailyMap[key] = _DailyRevenueMetric(
+      dayLabel: isMultiMonth
+          ? '${date.day} ${_monthShort(date.month)} ${date.year}'
+          : '${date.day} ${_monthShort(date.month)}',
       bookingsCount: (previous?.bookingsCount ?? 0) + 1,
       revenue: (previous?.revenue ?? 0) + booking.totalPrice,
+      date: DateTime(date.year, date.month, date.day),
     );
   }
   final dailyRevenue = dailyMap.entries.map((entry) => entry.value).toList()
-    ..sort(
-      (a, b) => _extractDay(a.dayLabel).compareTo(_extractDay(b.dayLabel)),
-    );
+    ..sort((a, b) => a.date.compareTo(b.date));
 
   final pendingBookings =
       monthBookings
@@ -515,6 +543,9 @@ _DashboardReport _buildReport(
     completedWorks: completedWorks,
     cancelledWorks: cancelledWorks,
     forecastAmount: forecastAmount,
+    totalSales: totalSales,
+    totalDiscount: totalDiscount,
+    totalAdvance: totalAdvance,
     topServices: topServices.take(5).toList(),
     topStaff: topStaff.take(5).toList(),
     dailyRevenue: dailyRevenue,
@@ -567,14 +598,15 @@ String _monthShort(int month) {
 String _dateLabel(DateTime date) =>
     '${date.day.toString().padLeft(2, '0')} ${_monthShort(date.month)} ${date.year}';
 
-int _extractDay(String dayLabel) =>
-    int.tryParse(dayLabel.split(' ').first) ?? 0;
 
 class _DashboardReport {
   final int totalWorks;
   final int completedWorks;
   final int cancelledWorks;
   final double forecastAmount;
+  final double totalSales;
+  final double totalDiscount;
+  final double totalAdvance;
   final List<_ServiceMetric> topServices;
   final List<_StaffMetric> topStaff;
   final List<_DailyRevenueMetric> dailyRevenue;
@@ -589,6 +621,9 @@ class _DashboardReport {
     required this.completedWorks,
     required this.cancelledWorks,
     required this.forecastAmount,
+    required this.totalSales,
+    required this.totalDiscount,
+    required this.totalAdvance,
     required this.topServices,
     required this.topStaff,
     required this.dailyRevenue,
@@ -628,11 +663,13 @@ class _DailyRevenueMetric {
   final String dayLabel;
   final int bookingsCount;
   final double revenue;
+  final DateTime date;
 
   const _DailyRevenueMetric({
     required this.dayLabel,
     required this.bookingsCount,
     required this.revenue,
+    required this.date,
   });
 }
 

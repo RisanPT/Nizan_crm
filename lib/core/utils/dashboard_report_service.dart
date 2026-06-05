@@ -16,6 +16,8 @@ Future<void> downloadDashboardReport({
   List<Lead> leads = const [],
   List<ArtistCollection> collections = const [],
   bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
 }) {
   return impl.downloadDashboardReport(
     month: month,
@@ -26,6 +28,8 @@ Future<void> downloadDashboardReport({
     leads: leads,
     collections: collections,
     useEventDate: useEventDate,
+    startDate: startDate,
+    endDate: endDate,
   );
 }
 
