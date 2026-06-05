@@ -109,6 +109,10 @@ Future<void> printBookingDetails(
                   '${booking.bookingDate.day.toString().padLeft(2, '0')}/${booking.bookingDate.month.toString().padLeft(2, '0')}/${booking.bookingDate.year}'
               ].join(), PdfColors.white),
               _buildTableRow('Location', booking.district.isNotEmpty ? booking.district : 'N/A', lightBg),
+              if (booking.address.isNotEmpty)
+                _buildTableRow('Address', booking.address, PdfColors.white),
+              if (booking.pincode.isNotEmpty)
+                _buildTableRow('Pincode', booking.pincode, lightBg),
               if (booking.outfitDetails.isNotEmpty)
                 _buildTableRow('Outfit Details', booking.outfitDetails, PdfColors.white),
             ],

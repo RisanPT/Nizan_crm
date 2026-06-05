@@ -34,6 +34,8 @@ class AddBookingScreen extends HookConsumerWidget {
     final nameCtrl = useTextEditingController();
     final emailCtrl = useTextEditingController();
     final phoneCtrl = useTextEditingController();
+    final addressCtrl = useTextEditingController();
+    final pincodeCtrl = useTextEditingController();
     final allowMissingEmail = useState(false);
     final isSubmitting = useState(false);
 
@@ -364,6 +366,8 @@ class AddBookingScreen extends HookConsumerWidget {
         districtId: selectedDistrictModel?.id ?? '',
         customerName: actualName,
         phone: phoneCtrl.text.trim(),
+        address: addressCtrl.text.trim(),
+        pincode: pincodeCtrl.text.trim(),
         email: emailCtrl.text.trim(),
         legacyBooking: allowMissingEmail.value,
         service: bookingItems.map((item) => item.service).join(' + '),
@@ -495,6 +499,8 @@ class AddBookingScreen extends HookConsumerWidget {
                                         option.name,
                                     onSelected: (Customer selection) {
                                       phoneCtrl.text = selection.phone ?? '';
+                                      addressCtrl.text = selection.address ?? '';
+                                      pincodeCtrl.text = selection.pincode ?? '';
                                       final isPlaceholder = selection.email.contains(
                                         '@placeholder.local',
                                       );
@@ -591,6 +597,39 @@ class AddBookingScreen extends HookConsumerWidget {
                                         }
                                         return null;
                                       },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              16.h,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 2,
+                                    child: TextFormField(
+                                      controller: addressCtrl,
+                                      decoration: _inputDeco(
+                                        'Address',
+                                        crmColors,
+                                      ),
+                                      validator: (v) => (v == null || v.trim().isEmpty)
+                                          ? 'Required'
+                                          : null,
+                                    ),
+                                  ),
+                                  16.w,
+                                  Expanded(
+                                    flex: 1,
+                                    child: TextFormField(
+                                      controller: pincodeCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: _inputDeco(
+                                        'Pincode',
+                                        crmColors,
+                                      ),
+                                      validator: (v) => (v == null || v.trim().isEmpty)
+                                          ? 'Required'
+                                          : null,
                                     ),
                                   ),
                                 ],

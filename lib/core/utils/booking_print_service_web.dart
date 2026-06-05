@@ -265,6 +265,8 @@ String _buildSingleBookingHtml(
           ? '${booking.travelDistanceKm.toStringAsFixed(0)} KM'
           : '',
     ),
+    _detailRow('Address', booking.address),
+    _detailRow('Pincode', booking.pincode),
     _detailRow('Map URL', booking.mapUrl),
     _detailRow('Room Detail', booking.requiredRoomDetail),
     _detailRow('Secondary Contact', booking.secondaryContact),
@@ -588,6 +590,8 @@ String _buildClientConfirmationHtml(Booking booking) {
         <div class="client-detail-line"><strong>Event Date &amp; Time :</strong> ${_escape(_formatLongDate(booking.selectedDates.isNotEmpty ? booking.selectedDates.first : booking.bookingDate))}</div>
         <div class="client-detail-line"><strong>Get Ready Time :</strong> ${_escape('${_formatTime(booking.serviceStart)} - ${_formatTime(booking.serviceEnd)}')}</div>
         <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.district.trim().isNotEmpty ? booking.district.trim() : booking.region.trim().isNotEmpty ? booking.region.trim() : 'To be confirmed')}</div>
+        \${booking.address.trim().isNotEmpty ? \`<div class="client-detail-line"><strong>Address :</strong> \${_escape(booking.address)}</div>\` : ''}
+        \${booking.pincode.trim().isNotEmpty ? \`<div class="client-detail-line"><strong>Pincode :</strong> \${_escape(booking.pincode)}</div>\` : ''}
         <div class="client-detail-line"><strong>Package :</strong> ${_escape(booking.service)}</div>
         <div class="client-detail-line"><strong>Outfit :</strong> ${_escape(outfitSummary)}</div>
         <div class="client-detail-line"><strong>Add Ons :</strong> ${_escape(addonSummary)}</div>$artistLine$assistantLine$pocLine

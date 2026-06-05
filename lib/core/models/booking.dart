@@ -326,6 +326,8 @@ class Booking {
   final String vehicleId;
   final String customerName;
   final String phone;
+  final String address;
+  final String pincode;
   final String email;
   final bool legacyBooking;
   final String service;
@@ -374,6 +376,8 @@ class Booking {
     this.vehicleId = '',
     required this.customerName,
     required this.phone,
+    this.address = '',
+    this.pincode = '',
     this.email = '',
     this.legacyBooking = false,
     required this.service,
@@ -602,6 +606,8 @@ class Booking {
       vehicleId: json['vehicleId'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
+      address: json['address'] as String? ?? '',
+      pincode: json['pincode'] as String? ?? '',
       email: json['email'] as String? ?? '',
       legacyBooking: json['legacyBooking'] as bool? ?? false,
       service: json['service'] as String? ?? '',
@@ -666,6 +672,8 @@ class Booking {
       'driverId': driverId,
       'vehicleId': vehicleId,
       'phone': phone,
+      'address': address,
+      'pincode': pincode,
       'email': email,
       'legacyBooking': legacyBooking,
       'service': service,
@@ -716,6 +724,8 @@ class Booking {
     String? vehicleId,
     String? customerName,
     String? phone,
+    String? address,
+    String? pincode,
     String? email,
     bool? legacyBooking,
     String? service,
@@ -764,6 +774,8 @@ class Booking {
       vehicleId: vehicleId ?? this.vehicleId,
       customerName: customerName ?? this.customerName,
       phone: phone ?? this.phone,
+      address: address ?? this.address,
+      pincode: pincode ?? this.pincode,
       email: email ?? this.email,
       legacyBooking: legacyBooking ?? this.legacyBooking,
       service: service ?? this.service,

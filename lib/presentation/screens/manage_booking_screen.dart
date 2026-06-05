@@ -163,6 +163,8 @@ class ManageBookingScreen extends HookConsumerWidget {
       text: booking?.customerName ?? '',
     );
     final phoneCtrl = useTextEditingController(text: booking?.phone ?? '');
+    final addressCtrl = useTextEditingController(text: booking?.address ?? '');
+    final pincodeCtrl = useTextEditingController(text: booking?.pincode ?? '');
     final emailCtrl = useTextEditingController(text: booking?.email ?? '');
     final bookingDateCtrl = useTextEditingController(
       text: canonicalBookingDate == null
@@ -273,6 +275,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         if (booking != null) {
           nameCtrl.text = booking.customerName;
           phoneCtrl.text = booking.phone;
+          addressCtrl.text = booking.address;
+          pincodeCtrl.text = booking.pincode;
           emailCtrl.text = booking.email;
           bookingDateCtrl.text = canonicalBookingDate == null
               ? ''
@@ -362,6 +366,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.id,
         booking?.customerName,
         booking?.phone,
+        booking?.address,
+        booking?.pincode,
         booking?.email,
         booking?.regionId,
         booking?.districtId,
@@ -836,6 +842,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         customerName: nameCtrl.text.trim(),
         packageId: selectedPackageId.value.trim(),
         phone: phoneCtrl.text.trim(),
+        address: addressCtrl.text.trim(),
+        pincode: pincodeCtrl.text.trim(),
         email: emailCtrl.text.trim(),
         service: packageCtrl.text.trim().isEmpty
             ? booking.service
@@ -1111,6 +1119,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 'EMAIL',
                                 emailCtrl,
                                 keyboardType: TextInputType.emailAddress,
+                              ),
+                              _buildField(context, 'ADDRESS', addressCtrl),
+                              _buildField(
+                                context,
+                                'PINCODE',
+                                pincodeCtrl,
+                                keyboardType: TextInputType.number,
                               ),
                               _buildField(
                                 context,
