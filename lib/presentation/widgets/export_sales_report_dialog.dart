@@ -1,25 +1,27 @@
 import 'package:flutter/material.dart';
 import '../../core/extensions/space_extension.dart';
 
-class ExportSalesReportDialog extends StatelessWidget {
+class ExportSalesReportDialog extends StatefulWidget {
   final String financialYear;
   final String? activeFilters;
-  final VoidCallback onTodayReport;
-  final VoidCallback onDailyPerformance;
-  final VoidCallback onExecutiveSummary;
-  final VoidCallback onFullLedger;
-  final VoidCallback onForecastReport;
-  final VoidCallback onSixMonthsReport;
-  final VoidCallback onOneYearReport;
-  final VoidCallback onAprJunReport;
-  final VoidCallback onJulSepReport;
-  final VoidCallback onOctDecReport;
-  final VoidCallback onJanMarReport;
+  final bool initialUseEventDate;
+  final void Function(bool) onTodayReport;
+  final void Function(bool) onDailyPerformance;
+  final void Function(bool) onExecutiveSummary;
+  final void Function(bool) onFullLedger;
+  final void Function(bool) onForecastReport;
+  final void Function(bool) onSixMonthsReport;
+  final void Function(bool) onOneYearReport;
+  final void Function(bool) onAprJunReport;
+  final void Function(bool) onJulSepReport;
+  final void Function(bool) onOctDecReport;
+  final void Function(bool) onJanMarReport;
 
   const ExportSalesReportDialog({
     super.key,
     required this.financialYear,
     this.activeFilters,
+    required this.initialUseEventDate,
     required this.onTodayReport,
     required this.onDailyPerformance,
     required this.onExecutiveSummary,
@@ -32,6 +34,19 @@ class ExportSalesReportDialog extends StatelessWidget {
     required this.onOctDecReport,
     required this.onJanMarReport,
   });
+
+  @override
+  State<ExportSalesReportDialog> createState() => _ExportSalesReportDialogState();
+}
+
+class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
+  late bool _useEventDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _useEventDate = widget.initialUseEventDate;
+  }
 
   Widget _buildSectionHeader(ThemeData theme, String title) {
     return Column(
@@ -68,8 +83,8 @@ class ExportSalesReportDialog extends StatelessWidget {
 
     String startYear = DateTime.now().year.toString();
     String endYear = (DateTime.now().year + 1).toString();
-    if (financialYear.contains('-')) {
-      final parts = financialYear.split('-');
+    if (widget.financialYear.contains('-')) {
+      final parts = widget.financialYear.split('-');
       if (parts.length == 2) {
         startYear = parts[0];
         if (parts[1].length == 2) {
@@ -115,7 +130,38 @@ class ExportSalesReportDialog extends StatelessWidget {
               ),
             ),
             16.h,
-            if (activeFilters != null && activeFilters!.isNotEmpty) ...[
+            Row(
+              children: [
+                const Text(
+                  'Report Date Basis:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF475569),
+                  ),
+                ),
+                16.w,
+                Expanded(
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('By Booking Date')),
+                      ButtonSegment(value: true, label: Text('By Event Date')),
+                    ],
+                    selected: {_useEventDate},
+                    onSelectionChanged: (Set<bool> newSelection) {
+                      setState(() {
+                        _useEventDate = newSelection.first;
+                      });
+                    },
+                    style: ButtonStyle(
+                      textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            16.h,
+            if (widget.activeFilters != null && widget.activeFilters!.isNotEmpty) ...[
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -143,7 +189,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                           ),
                           4.h,
                           Text(
-                            activeFilters!,
+                            widget.activeFilters!,
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
@@ -172,7 +218,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Detailed ledger of all bookings recorded today.',
                       onTap: () {
                         Navigator.pop(context);
-                        onTodayReport();
+                        widget.onTodayReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -182,7 +228,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Daily revenue and booking counts for the current month.',
                       onTap: () {
                         Navigator.pop(context);
-                        onDailyPerformance();
+                        widget.onDailyPerformance(_useEventDate);
                       },
                     ),
                     12.h,
@@ -192,7 +238,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Metrics, revenue charts, and top performance stats.',
                       onTap: () {
                         Navigator.pop(context);
-                        onExecutiveSummary();
+                        widget.onExecutiveSummary(_useEventDate);
                       },
                     ),
                     12.h,
@@ -202,7 +248,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Expected collections and upcoming payment details.',
                       onTap: () {
                         Navigator.pop(context);
-                        onForecastReport();
+                        widget.onForecastReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -212,7 +258,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Complete list of all bookings with status and totals.',
                       onTap: () {
                         Navigator.pop(context);
-                        onFullLedger();
+                        widget.onFullLedger(_useEventDate);
                       },
                     ),
                     24.h,
@@ -224,7 +270,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Quarterly sales and bookings for Apr - Jun $startYear.',
                       onTap: () {
                         Navigator.pop(context);
-                        onAprJunReport();
+                        widget.onAprJunReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -234,7 +280,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Quarterly sales and bookings for Jul - Sep $startYear.',
                       onTap: () {
                         Navigator.pop(context);
-                        onJulSepReport();
+                        widget.onJulSepReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -244,7 +290,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Quarterly sales and bookings for Oct - Dec $startYear.',
                       onTap: () {
                         Navigator.pop(context);
-                        onOctDecReport();
+                        widget.onOctDecReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -254,7 +300,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Quarterly sales and bookings for Jan - Mar $endYear.',
                       onTap: () {
                         Navigator.pop(context);
-                        onJanMarReport();
+                        widget.onJanMarReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -264,7 +310,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Summary of all bookings and sales in the last 6 months.',
                       onTap: () {
                         Navigator.pop(context);
-                        onSixMonthsReport();
+                        widget.onSixMonthsReport(_useEventDate);
                       },
                     ),
                     12.h,
@@ -274,7 +320,7 @@ class ExportSalesReportDialog extends StatelessWidget {
                       subtitle: 'Full annual summary of bookings and sales ledger.',
                       onTap: () {
                         Navigator.pop(context);
-                        onOneYearReport();
+                        widget.onOneYearReport(_useEventDate);
                       },
                     ),
                   ],

@@ -71,7 +71,9 @@ class _FleetAssignmentsScreenState
         driverName: driver?.name ?? '',
         vehicleId: selectedVehicleId ?? '',
         travelMode: travelMode,
-        travelDistanceKm: double.tryParse(_distCtrl.text.trim()) ?? 0,
+        travelDistanceKm: _distCtrl.text.trim().isEmpty
+            ? 0.0
+            : (double.tryParse(_distCtrl.text.trim().replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0),
         travelTime: _timeCtrl.text.trim(),
       );
 

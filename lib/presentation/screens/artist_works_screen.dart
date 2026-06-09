@@ -10,7 +10,6 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
-import '../../services/booking_service.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
 
@@ -307,6 +306,8 @@ class _PhoneOptionTile extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Colour helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+
 Color _statusColor(String status) {
   switch (status.toLowerCase()) {
     case 'confirmed':
@@ -317,6 +318,8 @@ Color _statusColor(String status) {
       return const Color(0xFFF97316);
     case 'cancelled':
       return const Color(0xFFEF4444);
+    case 'postponed':
+      return const Color(0xFFF97316); // Orange
     default:
       return const Color(0xFF8B5CF6);
   }
@@ -332,6 +335,8 @@ IconData _statusIcon(String status) {
       return Icons.hourglass_top_rounded;
     case 'cancelled':
       return Icons.cancel_rounded;
+    case 'postponed':
+      return Icons.schedule_rounded;
     default:
       return Icons.info_rounded;
   }
@@ -389,8 +394,16 @@ class ArtistWorksScreen extends HookConsumerWidget {
           final now = DateTime.now();
           final sorted = [...bookings]
             ..sort((a, b) {
-              final aFuture = a.serviceStart.isAfter(now);
-              final bFuture = b.serviceStart.isAfter(now);
+              final aFuture = a.bookingDate.isAfter(DateTime(now.year, now.month, now.day)) ||
+                  (a.bookingDate.year == now.year &&
+                   a.bookingDate.month == now.month &&
+                   a.bookingDate.day == now.day &&
+                   a.serviceStart.isAfter(now));
+              final bFuture = b.bookingDate.isAfter(DateTime(now.year, now.month, now.day)) ||
+                  (b.bookingDate.year == now.year &&
+                   b.bookingDate.month == now.month &&
+                   b.bookingDate.day == now.day &&
+                   b.serviceStart.isAfter(now));
               if (aFuture && !bFuture) return -1;
               if (!aFuture && bFuture) return 1;
               return a.serviceStart.compareTo(b.serviceStart);
@@ -445,26 +458,26 @@ class _BookingCardStack extends HookWidget {
     final todayBookings = bookings
         .where(
           (b) =>
-              b.serviceStart.year == now.year &&
-              b.serviceStart.month == now.month &&
-              b.serviceStart.day == now.day,
+              b.bookingDate.year == now.year &&
+              b.bookingDate.month == now.month &&
+              b.bookingDate.day == now.day,
         )
         .toList();
 
     final upcomingBookings = bookings
         .where(
           (b) =>
-              b.serviceStart.isAfter(now) &&
-              !(b.serviceStart.year == now.year &&
-                  b.serviceStart.month == now.month &&
-                  b.serviceStart.day == now.day),
+              b.bookingDate.isAfter(DateTime(now.year, now.month, now.day)) &&
+              !(b.bookingDate.year == now.year &&
+                  b.bookingDate.month == now.month &&
+                  b.bookingDate.day == now.day),
         )
         .toList();
 
     final pastBookings = bookings
         .where(
           (b) =>
-              b.serviceStart.isBefore(DateTime(now.year, now.month, now.day)),
+              b.bookingDate.isBefore(DateTime(now.year, now.month, now.day)),
         )
         .toList();
 
@@ -857,6 +870,81 @@ class _AnimatedWorkCard extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (booking.pocName.trim().isNotEmpty || booking.captureStaffDetails.trim().isNotEmpty) ...[
+                              6.h,
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  if (booking.pocName.trim().isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: crm.primary.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: crm.primary.withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.person_pin_rounded,
+                                            size: 10,
+                                            color: crm.primary,
+                                          ),
+                                          4.w,
+                                          Text(
+                                            'POC: ${booking.pocName}',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              color: crm.primary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (booking.captureStaffDetails.trim().isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: Colors.orange.withValues(alpha: 0.2),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.camera_enhance_rounded,
+                                            size: 10,
+                                            color: Colors.orange,
+                                          ),
+                                          4.w,
+                                          Text(
+                                            'CAPTURE: ${booking.captureStaffDetails}',
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.orange,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                             if (booking.phone.trim().isNotEmpty || booking.mapUrl.isNotEmpty) ...[
                               8.h,
                               Row(
@@ -1006,7 +1094,7 @@ class _AnimatedWorkCard extends ConsumerWidget {
                         // Date block
                         _IconInfo(
                           icon: Icons.calendar_today_rounded,
-                          text: _fmt(booking.serviceStart),
+                          text: _fmt(booking.bookingDate),
                           color: isToday ? statusColor : crm.textSecondary,
                         ),
                         const Spacer(),
@@ -1057,6 +1145,7 @@ class _ExpandedDetails extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
+    final isPostponed = booking.status.toLowerCase() == 'postponed';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1083,7 +1172,33 @@ class _ExpandedDetails extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              WorkTimerWidget(booking: booking),
+              if (!isPostponed) WorkTimerWidget(booking: booking),
+              if (isPostponed) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
+                      12.w,
+                      Expanded(
+                        child: Text(
+                          'This booking has been postponed. Timer is unavailable.',
+                          style: TextStyle(
+                            color: Colors.orange.shade900,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                12.h,
+              ],
               12.h,
               // Contact details
               if (booking.phone.trim().isNotEmpty || booking.secondaryContact.trim().isNotEmpty) ...[
@@ -1241,6 +1356,110 @@ class _ExpandedDetails extends ConsumerWidget {
                 14.h,
               ],
 
+              // POC & Capture Staff
+              if (booking.pocName.trim().isNotEmpty || booking.captureStaffDetails.trim().isNotEmpty) ...[
+                _DetailLabel('Coordination & Logistics'),
+                6.h,
+                Row(
+                  children: [
+                    if (booking.pocName.trim().isNotEmpty)
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: crm.background,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: crm.border),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_pin_rounded, size: 16, color: crm.primary),
+                              8.w,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Point of Contact (POC)',
+                                      style: TextStyle(fontSize: 10, color: crm.textSecondary),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      booking.pocName,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: crm.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (booking.pocPhone.trim().isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      InkWell(
+                                        onTap: () => _makePhoneCall(booking.pocPhone.trim(), context),
+                                        child: Text(
+                                          booking.pocPhone,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: crm.primary,
+                                            fontWeight: FontWeight.w600,
+                                            decoration: TextDecoration.underline,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (booking.pocName.trim().isNotEmpty && booking.captureStaffDetails.trim().isNotEmpty)
+                      8.w,
+                    if (booking.captureStaffDetails.trim().isNotEmpty)
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: crm.background,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: crm.border),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.camera_enhance_rounded, size: 16, color: Colors.orange),
+                              8.w,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Capture Staff',
+                                      style: TextStyle(fontSize: 10, color: crm.textSecondary),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      booking.captureStaffDetails,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: crm.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                14.h,
+              ],
+
               // Travel info
               if (booking.travelMode.isNotEmpty) ...[
                 _DetailLabel('Travel'),
@@ -1319,13 +1538,41 @@ class _ExpandedDetails extends ConsumerWidget {
                       ),
                       8.w,
                       Expanded(
-                        child: Text(
-                          booking.staffInstructions,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF92400E),
-                            height: 1.4,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              booking.staffInstructions,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF92400E),
+                                height: 1.4,
+                              ),
+                            ),
+                            ...() {
+                              final urlRegExp = RegExp(r'(https?:\/\/[^\s]+)');
+                              final matches = urlRegExp.allMatches(booking.staffInstructions);
+                              if (matches.isEmpty) return <Widget>[];
+                              return <Widget>[
+                                8.h,
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: matches.map((m) {
+                                    final url = m.group(0)!;
+                                    final isMap = url.contains('maps') || url.contains('goo.gl');
+                                    return ActionChip(
+                                      avatar: Icon(isMap ? Icons.location_on : Icons.link, size: 14, color: const Color(0xFFF97316)),
+                                      label: Text(isMap ? 'Open Map' : 'Open Link', style: const TextStyle(fontSize: 10, color: Color(0xFF92400E))),
+                                      backgroundColor: const Color(0xFFFFF7ED),
+                                      side: BorderSide(color: const Color(0xFFF97316).withValues(alpha: 0.3)),
+                                      onPressed: () => _openMapUrl(url, context),
+                                    );
+                                  }).toList(),
+                                )
+                              ];
+                            }(),
+                          ],
                         ),
                       ),
                     ],
@@ -1376,6 +1623,13 @@ class _ExpandedDetails extends ConsumerWidget {
                                   '${addon.persons} person(s) • ₹${addon.amount.toStringAsFixed(0)} each',
                                   style: TextStyle(color: crm.textSecondary, fontSize: 11),
                                 ),
+                                if (addon.description.isNotEmpty) ...[
+                                  2.h,
+                                  Text(
+                                    addon.description,
+                                    style: TextStyle(color: crm.textSecondary, fontSize: 11, fontStyle: FontStyle.italic),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -1414,7 +1668,11 @@ class _ExpandedDetails extends ConsumerWidget {
                               child: Container(
                                 padding: const EdgeInsets.all(5),
                                 decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.1),
+                                  color: booking.status.toLowerCase() == 'cancelled'
+                                      ? Colors.red.withValues(alpha: 0.1)
+                                      : booking.status.toLowerCase() == 'postponed'
+                                      ? Colors.orange.withValues(alpha: 0.1)
+                                      : Colors.red.withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -1633,6 +1891,7 @@ class _AddAddonSheet extends ConsumerStatefulWidget {
 class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
   AddonService? _selectedService;
   int _persons = 1;
+  String _description = '';
   bool _isLoading = false;
 
   @override
@@ -1640,6 +1899,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
     super.initState();
     if (widget.existingAddon != null) {
       _persons = widget.existingAddon!.persons;
+      _description = widget.existingAddon!.description;
     }
   }
 
@@ -1691,7 +1951,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
           16.h,
           asyncAddons.when(
             data: (services) {
-              final activeServices = services.where((s) => s.status.toLowerCase() == 'active').toList();
+              final activeServices = services.where((s) => s.status.toLowerCase() == 'active' && s.status.toLowerCase() != 'postponed').toList();
               if (activeServices.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20.0),
@@ -1730,6 +1990,9 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
                     onChanged: (val) {
                       setState(() {
                         _selectedService = val;
+                        if (val != null && _description.trim().isEmpty) {
+                          _description = val.description;
+                        }
                       });
                     },
                   ),
@@ -1772,6 +2035,28 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
                         ],
                       ),
                     ],
+                  ),
+                  16.h,
+                  Text(
+                    'Description / Notes',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: crm.textSecondary,
+                    ),
+                  ),
+                  4.h,
+                  TextFormField(
+                    initialValue: _description,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      hintText: 'e.g., Saree draping for sister',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                    onChanged: (val) => setState(() => _description = val),
                   ),
                   20.h,
                   const Divider(),
@@ -1854,6 +2139,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
         service: _selectedService!.name,
         amount: _selectedService!.price,
         persons: _persons,
+        description: _description,
       );
 
       final currentBooking = widget.booking;
@@ -2424,7 +2710,7 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     
-    if (widget.booking.status.toLowerCase() == 'cancelled') {
+    if (widget.booking.status.toLowerCase() == 'cancelled' || widget.booking.status.toLowerCase() == 'postponed') {
       return const SizedBox.shrink();
     }
 

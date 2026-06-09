@@ -105,11 +105,12 @@ class CalendarScreen extends HookConsumerWidget {
     final groupTypes = <String, bool>{};
     for (final entry in bookings) {
       final isCancelled = entry.booking.status.toLowerCase() == 'cancelled';
+      final isPostponed = entry.booking.status.toLowerCase() == 'postponed';
       final isCompleted = entry.booking.status.toLowerCase() == 'completed';
 
-      if (isCancelled) {
-        // Cancelled bookings are treated individually to show red with client name
-        final key = 'cancelled:${entry.id}';
+      if (isCancelled || isPostponed) {
+        // Cancelled and postponed bookings are treated individually to show distinct color with client name
+        final key = isCancelled ? 'cancelled:${entry.id}' : 'postponed:${entry.id}';
         grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
         groupLabels[key] = entry.booking.customerName.trim();
         groupTypes[key] = false;
@@ -2133,6 +2134,7 @@ class CalendarScreen extends HookConsumerWidget {
     final booking = bookingEntry.booking;
     
     final isCancelled = booking.status.toLowerCase() == 'cancelled';
+    final isPostponed = booking.status.toLowerCase() == 'postponed';
     final isCompleted = booking.status.toLowerCase() == 'completed';
 
     Color pillBg;
@@ -2140,6 +2142,9 @@ class CalendarScreen extends HookConsumerWidget {
 
     if (isCancelled) {
       pillBg = const Color(0xFFEF4444); // Red
+      pillTextColor = Colors.white;
+    } else if (isPostponed) {
+      pillBg = const Color(0xFFEAB308); // Yellow
       pillTextColor = Colors.white;
     } else if (isCompleted) {
       pillBg = const Color(0xFF22C55E); // Green

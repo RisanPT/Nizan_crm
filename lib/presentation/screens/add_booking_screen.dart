@@ -359,36 +359,40 @@ class AddBookingScreen extends HookConsumerWidget {
       final actualName =
           autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
 
-      final booking = Booking(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        packageId: bookingItems.first.packageId,
-        regionId: selectedDistrictModel?.regionId ?? '',
-        districtId: selectedDistrictModel?.id ?? '',
-        customerName: actualName,
-        phone: phoneCtrl.text.trim(),
-        address: addressCtrl.text.trim(),
-        pincode: pincodeCtrl.text.trim(),
-        email: emailCtrl.text.trim(),
-        legacyBooking: allowMissingEmail.value,
-        service: bookingItems.map((item) => item.service).join(' + '),
-        eventSlot: bookingItems
-            .map((item) => item.eventSlot.trim())
-            .where((item) => item.isNotEmpty)
-            .join(' | '),
-        region: selectedDistrictModel?.regionName ?? '',
-        district: selectedDistrictModel?.name ?? '',
-        bookingDate: d,
-        selectedDates: sortedDates,
-        serviceStart: sStart,
-        serviceEnd: sEnd,
-        totalPrice: totalPrice.value,
-        advanceAmount: advanceAmount.value,
-        bookingItems: bookingItems,
-      );
-
       isSubmitting.value = true;
       try {
-        await ref.read(bookingProvider.notifier).addBooking(booking);
+        for (int i = 0; i < bookingItems.length; i++) {
+          final item = bookingItems[i];
+          final booking = Booking(
+            id: '${DateTime.now().millisecondsSinceEpoch}_$i',
+            packageId: item.packageId,
+            regionId: selectedDistrictModel?.regionId ?? '',
+            districtId: selectedDistrictModel?.id ?? '',
+            customerName: actualName,
+            phone: phoneCtrl.text.trim(),
+            address: addressCtrl.text.trim(),
+            pincode: pincodeCtrl.text.trim(),
+            email: emailCtrl.text.trim(),
+            legacyBooking: allowMissingEmail.value,
+            service: item.service,
+            eventSlot: item.eventSlot.trim(),
+            region: selectedDistrictModel?.regionName ?? '',
+            district: selectedDistrictModel?.name ?? '',
+            bookingDate: d,
+            selectedDates: sortedDates,
+            serviceStart: sStart,
+            serviceEnd: sEnd,
+            totalPrice: item.totalPrice,
+            advanceAmount: item.advanceAmount,
+            bookingItems: const [],
+          );
+          await ref.read(bookingProvider.notifier).addBooking(booking);
+          
+          // Add a small delay so backend doesn't assign the same booking number
+          if (i < bookingItems.length - 1) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        }
 
         if (!context.mounted) return;
 
@@ -397,9 +401,9 @@ class AddBookingScreen extends HookConsumerWidget {
         ref.invalidate(customersProvider);
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Booking created and added to calendar.'),
-            backgroundColor: Color(0xFF10B981),
+          SnackBar(
+            content: Text('${bookingItems.length} Booking(s) created and added to calendar.'),
+            backgroundColor: const Color(0xFF10B981),
           ),
         );
         context.go('/calendar?date=${formatDateForRoute(d)}');

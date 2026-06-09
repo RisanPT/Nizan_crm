@@ -86,12 +86,14 @@ class BookingAddon {
   final String service;
   final double amount;
   final int persons;
+  final String description;
 
   const BookingAddon({
     this.addonServiceId = '',
     required this.service,
     required this.amount,
     required this.persons,
+    this.description = '',
   });
 
   factory BookingAddon.fromJson(Map<String, dynamic> json) {
@@ -100,6 +102,7 @@ class BookingAddon {
       service: json['service'] as String? ?? '',
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       persons: (json['persons'] as num?)?.toInt() ?? 1,
+      description: json['description'] as String? ?? '',
     );
   }
 
@@ -109,6 +112,7 @@ class BookingAddon {
       'service': service,
       'amount': amount,
       'persons': persons,
+      'description': description,
     };
   }
 
@@ -117,12 +121,14 @@ class BookingAddon {
     String? service,
     double? amount,
     int? persons,
+    String? description,
   }) {
     return BookingAddon(
       addonServiceId: addonServiceId ?? this.addonServiceId,
       service: service ?? this.service,
       amount: amount ?? this.amount,
       persons: persons ?? this.persons,
+      description: description ?? this.description,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -603,7 +604,8 @@ class ManageBookingScreen extends HookConsumerWidget {
               final sameDay = item.isOnDate(currentBookingDate);
               final activeStatus =
                   item.status.toLowerCase() != 'rejected' &&
-                  item.status.toLowerCase() != 'cancelled';
+                  item.status.toLowerCase() != 'cancelled' &&
+                  item.status.toLowerCase() != 'postponed';
               final containsArtist = item.assignedStaff.any(
                 (assignment) =>
                     (currentArtistId.isNotEmpty &&
@@ -625,7 +627,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                   final sameDay = entry.isOnDate(currentBookingDate);
                   final activeStatus =
                       entry.booking.status.toLowerCase() != 'rejected' &&
-                      entry.booking.status.toLowerCase() != 'cancelled';
+                      entry.booking.status.toLowerCase() != 'cancelled' &&
+                      entry.booking.status.toLowerCase() != 'postponed';
                   final containsArtist = entry.assignedStaff.any(
                     (assignment) =>
                         (currentArtistId.isNotEmpty &&
@@ -868,9 +871,10 @@ class ManageBookingScreen extends HookConsumerWidget {
         mapUrl: mapUrlCtrl.text.trim(),
         travelMode: travelModeCtrl.text.trim(),
         travelTime: travelTimeCtrl.text.trim(),
-        travelDistanceKm:
-            double.tryParse(travelDistanceCtrl.text.trim()) ??
-            booking.travelDistanceKm,
+        travelDistanceKm: travelDistanceCtrl.text.trim().isEmpty
+            ? 0.0
+            : (double.tryParse(travelDistanceCtrl.text.trim().replaceAll(RegExp(r'[^0-9.]'), '')) ??
+                booking.travelDistanceKm),
         eventSlot: eventSlots.value.join(' | '),
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
@@ -1101,6 +1105,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                                   'pending',
                                   'confirmed',
                                   'completed',
+                                  'postponed',
                                   'cancelled',
                                 ],
                                 statusState.value,
@@ -1439,10 +1444,64 @@ class ManageBookingScreen extends HookConsumerWidget {
                                   asyncAddonServices,
                                 ),
                                 16.h,
-                                _buildTextArea(
-                                  context,
-                                  'STAFF INSTRUCTIONS / NEEDS',
-                                  staffNeedsCtrl,
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildTextArea(
+                                      context,
+                                      'STAFF INSTRUCTIONS / NEEDS',
+                                      staffNeedsCtrl,
+                                    ),
+                                    8.h,
+                                    Wrap(
+                                      spacing: 8,
+                                      children: [
+                                        ActionChip(
+                                          label: const Text('Add List Item', style: TextStyle(fontSize: 10)),
+                                          onPressed: () {
+                                            final text = staffNeedsCtrl.text;
+                                            final lines = text.split('\n');
+                                            int nextNum = 1;
+                                            for (final line in lines.reversed) {
+                                              final match = RegExp(r'^(\d+)\.').firstMatch(line.trim());
+                                              if (match != null) {
+                                                nextNum = int.parse(match.group(1)!) + 1;
+                                                break;
+                                              }
+                                            }
+                                            final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
+                                            staffNeedsCtrl.text = '$text$prefix$nextNum. ';
+                                            staffNeedsCtrl.selection = TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
+                                          },
+                                        ),
+                                        ActionChip(
+                                          label: const Text('Paste Map Link', style: TextStyle(fontSize: 10)),
+                                          onPressed: () async {
+                                            final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+                                            final pastedText = clipboardData?.text?.trim() ?? '';
+                                            
+                                            final text = staffNeedsCtrl.text;
+                                            final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
+                                            
+                                            if (pastedText.isNotEmpty && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
+                                              staffNeedsCtrl.text = '$text${prefix}Location Map: $pastedText\n';
+                                            } else if (pastedText.isNotEmpty) {
+                                              staffNeedsCtrl.text = '$text${prefix}Location: $pastedText\n';
+                                            } else {
+                                              staffNeedsCtrl.text = '$text${prefix}Location Map: [Paste Link Here]\n';
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Clipboard is empty or does not contain text.')),
+                                                );
+                                              }
+                                            }
+                                            
+                                            staffNeedsCtrl.selection = TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -1616,13 +1675,14 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<BookingDisplayEntry> bookings,
     ValueNotifier<bool> showAll,
   ) {
+    final activeBookings = bookings.where((e) => e.booking.status != 'completed' && e.booking.status != 'postponed' && e.booking.status != 'cancelled').toList();
     final visibleBookings = showAll.value
-        ? bookings
-        : bookings.take(3).toList();
+        ? activeBookings
+        : activeBookings.take(3).toList();
 
     return _SectionCard(
       title: "Today's Works",
-      subtitle: '$artistName has ${bookings.length} booking(s) today',
+      subtitle: '$artistName has ${activeBookings.length} active booking(s) today',
       child: Column(
         children: [
           ...visibleBookings.map(
@@ -3308,6 +3368,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                   addonServiceId: selected.id,
                   service: selected.name,
                   amount: selected.price,
+                  description: selected.description,
                 ),
               );
             },

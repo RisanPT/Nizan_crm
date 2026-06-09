@@ -115,15 +115,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
     final geoFilteredAllBookings = allBookings.where(bookingMatchesGeoFilters).toList();
 
-    final todaysScheduled = geoFilteredAllBookings.where((b) {
+    int countPackages(Iterable<Booking> bookings) {
+      return bookings.fold(0, (sum, b) => sum + (b.bookingItems.isEmpty ? 1 : b.bookingItems.length));
+    }
+
+    final todaysScheduled = countPackages(geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
       return d.year == now.year && d.month == now.month && d.day == now.day;
-    }).length;
+    }));
 
-    final todaysCompleted = geoFilteredAllBookings.where((b) {
+    final todaysCompleted = countPackages(geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
-      return d.year == now.year && d.month == now.month && d.day == now.day && b.status.toLowerCase() == 'completed';
-    }).length;
+      return b.status.toLowerCase() == 'completed' &&
+          d.year == now.year &&
+          d.month == now.month &&
+          d.day == now.day;
+    }));
     
     final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
     final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
@@ -133,16 +140,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
     });
 
 
-    final totalSalesValue = geoFilteredAllBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.totalPrice : sum);
-    final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' ? sum + b.advanceAmount : sum);
-    final completedOverall = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'completed').length;
-    final cancelledOverall = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'cancelled').length;
-    final pendingWorks = geoFilteredAllBookings.where((b) => b.status.toLowerCase() == 'pending').length;
+    final totalSalesValue = geoFilteredAllBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.totalPrice : sum);
+    final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.advanceAmount : sum);
+
+
 
     final currentMonthKey = '${now.year}-${now.month}';
     final monthBookings = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
-      return '${d.year}-${d.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled';
+      return '${d.year}-${d.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed';
     }).toList();
 
     final forecastSales = monthBookings.fold<double>(
@@ -197,7 +203,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
         builder: (dialogCtx) => ExportSalesReportDialog(
           financialYear: selectedFY.value,
           activeFilters: activeFiltersStr,
-          onTodayReport: () => _runWithReportLoader(
+          initialUseEventDate: useEventDateVal,
+          onTodayReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
@@ -206,12 +213,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
               packages: packages,
               employees: employees,
               reportType: 'ceo_daily',
-              useEventDate: useEventDateVal,
+              useEventDate: useEventDate,
               districts: allDistricts,
               activeFilters: activeFiltersStr,
             ),
           ),
-          onDailyPerformance: () => _runWithReportLoader(
+          onDailyPerformance: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
@@ -220,12 +227,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
               packages: packages,
               employees: employees,
               reportType: 'sales',
-              useEventDate: useEventDateVal,
+              useEventDate: useEventDate,
               districts: allDistricts,
               activeFilters: activeFiltersStr,
             ),
           ),
-          onExecutiveSummary: () => _runWithReportLoader(
+          onExecutiveSummary: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
@@ -234,12 +241,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
               packages: packages,
               employees: employees,
               reportType: 'executive',
-              useEventDate: useEventDateVal,
+              useEventDate: useEventDate,
               districts: allDistricts,
               activeFilters: activeFiltersStr,
             ),
           ),
-          onFullLedger: () => _runWithReportLoader(
+          onFullLedger: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
@@ -248,12 +255,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
               packages: packages,
               employees: employees,
               reportType: 'crm',
-              useEventDate: useEventDateVal,
+              useEventDate: useEventDate,
               districts: allDistricts,
               activeFilters: activeFiltersStr,
             ),
           ),
-          onForecastReport: () => _runWithReportLoader(
+          onForecastReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () => downloadDashboardReport(
@@ -262,12 +269,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
               packages: packages,
               employees: employees,
               reportType: 'forecast',
-              useEventDate: useEventDateVal,
+              useEventDate: useEventDate,
               districts: allDistricts,
               activeFilters: activeFiltersStr,
             ),
           ),
-          onAprJunReport: () => _runWithReportLoader(
+          onAprJunReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -279,7 +286,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(startYear, 4, 1),
                 endDate: DateTime(startYear, 6, 30, 23, 59, 59),
                 districts: allDistricts,
@@ -287,7 +294,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
-          onJulSepReport: () => _runWithReportLoader(
+          onJulSepReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -299,7 +306,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(startYear, 7, 1),
                 endDate: DateTime(startYear, 9, 30, 23, 59, 59),
                 districts: allDistricts,
@@ -307,7 +314,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
-          onOctDecReport: () => _runWithReportLoader(
+          onOctDecReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -319,7 +326,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(startYear, 10, 1),
                 endDate: DateTime(startYear, 12, 31, 23, 59, 59),
                 districts: allDistricts,
@@ -327,7 +334,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
-          onJanMarReport: () => _runWithReportLoader(
+          onJanMarReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -339,7 +346,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(endYear, 1, 1),
                 endDate: DateTime(endYear, 3, 31, 23, 59, 59),
                 districts: allDistricts,
@@ -347,7 +354,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
-          onSixMonthsReport: () => _runWithReportLoader(
+          onSixMonthsReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -358,7 +365,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(now.year, now.month - 6, now.day),
                 endDate: now,
                 districts: allDistricts,
@@ -366,7 +373,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
-          onOneYearReport: () => _runWithReportLoader(
+          onOneYearReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
             action: () {
@@ -377,7 +384,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
-                useEventDate: useEventDateVal,
+                useEventDate: useEventDate,
                 startDate: DateTime(now.year - 1, now.month, now.day),
                 endDate: now,
                 districts: allDistricts,
@@ -530,7 +537,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       ),
                       _StatCardWithIcon(
                         title: "Today's Bookings",
-                        value: '$todaysScheduled',
+                        value: todaysScheduled.toString(),
                         subtitle: 'Scheduled events',
                         icon: Icons.calendar_today,
                         color: Colors.blue,
@@ -840,7 +847,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       ),
                       _StatCardWithIcon(
                         title: 'Pending Works',
-                        value: '$pendingWorks',
+                        value: '${countPackages(bookings.where((b) => b.status == 'Pending'))}',
                         subtitle: 'Currently active',
                         icon: Icons.pending_actions,
                         color: Colors.orange,
@@ -848,7 +855,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       ),
                       _StatCardWithIcon(
                         title: 'Completed Overall',
-                        value: '$completedOverall',
+                        value: '${countPackages(bookings.where((b) => b.status == 'Completed'))}',
                         subtitle: 'Successfully delivered',
                         icon: Icons.task_alt,
                         color: Colors.green,
@@ -856,7 +863,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       ),
                       _StatCardWithIcon(
                         title: 'Cancelled',
-                        value: '$cancelledOverall',
+                        value: '${countPackages(bookings.where((b) => b.status == 'Cancelled'))}',
                         subtitle: 'Bookings lost',
                         icon: Icons.cancel_outlined,
                         color: Colors.red,
@@ -1435,6 +1442,10 @@ class _StatusChip extends StatelessWidget {
         bg = Colors.red.withValues(alpha: 0.12);
         fg = Colors.red.shade700;
         break;
+      case 'postponed':
+        bg = Colors.orange.withValues(alpha: 0.12);
+        fg = Colors.orange.shade800;
+        break;
       case 'confirmed':
         bg = Colors.blue.withValues(alpha: 0.12);
         fg = Colors.blue.shade700;
@@ -1571,7 +1582,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
           stats.totalBookings++;
           final packageCount = b.bookingItems.isEmpty ? 1 : b.bookingItems.length;
           stats.totalPackages += packageCount;
-          if (b.status.toLowerCase() != 'cancelled') {
+          if (b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed') {
             stats.totalSales += b.totalPrice;
             stats.advanceCollected += b.advanceAmount;
             if (b.status.toLowerCase() != 'completed') {

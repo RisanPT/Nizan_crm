@@ -76,7 +76,7 @@ class SlotManagementScreen extends HookConsumerWidget {
     // Filter bookings based on Region, District and selected timeframe spread
     final rangeBookings = bookings.where((b) {
       final status = b.status.toLowerCase();
-      if (status == 'cancelled' || status == 'rejected') return false;
+      if (status == 'cancelled' || status == 'rejected' || status == 'postponed') return false;
 
       final dates = b.selectedDates.isNotEmpty ? b.selectedDates : [b.bookingDate];
       final hasDateInSpread = dates.any((d) => 
@@ -218,7 +218,7 @@ class SlotManagementScreen extends HookConsumerWidget {
     }
     for (final Booking b in bookings) {
       final status = b.status.toLowerCase();
-      if (status == 'cancelled' || status == 'rejected') continue;
+      if (status == 'cancelled' || status == 'rejected' || status == 'postponed') continue;
       final dates = b.selectedDates.isNotEmpty ? b.selectedDates : [b.bookingDate];
       final hasDateInSpread = dates.any((d) => 
         !d.isBefore(startDate) && !d.isAfter(endDate)
@@ -587,7 +587,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                     int artistDayBookings = 0;
                     for (final Booking b in bookings) {
                       final status = b.status.toLowerCase();
-                      if (status == 'cancelled' || status == 'rejected') continue;
+                      if (status == 'cancelled' || status == 'rejected' || status == 'postponed') continue;
                       
                       final dates = b.selectedDates.isNotEmpty ? b.selectedDates : [b.bookingDate];
                       final isOnThisDay = dates.any((d) => 

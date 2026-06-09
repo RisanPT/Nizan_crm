@@ -1112,7 +1112,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     if (totalRevenue == 0) {
       // Fallback to active bookings total price
       final activeBookingsTotal = filteredBookings
-          .where((b) => b.status.toLowerCase() != 'cancelled')
+          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
           .fold<double>(0, (sum, b) => sum + b.totalPrice);
       totalRevenue = activeBookingsTotal;
     }
@@ -1125,8 +1125,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .where((b) => b.status.toLowerCase() == 'completed')
         .fold<double>(0, (sum, b) => sum + b.totalPrice);
     if (prevRevenue == 0) {
+      final totalSales = filteredBookings
+          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
+          .fold<double>(0, (sum, b) => sum + b.totalPrice);
       prevRevenue = prevMonthBookings
-          .where((b) => b.status.toLowerCase() != 'cancelled')
+          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
           .fold<double>(0, (sum, b) => sum + b.totalPrice);
     }
     double revenueGrowth = 0.0;
@@ -2872,6 +2875,8 @@ class _ArtistMiniCard extends StatelessWidget {
         return const Color(0xFFF97316);
       case 'cancelled':
         return const Color(0xFFEF4444);
+      case 'postponed':
+        return const Color(0xFFF97316); // Orange
       default:
         return const Color(0xFF8B5CF6);
     }
