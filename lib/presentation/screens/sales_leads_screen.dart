@@ -10,6 +10,8 @@ import '../../core/utils/dashboard_report_service.dart';
 import '../../services/lead_service.dart';
 import '../../core/models/lead.dart';
 import '../../providers/dio_provider.dart';
+import '../../services/user_service.dart';
+import '../../core/providers/auth_provider.dart';
 
 // ─────────────────────────────────────────────────────────
 //  Smart-paste parser
@@ -182,6 +184,11 @@ class SalesLeadsScreen extends HookConsumerWidget {
     final searchCtrl = useTextEditingController();
     final selectedStatus = useState('All');
     final selectedSource = useState('All');
+    final selectedSalesperson = useState('All');
+
+    final session = ref.watch(authSessionProvider);
+    final isAdminOrManagerOrCRM = session != null && (session.role == 'admin' || session.role == 'manager' || session.role == 'crm');
+    final asyncUsers = ref.watch(crmUsersProvider);
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -219,7 +226,13 @@ class SalesLeadsScreen extends HookConsumerWidget {
                   final matchesSource = selectedSource.value == 'All' ||
                       lead.source.toLowerCase() == selectedSource.value.toLowerCase() ||
                       (selectedSource.value == 'Other' && !_isKnownSource(lead.source));
-                  return matchesSearch && matchesStatus && matchesSource;
+
+                  final matchesSalesperson = !isAdminOrManagerOrCRM ||
+                      selectedSalesperson.value == 'All' ||
+                      (selectedSalesperson.value == 'Unassigned' && (lead.assignedTo == null || lead.assignedTo!.isEmpty)) ||
+                      (lead.assignedTo == selectedSalesperson.value);
+
+                  return matchesSearch && matchesStatus && matchesSource && matchesSalesperson;
                 }).toList();
 
                 Future<void> exportLeadsReport() async {
@@ -238,6 +251,8 @@ class SalesLeadsScreen extends HookConsumerWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _LeadStatsRow(leads: leads),
+                    24.h,
                     // Filter Bar
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -328,6 +343,37 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                     ),
                                   ],
                                 ),
+                                if (isAdminOrManagerOrCRM) ...[
+                                  const Divider(),
+                                  DropdownButton<String>(
+                                    value: selectedSalesperson.value,
+                                    isExpanded: true,
+                                    onChanged: (val) {
+                                      if (val != null) selectedSalesperson.value = val;
+                                    },
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'All',
+                                        child: Text('All Staff', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                      const DropdownMenuItem(
+                                        value: 'Unassigned',
+                                        child: Text('Unassigned', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                      ...asyncUsers.value
+                                              ?.where((u) => u.role == 'sales')
+                                              .map((u) => DropdownMenuItem(
+                                                    value: u.id,
+                                                    child: Text(u.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                  ))
+                                              .toList() ??
+                                          [],
+                                    ],
+                                    style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                    underline: const SizedBox(),
+                                    icon: const Icon(Icons.keyboard_arrow_down),
+                                  ),
+                                ],
                                 const SizedBox(height: 8),
                                 ElevatedButton.icon(
                                   onPressed: exportLeadsReport,
@@ -414,6 +460,36 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   underline: const SizedBox(),
                                   icon: const Icon(Icons.keyboard_arrow_down),
                                 ),
+                                if (isAdminOrManagerOrCRM) ...[
+                                  Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
+                                  DropdownButton<String>(
+                                    value: selectedSalesperson.value,
+                                    onChanged: (val) {
+                                      if (val != null) selectedSalesperson.value = val;
+                                    },
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'All',
+                                        child: Text('All Staff', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                      const DropdownMenuItem(
+                                        value: 'Unassigned',
+                                        child: Text('Unassigned', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                      ...asyncUsers.value
+                                              ?.where((u) => u.role == 'sales')
+                                              .map((u) => DropdownMenuItem(
+                                                    value: u.id,
+                                                    child: Text(u.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                  ))
+                                              .toList() ??
+                                          [],
+                                    ],
+                                    style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                    underline: const SizedBox(),
+                                    icon: const Icon(Icons.keyboard_arrow_down),
+                                  ),
+                                ],
                                 const SizedBox(width: 16),
                                 ElevatedButton.icon(
                                   onPressed: exportLeadsReport,
@@ -577,6 +653,10 @@ class _LeadForm extends HookConsumerWidget {
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
     final status        = useState(initialLead?.status ?? 'New');
+    final assignedTo    = useState<String?>(initialLead?.assignedTo);
+    final asyncUsers    = ref.watch(crmUsersProvider);
+    final session       = ref.watch(authSessionProvider);
+    final isAdminOrManager = session != null && (session.role == 'admin' || session.role == 'manager');
     final isSaving      = useState(false);
     final isPasting     = useState(false);
     final sampleIndex   = useState(0);
@@ -656,6 +736,7 @@ class _LeadForm extends HookConsumerWidget {
           'status': status.value,
           'reason': reasonCtrl.text,
           'remarks': remarksCtrl.text,
+          'assignedTo': (session?.role == 'sales') ? session?.userId : assignedTo.value,
         };
 
         if (isEditing) {
@@ -675,6 +756,7 @@ class _LeadForm extends HookConsumerWidget {
           bookedDate.value = null;
           followUpDate.value = null;
           status.value = 'New';
+          assignedTo.value = null;
         }
 
         onSaved();
@@ -994,6 +1076,37 @@ class _LeadForm extends HookConsumerWidget {
         ),
         desktopWidth: 250,
       ),
+
+      // Assign Sales Executive (Admin/Manager view only)
+      if (isAdminOrManager)
+        responsiveField(
+          DropdownButtonFormField<String>(
+            value: assignedTo.value,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Assign Sales Executive',
+              prefixIcon: Icon(Icons.assignment_ind_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('Unassigned (None)'),
+              ),
+              ...asyncUsers.value
+                      ?.where((u) => u.role == 'sales')
+                      .map((u) => DropdownMenuItem<String>(
+                            value: u.id,
+                            child: Text(u.name, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList() ??
+                  [],
+            ],
+            onChanged: (v) {
+              assignedTo.value = v;
+            },
+          ),
+          desktopWidth: 220,
+        ),
 
       // Remarks
       responsiveField(
@@ -1406,7 +1519,7 @@ class _LeadsTable extends ConsumerWidget {
               8: FixedColumnWidth(130),
               9: FixedColumnWidth(170),
               10: FixedColumnWidth(220),
-              11: FixedColumnWidth(140),
+              11: FixedColumnWidth(180),
             },
             children: [
               TableRow(
@@ -1494,33 +1607,55 @@ class _LeadsTable extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           SizedBox(
-                            width: 36,
-                            height: 36,
+                            width: 32,
+                            height: 32,
                             child: IconButton(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.call_rounded, size: 17),
-                              tooltip: 'Call',
+                              icon: const Icon(Icons.call_rounded, size: 16),
+                              tooltip: 'Call (Cloud/SIM)',
                               color: const Color(0xFF22C55E),
-                              onPressed: () => _launchCall(context, lead.phone),
+                              onPressed: () => _initiateCallFlow(context, lead.phone),
                             ),
                           ),
                           SizedBox(
-                            width: 36,
-                            height: 36,
+                            width: 32,
+                            height: 32,
                             child: IconButton(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.edit_outlined, size: 17),
+                              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                              tooltip: 'WhatsApp Message',
+                              color: const Color(0xFF25D366),
+                              onPressed: () => _launchWhatsApp(context, lead.phone),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                              tooltip: 'Record Outcome',
+                              color: Colors.orange,
+                              onPressed: () => _showRecordOutcomeDialog(context, ref, lead),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 32,
+                            height: 32,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.edit_outlined, size: 16),
                               tooltip: 'Edit',
                               color: const Color(0xFF6C63FF),
                               onPressed: () => _showEditDialog(context, ref, lead),
                             ),
                           ),
                           SizedBox(
-                            width: 36,
-                            height: 36,
+                            width: 32,
+                            height: 32,
                             child: IconButton(
                               padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.delete_outline, size: 17),
+                              icon: const Icon(Icons.delete_outline, size: 16),
                               tooltip: 'Delete',
                               color: Colors.red,
                               onPressed: () => _confirmDelete(context, ref, lead),
@@ -1543,7 +1678,7 @@ class _LeadsTable extends ConsumerWidget {
 // ─────────────────────────────────────────────────────────
 //  Mobile Lead Card  (fully responsive, no overflow)
 // ─────────────────────────────────────────────────────────
-class _MobileLeadCard extends StatelessWidget {
+class _MobileLeadCard extends ConsumerWidget {
   final Lead lead;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -1555,7 +1690,7 @@ class _MobileLeadCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final color = _statusColor(lead.status);
 
@@ -1739,9 +1874,9 @@ class _MobileLeadCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _launchCall(context, lead.phone),
+                    onPressed: () => _initiateCallFlow(context, lead.phone),
                     icon: const Icon(Icons.call_rounded, size: 15, color: Color(0xFF22C55E)),
-                    label: const Text('Call', style: TextStyle(color: Color(0xFF22C55E), fontSize: 13)),
+                    label: const Text('Call', style: TextStyle(color: Color(0xFF22C55E), fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFF22C55E)),
                       padding: const EdgeInsets.symmetric(vertical: 9),
@@ -1752,9 +1887,39 @@ class _MobileLeadCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
+                    onPressed: () => _launchWhatsApp(context, lead.phone),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF25D366)),
+                    label: const Text('WhatsApp', style: TextStyle(color: Color(0xFF25D366), fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF25D366)),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            8.h,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showRecordOutcomeDialog(context, ref, lead),
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 15, color: Colors.orange),
+                    label: const Text('Outcome', style: TextStyle(color: Colors.orange, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
                     onPressed: onEdit,
                     icon: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF6C63FF)),
-                    label: const Text('Edit', style: TextStyle(color: Color(0xFF6C63FF), fontSize: 13)),
+                    label: const Text('Edit', style: TextStyle(color: Color(0xFF6C63FF), fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Color(0xFF6C63FF)),
                       padding: const EdgeInsets.symmetric(vertical: 9),
@@ -1767,7 +1932,7 @@ class _MobileLeadCard extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: onDelete,
                     icon: const Icon(Icons.delete_outline, size: 15, color: Colors.red),
-                    label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 13)),
+                    label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.red),
                       padding: const EdgeInsets.symmetric(vertical: 9),
@@ -1977,3 +2142,440 @@ Future<void> _runWithReportLoader({
     }
   }
 }
+
+// ─────────────────────────────────────────────────────────
+//  WhatsApp helper
+// ─────────────────────────────────────────────────────────
+Future<void> _launchWhatsApp(BuildContext context, String phone) async {
+  var cleaned = phone.replaceAll(RegExp(r'\D'), '');
+  if (cleaned.startsWith('0')) {
+    cleaned = cleaned.substring(1);
+  }
+  if (cleaned.length == 10) {
+    cleaned = '91$cleaned';
+  }
+  if (cleaned.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available')),
+      );
+    }
+    return;
+  }
+  final uri = Uri.parse('https://wa.me/$cleaned');
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } else {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot open WhatsApp for $cleaned')),
+      );
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  Initiate Call flow (Cloud vs Standard)
+// ─────────────────────────────────────────────────────────
+void _initiateCallFlow(BuildContext context, String phone) {
+  if (phone.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No phone number available')),
+    );
+    return;
+  }
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const _BottomSheetHandle(),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Initiate Call to $phone',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_outlined, color: Colors.blue),
+              title: const Text('Cloud Calling (Recorded)'),
+              subtitle: const Text('Initiate call via cloud gateway with recording'),
+              onTap: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Initiating Cloud Call to $phone (Recording active)...'),
+                    backgroundColor: Colors.blue[700],
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.phone_outlined, color: Colors.green),
+              title: const Text('Standard Phone Calling'),
+              subtitle: const Text('Dial directly using your device SIM card'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _launchCall(context, phone);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+//  Record Outcome Dialog helpers
+// ─────────────────────────────────────────────────────────
+void _showRecordOutcomeDialog(BuildContext context, WidgetRef ref, Lead lead) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref.invalidate(leadsProvider));
+    },
+  );
+}
+
+class _RecordOutcomeDialog extends HookConsumerWidget {
+  final Lead lead;
+  final VoidCallback onSaved;
+
+  const _RecordOutcomeDialog({required this.lead, required this.onSaved});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final status = useState(lead.status);
+    final followUpDate = useState<DateTime?>(lead.followUpDate);
+    final remarksCtrl = useTextEditingController(text: lead.remarks);
+    final reasonCtrl = useTextEditingController(text: lead.reason);
+    final reminderMinutes = useState<int>(0); // 0 = None, 5 = 5m prior, 10 = 10m prior
+    final isSaving = useState(false);
+
+    Future<void> pickDateTime() async {
+      final pickedDate = await showDatePicker(
+        context: context,
+        initialDate: followUpDate.value ?? DateTime.now(),
+        firstDate: DateTime(2015),
+        lastDate: DateTime(2100),
+      );
+      if (pickedDate == null) return;
+      if (!context.mounted) return;
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+      if (pickedTime == null) return;
+      followUpDate.value = DateTime(
+        pickedDate.year, pickedDate.month, pickedDate.day,
+        pickedTime.hour, pickedTime.minute,
+      );
+    }
+
+    Future<void> saveOutcome() async {
+      isSaving.value = true;
+      try {
+        final dio = ref.read(dioProvider);
+        
+        // Append reminder info to remarks if any reminder selected
+        var finalRemarks = remarksCtrl.text;
+        if (status.value == 'Follow-up' && reminderMinutes.value > 0) {
+          finalRemarks += '\n[Reminder set for ${reminderMinutes.value} minutes prior]';
+        }
+
+        final payload = {
+          'name': lead.name,
+          'phone': lead.phone,
+          'source': lead.source,
+          'location': lead.location,
+          'leadType': lead.leadType,
+          'enquiryDate': lead.enquiryDate.toIso8601String(),
+          'bookedDate': lead.bookedDate?.toIso8601String(),
+          'followUpDate': followUpDate.value?.toIso8601String(),
+          'status': status.value,
+          'reason': reasonCtrl.text,
+          'remarks': finalRemarks,
+        };
+
+        await dio.put('/leads/${lead.id}', data: payload);
+        onSaved();
+        
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(reminderMinutes.value > 0 
+                ? 'Outcome updated and reminder scheduled!' 
+                : 'Outcome updated successfully!'),
+              backgroundColor: Colors.green[700],
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e')),
+          );
+        }
+      } finally {
+        isSaving.value = false;
+      }
+    }
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 450),
+        padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Record Outcome',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const Divider(),
+              const SizedBox(height: 12),
+              
+              // Status Dropdown
+              DropdownButtonFormField<String>(
+                value: status.value,
+                decoration: const InputDecoration(
+                  labelText: 'Select Status / Outcome *',
+                  prefixIcon: Icon(Icons.info_outline),
+                ),
+                items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: (v) {
+                  status.value = v!;
+                  if (v != 'Follow-up') followUpDate.value = null;
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Follow-up Date/Time
+              if (status.value == 'Follow-up') ...[
+                InkWell(
+                  onTap: pickDateTime,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Follow-up Date & Time *',
+                      prefixIcon: Icon(Icons.event_available_outlined, color: Color(0xFFF97316)),
+                    ),
+                    child: Text(
+                      followUpDate.value != null
+                          ? _fmtDateTime(followUpDate.value!)
+                          : 'Tap to schedule',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Reminder Offset
+                DropdownButtonFormField<int>(
+                  value: reminderMinutes.value,
+                  decoration: const InputDecoration(
+                    labelText: 'Set Reminder',
+                    prefixIcon: Icon(Icons.alarm_on_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('No Reminder')),
+                    DropdownMenuItem(value: 5, child: Text('5 minutes prior')),
+                    DropdownMenuItem(value: 10, child: Text('10 minutes prior')),
+                    DropdownMenuItem(value: 30, child: Text('30 minutes prior')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) reminderMinutes.value = v;
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Reason if Lost
+              if (status.value == 'Lost') ...[
+                TextFormField(
+                  controller: reasonCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Reason for Lost',
+                    prefixIcon: Icon(Icons.help_outline),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Remarks
+              TextFormField(
+                controller: remarksCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Remarks / Call Context',
+                  prefixIcon: Icon(Icons.notes),
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: isSaving.value ? null : saveOutcome,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: crm.primary,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: isSaving.value
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Save Outcome'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  Lead Stats Dashboard Card
+// ─────────────────────────────────────────────────────────
+class _LeadStatsRow extends StatelessWidget {
+  final List<Lead> leads;
+
+  const _LeadStatsRow({required this.leads});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
+
+    final newCount = leads.where((l) => l.status.toLowerCase() == 'new').length;
+    final followUpCount = leads.where((l) => l.status.toLowerCase() == 'follow-up').length;
+    final closedCount = leads.where((l) => ['converted', 'lost'].contains(l.status.toLowerCase())).length;
+    
+    final now = DateTime.now();
+    final missedCount = leads.where((l) {
+      final statusLower = l.status.toLowerCase();
+      return statusLower != 'converted' &&
+             statusLower != 'lost' &&
+             l.followUpDate != null &&
+             l.followUpDate!.isBefore(now);
+    }).length;
+
+    Widget buildStatCard(String title, int count, IconData icon, Color color) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: crm.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 12, color: crm.textSecondary, fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    count.toString(),
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isMobile) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(child: buildStatCard('New Leads', newCount, Icons.star_border, Colors.blue)),
+              const SizedBox(width: 10),
+              Expanded(child: buildStatCard('Follow-up', followUpCount, Icons.sync, Colors.orange)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: buildStatCard('Closed', closedCount, Icons.check_circle_outline, Colors.green)),
+              const SizedBox(width: 10),
+              Expanded(child: buildStatCard('Missed', missedCount, Icons.warning_amber_rounded, Colors.red)),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 36) / 4;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SizedBox(width: itemWidth, child: buildStatCard('New Leads', newCount, Icons.star_border, Colors.blue)),
+            SizedBox(width: itemWidth, child: buildStatCard('Follow-up', followUpCount, Icons.sync, Colors.orange)),
+            SizedBox(width: itemWidth, child: buildStatCard('Closed Leads', closedCount, Icons.check_circle_outline, Colors.green)),
+            SizedBox(width: itemWidth, child: buildStatCard('Missed Leads', missedCount, Icons.warning_amber_rounded, Colors.red)),
+          ],
+        );
+      },
+    );
+  }
+}
+

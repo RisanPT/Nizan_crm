@@ -10,6 +10,7 @@ class Lead {
   final DateTime enquiryDate;
   final DateTime? bookedDate;
   final DateTime? followUpDate; // date+time for follow-up reminder
+  final String? assignedTo;      // ID of the assigned salesman user
   final String status;
   final String reason;
   final String remarks;
@@ -28,6 +29,7 @@ class Lead {
     required this.enquiryDate,
     this.bookedDate,
     this.followUpDate,
+    this.assignedTo,
     required this.status,
     required this.reason,
     required this.remarks,
@@ -60,6 +62,9 @@ class Lead {
       followUpDate: json['followUpDate'] != null
           ? DateTime.parse(json['followUpDate'] as String).toLocal()
           : null,
+      assignedTo: json['assignedTo'] is Map
+          ? json['assignedTo']['_id'] as String?
+          : json['assignedTo'] as String?,
       status: json['status'] as String? ?? 'New',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
@@ -83,6 +88,7 @@ class Lead {
       'enquiryDate': enquiryDate.toIso8601String(),
       if (bookedDate != null) 'bookedDate': bookedDate?.toIso8601String(),
       if (followUpDate != null) 'followUpDate': followUpDate?.toIso8601String(),
+      if (assignedTo != null) 'assignedTo': assignedTo,
       'status': status,
       'reason': reason,
       'remarks': remarks,
@@ -103,6 +109,7 @@ class Lead {
     DateTime? enquiryDate,
     DateTime? bookedDate,
     DateTime? followUpDate,
+    String? assignedTo,
     String? status,
     String? reason,
     String? remarks,
@@ -121,6 +128,7 @@ class Lead {
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
       followUpDate: followUpDate ?? this.followUpDate,
+      assignedTo: assignedTo ?? this.assignedTo,
       status: status ?? this.status,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,

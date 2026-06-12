@@ -1107,85 +1107,52 @@ class CalendarScreen extends HookConsumerWidget {
       }
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ── Page header ──────────────────────────────────────────────────
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Calendar Scheduler',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: (isMobile && !isArtist)
+          ? FloatingActionButton(
+              onPressed: () => context.push('/booking/add'),
+              backgroundColor: crmColors.primary,
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Page header ──────────────────────────────────────────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Calendar Scheduler',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Manage staff bookings and services.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              if (!isArtist) ...[
+                if (!isMobile) ...[
+                  OutlinedButton.icon(
+                    onPressed: manageBlockedDates,
+                    icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                    label: const Text('Blocked Dates'),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: crmColors.surface,
                     ),
                   ),
-                  Text(
-                    'Manage staff bookings and services.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-            if (!isMobile && !isArtist) ...[
-              OutlinedButton.icon(
-                onPressed: manageBlockedDates,
-                icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                label: const Text('Blocked Dates'),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: crmColors.surface,
-                ),
-              ),
-              16.w,
-              ElevatedButton.icon(
-                onPressed: () => context.push('/booking/add'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Booking'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: crmColors.primary,
-                  foregroundColor: Colors.white,
-                ),
-              ),
-            ],
-          ],
-        ),
-        if (isMobile) ...[
-          16.h,
-          if (isArtist)
-            _buildArtistFilter(
-              context,
-              crmColors,
-              activeArtists,
-              selectedArtistFilter,
-              isArtist,
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: manageBlockedDates,
-                    icon: const Icon(Icons.calendar_month, size: 18),
-                    label: const Text('Blocked'),
-                  ),
-                ),
-                16.w,
-                Expanded(
-                  child: _buildArtistFilter(
-                    context,
-                    crmColors,
-                    activeArtists,
-                    selectedArtistFilter,
-                    isArtist,
-                  ),
-                ),
-                16.w,
-                Expanded(
-                  child: ElevatedButton.icon(
+                  16.w,
+                  ElevatedButton.icon(
                     onPressed: () => context.push('/booking/add'),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('New Booking'),
@@ -1194,183 +1161,267 @@ class CalendarScreen extends HookConsumerWidget {
                       foregroundColor: Colors.white,
                     ),
                   ),
-                ),
+                ] else ...[
+                  IconButton(
+                    onPressed: manageBlockedDates,
+                    icon: Icon(Icons.calendar_today_outlined, color: crmColors.textPrimary),
+                    tooltip: 'Blocked Dates',
+                    style: IconButton.styleFrom(
+                      backgroundColor: crmColors.surface,
+                      side: BorderSide(color: crmColors.border),
+                    ),
+                  ),
+                ],
               ],
-            ),
-        ],
-        24.h,
-        // ── Calendar card ─────────────────────────────────────────────--
-        Expanded(
-          child: Card(
-            color: crmColors.surface,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: BorderSide(color: crmColors.border),
-            ),
-            child: Column(
-              children: [
-                // Toolbar
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 16,
-                    runSpacing: 16,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          OutlinedButton(
-                            onPressed: goToToday,
-                            child: const Text('Today'),
-                          ),
-                          8.w,
-                          IconButton(
-                            onPressed: goToPreviousWeek,
-                            icon: const Icon(Icons.chevron_left),
-                          ),
-                          IconButton(
-                            onPressed: goToNextWeek,
-                            icon: const Icon(Icons.chevron_right),
-                          ),
-                          16.w,
-                          if (viewMode.value == 'Month')
-                            OutlinedButton.icon(
-                              onPressed: openMonthPicker,
-                              icon: const Icon(Icons.calendar_month_outlined),
-                              label: Text(monthTitle(monthFocus.value)),
-                            )
-                          else if (!isMobile)
-                            Text(
-                              weekRangeTitle(),
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
+            ],
+          ),
+          24.h,
+          // ── Calendar card ─────────────────────────────────────────────--
+          Expanded(
+            child: Card(
+              color: crmColors.surface,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: BorderSide(color: crmColors.border),
+              ),
+              child: Column(
+                children: [
+                  // Toolbar
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: isMobile
+                        ? Column(
+                            children: [
+                              Row(
+                                children: [
+                                  IconButton(
+                                    onPressed: goToPreviousWeek,
+                                    icon: const Icon(Icons.chevron_left),
+                                  ),
+                                  Expanded(
+                                    child: Center(
+                                      child: InkWell(
+                                        onTap: viewMode.value == 'Month' ? openMonthPicker : null,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              viewMode.value == 'Month'
+                                                  ? monthTitle(monthFocus.value)
+                                                  : weekRangeTitle(),
+                                              style: theme.textTheme.titleMedium?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            if (viewMode.value == 'Month') ...[
+                                              4.w,
+                                              const Icon(Icons.arrow_drop_down, size: 18),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    onPressed: goToNextWeek,
+                                    icon: const Icon(Icons.chevron_right),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: goToToday,
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    ),
+                                    child: const Text('Today'),
+                                  ),
+                                ],
                               ),
-                            ),
-                        ],
-                      ),
-                      if (isMobile)
-                        Text(
-                          viewMode.value == 'Month'
-                              ? monthTitle(monthFocus.value)
-                              : weekRangeTitle(),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildArtistFilter(
-                            context,
-                            crmColors,
-                            activeArtists,
-                            selectedArtistFilter,
-                            isArtist,
-                          ),
-                          16.w,
-                          SegmentedButton<String>(
-                            segments: const [
-                              ButtonSegment(value: 'Day', label: Text('Day')),
-                              ButtonSegment(value: 'Week', label: Text('Week')),
-                              ButtonSegment(
-                                value: 'Month',
-                                label: Text('Month'),
+                              12.h,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildArtistFilter(
+                                      context,
+                                      crmColors,
+                                      activeArtists,
+                                      selectedArtistFilter,
+                                      isArtist,
+                                    ),
+                                  ),
+                                  12.w,
+                                  SegmentedButton<String>(
+                                    segments: const [
+                                      ButtonSegment(value: 'Day', label: Text('Day')),
+                                      ButtonSegment(value: 'Week', label: Text('Week')),
+                                      ButtonSegment(value: 'Month', label: Text('Month')),
+                                    ],
+                                    selected: {viewMode.value},
+                                    onSelectionChanged: (selection) {
+                                      viewMode.value = selection.first;
+                                    },
+                                    showSelectedIcon: false,
+                                    style: SegmentedButton.styleFrom(
+                                      backgroundColor: crmColors.input,
+                                      selectedBackgroundColor: crmColors.surface,
+                                      selectedForegroundColor: crmColors.textPrimary,
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
-                            selected: {viewMode.value},
-                            onSelectionChanged: (selection) {
-                              viewMode.value = selection.first;
-                            },
-                            style: SegmentedButton.styleFrom(
-                              backgroundColor: crmColors.input,
-                              selectedBackgroundColor: crmColors.surface,
-                              selectedForegroundColor: crmColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: viewMode.value == 'Month'
-                        ? _monthView(
-                            context,
-                            crmColors,
-                            filteredCalendarBookings,
-                            monthFocus.value,
-                            now,
-                            onOpenDay: openDayBookingsDialog,
                           )
-                        : viewMode.value == 'Day'
-                        ? _dayView(
-                            context,
-                            crmColors,
-                            filteredCalendarBookings,
-                            selectedDay,
-                            now,
-                          )
-                        : !isMobile
-                        ? _weekView(
-                            context,
-                            crmColors,
-                            filteredCalendarBookings,
-                            weekDays,
-                            now,
-                          )
-                        : isMobile
-                        ? _mobileDay(
-                            context,
-                            crmColors,
-                            isArtist,
-                            [
-                                ...filteredCalendarBookings.where(
-                                (b) => b.isOnDate(selectedDay),
+                        : Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 16,
+                            runSpacing: 16,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: goToToday,
+                                    child: const Text('Today'),
+                                  ),
+                                  8.w,
+                                  IconButton(
+                                    onPressed: goToPreviousWeek,
+                                    icon: const Icon(Icons.chevron_left),
+                                  ),
+                                  IconButton(
+                                    onPressed: goToNextWeek,
+                                    icon: const Icon(Icons.chevron_right),
+                                  ),
+                                  16.w,
+                                  if (viewMode.value == 'Month')
+                                    OutlinedButton.icon(
+                                      onPressed: openMonthPicker,
+                                      icon: const Icon(Icons.calendar_month_outlined),
+                                      label: Text(monthTitle(monthFocus.value)),
+                                    )
+                                  else
+                                    Text(
+                                      weekRangeTitle(),
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                ],
                               ),
-                            ]..sort(
-                              (a, b) =>
-                                  a.serviceStart.compareTo(b.serviceStart),
-                            ),
-                            selectedDay,
-                          )
-                        : const SizedBox.shrink(),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildArtistFilter(
+                                    context,
+                                    crmColors,
+                                    activeArtists,
+                                    selectedArtistFilter,
+                                    isArtist,
+                                  ),
+                                  16.w,
+                                  SegmentedButton<String>(
+                                    segments: const [
+                                      ButtonSegment(value: 'Day', label: Text('Day')),
+                                      ButtonSegment(value: 'Week', label: Text('Week')),
+                                      ButtonSegment(
+                                        value: 'Month',
+                                        label: Text('Month'),
+                                      ),
+                                    ],
+                                    selected: {viewMode.value},
+                                    onSelectionChanged: (selection) {
+                                      viewMode.value = selection.first;
+                                    },
+                                    style: SegmentedButton.styleFrom(
+                                      backgroundColor: crmColors.input,
+                                      selectedBackgroundColor: crmColors.surface,
+                                      selectedForegroundColor: crmColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                   ),
-                ),
-                // const Divider(height: 1),
-                // Padding(
-                //   padding: const EdgeInsets.all(16),
-                //   child: Wrap(
-                //     spacing: 24,
-                //     runSpacing: 12,
-                //     children: [
-                //       _buildLegendItem(
-                //         context,
-                //         'Hair Services',
-                //         _serviceColors['hair']!,
-                //       ),
-                //       _buildLegendItem(
-                //         context,
-                //         'Makeup & Bridal',
-                //         _serviceColors['makeup']!,
-                //       ),
-                //       _buildLegendItem(
-                //         context,
-                //         'Spa & Massage',
-                //         _serviceColors['spa']!,
-                //       ),
-                //     ],
-                //   ),
-                // ),
-              ],
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: viewMode.value == 'Month'
+                          ? _monthView(
+                              context,
+                              crmColors,
+                              filteredCalendarBookings,
+                              monthFocus.value,
+                              now,
+                              onOpenDay: openDayBookingsDialog,
+                            )
+                          : viewMode.value == 'Day'
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (isMobile)
+                                  _buildWeeklyStrip(
+                                    context,
+                                    crmColors,
+                                    weekDays,
+                                    selectedDayIndex.value,
+                                    selectedDayIndex,
+                                    filteredCalendarBookings,
+                                  ),
+                                _dayView(
+                                  context,
+                                  crmColors,
+                                  filteredCalendarBookings,
+                                  selectedDay,
+                                  now,
+                                ),
+                              ],
+                            )
+                          : !isMobile
+                          ? _weekView(
+                              context,
+                              crmColors,
+                              filteredCalendarBookings,
+                              weekDays,
+                              now,
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildWeeklyStrip(
+                                  context,
+                                  crmColors,
+                                  weekDays,
+                                  selectedDayIndex.value,
+                                  selectedDayIndex,
+                                  filteredCalendarBookings,
+                                ),
+                                _mobileDay(
+                                  context,
+                                  crmColors,
+                                  isArtist,
+                                  [
+                                    ...filteredCalendarBookings.where(
+                                      (b) => b.isOnDate(selectedDay),
+                                    ),
+                                  ]..sort(
+                                      (a, b) =>
+                                          a.serviceStart.compareTo(b.serviceStart),
+                                    ),
+                                  selectedDay,
+                                ),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1387,7 +1438,7 @@ class CalendarScreen extends HookConsumerWidget {
     if (entries.isEmpty) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(48),
+          padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1395,10 +1446,10 @@ class CalendarScreen extends HookConsumerWidget {
               16.h,
               Text(
                 'No bookings for this day',
-                style: TextStyle(color: crmColors.textSecondary),
+                style: TextStyle(color: crmColors.textSecondary, fontSize: 14),
               ),
               if (!isArtist) ...[
-                8.h,
+                12.h,
                 ElevatedButton.icon(
                   onPressed: () => context.push('/booking/add'),
                   icon: const Icon(Icons.add, size: 16),
@@ -1406,6 +1457,9 @@ class CalendarScreen extends HookConsumerWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: crmColors.primary,
                     foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
               ],
@@ -1485,6 +1539,27 @@ class CalendarScreen extends HookConsumerWidget {
                               fontSize: 12,
                             ),
                           ),
+                          if (isAssigned) ...[
+                            4.h,
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: 14,
+                                  color: crmColors.primary,
+                                ),
+                                4.w,
+                                Text(
+                                  _artistLabelForEntry(entry),
+                                  style: TextStyle(
+                                    color: crmColors.primary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1552,13 +1627,14 @@ class CalendarScreen extends HookConsumerWidget {
   ) {
     final days = _buildMonthCells(month);
     const weekdayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+    final isMobile = ResponsiveBuilder.isMobile(context);
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 8 : 16),
       child: Container(
         decoration: BoxDecoration(
           color: crmColors.surface,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(isMobile ? 16 : 28),
           border: Border.all(color: crmColors.border),
         ),
         child: Column(
@@ -1568,7 +1644,9 @@ class CalendarScreen extends HookConsumerWidget {
                   .map(
                     (label) => Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        padding: EdgeInsets.symmetric(
+                          vertical: isMobile ? 10 : 18,
+                        ),
                         child: Text(
                           label,
                           textAlign: TextAlign.center,
@@ -1576,6 +1654,7 @@ class CalendarScreen extends HookConsumerWidget {
                             color: crmColors.textSecondary,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.6,
+                            fontSize: isMobile ? 12 : 14,
                           ),
                         ),
                       ),
@@ -1592,7 +1671,9 @@ class CalendarScreen extends HookConsumerWidget {
                     : monthWidth < 1200
                     ? 2
                     : 3;
-                final childAspectRatio = monthWidth < 900
+                final childAspectRatio = isMobile
+                    ? 0.8
+                    : monthWidth < 900
                     ? 0.9
                     : monthWidth < 1200
                     ? 0.98
@@ -1619,7 +1700,7 @@ class CalendarScreen extends HookConsumerWidget {
                     final artistGroups = _groupBookingsByArtist(dayBookings);
 
                     return Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: EdgeInsets.all(isMobile ? 2 : 4),
                       decoration: BoxDecoration(
                         border: Border(
                           right: BorderSide(color: crmColors.border),
@@ -1637,18 +1718,19 @@ class CalendarScreen extends HookConsumerWidget {
                                 onTap: dayBookings.isEmpty
                                     ? null
                                     : () => onOpenDay(day, dayBookings),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(isMobile ? 8 : 12),
                                 child: Padding(
                                   padding: const EdgeInsets.all(2),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: isMobile
+                                        ? CrossAxisAlignment.center
+                                        : CrossAxisAlignment.start,
                                     children: [
                                       Align(
                                         alignment: Alignment.topCenter,
                                         child: Container(
-                                          width: 38,
-                                          height: 38,
+                                          width: isMobile ? 28 : 38,
+                                          height: isMobile ? 28 : 38,
                                           decoration: BoxDecoration(
                                             shape: BoxShape.circle,
                                             color: isToday
@@ -1659,7 +1741,7 @@ class CalendarScreen extends HookConsumerWidget {
                                           child: Text(
                                             '${day.day}',
                                             style: TextStyle(
-                                              fontSize: 16,
+                                              fontSize: isMobile ? 13 : 16,
                                               fontWeight: FontWeight.w700,
                                               color: isToday
                                                   ? Colors.white
@@ -1668,47 +1750,74 @@ class CalendarScreen extends HookConsumerWidget {
                                           ),
                                         ),
                                       ),
-                                      6.h,
-                                      ...artistGroups
-                                          .take(maxVisibleGroups)
-                                          .map(
-                                            (group) => Padding(
-                                              padding:
-                                                  const EdgeInsets.only(
-                                                bottom: 4,
+                                      if (isMobile) ...[
+                                        if (dayBookings.isNotEmpty) ...[
+                                          4.h,
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: dayBookings
+                                                .take(3)
+                                                .map((entry) {
+                                              final color =
+                                                  _colorForService(entry.service);
+                                              return Container(
+                                                width: 5,
+                                                height: 5,
+                                                margin: const EdgeInsets.symmetric(
+                                                  horizontal: 1,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: color,
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ],
+                                      ] else ...[
+                                        6.h,
+                                        ...artistGroups
+                                            .take(maxVisibleGroups)
+                                            .map(
+                                              (group) => Padding(
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                  bottom: 4,
+                                                ),
+                                                child: _buildMonthBookingPill(
+                                                  context,
+                                                  group,
+                                                ),
                                               ),
-                                              child: _buildMonthBookingPill(
-                                                context,
-                                                group,
+                                            ),
+                                        if (artistGroups.length >
+                                            maxVisibleGroups)
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: crmColors.secondary
+                                                  .withValues(alpha: 0.35),
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                            ),
+                                            child: Text(
+                                              'View all (${artistGroups.length})',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color:
+                                                    crmColors.textSecondary,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                             ),
                                           ),
-                                      if (artistGroups.length >
-                                          maxVisibleGroups)
-                                        Container(
-                                          width: double.infinity,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 5,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: crmColors.secondary
-                                                .withValues(alpha: 0.35),
-                                            borderRadius:
-                                                BorderRadius.circular(999),
-                                          ),
-                                          child: Text(
-                                            'View all (${artistGroups.length})',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color:
-                                                  crmColors.textSecondary,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1721,6 +1830,105 @@ class CalendarScreen extends HookConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyStrip(
+    BuildContext context,
+    CrmTheme crmColors,
+    List<DateTime> weekDays,
+    int selectedIndex,
+    ValueNotifier<int> selectedDayIndex,
+    List<Booking> bookings,
+  ) {
+    const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        border: Border(
+          bottom: BorderSide(color: crmColors.border),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(7, (index) {
+          final day = weekDays[index];
+          final isSelected = index == selectedIndex;
+          final isToday = DateTime.now().year == day.year &&
+              DateTime.now().month == day.month &&
+              DateTime.now().day == day.day;
+          
+          final dayName = dayNames[day.weekday % 7];
+          final dayBookings = _entriesForDay(bookings, day);
+
+          return InkWell(
+            onTap: () {
+              selectedDayIndex.value = index;
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 44,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? crmColors.primary
+                    : isToday
+                        ? crmColors.primary.withValues(alpha: 0.1)
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
+                border: isToday && !isSelected
+                    ? Border.all(color: crmColors.primary.withValues(alpha: 0.3))
+                    : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    dayName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected
+                          ? Colors.white70
+                          : isToday
+                              ? crmColors.primary
+                              : crmColors.textSecondary,
+                    ),
+                  ),
+                  4.h,
+                  Text(
+                    '${day.day}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected
+                          ? Colors.white
+                          : crmColors.textPrimary,
+                    ),
+                  ),
+                  if (dayBookings.isNotEmpty) ...[
+                    4.h,
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isSelected ? Colors.white : crmColors.primary,
+                      ),
+                    ),
+                  ] else ...[
+                    4.h,
+                    const SizedBox(width: 4, height: 4),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }),
       ),
     );
   }
@@ -1787,14 +1995,18 @@ class CalendarScreen extends HookConsumerWidget {
           children: [
             const Icon(Icons.filter_list, size: 18),
             8.w,
-            Text(
-              _filterLabelForValue(selectedArtistFilter.value, activeArtists),
-              style: TextStyle(
-                color: crmColors.textPrimary,
-                fontWeight: FontWeight.w500,
+            Flexible(
+              child: Text(
+                _filterLabelForValue(selectedArtistFilter.value, activeArtists),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: crmColors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-            8.w,
+            4.w,
             Icon(
               Icons.keyboard_arrow_down,
               size: 18,

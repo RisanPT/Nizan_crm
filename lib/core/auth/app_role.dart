@@ -83,7 +83,7 @@ enum AppRole {
       case AppRole.artist:
         return '/';
       case AppRole.sales:
-        return '/sales';
+        return '/sales/leads';
       case AppRole.crm:
         return '/booking/requests';
       case AppRole.accounts:
