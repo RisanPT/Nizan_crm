@@ -6,8 +6,10 @@ class Lead {
   final String source;
   final String location;
   final String leadType;
+  final DateTime leadDate;       // manually set: actual date lead was received
   final DateTime enquiryDate;
   final DateTime? bookedDate;
+  final DateTime? followUpDate; // date+time for follow-up reminder
   final String status;
   final String reason;
   final String remarks;
@@ -22,8 +24,10 @@ class Lead {
     required this.source,
     required this.location,
     required this.leadType,
+    required this.leadDate,
     required this.enquiryDate,
     this.bookedDate,
+    this.followUpDate,
     required this.status,
     required this.reason,
     required this.remarks,
@@ -32,6 +36,9 @@ class Lead {
   });
 
   factory Lead.fromJson(Map<String, dynamic> json) {
+    final createdAt = json['createdAt'] != null
+        ? DateTime.parse(json['createdAt'] as String).toLocal()
+        : DateTime.now();
     return Lead(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
@@ -40,18 +47,23 @@ class Lead {
       source: json['source'] as String? ?? 'Walk-in',
       location: json['location'] as String? ?? '',
       leadType: json['leadType'] as String? ?? 'Individual',
+      // leadDate: manually set received date, fallback to createdAt
+      leadDate: json['leadDate'] != null
+          ? DateTime.parse(json['leadDate'] as String).toLocal()
+          : createdAt,
       enquiryDate: json['enquiryDate'] != null
           ? DateTime.parse(json['enquiryDate'] as String).toLocal()
           : DateTime.now(),
       bookedDate: json['bookedDate'] != null
           ? DateTime.parse(json['bookedDate'] as String).toLocal()
           : null,
+      followUpDate: json['followUpDate'] != null
+          ? DateTime.parse(json['followUpDate'] as String).toLocal()
+          : null,
       status: json['status'] as String? ?? 'New',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'] as String).toLocal()
-          : DateTime.now(),
+      createdAt: createdAt,
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String).toLocal()
           : DateTime.now(),
@@ -67,8 +79,10 @@ class Lead {
       'source': source,
       'location': location,
       'leadType': leadType,
+      'leadDate': leadDate.toIso8601String(),
       'enquiryDate': enquiryDate.toIso8601String(),
       if (bookedDate != null) 'bookedDate': bookedDate?.toIso8601String(),
+      if (followUpDate != null) 'followUpDate': followUpDate?.toIso8601String(),
       'status': status,
       'reason': reason,
       'remarks': remarks,
@@ -85,8 +99,10 @@ class Lead {
     String? source,
     String? location,
     String? leadType,
+    DateTime? leadDate,
     DateTime? enquiryDate,
     DateTime? bookedDate,
+    DateTime? followUpDate,
     String? status,
     String? reason,
     String? remarks,
@@ -101,8 +117,10 @@ class Lead {
       source: source ?? this.source,
       location: location ?? this.location,
       leadType: leadType ?? this.leadType,
+      leadDate: leadDate ?? this.leadDate,
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
+      followUpDate: followUpDate ?? this.followUpDate,
       status: status ?? this.status,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,

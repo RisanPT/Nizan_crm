@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
@@ -117,6 +118,14 @@ String _fmtDate(DateTime d) {
   return '${d.day.toString().padLeft(2, '0')}-${months[d.month - 1]}-${d.year}';
 }
 
+String _fmtDateTime(DateTime d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  final hour = d.hour > 12 ? d.hour - 12 : (d.hour == 0 ? 12 : d.hour);
+  final amPm = d.hour >= 12 ? 'PM' : 'AM';
+  final min = d.minute.toString().padLeft(2, '0');
+  return '${d.day.toString().padLeft(2, '0')}-${months[d.month - 1]}-${d.year}  $hour:$min $amPm';
+}
+
 // ─────────────────────────────────────────────────────────
 //  Status color helper (top-level so shared everywhere)
 // ─────────────────────────────────────────────────────────
@@ -128,6 +137,31 @@ Color _statusColor(String status) {
     case 'qualified': return const Color(0xFF14B8A6);
     case 'follow-up': return const Color(0xFFF97316);
     default:          return const Color(0xFFF97316);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  Call helper
+// ─────────────────────────────────────────────────────────
+Future<void> _launchCall(BuildContext context, String phone) async {
+  final cleaned = phone.replaceAll(RegExp(r'[\s\-]'), '');
+  if (cleaned.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available')),
+      );
+    }
+    return;
+  }
+  final uri = Uri.parse('tel:$cleaned');
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
+  } else {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot launch call to $cleaned')),
+      );
+    }
   }
 }
 
@@ -255,35 +289,42 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 Row(
                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    DropdownButton<String>(
-                                      value: selectedStatus.value,
-                                      onChanged: (val) {
-                                        if (val != null) selectedStatus.value = val;
-                                      },
-                                      items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
-                                        return DropdownMenuItem(
-                                          value: s,
-                                          child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        );
-                                      }).toList(),
-                                      style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                                      underline: const SizedBox(),
-                                      icon: const Icon(Icons.keyboard_arrow_down),
+                                    Flexible(
+                                      child: DropdownButton<String>(
+                                        value: selectedStatus.value,
+                                        isExpanded: true,
+                                        onChanged: (val) {
+                                          if (val != null) selectedStatus.value = val;
+                                        },
+                                        items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
+                                          return DropdownMenuItem(
+                                            value: s,
+                                            child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          );
+                                        }).toList(),
+                                        style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                        underline: const SizedBox(),
+                                        icon: const Icon(Icons.keyboard_arrow_down),
+                                      ),
                                     ),
-                                    DropdownButton<String>(
-                                      value: selectedSource.value,
-                                      onChanged: (val) {
-                                        if (val != null) selectedSource.value = val;
-                                      },
-                                      items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
-                                        return DropdownMenuItem(
-                                          value: s,
-                                          child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                        );
-                                      }).toList(),
-                                      style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                                      underline: const SizedBox(),
-                                      icon: const Icon(Icons.keyboard_arrow_down),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: DropdownButton<String>(
+                                        value: selectedSource.value,
+                                        isExpanded: true,
+                                        onChanged: (val) {
+                                          if (val != null) selectedSource.value = val;
+                                        },
+                                        items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
+                                          return DropdownMenuItem(
+                                            value: s,
+                                            child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                          );
+                                        }).toList(),
+                                        style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                        underline: const SizedBox(),
+                                        icon: const Icon(Icons.keyboard_arrow_down),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -390,6 +431,31 @@ class SalesLeadsScreen extends HookConsumerWidget {
                             ),
                     ),
                     20.h,
+                    // Lead count badge on mobile
+                    if (isMobile) ...[  
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: crm.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${filteredLeads.length} lead${filteredLeads.length == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  color: crm.primary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     _LeadsTable(leads: filteredLeads, isDesktop: isDesktop),
                   ],
                 );
@@ -435,21 +501,22 @@ class _AddLeadCard extends HookConsumerWidget {
                 children: [
                   const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF6C63FF)),
                   12.w,
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Add New Lead',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-                      ),
-                      if (!isMobile || isExpanded.value)
-                        Text(
-                          'Fill manually or paste from WhatsApp / clipboard',
-                          style: TextStyle(color: crm.textSecondary, fontSize: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Add New Lead',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
                         ),
-                    ],
+                        if (!isMobile || isExpanded.value)
+                          Text(
+                            'Fill manually or paste from WhatsApp / clipboard',
+                            style: TextStyle(color: crm.textSecondary, fontSize: 12),
+                          ),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
                   if (isMobile)
                     Icon(
                       isExpanded.value
@@ -508,6 +575,7 @@ class _LeadForm extends HookConsumerWidget {
     final remarksCtrl   = useTextEditingController(text: initialLead?.remarks ?? '');
     final enquiryDate   = useState(initialLead?.enquiryDate ?? DateTime.now());
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
+    final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
     final status        = useState(initialLead?.status ?? 'New');
     final isSaving      = useState(false);
     final isPasting     = useState(false);
@@ -584,6 +652,7 @@ class _LeadForm extends HookConsumerWidget {
           'leadType': leadTypeCtrl.text,
           'enquiryDate': enquiryDate.value.toIso8601String(),
           'bookedDate': bookedDate.value?.toIso8601String(),
+          'followUpDate': followUpDate.value?.toIso8601String(),
           'status': status.value,
           'reason': reasonCtrl.text,
           'remarks': remarksCtrl.text,
@@ -604,6 +673,7 @@ class _LeadForm extends HookConsumerWidget {
           selectedSource.value = 'Instagram';
           enquiryDate.value = DateTime.now();
           bookedDate.value = null;
+          followUpDate.value = null;
           status.value = 'New';
         }
 
@@ -628,18 +698,44 @@ class _LeadForm extends HookConsumerWidget {
       }
     }
 
-    // ── date picker helper ─────────────────────────────────
+    // ── date picker helper (allows past dates) ─────────────────────────────────
     Future<void> pickDate({
       required DateTime initial,
       required void Function(DateTime) onPicked,
+      DateTime? firstDate,
+      DateTime? lastDate,
     }) async {
       final picked = await showDatePicker(
         context: context,
         initialDate: initial,
-        firstDate: DateTime(2020),
-        lastDate: DateTime(2100),
+        firstDate: firstDate ?? DateTime(2015), // allow past dates
+        lastDate: lastDate ?? DateTime(2100),
       );
       if (picked != null) onPicked(picked);
+    }
+
+    // ── date + time picker helper ────────────────────────────────────────────
+    Future<void> pickDateTime({
+      required DateTime initial,
+      required void Function(DateTime) onPicked,
+    }) async {
+      final pickedDate = await showDatePicker(
+        context: context,
+        initialDate: initial,
+        firstDate: DateTime(2015),
+        lastDate: DateTime(2100),
+      );
+      if (pickedDate == null) return;
+      if (!context.mounted) return;
+      final pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+      );
+      if (pickedTime == null) return;
+      onPicked(DateTime(
+        pickedDate.year, pickedDate.month, pickedDate.day,
+        pickedTime.hour, pickedTime.minute,
+      ));
     }
 
     // ── UI ────────────────────────────────────────────────
@@ -665,35 +761,75 @@ class _LeadForm extends HookConsumerWidget {
         desktopWidth: 250,
       ),
 
-      // Phone
+      // Phone + Call button row (only on mobile form; desktop uses separate layout)
       responsiveField(
-        TextFormField(
-          controller: phoneCtrl,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Phone Number *',
-            prefixIcon: Icon(Icons.phone_outlined),
-          ),
-        ),
-        desktopWidth: 200,
+        isMobile
+            ? Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number *',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Quick call button in the form
+                  Container(
+                    height: 56,
+                    width: 52,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF22C55E).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.4)),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.call_rounded, color: Color(0xFF22C55E), size: 22),
+                      tooltip: 'Call',
+                      onPressed: () => _launchCall(context, phoneCtrl.text),
+                    ),
+                  ),
+                ],
+              )
+            : TextFormField(
+                controller: phoneCtrl,
+                keyboardType: TextInputType.phone,
+                decoration: InputDecoration(
+                  labelText: 'Phone Number *',
+                  prefixIcon: const Icon(Icons.phone_outlined),
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.call_rounded, color: Color(0xFF22C55E), size: 20),
+                    tooltip: 'Call',
+                    onPressed: () => _launchCall(context, phoneCtrl.text),
+                  ),
+                ),
+              ),
+        desktopWidth: 230,
       ),
 
-      // Enquiry Date
+      // Enquiry Date — allows past dates
       responsiveField(
         InkWell(
           onTap: () => pickDate(
             initial: enquiryDate.value,
             onPicked: (d) => enquiryDate.value = d,
+            firstDate: DateTime(2015), // past allowed
           ),
           child: InputDecorator(
             decoration: const InputDecoration(
               labelText: 'Date Enquired For',
               prefixIcon: Icon(Icons.calendar_today_outlined),
+              helperText: 'Past dates allowed',
+              helperStyle: TextStyle(fontSize: 10),
             ),
             child: Text(_fmtDate(enquiryDate.value)),
           ),
         ),
-        desktopWidth: 200,
+        desktopWidth: 210,
       ),
 
       // Booked Date
@@ -728,12 +864,13 @@ class _LeadForm extends HookConsumerWidget {
       responsiveField(
         DropdownButtonFormField<String>(
           value: selectedSource.value,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Source',
             prefixIcon: Icon(Icons.campaign_outlined),
           ),
           items: ['Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other']
-              .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+              .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (v) {
             selectedSource.value = v!;
@@ -786,17 +923,65 @@ class _LeadForm extends HookConsumerWidget {
       responsiveField(
         DropdownButtonFormField<String>(
           value: status.value,
+          isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Status',
             prefixIcon: Icon(Icons.info_outline),
           ),
           items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
-              .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+              .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
               .toList(),
-          onChanged: (v) => status.value = v!,
+          onChanged: (v) {
+            status.value = v!;
+            // Clear followUpDate if switching away from Follow-up
+            if (v != 'Follow-up') followUpDate.value = null;
+          },
         ),
         desktopWidth: 180,
       ),
+
+      // Follow-up Date & Time — shown only when status is Follow-up
+      if (status.value == 'Follow-up')
+        responsiveField(
+          InkWell(
+            onTap: () => pickDateTime(
+              initial: followUpDate.value ?? DateTime.now().add(const Duration(days: 1)),
+              onPicked: (dt) => followUpDate.value = dt,
+            ),
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Follow-up Date & Time *',
+                prefixIcon: const Icon(Icons.event_available_outlined, color: Color(0xFFF97316)),
+                labelStyle: const TextStyle(color: Color(0xFFF97316)),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFF97316), width: 1.4),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFF97316), width: 2),
+                ),
+                suffixIcon: followUpDate.value != null
+                    ? GestureDetector(
+                        onTap: () => followUpDate.value = null,
+                        child: const Icon(Icons.close, size: 16, color: Color(0xFFF97316)),
+                      )
+                    : null,
+              ),
+              child: Text(
+                followUpDate.value != null
+                    ? _fmtDateTime(followUpDate.value!)
+                    : 'Tap to set follow-up time',
+                style: TextStyle(
+                  color: followUpDate.value != null
+                      ? const Color(0xFFF97316)
+                      : Colors.grey,
+                ),
+              ),
+            ),
+          ),
+          desktopWidth: 240,
+        ),
 
       // Reason
       responsiveField(
@@ -1207,20 +1392,21 @@ class _LeadsTable extends ConsumerWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1200),
+          constraints: const BoxConstraints(minWidth: 1300),
           child: Table(
             columnWidths: const {
               0: FixedColumnWidth(110),
               1: FixedColumnWidth(110),
               2: FixedColumnWidth(180),
               3: FixedColumnWidth(110),
-              4: FixedColumnWidth(140),
+              4: FixedColumnWidth(160),
               5: FixedColumnWidth(110),
               6: FixedColumnWidth(130),
               7: FixedColumnWidth(110),
               8: FixedColumnWidth(130),
-              9: FixedColumnWidth(220),
-              10: FixedColumnWidth(100),
+              9: FixedColumnWidth(170),
+              10: FixedColumnWidth(220),
+              11: FixedColumnWidth(140),
             },
             children: [
               TableRow(
@@ -1238,6 +1424,7 @@ class _LeadsTable extends ConsumerWidget {
                   _HeaderCell('LOCATION'),
                   _HeaderCell('LEAD TYPE'),
                   _HeaderCell('STATUS'),
+                  _HeaderCell('FOLLOW-UP'),
                   _HeaderCell('REMARKS'),
                   _HeaderCell('ACTIONS'),
                 ],
@@ -1245,11 +1432,33 @@ class _LeadsTable extends ConsumerWidget {
               ...leads.map((lead) {
                 return TableRow(
                   children: [
-                    _DataCell(_fmtDate(lead.createdAt)),
+                    _DataCell(_fmtDate(lead.leadDate)),
                     _DataCell(lead.bookedDate != null ? _fmtDate(lead.bookedDate!) : '-'),
                     _DataCell(lead.name, bold: true),
                     _DataCell(_fmtDate(lead.enquiryDate)),
-                    _DataCell(lead.phone),
+                    // Phone with call button
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(child: Text(lead.phone, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                          const SizedBox(width: 4),
+                          InkWell(
+                            onTap: () => _launchCall(context, lead.phone),
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.call_rounded, size: 14, color: Color(0xFF22C55E)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     _DataCell(lead.source),
                     _DataCell(lead.location),
                     _DataCell(lead.leadType),
@@ -1257,24 +1466,65 @@ class _LeadsTable extends ConsumerWidget {
                       padding: const EdgeInsets.all(12),
                       child: _StatusBadge(status: lead.status),
                     ),
+                    // Follow-up column
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      child: lead.followUpDate != null
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.event_available_outlined, size: 13, color: Color(0xFFF97316)),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    _fmtDateTime(lead.followUpDate!),
+                                    style: const TextStyle(fontSize: 11, color: Color(0xFFF97316), fontWeight: FontWeight.w500),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Text('-', style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
+                    ),
                     _DataCell(lead.remarks),
                     // Actions column
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined, size: 18),
-                            tooltip: 'Edit',
-                            color: const Color(0xFF6C63FF),
-                            onPressed: () => _showEditDialog(context, ref, lead),
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.call_rounded, size: 17),
+                              tooltip: 'Call',
+                              color: const Color(0xFF22C55E),
+                              onPressed: () => _launchCall(context, lead.phone),
+                            ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            tooltip: 'Delete',
-                            color: Colors.red,
-                            onPressed: () => _confirmDelete(context, ref, lead),
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.edit_outlined, size: 17),
+                              tooltip: 'Edit',
+                              color: const Color(0xFF6C63FF),
+                              onPressed: () => _showEditDialog(context, ref, lead),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.delete_outline, size: 17),
+                              tooltip: 'Delete',
+                              color: Colors.red,
+                              onPressed: () => _confirmDelete(context, ref, lead),
+                            ),
                           ),
                         ],
                       ),
@@ -1291,7 +1541,7 @@ class _LeadsTable extends ConsumerWidget {
 }
 
 // ─────────────────────────────────────────────────────────
-//  Mobile Lead Card
+//  Mobile Lead Card  (fully responsive, no overflow)
 // ─────────────────────────────────────────────────────────
 class _MobileLeadCard extends StatelessWidget {
   final Lead lead;
@@ -1317,66 +1567,114 @@ class _MobileLeadCard extends StatelessWidget {
         side: BorderSide(color: crm.border),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top row: name + status + actions ─────────
+            // ── Row 1: Date chip + Status badge (no overflow) ──
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    lead.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: crm.background,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: crm.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_today_outlined, size: 11, color: crm.textSecondary),
+                      const SizedBox(width: 4),
+                      Text(
+                        _fmtDate(lead.leadDate),
+                        style: TextStyle(fontSize: 11, color: crm.textSecondary, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
                 ),
-                8.w,
+                const Spacer(),
                 _StatusBadge(status: lead.status),
-                4.w,
-                // Edit button
-                GestureDetector(
-                  onTap: onEdit,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6C63FF).withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.edit_outlined, size: 16, color: Color(0xFF6C63FF)),
-                  ),
-                ),
-                4.w,
-                // Delete button
-                GestureDetector(
-                  onTap: onDelete,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
-                  ),
-                ),
               ],
             ),
             10.h,
 
-            // ── Details grid ──────────────────────────────
-            _InfoRow(icon: Icons.phone_outlined, label: 'Phone', value: lead.phone),
-            6.h,
-            _InfoRow(icon: Icons.campaign_outlined, label: 'Source', value: lead.source),
-            6.h,
-            _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
-            6.h,
-            _InfoRow(icon: Icons.category_outlined, label: 'Type', value: lead.leadType),
-            6.h,
-            _InfoRow(
-              icon: Icons.calendar_today_outlined,
-              label: 'Enquired For',
-              value: _fmtDate(lead.enquiryDate),
+            // ── Row 2: Name ──────────────────────────────────
+            Text(
+              lead.name,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
             ),
+            8.h,
+
+            // ── Row 3: Phone tap-to-call ─────────────────────
+            GestureDetector(
+              onTap: () => _launchCall(context, lead.phone),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.call_rounded, size: 14, color: Color(0xFF22C55E)),
+                    6.w,
+                    Expanded(
+                      child: Text(
+                        lead.phone.isNotEmpty ? lead.phone : 'No phone',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF22C55E),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Text(
+                      'Tap to call',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF22C55E)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            8.h,
+
+            // ── Row 4: Info grid (2 columns) ─────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _InfoRow(icon: Icons.campaign_outlined, label: 'Source', value: lead.source),
+                      6.h,
+                      _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _InfoRow(icon: Icons.category_outlined, label: 'Type', value: lead.leadType),
+                      6.h,
+                      _InfoRow(
+                        icon: Icons.calendar_today_outlined,
+                        label: 'Enquired For',
+                        value: _fmtDate(lead.enquiryDate),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+
             if (lead.bookedDate != null) ...[
               6.h,
               _InfoRow(
@@ -1386,8 +1684,40 @@ class _MobileLeadCard extends StatelessWidget {
                 valueColor: const Color(0xFF22C55E),
               ),
             ],
+
+            // Follow-up date
+            if (lead.followUpDate != null) ...[
+              8.h,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF97316).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_available_outlined, size: 14, color: Color(0xFFF97316)),
+                    6.w,
+                    Expanded(
+                      child: Text(
+                        'Follow-up: ${_fmtDateTime(lead.followUpDate!)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFF97316),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Remarks
             if (lead.remarks.isNotEmpty) ...[
-              10.h,
+              8.h,
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -1402,6 +1732,51 @@ class _MobileLeadCard extends StatelessWidget {
                 ),
               ),
             ],
+
+            // ── Bottom action buttons (full-width, no overflow) ──
+            10.h,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _launchCall(context, lead.phone),
+                    icon: const Icon(Icons.call_rounded, size: 15, color: Color(0xFF22C55E)),
+                    label: const Text('Call', style: TextStyle(color: Color(0xFF22C55E), fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF22C55E)),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onEdit,
+                    icon: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF6C63FF)),
+                    label: const Text('Edit', style: TextStyle(color: Color(0xFF6C63FF), fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF6C63FF)),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, size: 15, color: Colors.red),
+                    label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 9),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
