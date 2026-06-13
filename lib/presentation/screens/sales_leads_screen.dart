@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
@@ -1466,7 +1467,7 @@ class _LeadsTable extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    final isMobile = ResponsiveBuilder.isMobile(context);
+    final double width = MediaQuery.of(context).size.width;
 
     if (leads.isEmpty) {
       return Center(
@@ -1477,197 +1478,266 @@ class _LeadsTable extends ConsumerWidget {
       );
     }
 
-    // ── Mobile: rich cards ──────────────────────────────
-    if (isMobile) {
-      return ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: leads.length,
-        separatorBuilder: (context, index) => 10.h,
-        itemBuilder: (context, index) {
-          final lead = leads[index];
-          return _MobileLeadCard(
-            lead: lead,
-            onEdit: () => _showEditDialog(context, ref, lead),
-            onDelete: () => _confirmDelete(context, ref, lead),
-          );
-        },
-      );
-    }
+    final int crossAxisCount = width < 600
+        ? 1
+        : (width < 1000
+            ? 2
+            : (width < 1400 ? 3 : 4));
 
-    // ── Desktop: table ──────────────────────────────────
-    return Container(
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border),
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        mainAxisExtent: 360,
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 1300),
-          child: Table(
-            columnWidths: const {
-              0: FixedColumnWidth(110),
-              1: FixedColumnWidth(110),
-              2: FixedColumnWidth(180),
-              3: FixedColumnWidth(110),
-              4: FixedColumnWidth(160),
-              5: FixedColumnWidth(110),
-              6: FixedColumnWidth(130),
-              7: FixedColumnWidth(110),
-              8: FixedColumnWidth(130),
-              9: FixedColumnWidth(170),
-              10: FixedColumnWidth(220),
-              11: FixedColumnWidth(180),
-            },
-            children: [
-              TableRow(
-                decoration: BoxDecoration(
-                  color: crm.background,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                children: const [
-                  _HeaderCell('DATE'),
-                  _HeaderCell('BOOKED'),
-                  _HeaderCell('NAME'),
-                  _HeaderCell('ENQUIRED FOR'),
-                  _HeaderCell('PHONE'),
-                  _HeaderCell('SOURCE'),
-                  _HeaderCell('LOCATION'),
-                  _HeaderCell('LEAD TYPE'),
-                  _HeaderCell('STATUS'),
-                  _HeaderCell('FOLLOW-UP'),
-                  _HeaderCell('REMARKS'),
-                  _HeaderCell('ACTIONS'),
-                ],
+      itemCount: leads.length,
+      itemBuilder: (context, index) {
+        final lead = leads[index];
+        return _LeadCard(
+          lead: lead,
+          onEdit: () => _showEditDialog(context, ref, lead),
+          onDelete: () => _confirmDelete(context, ref, lead),
+          onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
+          onViewDetails: () => context.go('/sales/leads/${lead.id}'),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+//  Lead Card (fully responsive grid card with hover animation & eye icon)
+// ─────────────────────────────────────────────────────────
+class _LeadCard extends StatefulWidget {
+  final Lead lead;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onRecordOutcome;
+  final VoidCallback onViewDetails;
+
+  const _LeadCard({
+    required this.lead,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onRecordOutcome,
+    required this.onViewDetails,
+  });
+
+  @override
+  State<_LeadCard> createState() => _LeadCardState();
+}
+
+class _LeadCardState extends State<_LeadCard> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final lead = widget.lead;
+    final crm = context.crmColors;
+    final color = _statusColor(lead.status);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        transform: _isHovered ? Matrix4.translationValues(0, -4, 0) : Matrix4.identity(),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isHovered ? crm.primary.withValues(alpha: 0.5) : crm.border,
+            width: _isHovered ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            if (_isHovered)
+              BoxShadow(
+                color: crm.primary.withValues(alpha: 0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              )
+            else
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              ...leads.map((lead) {
-                return TableRow(
-                  children: [
-                    _DataCell(_fmtDate(lead.leadDate)),
-                    _DataCell(lead.bookedDate != null ? _fmtDate(lead.bookedDate!) : '-'),
-                    _DataCell(lead.name, bold: true),
-                    _DataCell(_fmtDate(lead.enquiryDate)),
-                    // Phone with call button
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                      child: Row(
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: widget.onViewDetails,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Flexible(child: Text(lead.phone, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                          Icon(Icons.calendar_today_outlined, size: 12, color: crm.textSecondary),
                           const SizedBox(width: 4),
-                          InkWell(
-                            onTap: () => _launchCall(context, lead.phone),
-                            borderRadius: BorderRadius.circular(6),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Icon(Icons.call_rounded, size: 14, color: Color(0xFF22C55E)),
+                          Text(
+                            _fmtDate(lead.leadDate),
+                            style: TextStyle(fontSize: 11, color: crm.textSecondary, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                      _StatusBadge(status: lead.status),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    lead.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => _launchCall(context, lead.phone),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF22C55E).withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.call_rounded, size: 12, color: Color(0xFF22C55E)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              lead.phone.isNotEmpty ? lead.phone : 'No phone',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF22C55E),
+                                  fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
                             ),
+                          ),
+                          const Text(
+                            'Tap to call',
+                            style: TextStyle(fontSize: 10, color: Color(0xFF22C55E)),
                           ),
                         ],
                       ),
                     ),
-                    _DataCell(lead.source),
-                    _DataCell(lead.location),
-                    _DataCell(lead.leadType),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: _StatusBadge(status: lead.status),
-                    ),
-                    // Follow-up column
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                      child: lead.followUpDate != null
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.event_available_outlined, size: 13, color: Color(0xFFF97316)),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    _fmtDateTime(lead.followUpDate!),
-                                    style: const TextStyle(fontSize: 11, color: Color(0xFFF97316), fontWeight: FontWeight.w500),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Text('-', style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
-                    ),
-                    _DataCell(lead.remarks),
-                    // Actions column
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                  ),
+                  const SizedBox(height: 8),
+                  _InfoRow(icon: Icons.campaign_outlined, label: 'Source', value: lead.source),
+                  const SizedBox(height: 6),
+                  _InfoRow(icon: Icons.category_outlined, label: 'Type', value: lead.leadType),
+                  const SizedBox(height: 6),
+                  _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
+                  const SizedBox(height: 6),
+                  _InfoRow(
+                    icon: Icons.calendar_today_outlined,
+                    label: 'Event Date',
+                    value: _fmtDate(lead.enquiryDate),
+                  ),
+                  if (lead.bookedDate != null || lead.followUpDate != null) ...[
+                    const SizedBox(height: 8),
+                    if (lead.bookedDate != null)
+                      _InfoRow(
+                        icon: Icons.bookmark_added_outlined,
+                        label: 'Booked',
+                        value: _fmtDate(lead.bookedDate!),
+                        valueColor: const Color(0xFF22C55E),
+                      ),
+                    if (lead.followUpDate != null)
+                      Row(
                         children: [
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.call_rounded, size: 16),
-                              tooltip: 'Call (Cloud/SIM)',
-                              color: const Color(0xFF22C55E),
-                              onPressed: () => _initiateCallFlow(context, lead.phone),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                              tooltip: 'WhatsApp Message',
-                              color: const Color(0xFF25D366),
-                              onPressed: () => _launchWhatsApp(context, lead.phone),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                              tooltip: 'Record Outcome',
-                              color: Colors.orange,
-                              onPressed: () => _showRecordOutcomeDialog(context, ref, lead),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.edit_outlined, size: 16),
-                              tooltip: 'Edit',
-                              color: const Color(0xFF6C63FF),
-                              onPressed: () => _showEditDialog(context, ref, lead),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const Icon(Icons.delete_outline, size: 16),
-                              tooltip: 'Delete',
-                              color: Colors.red,
-                              onPressed: () => _confirmDelete(context, ref, lead),
+                          const Icon(Icons.event_available_outlined, size: 14, color: Color(0xFFF97316)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Follow-up: ${_fmtDateTime(lead.followUpDate!)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFFF97316),
+                                fontWeight: FontWeight.w600,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
+                      ),
+                  ],
+                  if (lead.remarks.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: color.withValues(alpha: 0.15)),
+                      ),
+                      child: Text(
+                        lead.remarks,
+                        style: TextStyle(fontSize: 11, color: crm.textSecondary, height: 1.3),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
-                );
-              }),
-            ],
+                  const Spacer(),
+                  const Divider(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _ActionButton(
+                        icon: Icons.visibility_outlined,
+                        tooltip: 'View Details',
+                        color: Colors.blue,
+                        onPressed: widget.onViewDetails,
+                      ),
+                      _ActionButton(
+                        icon: Icons.call_rounded,
+                        tooltip: 'Call (Cloud/SIM)',
+                        color: const Color(0xFF22C55E),
+                        onPressed: () => _initiateCallFlow(context, lead.phone),
+                      ),
+                      _ActionButton(
+                        icon: Icons.chat_bubble_outline_rounded,
+                        tooltip: 'WhatsApp Message',
+                        color: const Color(0xFF25D366),
+                        onPressed: () => _launchWhatsApp(context, lead.phone),
+                      ),
+                      _ActionButton(
+                        icon: Icons.add_circle_outline_rounded,
+                        tooltip: 'Record Outcome',
+                        color: Colors.orange,
+                        onPressed: widget.onRecordOutcome,
+                      ),
+                      _ActionButton(
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Edit',
+                        color: const Color(0xFF6C63FF),
+                        onPressed: widget.onEdit,
+                      ),
+                      _ActionButton(
+                        icon: Icons.delete_outline,
+                        tooltip: 'Delete',
+                        color: Colors.red,
+                        onPressed: widget.onDelete,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1675,275 +1745,30 @@ class _LeadsTable extends ConsumerWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────
-//  Mobile Lead Card  (fully responsive, no overflow)
-// ─────────────────────────────────────────────────────────
-class _MobileLeadCard extends ConsumerWidget {
-  final Lead lead;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onPressed;
 
-  const _MobileLeadCard({
-    required this.lead,
-    required this.onEdit,
-    required this.onDelete,
+  const _ActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onPressed,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
-    final color = _statusColor(lead.status);
-
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: crm.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Row 1: Date chip + Status badge (no overflow) ──
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: crm.background,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: crm.border),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.calendar_today_outlined, size: 11, color: crm.textSecondary),
-                      const SizedBox(width: 4),
-                      Text(
-                        _fmtDate(lead.leadDate),
-                        style: TextStyle(fontSize: 11, color: crm.textSecondary, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                _StatusBadge(status: lead.status),
-              ],
-            ),
-            10.h,
-
-            // ── Row 2: Name ──────────────────────────────────
-            Text(
-              lead.name,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-            8.h,
-
-            // ── Row 3: Phone tap-to-call ─────────────────────
-            GestureDetector(
-              onTap: () => _launchCall(context, lead.phone),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.call_rounded, size: 14, color: Color(0xFF22C55E)),
-                    6.w,
-                    Expanded(
-                      child: Text(
-                        lead.phone.isNotEmpty ? lead.phone : 'No phone',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF22C55E),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Text(
-                      'Tap to call',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF22C55E)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            8.h,
-
-            // ── Row 4: Info grid (2 columns) ─────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _InfoRow(icon: Icons.campaign_outlined, label: 'Source', value: lead.source),
-                      6.h,
-                      _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _InfoRow(icon: Icons.category_outlined, label: 'Type', value: lead.leadType),
-                      6.h,
-                      _InfoRow(
-                        icon: Icons.calendar_today_outlined,
-                        label: 'Enquired For',
-                        value: _fmtDate(lead.enquiryDate),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-
-            if (lead.bookedDate != null) ...[
-              6.h,
-              _InfoRow(
-                icon: Icons.bookmark_added_outlined,
-                label: 'Booked',
-                value: _fmtDate(lead.bookedDate!),
-                valueColor: const Color(0xFF22C55E),
-              ),
-            ],
-
-            // Follow-up date
-            if (lead.followUpDate != null) ...[
-              8.h,
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF97316).withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFF97316).withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.event_available_outlined, size: 14, color: Color(0xFFF97316)),
-                    6.w,
-                    Expanded(
-                      child: Text(
-                        'Follow-up: ${_fmtDateTime(lead.followUpDate!)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFFF97316),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            // Remarks
-            if (lead.remarks.isNotEmpty) ...[
-              8.h,
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: color.withValues(alpha: 0.15)),
-                ),
-                child: Text(
-                  lead.remarks,
-                  style: TextStyle(fontSize: 13, color: crm.textSecondary, height: 1.4),
-                ),
-              ),
-            ],
-
-            // ── Bottom action buttons (full-width, no overflow) ──
-            10.h,
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _initiateCallFlow(context, lead.phone),
-                    icon: const Icon(Icons.call_rounded, size: 15, color: Color(0xFF22C55E)),
-                    label: const Text('Call', style: TextStyle(color: Color(0xFF22C55E), fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF22C55E)),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _launchWhatsApp(context, lead.phone),
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 15, color: Color(0xFF25D366)),
-                    label: const Text('WhatsApp', style: TextStyle(color: Color(0xFF25D366), fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF25D366)),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            8.h,
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showRecordOutcomeDialog(context, ref, lead),
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 15, color: Colors.orange),
-                    label: const Text('Outcome', style: TextStyle(color: Colors.orange, fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.orange),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onEdit,
-                    icon: const Icon(Icons.edit_outlined, size: 15, color: Color(0xFF6C63FF)),
-                    label: const Text('Edit', style: TextStyle(color: Color(0xFF6C63FF), fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFF6C63FF)),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline, size: 15, color: Colors.red),
-                    label: const Text('Delete', style: TextStyle(color: Colors.red, fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 9),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 32,
+      height: 32,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        icon: Icon(icon, size: 18),
+        tooltip: tooltip,
+        color: color,
+        onPressed: onPressed,
       ),
     );
   }
@@ -2010,35 +1835,6 @@ class _BottomSheetHandle extends StatelessWidget {
 // ─────────────────────────────────────────────────────────
 //  Shared small widgets
 // ─────────────────────────────────────────────────────────
-class _HeaderCell extends StatelessWidget {
-  final String text;
-  const _HeaderCell(this.text);
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.all(14),
-        child: Text(
-          text,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
-        ),
-      );
-}
-
-class _DataCell extends StatelessWidget {
-  final String text;
-  final bool bold;
-  const _DataCell(this.text, {this.bold = false});
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            fontSize: 13,
-          ),
-        ),
-      );
-}
 
 class _StatusBadge extends StatelessWidget {
   final String status;

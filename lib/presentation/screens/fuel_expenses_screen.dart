@@ -136,7 +136,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                 expense == null ? 'Add Expense' : 'Edit Expense',
               ),
               content: SizedBox(
-                width: 460,
+                width: isMobile ? double.maxFinite : 460,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -437,32 +437,81 @@ class FuelExpensesScreen extends HookConsumerWidget {
                         ];
                         return details.join(' • ');
                       }()),
-                      trailing: Wrap(
-                        spacing: 8,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            expense.paymentMode.toUpperCase(),
-                            style: TextStyle(
-                              color: crmColors.textSecondary,
-                              fontWeight: FontWeight.w700,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: crmColors.textSecondary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              expense.paymentMode.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: crmColors.textSecondary,
+                              ),
                             ),
                           ),
-                          TextButton(
-                            onPressed: () => openExpenseDialog(expense),
-                            child: const Text('Edit'),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              await ref
-                                  .read(fuelExpenseServiceProvider)
-                                  .deleteFuelExpense(expense.id);
-                              ref.invalidate(fuelExpensesProvider);
-                              ref.invalidate(paginatedFuelExpensesProvider);
+                          8.w,
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, size: 20),
+                            onSelected: (val) async {
+                              if (val == 'edit') {
+                                openExpenseDialog(expense);
+                              } else if (val == 'delete') {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete Expense'),
+                                    content: const Text('Are you sure you want to delete this expense?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await ref.read(fuelExpenseServiceProvider).deleteFuelExpense(expense.id);
+                                  ref.invalidate(fuelExpensesProvider);
+                                  ref.invalidate(paginatedFuelExpensesProvider);
+                                }
+                              }
                             },
-                            style: TextButton.styleFrom(
-                              foregroundColor: crmColors.destructive,
-                            ),
-                            child: const Text('Delete'),
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Edit'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete, size: 16, color: crmColors.destructive),
+                                    const SizedBox(width: 8),
+                                    Text('Delete', style: TextStyle(color: crmColors.destructive)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

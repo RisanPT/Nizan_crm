@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
 import '../../core/models/employee.dart';
@@ -30,6 +31,31 @@ class _FleetAssignmentsScreenState
   String? _selectedDriverId;
   String? _selectedVehicleId;
   bool _saving = false;
+
+  Future<void> _openMapUrl(String url, BuildContext context) async {
+    final uri = Uri.tryParse(url.trim());
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Google Maps link.')),
+      );
+    }
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber, BuildContext context) async {
+    final cleanPhone = phoneNumber.replaceAll(RegExp(r'\s+'), '');
+    final uri = Uri.tryParse('tel:$cleanPhone');
+    if (uri == null) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch phone call for $phoneNumber.')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -391,7 +417,7 @@ class _FleetAssignmentsScreenState
                                               ),
                                               4.w,
                                               Text(
-                                                '${booking.region} • ${booking.district}',
+                                                booking.district,
                                                 style: TextStyle(
                                                   fontSize: 11,
                                                   color: crmColors.textSecondary,
@@ -492,7 +518,7 @@ class _FleetAssignmentsScreenState
                                                 tooltip: 'Open Location Link',
                                                 onPressed: activeBooking
                                                         .mapUrl.isNotEmpty
-                                                    ? () {} // Can link to URL
+                                                    ? () => _openMapUrl(activeBooking.mapUrl, context)
                                                     : null,
                                               ),
                                             ],
@@ -616,6 +642,128 @@ class _FleetAssignmentsScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (booking.address.trim().isNotEmpty || booking.district.trim().isNotEmpty) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: crmColors.border),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  color: crmColors.primary,
+                  size: 20,
+                ),
+                12.w,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Event Address',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      4.h,
+                      Text(
+                        booking.address.trim().isNotEmpty
+                            ? booking.address.trim()
+                            : booking.district,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (booking.mapUrl.trim().isNotEmpty) ...[
+                  8.w,
+                  IconButton(
+                    icon: const Icon(Icons.map_outlined),
+                    color: Colors.green,
+                    tooltip: 'Google Maps Direction',
+                    onPressed: () => _openMapUrl(booking.mapUrl, context),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          12.h,
+        ],
+        if (booking.pocName.trim().isNotEmpty) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: crmColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: crmColors.border),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.person_pin_circle_outlined,
+                  color: crmColors.primary,
+                  size: 20,
+                ),
+                12.w,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Point of Contact (POC)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      4.h,
+                      Text(
+                        booking.pocName.trim(),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (booking.pocPhone.trim().isNotEmpty) ...[
+                        2.h,
+                        Text(
+                          booking.pocPhone.trim(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: crmColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (booking.pocPhone.trim().isNotEmpty) ...[
+                  8.w,
+                  IconButton(
+                    icon: const Icon(Icons.call_outlined),
+                    color: crmColors.primary,
+                    tooltip: 'Call POC',
+                    onPressed: () => _makePhoneCall(booking.pocPhone, context),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          16.h,
+        ],
         Text(
           'TRANSPORT DETAILS & ALLOCATION',
           style: TextStyle(

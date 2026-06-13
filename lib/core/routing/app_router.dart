@@ -32,6 +32,7 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
+import '../../presentation/screens/lead_details_screen.dart';
 
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -135,6 +136,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Sales & Invoices';
           } else if (state.uri.path == '/sales/leads') {
             title = 'Leads Management';
+          } else if (state.uri.path.startsWith('/sales/leads/')) {
+            title = 'Lead Details';
           } else if (state.uri.path == '/fleet/vehicles') {
             title = 'Fleet Vehicles';
           } else if (state.uri.path == '/fleet/drivers') {
@@ -236,6 +239,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales/leads',
             builder: (context, state) => const SalesLeadsScreen(),
+          ),
+          GoRoute(
+            path: '/sales/leads/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return LeadDetailsScreen(leadId: id);
+            },
           ),
           GoRoute(
             path: '/fleet/vehicles',

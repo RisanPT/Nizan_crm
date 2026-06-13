@@ -570,6 +570,13 @@ String _buildClientConfirmationHtml(Booking booking) {
           return '\n        <div class="client-detail-line" style="background:#fff8e1;border-left:3px solid #f59e0b;padding-left:8px;"><strong>Point of Contact :</strong> ${_escape(contact)}</div>';
         }();
 
+  final addressLine = booking.address.trim().isNotEmpty
+      ? '\n        <div class="client-detail-line"><strong>Address :</strong> ${_escape(booking.address)}</div>'
+      : '';
+  final pincodeLine = booking.pincode.trim().isNotEmpty
+      ? '\n        <div class="client-detail-line"><strong>Pincode :</strong> ${_escape(booking.pincode)}</div>'
+      : '';
+
   return '''
     <div class="client-confirmation">
       <div class="client-brand">
@@ -589,9 +596,7 @@ String _buildClientConfirmationHtml(Booking booking) {
         <div class="client-detail-line"><strong>Booking Date :</strong> ${_escape(_formatLongDate(booking.createdAt ?? booking.bookingDate))}</div>
         <div class="client-detail-line"><strong>Event Date &amp; Time :</strong> ${_escape(_formatLongDate(booking.selectedDates.isNotEmpty ? booking.selectedDates.first : booking.bookingDate))}</div>
         <div class="client-detail-line"><strong>Get Ready Time :</strong> ${_escape('${_formatTime(booking.serviceStart)} - ${_formatTime(booking.serviceEnd)}')}</div>
-        <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.district.trim().isNotEmpty ? booking.district.trim() : booking.region.trim().isNotEmpty ? booking.region.trim() : 'To be confirmed')}</div>
-        \${booking.address.trim().isNotEmpty ? \`<div class="client-detail-line"><strong>Address :</strong> \${_escape(booking.address)}</div>\` : ''}
-        \${booking.pincode.trim().isNotEmpty ? \`<div class="client-detail-line"><strong>Pincode :</strong> \${_escape(booking.pincode)}</div>\` : ''}
+        <div class="client-detail-line"><strong>Location :</strong> ${_escape(booking.district.trim().isNotEmpty ? booking.district.trim() : booking.region.trim().isNotEmpty ? booking.region.trim() : 'To be confirmed')}</div>$addressLine$pincodeLine
         <div class="client-detail-line"><strong>Package :</strong> ${_escape(booking.service)}</div>
         <div class="client-detail-line"><strong>Outfit :</strong> ${_escape(outfitSummary)}</div>
         <div class="client-detail-line"><strong>Add Ons :</strong> ${_escape(addonSummary)}</div>$artistLine$assistantLine$pocLine

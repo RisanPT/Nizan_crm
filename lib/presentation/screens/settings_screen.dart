@@ -171,6 +171,14 @@ class SettingsScreen extends HookConsumerWidget {
                                 color: Colors.green,
                               ),
                             ),
+                            DropdownMenuItem(
+                              value: 'fleet_manager',
+                              child: _RoleItem(
+                                label: 'Fleet Manager',
+                                sub: 'Calendar & Fleet Management',
+                                color: Colors.blueGrey,
+                              ),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
@@ -873,6 +881,7 @@ class _RoleBadge extends StatelessWidget {
     'sales': ('Sales', Colors.teal),
     'artist': ('Artist', Colors.orange),
     'accounts': ('Accounts', Colors.green),
+    'fleet_manager': ('Fleet Manager', Colors.blueGrey),
   };
 
   @override

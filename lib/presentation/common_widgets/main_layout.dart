@@ -43,6 +43,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/booking')) return 2;
       if (location == '/sales') return 3;
       if (location == '/profile') return 4;
+    } else if (role == AppRole.fleetManager) {
+      if (location.startsWith('/fleet/assignments')) return 0;
+      if (location.startsWith('/fleet/vehicles')) return 1;
+      if (location.startsWith('/fleet/drivers')) return 2;
+      if (location == '/calendar') return 3;
+      if (location == '/profile') return 4;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -67,6 +73,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 1: context.go('/calendar'); break;
         case 2: context.go('/booking/requests'); break;
         case 3: context.go('/sales'); break;
+        case 4: context.go('/profile'); break;
+      }
+    } else if (role == AppRole.fleetManager) {
+      switch (index) {
+        case 0: context.go('/fleet/assignments'); break;
+        case 1: context.go('/fleet/vehicles'); break;
+        case 2: context.go('/fleet/drivers'); break;
+        case 3: context.go('/calendar'); break;
         case 4: context.go('/profile'); break;
       }
     } else {
@@ -148,33 +162,61 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                         label: 'Profile',
                       ),
                     ]
-                  : const [
-                      NavigationDestination(
-                        icon: Icon(Icons.dashboard_outlined),
-                        selectedIcon: Icon(Icons.dashboard),
-                        label: 'Home',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.people_outline),
-                        selectedIcon: Icon(Icons.people),
-                        label: 'Clients',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.calendar_month_outlined),
-                        selectedIcon: Icon(Icons.calendar_month),
-                        label: 'Calendar',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.receipt_long_outlined),
-                        selectedIcon: Icon(Icons.receipt_long),
-                        label: 'Bookings',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.account_balance_wallet_outlined),
-                        selectedIcon: Icon(Icons.account_balance_wallet),
-                        label: 'Finance',
-                      ),
-                    ],
+                  : role == AppRole.fleetManager
+                      ? const [
+                          NavigationDestination(
+                            icon: Icon(Icons.assignment_outlined),
+                            selectedIcon: Icon(Icons.assignment),
+                            label: 'Assign',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.directions_car_outlined),
+                            selectedIcon: Icon(Icons.directions_car),
+                            label: 'Cars',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.badge_outlined),
+                            selectedIcon: Icon(Icons.badge),
+                            label: 'Drivers',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.calendar_month_outlined),
+                            selectedIcon: Icon(Icons.calendar_month),
+                            label: 'Calendar',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.person_outline),
+                            selectedIcon: Icon(Icons.person),
+                            label: 'Profile',
+                          ),
+                        ]
+                      : const [
+                          NavigationDestination(
+                            icon: Icon(Icons.dashboard_outlined),
+                            selectedIcon: Icon(Icons.dashboard),
+                            label: 'Home',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.people_outline),
+                            selectedIcon: Icon(Icons.people),
+                            label: 'Clients',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.calendar_month_outlined),
+                            selectedIcon: Icon(Icons.calendar_month),
+                            label: 'Calendar',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.receipt_long_outlined),
+                            selectedIcon: Icon(Icons.receipt_long),
+                            label: 'Bookings',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.account_balance_wallet_outlined),
+                            selectedIcon: Icon(Icons.account_balance_wallet),
+                            label: 'Finance',
+                          ),
+                        ],
         ),
       );
     }

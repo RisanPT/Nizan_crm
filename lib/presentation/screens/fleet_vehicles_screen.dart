@@ -68,7 +68,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
             builder: (context, setState) => AlertDialog(
               title: Text(vehicle == null ? 'Add Vehicle' : 'Edit Vehicle'),
               content: SizedBox(
-                width: 440,
+                width: isMobile ? double.maxFinite : 440,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -349,34 +349,85 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                               : 'Unassigned',
                         ].where((item) => item.isNotEmpty).join(' • '),
                       ),
-                      trailing: Wrap(
-                        spacing: 8,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            vehicle.status.toUpperCase(),
-                            style: TextStyle(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
                               color: vehicle.status == 'active'
-                                  ? crmColors.success
-                                  : crmColors.textSecondary,
-                              fontWeight: FontWeight.w700,
+                                  ? crmColors.success.withValues(alpha: 0.12)
+                                  : crmColors.textSecondary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              vehicle.status.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: vehicle.status == 'active'
+                                    ? crmColors.success
+                                    : crmColors.textSecondary,
+                              ),
                             ),
                           ),
-                          TextButton(
-                            onPressed: () => openVehicleDialog(vehicle),
-                            child: const Text('Edit'),
-                          ),
-                          TextButton(
-                            onPressed: () async {
-                              await ref
-                                  .read(vehicleServiceProvider)
-                                  .deleteVehicle(vehicle.id);
-                              ref.invalidate(vehiclesProvider);
-                              ref.invalidate(paginatedVehiclesProvider);
+                          8.w,
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert, size: 20),
+                            onSelected: (val) async {
+                              if (val == 'edit') {
+                                openVehicleDialog(vehicle);
+                              } else if (val == 'delete') {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: const Text('Delete Vehicle'),
+                                    content: Text('Are you sure you want to delete ${vehicle.name}?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx, true),
+                                        style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
+                                        child: const Text('Delete'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await ref.read(vehicleServiceProvider).deleteVehicle(vehicle.id);
+                                  ref.invalidate(vehiclesProvider);
+                                  ref.invalidate(paginatedVehiclesProvider);
+                                }
+                              }
                             },
-                            style: TextButton.styleFrom(
-                              foregroundColor: crmColors.destructive,
-                            ),
-                            child: const Text('Delete'),
+                            itemBuilder: (ctx) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.edit, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Edit'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'delete',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete, size: 16, color: crmColors.destructive),
+                                    const SizedBox(width: 8),
+                                    Text('Delete', style: TextStyle(color: crmColors.destructive)),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

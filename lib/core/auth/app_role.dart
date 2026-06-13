@@ -6,6 +6,7 @@ enum AppRole {
   sales,
   artist,
   accounts,
+  fleetManager,
   unknown;
 
   static AppRole fromString(String? raw) {
@@ -22,6 +23,9 @@ enum AppRole {
         return AppRole.artist;
       case 'accounts':
         return AppRole.accounts;
+      case 'fleet_manager':
+      case 'fleetmanager':
+        return AppRole.fleetManager;
       default:
         return AppRole.unknown;
     }
@@ -39,7 +43,7 @@ enum AppRole {
   bool get canSeeClients => isFullAccess || this == crm || this == sales;
 
   /// Calendar scheduler / Works
-  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts;
+  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts || this == fleetManager;
 
   /// Booking requests + manage booking
   bool get canSeeBookings => isFullAccess || this == crm || this == sales || this == accounts;
@@ -58,7 +62,7 @@ enum AppRole {
       isFullAccess || this == artist || this == accounts;
 
   /// Fleet (vehicles, drivers, fuel)
-  bool get canSeeFleet => isFullAccess;
+  bool get canSeeFleet => isFullAccess || this == fleetManager;
 
   /// Settings (user management etc.)
   bool get canSeeSettings => isFullAccess;
@@ -88,6 +92,8 @@ enum AppRole {
         return '/booking/requests';
       case AppRole.accounts:
         return '/accounts/artist-collections';
+      case AppRole.fleetManager:
+        return '/fleet/assignments';
       case AppRole.manager:
         return '/clients';
       case AppRole.admin:
