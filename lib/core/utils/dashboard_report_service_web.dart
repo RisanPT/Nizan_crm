@@ -13,6 +13,7 @@ import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
 import '../models/district.dart';
+import '../models/crm_user.dart';
 
 // Cache for report logo bytes to avoid redundant asset loading
 Uint8List? _cachedLogoBytes;
@@ -717,6 +718,7 @@ Future<void> downloadLeadsReport({
   String statusFilter = 'All',
   String sourceFilter = 'All',
   String searchQuery = '',
+  List<CrmUser> users = const [],
 }) async {
   if (_cachedLogoBytes == null) {
     final logoData = await rootBundle.load('assets/images/teamn_logo.png');
@@ -796,8 +798,16 @@ Future<void> downloadLeadsReport({
           ),
           pw.SizedBox(height: 22),
 
+          _sectionTitle('Staff-wise Leads Performance'),
+          _staffWiseSummaryTable(leads, users),
+          pw.SizedBox(height: 22),
+
+          _sectionTitle('Month-wise Leads Summary'),
+          _monthWiseSummaryTable(leads),
+          pw.SizedBox(height: 22),
+
           _sectionTitle('Leads List'),
-          _leadsTable(leads),
+          _leadsTable(leads, users),
         ];
       },
     ),
@@ -810,7 +820,7 @@ Future<void> downloadLeadsReport({
   );
 }
 
-pw.Widget _leadsTable(List<Lead> rows) {
+pw.Widget _leadsTable(List<Lead> rows, List<CrmUser> users) {
   if (rows.isEmpty) {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(12),
@@ -823,16 +833,27 @@ pw.Widget _leadsTable(List<Lead> rows) {
 
   final List<List<dynamic>> dataList = rows
       .map<List<dynamic>>(
-        (lead) => <dynamic>[
-          _dateLabel(lead.createdAt),
-          lead.name,
-          lead.phone,
-          lead.source,
-          lead.location,
-          lead.leadType,
-          lead.status.toUpperCase(),
-          lead.remarks,
-        ],
+        (lead) {
+          String assignedName = 'Unassigned';
+          if (lead.assignedTo != null && lead.assignedTo!.isNotEmpty) {
+            final matched = users.firstWhere(
+              (u) => u.id == lead.assignedTo,
+              orElse: () => CrmUser(id: lead.assignedTo!, name: 'Staff', email: '', role: 'sales', active: true),
+            );
+            assignedName = matched.name;
+          }
+          return <dynamic>[
+            _dateLabel(lead.createdAt),
+            lead.name,
+            lead.phone,
+            lead.source,
+            assignedName,
+            lead.location,
+            lead.leadType,
+            lead.status.toUpperCase(),
+            lead.remarks,
+          ];
+        },
       )
       .toList();
 
@@ -842,6 +863,7 @@ pw.Widget _leadsTable(List<Lead> rows) {
       'Name',
       'Phone',
       'Source',
+      'Assigned To',
       'Location',
       'Type',
       'Status',
@@ -849,9 +871,123 @@ pw.Widget _leadsTable(List<Lead> rows) {
     ],
     data: dataList,
     border: pw.TableBorder.all(color: PdfColors.blueGrey100),
-    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+    cellPadding: const pw.EdgeInsets.all(4),
+    cellAlignment: pw.Alignment.centerLeft,
+    cellStyle: const pw.TextStyle(fontSize: 7),
+  );
+}
+
+pw.Widget _staffWiseSummaryTable(List<Lead> leads, List<CrmUser> users) {
+  final Map<String, List<Lead>> grouped = {};
+  for (final lead in leads) {
+    final key = lead.assignedTo ?? '';
+    grouped.putIfAbsent(key, () => []).add(lead);
+  }
+
+  final List<List<dynamic>> tableData = [];
+  grouped.forEach((userId, userLeads) {
+    String staffName = 'Unassigned';
+    if (userId.isNotEmpty) {
+      final matched = users.firstWhere(
+        (u) => u.id == userId,
+        orElse: () => CrmUser(id: userId, name: 'User ($userId)', email: '', role: 'sales', active: true),
+      );
+      staffName = matched.name;
+    }
+
+    final total = userLeads.length;
+    final converted = userLeads.where((l) => l.status.toLowerCase() == 'converted').length;
+    final lost = userLeads.where((l) => l.status.toLowerCase() == 'lost').length;
+    final active = total - converted - lost;
+    final convRate = total > 0 ? (converted / total * 100) : 0.0;
+
+    tableData.add([
+      staffName,
+      '$total',
+      '$active',
+      '$converted',
+      '$lost',
+      '${convRate.toStringAsFixed(1)}%',
+    ]);
+  });
+
+  tableData.sort((a, b) => int.parse(b[1]).compareTo(int.parse(a[1])));
+
+  return pw.TableHelper.fromTextArray(
+    headers: const [
+      'Staff Name',
+      'Total Leads',
+      'Active Leads',
+      'Converted',
+      'Lost',
+      'Conv. Rate',
+    ],
+    data: tableData,
+    border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
     headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
     cellPadding: const pw.EdgeInsets.all(6),
     cellAlignment: pw.Alignment.centerLeft,
+    cellStyle: const pw.TextStyle(fontSize: 8),
+  );
+}
+
+pw.Widget _monthWiseSummaryTable(List<Lead> leads) {
+  final Map<String, List<Lead>> grouped = {};
+  final List<String> monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  for (final lead in leads) {
+    final date = lead.leadDate;
+    final key = '${date.year}-${date.month.toString().padLeft(2, '0')}';
+    grouped.putIfAbsent(key, () => []).add(lead);
+  }
+
+  final sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+
+  final List<List<dynamic>> tableData = [];
+  for (final key in sortedKeys) {
+    final userLeads = grouped[key]!;
+    final parts = key.split('-');
+    final year = parts[0];
+    final monthIndex = int.parse(parts[1]) - 1;
+    final monthLabel = '${monthNames[monthIndex]} $year';
+
+    final total = userLeads.length;
+    final converted = userLeads.where((l) => l.status.toLowerCase() == 'converted').length;
+    final lost = userLeads.where((l) => l.status.toLowerCase() == 'lost').length;
+    final active = total - converted - lost;
+    final convRate = total > 0 ? (converted / total * 100) : 0.0;
+
+    tableData.add([
+      monthLabel,
+      '$total',
+      '$active',
+      '$converted',
+      '$lost',
+      '${convRate.toStringAsFixed(1)}%',
+    ]);
+  }
+
+  return pw.TableHelper.fromTextArray(
+    headers: const [
+      'Month',
+      'Total Leads',
+      'Active Leads',
+      'Converted',
+      'Lost',
+      'Conv. Rate',
+    ],
+    data: tableData,
+    border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+    cellPadding: const pw.EdgeInsets.all(6),
+    cellAlignment: pw.Alignment.centerLeft,
+    cellStyle: const pw.TextStyle(fontSize: 8),
   );
 }

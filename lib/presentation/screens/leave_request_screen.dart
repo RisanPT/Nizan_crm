@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/responsive_builder.dart';
 
 
 class LeaveRequestScreen extends ConsumerStatefulWidget {
@@ -16,6 +17,7 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final crm = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
 
     // Mock data for leave history
     final leaveHistory = [
@@ -137,24 +139,25 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Time Off',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5,
+              if (!isMobile)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Time Off',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Request leaves and track history',
-                      style: TextStyle(color: crm.textSecondary, fontSize: 13),
-                    ),
-                  ],
+                      Text(
+                        'Request leaves and track history',
+                        style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
               ElevatedButton.icon(
                 onPressed: showApplyLeaveDialog,
                 icon: const Icon(Icons.add_rounded, size: 20),
@@ -166,7 +169,7 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
               ),
             ],
           ),
-          32.h,
+          if (!isMobile) 32.h else 12.h,
           Text(
             'Request History',
             style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),

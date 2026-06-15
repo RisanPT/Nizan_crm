@@ -24,6 +24,8 @@ class _FleetAssignmentsScreenState
   String _searchQuery = '';
   bool _showUnassignedOnly = false;
   String? _activeBookingId;
+  DateTime _selectedMonth = DateTime.now();
+  bool _filterByMonth = true;
 
   // Form Controllers
   final _distCtrl = TextEditingController();
@@ -163,8 +165,15 @@ class _FleetAssignmentsScreenState
                   b.status.toLowerCase() == 'completed';
           final matchesUnassigned =
               !_showUnassignedOnly || (b.driverId.isEmpty && b.vehicleId.isEmpty);
+          final matchesMonth = !_filterByMonth ||
+              (b.serviceStart.year == _selectedMonth.year &&
+                  b.serviceStart.month == _selectedMonth.month);
 
-          return matchesSearch && hasArtists && isConfirmedOrCompleted && matchesUnassigned;
+          return matchesSearch &&
+              hasArtists &&
+              isConfirmedOrCompleted &&
+              matchesUnassigned &&
+              matchesMonth;
         }).toList()
           ..sort((a, b) => b.serviceStart.compareTo(a.serviceStart));
 
@@ -198,70 +207,370 @@ class _FleetAssignmentsScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Screen Header
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Fleet Assignments',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      8.h,
-                      Text(
-                        'Assign vehicles, in-house or rented status, and drivers to artist jobs.',
-                        style: TextStyle(color: crmColors.textSecondary),
-                      ),
-                    ],
+            if (!isMobile) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Fleet Assignments',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        8.h,
+                        Text(
+                          'Assign vehicles, in-house or rented status, and drivers to artist jobs.',
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            20.h,
+                ],
+              ),
+              20.h,
+            ],
 
-            // Search and filters
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            // Responsive Search & Filters
+            if (isMobile) ...[
+              // ── Compact Search + Icon-Toggle Bar ──────────────────────────
+              Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: crmColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: crmColors.border),
+                ),
                 child: Row(
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Icon(Icons.search, size: 18, color: crmColors.textSecondary),
+                    ),
                     Expanded(
-                      flex: 3,
                       child: TextField(
-                        decoration: const InputDecoration(
-                          hintText: 'Search by client name, reference, service...',
-                          prefixIcon: Icon(Icons.search, size: 20),
-                          contentPadding: EdgeInsets.symmetric(vertical: 10),
+                        decoration: InputDecoration(
+                          hintText: 'Search bookings...',
+                          hintStyle: TextStyle(fontSize: 13, color: crmColors.textSecondary),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          isDense: true,
                         ),
+                        style: const TextStyle(fontSize: 13),
                         onChanged: (val) => setState(() => _searchQuery = val),
                       ),
                     ),
-                    16.w,
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: _showUnassignedOnly,
-                          onChanged: (val) {
-                            setState(() {
-                              _showUnassignedOnly = val ?? false;
-                              _activeBookingId = null;
-                            });
-                          },
+                    // Month filter toggle
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _filterByMonth = !_filterByMonth;
+                        _activeBookingId = null;
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _filterByMonth
+                              ? crmColors.primary.withValues(alpha: 0.12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const Text(
-                          'Unassigned Only',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                        child: Icon(
+                          Icons.calendar_month_outlined,
+                          size: 18,
+                          color: _filterByMonth ? crmColors.primary : crmColors.textSecondary,
                         ),
-                      ],
+                      ),
+                    ),
+                    // Unassigned-only toggle
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _showUnassignedOnly = !_showUnassignedOnly;
+                        _activeBookingId = null;
+                      }),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.all(8),
+                        margin: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
+                        decoration: BoxDecoration(
+                          color: _showUnassignedOnly
+                              ? crmColors.warning.withValues(alpha: 0.12)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          Icons.pending_actions_outlined,
+                          size: 18,
+                          color: _showUnassignedOnly ? crmColors.warning : crmColors.textSecondary,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
-            ),
+              8.h,
+
+              // ── Slim month navigator (shown when month filter is on) ──────
+              if (_filterByMonth) ...[
+                Container(
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: crmColors.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: crmColors.primary.withValues(alpha: 0.15)),
+                  ),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 38,
+                        child: IconButton(
+                          icon: Icon(Icons.chevron_left, size: 18, color: crmColors.primary),
+                          onPressed: () => setState(() {
+                            _selectedMonth = DateTime(
+                              _selectedMonth.year,
+                              _selectedMonth.month - 1,
+                              1,
+                            );
+                            _activeBookingId = null;
+                          }),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () async {
+                            final DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedMonth,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2030),
+                              initialDatePickerMode: DatePickerMode.year,
+                              helpText: 'Select Month & Year',
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedMonth = DateTime(picked.year, picked.month, 1);
+                                _activeBookingId = null;
+                              });
+                            }
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.calendar_month, size: 13, color: crmColors.primary),
+                              5.w,
+                              Text(
+                                _formatMonthYear(_selectedMonth),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: crmColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 38,
+                        child: IconButton(
+                          icon: Icon(Icons.chevron_right, size: 18, color: crmColors.primary),
+                          onPressed: () => setState(() {
+                            _selectedMonth = DateTime(
+                              _selectedMonth.year,
+                              _selectedMonth.month + 1,
+                              1,
+                            );
+                            _activeBookingId = null;
+                          }),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                8.h,
+              ],
+
+              // ── Active filter pill (dismissible) ─────────────────────────
+              if (_showUnassignedOnly)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: crmColors.warning.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: crmColors.warning.withValues(alpha: 0.30)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.pending_actions_outlined,
+                                size: 11, color: crmColors.warning),
+                            4.w,
+                            Text(
+                              'Unassigned only',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: crmColors.warning,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            6.w,
+                            GestureDetector(
+                              onTap: () => setState(() {
+                                _showUnassignedOnly = false;
+                                _activeBookingId = null;
+                              }),
+                              child: Icon(Icons.close, size: 12, color: crmColors.warning),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ] else ...[
+              // Desktop Search and filters
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            hintText: 'Search by client name, reference, service...',
+                            prefixIcon: Icon(Icons.search, size: 20),
+                            contentPadding: EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onChanged: (val) => setState(() => _searchQuery = val),
+                        ),
+                      ),
+                      16.w,
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _showUnassignedOnly,
+                            onChanged: (val) {
+                              setState(() {
+                                _showUnassignedOnly = val ?? false;
+                                _activeBookingId = null;
+                              });
+                            },
+                          ),
+                          const Text(
+                            'Unassigned Only',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              16.h,
+
+              // Month Selector / Navigation Header Card (Desktop)
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: crmColors.border),
+                ),
+                color: crmColors.surface,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        tooltip: 'Previous Month',
+                        onPressed: () {
+                          setState(() {
+                            _selectedMonth = DateTime(
+                              _selectedMonth.year,
+                              _selectedMonth.month - 1,
+                              1,
+                            );
+                            _activeBookingId = null;
+                          });
+                        },
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final DateTime? picked = await showDatePicker(
+                            context: context,
+                            initialDate: _selectedMonth,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2030),
+                            initialDatePickerMode: DatePickerMode.year,
+                            helpText: 'Select Month & Year',
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _selectedMonth = DateTime(picked.year, picked.month, 1);
+                              _activeBookingId = null;
+                            });
+                          }
+                        },
+                        icon: Icon(Icons.calendar_month, color: crmColors.primary, size: 20),
+                        label: Text(
+                          _formatMonthYear(_selectedMonth),
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: crmColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        tooltip: 'Next Month',
+                        onPressed: () {
+                          setState(() {
+                            _selectedMonth = DateTime(
+                              _selectedMonth.year,
+                              _selectedMonth.month + 1,
+                              1,
+                            );
+                            _activeBookingId = null;
+                          });
+                        },
+                      ),
+                      const Spacer(),
+                      FilterChip(
+                        selected: _filterByMonth,
+                        label: const Text('Filter by Month'),
+                        onSelected: (val) {
+                          setState(() {
+                            _filterByMonth = val;
+                            _activeBookingId = null;
+                          });
+                        },
+                        selectedColor: crmColors.primary.withValues(alpha: 0.15),
+                        checkmarkColor: crmColors.primary,
+                        labelStyle: TextStyle(
+                          color: _filterByMonth ? crmColors.primary : crmColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             16.h,
 
             // Body Area
@@ -303,51 +612,133 @@ class _FleetAssignmentsScreenState
                     final isAssigned =
                         booking.driverId.isNotEmpty && booking.vehicleId.isNotEmpty;
 
-                    return Card(
-                      child: ListTile(
-                        title: Text(
-                          '${booking.customerName} • #${booking.bookingNumber}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(
-                          '${booking.service}\n'
-                          'Date: ${_formatDate(booking.serviceStart)}\n'
-                          'Transport: ${isAssigned ? "${booking.driverName} • ${booking.travelMode}" : "Unassigned"}',
-                        ),
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: isAssigned ? crmColors.success : crmColors.warning,
-                        ),
-                        onTap: () {
-                          _loadBookingDetails(booking);
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Assign Transport'),
-                              content: SingleChildScrollView(
-                                child: _buildAssignmentForm(
-                                    ctx, booking, drivers, vehicles),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancel'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: _saving
-                                      ? null
-                                      : () async {
-                                          await _saveAssignment(booking);
-                                          if (ctx.mounted) Navigator.pop(ctx);
-                                        },
-                                  child: const Text('Save'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+                    return _buildBookingCard(
+                      context: context,
+                      booking: booking,
+                      isActive: false,
+                      isAssigned: isAssigned,
+                      crmColors: crmColors,
+                      onTap: () {
+                        _loadBookingDetails(booking);
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          useSafeArea: true,
+                          builder: (ctx) {
+                            return DraggableScrollableSheet(
+                              initialChildSize: 0.78,
+                              maxChildSize: 0.95,
+                              minChildSize: 0.50,
+                              expand: false,
+                              builder: (sheetCtx, scrollController) {
+                                return Container(
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).scaffoldBackgroundColor,
+                                    borderRadius: const BorderRadius.vertical(
+                                      top: Radius.circular(24),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      // Drag handle
+                                      Center(
+                                        child: Container(
+                                          margin: const EdgeInsets.only(top: 12, bottom: 4),
+                                          width: 36,
+                                          height: 4,
+                                          decoration: BoxDecoration(
+                                            color: crmColors.border,
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                        ),
+                                      ),
+                                      // Sheet header
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Assign Transport',
+                                                    style: Theme.of(context)
+                                                        .textTheme
+                                                        .titleMedium
+                                                        ?.copyWith(
+                                                            fontWeight: FontWeight.bold),
+                                                  ),
+                                                  Text(
+                                                    booking.customerName,
+                                                    style: TextStyle(
+                                                      fontSize: 13,
+                                                      color: crmColors.primary,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              onPressed: () => Navigator.pop(ctx),
+                                              icon: const Icon(Icons.close),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Divider(height: 1, color: crmColors.border),
+                                      // Scrollable form
+                                      Expanded(
+                                        child: SingleChildScrollView(
+                                          controller: scrollController,
+                                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                                          child: _buildAssignmentForm(
+                                              context, booking, drivers, vehicles),
+                                        ),
+                                      ),
+                                      // Save button
+                                      Padding(
+                                        padding: EdgeInsets.fromLTRB(
+                                          20,
+                                          8,
+                                          20,
+                                          MediaQuery.of(ctx).viewInsets.bottom + 20,
+                                        ),
+                                        child: SizedBox(
+                                          width: double.infinity,
+                                          height: 48,
+                                          child: ElevatedButton(
+                                            onPressed: _saving
+                                                ? null
+                                                : () async {
+                                                    await _saveAssignment(booking);
+                                                    if (ctx.mounted) Navigator.pop(ctx);
+                                                  },
+                                            child: _saving
+                                                ? const SizedBox(
+                                                    width: 20,
+                                                    height: 20,
+                                                    child: CircularProgressIndicator(
+                                                      strokeWidth: 2.5,
+                                                      color: Colors.white,
+                                                    ),
+                                                  )
+                                                : const Text('Save Transport Allocation'),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        );
+                      },
                     );
                   },
                 ),
@@ -357,121 +748,43 @@ class _FleetAssignmentsScreenState
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Left list panel
+                    // Left list panel - Responsive Grid of Cards
                     Expanded(
                       flex: 4,
-                      child: Card(
-                        child: ListView.separated(
-                          itemCount: filteredBookings.length,
-                          separatorBuilder: (context, index) =>
-                              Divider(height: 1, color: crmColors.border),
-                          itemBuilder: (context, index) {
-                            final booking = filteredBookings[index];
-                            final isActive = booking.id == activeBooking?.id;
-                            final isAssigned = booking.driverId.isNotEmpty &&
-                                booking.vehicleId.isNotEmpty;
-
-                            return InkWell(
-                              onTap: () {
-                                setState(() {
-                                  _activeBookingId = booking.id;
-                                  _loadBookingDetails(booking);
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isActive
-                                      ? crmColors.secondary.withValues(alpha: 0.15)
-                                      : Colors.transparent,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            booking.customerName,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          4.h,
-                                          Text(
-                                            '#${booking.bookingNumber} • ${booking.service}',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: crmColors.textSecondary,
-                                            ),
-                                          ),
-                                          6.h,
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.location_on_outlined,
-                                                size: 12,
-                                                color: crmColors.textSecondary,
-                                              ),
-                                              4.w,
-                                              Text(
-                                                booking.district,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: crmColors.textSecondary,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          _formatDate(booking.serviceStart),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        8.h,
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isAssigned
-                                                ? crmColors.success
-                                                    .withValues(alpha: 0.12)
-                                                : crmColors.warning
-                                                    .withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            isAssigned ? 'Assigned' : 'Pending',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: isAssigned
-                                                  ? crmColors.success
-                                                  : crmColors.warning,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final crossAxisCount = constraints.maxWidth > 520 ? 2 : 1;
+                          
+                          return GridView.builder(
+                            itemCount: filteredBookings.length,
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: crossAxisCount,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                              childAspectRatio: crossAxisCount == 2 ? 1.25 : 2.5,
+                            ),
+                            itemBuilder: (context, index) {
+                              final booking = filteredBookings[index];
+                              final isActive = booking.id == activeBooking?.id;
+                              final isAssigned = booking.driverId.isNotEmpty &&
+                                  booking.vehicleId.isNotEmpty;
+                              
+                              return _buildBookingCard(
+                                context: context,
+                                booking: booking,
+                                isActive: isActive,
+                                isAssigned: isAssigned,
+                                crmColors: crmColors,
+                                onTap: () {
+                                  setState(() {
+                                    _activeBookingId = booking.id;
+                                    _loadBookingDetails(booking);
+                                  });
+                                },
+                              );
+                            },
+                          );
+                        },
                       ),
                     ),
                     16.w,
@@ -863,8 +1176,7 @@ class _FleetAssignmentsScreenState
       ],
     );
   }
-
-  String _formatDate(DateTime date) {
+  String _formatDateShort(DateTime date) {
     const months = [
       'Jan',
       'Feb',
@@ -879,6 +1191,258 @@ class _FleetAssignmentsScreenState
       'Nov',
       'Dec',
     ];
-    return '${date.day} ${months[date.month - 1]} ${date.year}';
+    return months[date.month - 1];
+  }
+
+  String _formatMonthYear(DateTime date) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  Widget _buildBookingCard({
+    required BuildContext context,
+    required Booking booking,
+    required bool isActive,
+    required bool isAssigned,
+    required CrmTheme crmColors,
+    required VoidCallback onTap,
+  }) {
+    final accentColor = isAssigned ? crmColors.success : crmColors.warning;
+
+    return Card(
+      elevation: isActive ? 4 : 0,
+      shadowColor: isActive ? crmColors.primary.withValues(alpha: 0.20) : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isActive ? crmColors.primary : crmColors.border,
+          width: isActive ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // ── Left accent strip ────────────────────────────────────
+              Container(width: 4, color: accentColor),
+
+              // ── Card content ─────────────────────────────────────────
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+
+                      // ── Top row: date badge + info + status ──────────
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Date badge (day large, month below)
+                          Container(
+                            width: 46,
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? crmColors.primary
+                                  : crmColors.primary.withValues(alpha: 0.09),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  booking.serviceStart.day.toString(),
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: isActive
+                                        ? Colors.white
+                                        : crmColors.primary,
+                                    height: 1.0,
+                                  ),
+                                ),
+                                3.h,
+                                Text(
+                                  _formatDateShort(booking.serviceStart),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.3,
+                                    color: isActive
+                                        ? Colors.white.withValues(alpha: 0.80)
+                                        : crmColors.primary
+                                            .withValues(alpha: 0.65),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          12.w,
+
+                          // Customer name + booking ref + service
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  booking.customerName,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                4.h,
+                                Text(
+                                  '#${booking.bookingNumber}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: crmColors.textSecondary,
+                                  ),
+                                ),
+                                if (booking.service.isNotEmpty) ...[
+                                  2.h,
+                                  Text(
+                                    booking.service,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: crmColors.textSecondary
+                                          .withValues(alpha: 0.75),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          6.w,
+
+                          // Status badge — pill with border
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: accentColor.withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: accentColor.withValues(alpha: 0.30),
+                              ),
+                            ),
+                            child: Text(
+                              isAssigned ? 'Assigned' : 'Pending',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: accentColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      10.h,
+
+                      // ── Location row ─────────────────────────────────
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: crmColors.textSecondary,
+                          ),
+                          4.w,
+                          Expanded(
+                            child: Text(
+                              booking.district.isNotEmpty
+                                  ? booking.district
+                                  : 'Location not specified',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: crmColors.textSecondary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      8.h,
+
+                      // ── Transport footer banner ───────────────────────
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.07),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: accentColor.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isAssigned
+                                  ? Icons.local_shipping_outlined
+                                  : Icons.warning_amber_rounded,
+                              size: 13,
+                              color: accentColor,
+                            ),
+                            6.w,
+                            Expanded(
+                              child: Text(
+                                isAssigned
+                                    ? '${booking.driverName} • ${booking.travelMode}'
+                                    : 'Tap to assign transport',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: accentColor,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (!isAssigned) ...[
+                              4.w,
+                              Icon(Icons.chevron_right,
+                                  size: 14, color: accentColor),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

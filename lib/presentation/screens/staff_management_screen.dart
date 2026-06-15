@@ -371,27 +371,27 @@ class StaffManagementScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Artists & Staff',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        if (!isMobile) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Artists & Staff',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Manage artists, assistants, and their service regions.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
+                    Text(
+                      'Manage artists, assistants, and their service regions.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (!isMobile)
               Row(
                 children: [
                   ElevatedButton.icon(
@@ -401,8 +401,10 @@ class StaffManagementScreen extends HookConsumerWidget {
                   ),
                 ],
               ),
-          ],
-        ),
+            ],
+          ),
+          24.h,
+        ],
         if (isMobile) ...[
           16.h,
           Row(
@@ -417,7 +419,6 @@ class StaffManagementScreen extends HookConsumerWidget {
             ],
           ),
         ],
-        24.h,
 
         // Search and Filter Bar
         Card(

@@ -91,27 +91,27 @@ class ServicesManagementScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Package Management',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        if (!isMobile) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Package Management',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Manage packages, base pricing, advances, and district overrides.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
+                    Text(
+                      'Manage packages, base pricing, advances, and district overrides.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (!isMobile)
               Row(
                 children: [
                   OutlinedButton.icon(
@@ -136,8 +136,10 @@ class ServicesManagementScreen extends HookConsumerWidget {
                   ),
                 ],
               ),
-          ],
-        ),
+            ],
+          ),
+          20.h,
+        ],
         if (isMobile) ...[
           16.h,
           Row(
@@ -171,7 +173,6 @@ class ServicesManagementScreen extends HookConsumerWidget {
             ],
           ),
         ],
-        20.h,
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(

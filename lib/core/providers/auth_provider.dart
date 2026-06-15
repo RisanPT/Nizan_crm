@@ -137,7 +137,6 @@ class AuthController extends ChangeNotifier {
           .login(email: email, password: password);
 
       _session = session;
-      _ref.invalidate(currentEmployeeProvider);
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(_sessionKey, session.toStorageValue());
     } catch (error) {
@@ -152,7 +151,6 @@ class AuthController extends ChangeNotifier {
   Future<void> logout() async {
     _session = null;
     _errorMessage = null;
-    _ref.invalidate(currentEmployeeProvider);
     await _clearPersistedSession();
     notifyListeners();
   }

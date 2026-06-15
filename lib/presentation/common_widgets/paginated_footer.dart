@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/responsive_builder.dart';
 
 class PaginatedFooter extends StatelessWidget {
   final int page;
@@ -26,9 +27,71 @@ class PaginatedFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
     final startItem = totalItems == 0 ? 0 : ((page - 1) * limit) + 1;
     final endItem = totalItems == 0 ? 0 : startItem + currentItemCount - 1;
 
+    if (isMobile) {
+      // ── Mobile: two-row compact layout ──────────────────────────────────
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: crmColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: crmColors.border),
+        ),
+        child: Row(
+          children: [
+            // Info column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Page $page of $totalPages',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: crmColors.textPrimary,
+                    ),
+                  ),
+                  2.h,
+                  Text(
+                    'Showing $startItem–$endItem of $totalItems',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: crmColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Compact icon buttons
+            IconButton.outlined(
+              onPressed: onPrevious,
+              icon: const Icon(Icons.chevron_left, size: 20),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+            8.w,
+            IconButton.filled(
+              onPressed: onNext,
+              icon: const Icon(Icons.chevron_right, size: 20),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(36, 36),
+                padding: EdgeInsets.zero,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ── Desktop: single-row layout ───────────────────────────────────────
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
@@ -40,7 +103,7 @@ class PaginatedFooter extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Showing $startItem-$endItem of $totalItems',
+              'Showing $startItem–$endItem of $totalItems',
               style: TextStyle(
                 color: crmColors.textSecondary,
                 fontWeight: FontWeight.w600,

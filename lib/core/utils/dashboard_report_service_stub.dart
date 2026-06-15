@@ -4,6 +4,7 @@ import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
 import '../models/district.dart';
+import '../models/crm_user.dart';
 
 Future<void> downloadDashboardReport({
   required DateTime month,
@@ -27,6 +28,7 @@ Future<void> downloadLeadsReport({
   String statusFilter = 'All',
   String sourceFilter = 'All',
   String searchQuery = '',
+  List<CrmUser> users = const [],
 }) async {
   throw UnsupportedError('Leads PDF export is only available on web.');
 }

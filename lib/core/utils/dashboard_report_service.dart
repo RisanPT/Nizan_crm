@@ -4,6 +4,7 @@ import '../models/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
 import '../models/district.dart';
+import '../models/crm_user.dart';
 import 'dashboard_report_service_stub.dart'
     if (dart.library.io) 'dashboard_report_service_mobile.dart'
     if (dart.library.html) 'dashboard_report_service_web.dart' as impl;
@@ -43,11 +44,13 @@ Future<void> downloadLeadsReport({
   String statusFilter = 'All',
   String sourceFilter = 'All',
   String searchQuery = '',
+  List<CrmUser> users = const [],
 }) {
   return impl.downloadLeadsReport(
     leads: leads,
     statusFilter: statusFilter,
     sourceFilter: sourceFilter,
     searchQuery: searchQuery,
+    users: users,
   );
 }

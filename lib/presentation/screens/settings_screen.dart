@@ -424,6 +424,45 @@ class SettingsScreen extends HookConsumerWidget {
       );
     }
 
+    Future<void> deleteUser(CrmUser user) async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete User'),
+          content: Text('Are you sure you want to delete ${user.name}? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: crmColors.destructive,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        try {
+          await ref.read(userServiceProvider).deleteUser(user.id);
+          ref.invalidate(crmUsersProvider);
+          ref.invalidate(paginatedCrmUsersProvider);
+          if (context.mounted) {
+            _showMessage(context, 'User deleted successfully');
+          }
+        } catch (e) {
+          if (context.mounted) {
+            _showMessage(context, 'Failed to delete user: $e');
+          }
+        }
+      }
+    }
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -486,7 +525,9 @@ class SettingsScreen extends HookConsumerWidget {
                       ...users.map((user) => _MobileUserCard(
                             user: user,
                             currentUserId: session?.userId ?? '',
+                            showDelete: session?.role == 'admin' && user.id != session?.userId,
                             onEdit: () => openUserDialog(user),
+                            onDelete: () => deleteUser(user),
                           )),
                       16.h,
                       PaginatedFooter(
@@ -538,7 +579,9 @@ class SettingsScreen extends HookConsumerWidget {
                       (user) => _DesktopUserRow(
                         user: user,
                         currentUserId: session?.userId ?? '',
+                        showDelete: session?.role == 'admin' && user.id != session?.userId,
                         onEdit: () => openUserDialog(user),
+                        onDelete: () => deleteUser(user),
                       ),
                     ),
                     16.h,
@@ -656,12 +699,16 @@ class _DesktopUserRow extends StatelessWidget {
   const _DesktopUserRow({
     required this.user,
     required this.currentUserId,
+    required this.showDelete,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final CrmUser user;
   final String currentUserId;
+  final bool showDelete;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -722,12 +769,19 @@ class _DesktopUserRow extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Wrap(
                 spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   if (user.id == currentUserId) const Chip(label: Text('You')),
                   OutlinedButton(
                     onPressed: onEdit,
                     child: const Text('Edit'),
                   ),
+                  if (showDelete)
+                    IconButton(
+                      icon: Icon(Icons.delete_outline, color: context.crmColors.destructive),
+                      tooltip: 'Delete User',
+                      onPressed: onDelete,
+                    ),
                 ],
               ),
             ),
@@ -742,12 +796,16 @@ class _MobileUserCard extends StatelessWidget {
   const _MobileUserCard({
     required this.user,
     required this.currentUserId,
+    required this.showDelete,
     required this.onEdit,
+    required this.onDelete,
   });
 
   final CrmUser user;
   final String currentUserId;
+  final bool showDelete;
   final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -783,6 +841,13 @@ class _MobileUserCard extends StatelessWidget {
             children: [
               if (user.id == currentUserId) const Chip(label: Text('You')),
               const Spacer(),
+              if (showDelete) ...[
+                IconButton(
+                  icon: Icon(Icons.delete_outline, color: crmColors.destructive),
+                  onPressed: onDelete,
+                ),
+                const SizedBox(width: 8),
+              ],
               OutlinedButton(
                 onPressed: onEdit,
                 child: const Text('Edit'),

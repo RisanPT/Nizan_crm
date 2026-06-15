@@ -134,6 +134,14 @@ class UserService {
     }
   }
 
+  Future<void> deleteUser(String id) async {
+    try {
+      await _dio.delete('/auth/users/$id');
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to delete user'));
+    }
+  }
+
   String _message(DioException e, String fallback) {
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {

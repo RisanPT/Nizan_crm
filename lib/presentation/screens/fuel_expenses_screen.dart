@@ -26,19 +26,9 @@ class FuelExpensesScreen extends HookConsumerWidget {
   ];
 
   String _formatDate(DateTime value) {
-    final months = const [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${value.day.toString().padLeft(2, '0')} ${months[value.month - 1]} ${value.year}';
   }
@@ -54,6 +44,39 @@ class FuelExpensesScreen extends HookConsumerWidget {
           orElse: () => ('other', 'Other'),
         )
         .$2;
+  }
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'fuel':
+        return Icons.local_gas_station_outlined;
+      case 'food':
+        return Icons.restaurant_outlined;
+      case 'toll':
+        return Icons.toll_outlined;
+      case 'parking':
+        return Icons.local_parking_outlined;
+      case 'service':
+        return Icons.build_outlined;
+      default:
+        return Icons.receipt_long_outlined;
+    }
+  }
+
+  Color _categoryColor(String category, CrmTheme colors) {
+    switch (category) {
+      case 'fuel':
+        return colors.primary;
+      case 'food':
+        return colors.warning;
+      case 'toll':
+      case 'parking':
+        return colors.accent;
+      case 'service':
+        return colors.success;
+      default:
+        return colors.textSecondary;
+    }
   }
 
   @override
@@ -162,9 +185,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
-                        initialValue: hasSelectedVehicle
-                            ? selectedVehicleId
-                            : null,
+                        initialValue:
+                            hasSelectedVehicle ? selectedVehicleId : null,
                         items: vehicleOptions,
                         onChanged: (value) {
                           if (value != null) {
@@ -232,8 +254,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                 controller: litersCtrl,
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
+                                  decimal: true,
+                                ),
                                 decoration: const InputDecoration(
                                   labelText: 'Liters',
                                 ),
@@ -250,8 +272,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                               controller: amountCtrl,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
+                                decimal: true,
+                              ),
                               decoration: const InputDecoration(
                                 labelText: 'Total Amount',
                               ),
@@ -355,42 +377,74 @@ class FuelExpensesScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fleet Expenses',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        // ── Desktop header ──────────────────────────────────────────────
+        if (!isMobile) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fleet Expenses',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Track fuel, food, toll, parking, service, and other vehicle-related expenses.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
+                    Text(
+                      'Track fuel, food, toll, parking, service, and other vehicle-related expenses.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (!isMobile)
               ElevatedButton.icon(
                 onPressed: () => openExpenseDialog(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Expense'),
               ),
-          ],
-        ),
-        if (isMobile) ...[
-          16.h,
-          ElevatedButton.icon(
-            onPressed: () => openExpenseDialog(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Expense'),
+            ],
           ),
+          24.h,
         ],
-        24.h,
+
+        // ── Mobile header ───────────────────────────────────────────────
+        if (isMobile)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                asyncExpenses.maybeWhen(
+                  data: (r) {
+                    final count = r.totalItems;
+                    return Text(
+                      '$count expense${count == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: crmColors.textSecondary,
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () => openExpenseDialog(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Expense',
+                      style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── List ────────────────────────────────────────────────────────
         Expanded(
           child: asyncExpenses.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -404,13 +458,301 @@ class FuelExpensesScreen extends HookConsumerWidget {
               final expenses = response.items;
               if (expenses.isEmpty) {
                 return Center(
-                  child: Text(
-                    'No expenses found.',
-                    style: TextStyle(color: crmColors.textSecondary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.receipt_long_outlined,
+                        size: 56,
+                        color: crmColors.textSecondary.withValues(alpha: 0.4),
+                      ),
+                      16.h,
+                      Text(
+                        'No expenses yet',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      6.h,
+                      Text(
+                        'Tap "Add Expense" to log your first entry.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: crmColors.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
 
+              if (isMobile) {
+                // ── Mobile: premium expense cards ──────────────────────
+                return ListView.separated(
+                  itemCount: expenses.length,
+                  separatorBuilder: (_, __) => 10.h,
+                  itemBuilder: (context, index) {
+                    final exp = expenses[index];
+                    final catColor = _categoryColor(exp.category, crmColors);
+                    final catIcon = _categoryIcon(exp.category);
+
+                    return Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: crmColors.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => openExpenseDialog(exp),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Left accent
+                              Container(width: 4, color: catColor),
+                              // Content
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      12, 12, 8, 12),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Category icon badge
+                                      Container(
+                                        width: 42,
+                                        height: 42,
+                                        decoration: BoxDecoration(
+                                          color: catColor.withValues(alpha: 0.10),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          catIcon,
+                                          color: catColor,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      12.w,
+                                      // Info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Amount + category
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  _formatCurrency(
+                                                      exp.totalAmount),
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15,
+                                                  ),
+                                                ),
+                                                const Spacer(),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 7,
+                                                          vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: catColor
+                                                        .withValues(alpha: 0.10),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            5),
+                                                  ),
+                                                  child: Text(
+                                                    _categoryLabel(exp.category)
+                                                        .toUpperCase(),
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: catColor,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            4.h,
+                                            // Date + vehicle
+                                            Text(
+                                              exp.vehicle != null
+                                                  ? '${exp.vehicle!.name} • ${_formatDate(exp.date)}'
+                                                  : _formatDate(exp.date),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: crmColors.textSecondary,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            if (exp.liters > 0 ||
+                                                exp.station.isNotEmpty) ...[
+                                              6.h,
+                                              Row(
+                                                children: [
+                                                  if (exp.liters > 0) ...[
+                                                    Icon(
+                                                        Icons
+                                                            .local_gas_station_outlined,
+                                                        size: 11,
+                                                        color: crmColors
+                                                            .textSecondary),
+                                                    3.w,
+                                                    Text(
+                                                      '${exp.liters.toStringAsFixed(1)} L',
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: crmColors
+                                                              .textSecondary),
+                                                    ),
+                                                    8.w,
+                                                  ],
+                                                  if (exp.station
+                                                      .isNotEmpty) ...[
+                                                    Icon(Icons.store_outlined,
+                                                        size: 11,
+                                                        color: crmColors
+                                                            .textSecondary),
+                                                    3.w,
+                                                    Expanded(
+                                                      child: Text(
+                                                        exp.station,
+                                                        style: TextStyle(
+                                                            fontSize: 11,
+                                                            color: crmColors
+                                                                .textSecondary),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                            ],
+                                            6.h,
+                                            // Payment mode tag
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: crmColors.textSecondary
+                                                    .withValues(alpha: 0.08),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                exp.paymentMode.toUpperCase(),
+                                                style: TextStyle(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      crmColors.textSecondary,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      // Menu
+                                      PopupMenuButton<String>(
+                                        icon: Icon(Icons.more_vert,
+                                            size: 18,
+                                            color: crmColors.textSecondary),
+                                        onSelected: (val) async {
+                                          if (val == 'edit') {
+                                            openExpenseDialog(exp);
+                                          } else if (val == 'delete') {
+                                            final confirm =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text(
+                                                    'Delete Expense'),
+                                                content: const Text(
+                                                    'Delete this expense?'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, true),
+                                                    style:
+                                                        TextButton.styleFrom(
+                                                      foregroundColor:
+                                                          crmColors.destructive,
+                                                    ),
+                                                    child: const Text('Delete'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirm == true) {
+                                              await ref
+                                                  .read(
+                                                      fuelExpenseServiceProvider)
+                                                  .deleteFuelExpense(exp.id);
+                                              ref.invalidate(
+                                                  fuelExpensesProvider);
+                                              ref.invalidate(
+                                                  paginatedFuelExpensesProvider);
+                                            }
+                                          }
+                                        },
+                                        itemBuilder: (ctx) => [
+                                          const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Row(children: [
+                                              Icon(Icons.edit, size: 16),
+                                              SizedBox(width: 8),
+                                              Text('Edit'),
+                                            ]),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(children: [
+                                              Icon(Icons.delete,
+                                                  size: 16,
+                                                  color: crmColors.destructive),
+                                              const SizedBox(width: 8),
+                                              Text('Delete',
+                                                  style: TextStyle(
+                                                      color: crmColors
+                                                          .destructive)),
+                                            ]),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
+
+              // ── Desktop: Card with ListView ──────────────────────────
               return Card(
                 child: ListView.separated(
                   itemCount: expenses.length,
@@ -446,7 +788,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: crmColors.textSecondary.withValues(alpha: 0.12),
+                              color: crmColors.textSecondary
+                                  .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -469,22 +812,29 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                   context: context,
                                   builder: (ctx) => AlertDialog(
                                     title: const Text('Delete Expense'),
-                                    content: const Text('Are you sure you want to delete this expense?'),
+                                    content: const Text(
+                                        'Are you sure you want to delete this expense?'),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
                                         child: const Text('Cancel'),
                                       ),
                                       TextButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
-                                        style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor:
+                                                crmColors.destructive),
                                         child: const Text('Delete'),
                                       ),
                                     ],
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await ref.read(fuelExpenseServiceProvider).deleteFuelExpense(expense.id);
+                                  await ref
+                                      .read(fuelExpenseServiceProvider)
+                                      .deleteFuelExpense(expense.id);
                                   ref.invalidate(fuelExpensesProvider);
                                   ref.invalidate(paginatedFuelExpensesProvider);
                                 }
@@ -505,9 +855,13 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete, size: 16, color: crmColors.destructive),
+                                    Icon(Icons.delete,
+                                        size: 16,
+                                        color: crmColors.destructive),
                                     const SizedBox(width: 8),
-                                    Text('Delete', style: TextStyle(color: crmColors.destructive)),
+                                    Text('Delete',
+                                        style: TextStyle(
+                                            color: crmColors.destructive)),
                                   ],
                                 ),
                               ),

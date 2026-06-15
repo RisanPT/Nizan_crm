@@ -195,26 +195,26 @@ class FleetDriversScreen extends HookConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fleet Drivers',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        if (!isMobile) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fleet Drivers',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Manage driver records used across bookings and fleet vehicles.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
+                    Text(
+                      'Manage driver records used across bookings and fleet vehicles.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (!isMobile)
               Row(
                 children: [
                   OutlinedButton(
@@ -229,17 +229,46 @@ class FleetDriversScreen extends HookConsumerWidget {
                   ),
                 ],
               ),
-          ],
-        ),
+            ],
+          ),
+          24.h,
+        ],
         if (isMobile) ...[
-          16.h,
-          ElevatedButton.icon(
-            onPressed: () => openDriverDialog(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Driver'),
+          // Mobile inline header with count + action
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                asyncEmployees.maybeWhen(
+                  data: (employees) {
+                    final count = employees
+                        .where((e) => e.artistRole == 'driver')
+                        .length;
+                    return Text(
+                      '$count driver${count == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: crmColors.textSecondary,
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () => openDriverDialog(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Driver', style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
-        24.h,
         Expanded(
           child: asyncEmployees.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -271,16 +300,54 @@ class FleetDriversScreen extends HookConsumerWidget {
 
               if (drivers.isEmpty) {
                 return Center(
-                  child: Text(
-                    'No drivers found.',
-                    style: TextStyle(color: crmColors.textSecondary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.drive_eta_outlined,
+                        size: 56,
+                        color: crmColors.textSecondary.withValues(alpha: 0.4),
+                      ),
+                      16.h,
+                      Text(
+                        'No drivers yet',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      6.h,
+                      Text(
+                        'Tap "Add Driver" to get started.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: crmColors.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
 
+              if (isMobile) {
+                return ListView.separated(
+                  itemCount: drivers.length,
+                  separatorBuilder: (_, __) => 10.h,
+                  itemBuilder: (context, index) {
+                    return _buildDriverCard(
+                      context,
+                      ref,
+                      drivers[index],
+                      onEdit: () => openDriverDialog(drivers[index]),
+                    );
+                  },
+                );
+              }
+
               return GridView.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: isMobile ? 1 : 3,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
                   mainAxisExtent: 160,
@@ -503,7 +570,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                 ),
               ],
             ),
-            const Spacer(),
+            12.h,
             if (employee.regionName.isNotEmpty) ...[
               Row(
                 children: [

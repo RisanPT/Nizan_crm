@@ -268,45 +268,99 @@ class FleetVehiclesScreen extends HookConsumerWidget {
       );
     }
 
+    Color statusColor(String status, CrmTheme colors) {
+      switch (status) {
+        case 'active':
+          return colors.success;
+        case 'maintenance':
+          return colors.warning;
+        default:
+          return colors.textSecondary;
+      }
+    }
+
+    IconData vehicleIcon(String type) {
+      switch (type) {
+        case 'van':
+          return Icons.airport_shuttle_outlined;
+        case 'bike':
+          return Icons.two_wheeler_outlined;
+        default:
+          return Icons.directions_car_outlined;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Fleet Vehicles',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
+        // ── Desktop header ──────────────────────────────────────────────
+        if (!isMobile) ...[
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Fleet Vehicles',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Manage cars, bikes, vans, assigned drivers, and current status.',
-                    style: TextStyle(color: crmColors.textSecondary),
-                  ),
-                ],
+                    Text(
+                      'Manage cars, bikes, vans, assigned drivers, and current status.',
+                      style: TextStyle(color: crmColors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (!isMobile)
               ElevatedButton.icon(
                 onPressed: () => openVehicleDialog(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Vehicle'),
               ),
-          ],
-        ),
-        if (isMobile) ...[
-          16.h,
-          ElevatedButton.icon(
-            onPressed: () => openVehicleDialog(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Add Vehicle'),
+            ],
           ),
+          24.h,
         ],
-        24.h,
+
+        // ── Mobile header ───────────────────────────────────────────────
+        if (isMobile)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Row(
+              children: [
+                asyncVehicles.maybeWhen(
+                  data: (r) {
+                    final count = r.totalItems;
+                    return Text(
+                      '$count vehicle${count == 1 ? '' : 's'}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: crmColors.textSecondary,
+                      ),
+                    );
+                  },
+                  orElse: () => const SizedBox.shrink(),
+                ),
+                const Spacer(),
+                FilledButton.icon(
+                  onPressed: () => openVehicleDialog(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Vehicle',
+                      style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // ── List ────────────────────────────────────────────────────────
         Expanded(
           child: asyncVehicles.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -320,13 +374,257 @@ class FleetVehiclesScreen extends HookConsumerWidget {
               final vehicles = response.items;
               if (vehicles.isEmpty) {
                 return Center(
-                  child: Text(
-                    'No vehicles found.',
-                    style: TextStyle(color: crmColors.textSecondary),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.directions_car_outlined,
+                        size: 56,
+                        color: crmColors.textSecondary.withValues(alpha: 0.4),
+                      ),
+                      16.h,
+                      Text(
+                        'No vehicles yet',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      6.h,
+                      Text(
+                        'Tap "Add Vehicle" to get started.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: crmColors.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }
 
+              if (isMobile) {
+                // ── Mobile: premium card list ──────────────────────────
+                return ListView.separated(
+                  itemCount: vehicles.length,
+                  separatorBuilder: (_, __) => 10.h,
+                  itemBuilder: (context, index) {
+                    final v = vehicles[index];
+                    final isRented = v.ownershipType == 'rented';
+                    final accentColor = statusColor(v.status, crmColors);
+
+                    return Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: BorderSide(color: crmColors.border),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: InkWell(
+                        onTap: () => openVehicleDialog(v),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Left accent
+                              Container(width: 4, color: accentColor),
+                              // Content
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                      12, 12, 8, 12),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      // Vehicle icon badge
+                                      Container(
+                                        width: 42,
+                                        height: 42,
+                                        decoration: BoxDecoration(
+                                          color: crmColors.primary
+                                              .withValues(alpha: 0.09),
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          vehicleIcon(v.type),
+                                          color: crmColors.primary,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      12.w,
+                                      // Info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            // Name + reg
+                                            Text(
+                                              v.name,
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            3.h,
+                                            Text(
+                                              v.registrationNumber.isNotEmpty
+                                                  ? '${v.registrationNumber} • ${v.brand}'
+                                                  : v.brand,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: crmColors.textSecondary,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            8.h,
+                                            // Tags row
+                                            Wrap(
+                                              spacing: 6,
+                                              runSpacing: 4,
+                                              children: [
+                                                _tag(
+                                                  v.status.toUpperCase(),
+                                                  accentColor,
+                                                ),
+                                                _tag(
+                                                  isRented
+                                                      ? 'RENTED'
+                                                      : 'IN-HOUSE',
+                                                  isRented
+                                                      ? crmColors.warning
+                                                      : crmColors.primary,
+                                                ),
+                                                _tag(
+                                                  v.fuelType
+                                                      .toUpperCase(),
+                                                  crmColors.textSecondary,
+                                                ),
+                                              ],
+                                            ),
+                                            if (v.driver?.name.isNotEmpty ==
+                                                true) ...[
+                                              6.h,
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.person_outline,
+                                                    size: 11,
+                                                    color:
+                                                        crmColors.textSecondary,
+                                                  ),
+                                                  4.w,
+                                                  Expanded(
+                                                    child: Text(
+                                                      v.driver!.name,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: crmColors
+                                                            .textSecondary,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                      // Menu
+                                      PopupMenuButton<String>(
+                                        icon: Icon(Icons.more_vert,
+                                            size: 18,
+                                            color: crmColors.textSecondary),
+                                        onSelected: (val) async {
+                                          if (val == 'edit') {
+                                            openVehicleDialog(v);
+                                          } else if (val == 'delete') {
+                                            final confirm =
+                                                await showDialog<bool>(
+                                              context: context,
+                                              builder: (ctx) => AlertDialog(
+                                                title: const Text(
+                                                    'Delete Vehicle'),
+                                                content: Text(
+                                                    'Delete ${v.name}?'),
+                                                actions: [
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, false),
+                                                    child: const Text('Cancel'),
+                                                  ),
+                                                  TextButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, true),
+                                                    style:
+                                                        TextButton.styleFrom(
+                                                      foregroundColor:
+                                                          crmColors.destructive,
+                                                    ),
+                                                    child: const Text('Delete'),
+                                                  ),
+                                                ],
+                                              ),
+                                            );
+                                            if (confirm == true) {
+                                              await ref
+                                                  .read(vehicleServiceProvider)
+                                                  .deleteVehicle(v.id);
+                                              ref.invalidate(vehiclesProvider);
+                                              ref.invalidate(
+                                                  paginatedVehiclesProvider);
+                                            }
+                                          }
+                                        },
+                                        itemBuilder: (ctx) => [
+                                          const PopupMenuItem(
+                                            value: 'edit',
+                                            child: Row(children: [
+                                              Icon(Icons.edit, size: 16),
+                                              SizedBox(width: 8),
+                                              Text('Edit'),
+                                            ]),
+                                          ),
+                                          PopupMenuItem(
+                                            value: 'delete',
+                                            child: Row(children: [
+                                              Icon(Icons.delete,
+                                                  size: 16,
+                                                  color: crmColors.destructive),
+                                              const SizedBox(width: 8),
+                                              Text('Delete',
+                                                  style: TextStyle(
+                                                      color: crmColors
+                                                          .destructive)),
+                                            ]),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }
+
+              // ── Desktop: Card with ListView ──────────────────────────
               return Card(
                 child: ListView.separated(
                   itemCount: vehicles.length,
@@ -337,13 +635,16 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                     return ListTile(
                       title: Text(
                         '${vehicle.name} • ${vehicle.registrationNumber}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                        style:
+                            const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
                         [
                           vehicle.brand,
                           vehicle.type.toUpperCase(),
-                          vehicle.ownershipType == 'rented' ? 'RENTED' : 'IN-HOUSE',
+                          vehicle.ownershipType == 'rented'
+                              ? 'RENTED'
+                              : 'IN-HOUSE',
                           vehicle.driver?.name.isNotEmpty == true
                               ? 'Driver: ${vehicle.driver!.name}'
                               : 'Unassigned',
@@ -360,7 +661,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                             decoration: BoxDecoration(
                               color: vehicle.status == 'active'
                                   ? crmColors.success.withValues(alpha: 0.12)
-                                  : crmColors.textSecondary.withValues(alpha: 0.12),
+                                  : crmColors.textSecondary
+                                      .withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -385,22 +687,29 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                   context: context,
                                   builder: (ctx) => AlertDialog(
                                     title: const Text('Delete Vehicle'),
-                                    content: Text('Are you sure you want to delete ${vehicle.name}?'),
+                                    content: Text(
+                                        'Are you sure you want to delete ${vehicle.name}?'),
                                     actions: [
                                       TextButton(
-                                        onPressed: () => Navigator.pop(ctx, false),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
                                         child: const Text('Cancel'),
                                       ),
                                       TextButton(
-                                        onPressed: () => Navigator.pop(ctx, true),
-                                        style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        style: TextButton.styleFrom(
+                                            foregroundColor:
+                                                crmColors.destructive),
                                         child: const Text('Delete'),
                                       ),
                                     ],
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await ref.read(vehicleServiceProvider).deleteVehicle(vehicle.id);
+                                  await ref
+                                      .read(vehicleServiceProvider)
+                                      .deleteVehicle(vehicle.id);
                                   ref.invalidate(vehiclesProvider);
                                   ref.invalidate(paginatedVehiclesProvider);
                                 }
@@ -421,9 +730,13 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete, size: 16, color: crmColors.destructive),
+                                    Icon(Icons.delete,
+                                        size: 16,
+                                        color: crmColors.destructive),
                                     const SizedBox(width: 8),
-                                    Text('Delete', style: TextStyle(color: crmColors.destructive)),
+                                    Text('Delete',
+                                        style: TextStyle(
+                                            color: crmColors.destructive)),
                                   ],
                                 ),
                               ),
@@ -456,6 +769,24 @@ class FleetVehiclesScreen extends HookConsumerWidget {
           orElse: () => const SizedBox.shrink(),
         ),
       ],
+    );
+  }
+
+  Widget _tag(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: color,
+        ),
+      ),
     );
   }
 }

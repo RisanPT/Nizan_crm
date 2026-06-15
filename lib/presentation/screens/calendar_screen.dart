@@ -1121,28 +1121,28 @@ class CalendarScreen extends HookConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Page header ──────────────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Calendar Scheduler',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
+          if (!isMobile) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Calendar Scheduler',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Manage staff bookings and services.',
-                      style: TextStyle(color: crmColors.textSecondary),
-                    ),
-                  ],
+                      Text(
+                        'Manage staff bookings and services.',
+                        style: TextStyle(color: crmColors.textSecondary),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (!isArtist) ...[
-                if (!isMobile) ...[
+                if (!isArtist) ...[
                   OutlinedButton.icon(
                     onPressed: manageBlockedDates,
                     icon: const Icon(Icons.calendar_month_outlined, size: 18),
@@ -1161,21 +1161,27 @@ class CalendarScreen extends HookConsumerWidget {
                       foregroundColor: Colors.white,
                     ),
                   ),
-                ] else ...[
-                  IconButton(
-                    onPressed: manageBlockedDates,
-                    icon: Icon(Icons.calendar_today_outlined, color: crmColors.textPrimary),
-                    tooltip: 'Blocked Dates',
-                    style: IconButton.styleFrom(
-                      backgroundColor: crmColors.surface,
-                      side: BorderSide(color: crmColors.border),
-                    ),
-                  ),
                 ],
               ],
-            ],
-          ),
-          24.h,
+            ),
+            24.h,
+          ] else if (!isArtist) ...[
+            Row(
+              children: [
+                const Spacer(),
+                IconButton(
+                  onPressed: manageBlockedDates,
+                  icon: Icon(Icons.calendar_today_outlined, color: crmColors.textPrimary),
+                  tooltip: 'Blocked Dates',
+                  style: IconButton.styleFrom(
+                    backgroundColor: crmColors.surface,
+                    side: BorderSide(color: crmColors.border),
+                  ),
+                ),
+              ],
+            ),
+            12.h,
+          ],
           // ── Calendar card ─────────────────────────────────────────────--
           Expanded(
             child: Card(

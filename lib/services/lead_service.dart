@@ -51,4 +51,12 @@ class LeadService {
       throw Exception('Failed to delete lead: ${e.message}');
     }
   }
+
+  Future<void> bulkAssignLeads(String userId) async {
+    try {
+      await _dio.post('/leads/bulk-assign', data: {'userId': userId});
+    } on DioException catch (e) {
+      throw Exception('Failed to bulk assign leads: ${e.message}');
+    }
+  }
 }
