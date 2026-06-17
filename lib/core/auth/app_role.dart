@@ -46,7 +46,11 @@ enum AppRole {
   bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts || this == fleetManager;
 
   /// Booking requests + manage booking
-  bool get canSeeBookings => isFullAccess || this == crm || this == sales || this == accounts;
+  bool get canSeeBookings =>
+      isFullAccess ||
+      this == crm ||
+      this == sales ||
+      this == accounts;
 
   /// Services management (packages, regions, addons)
   bool get canSeeServices => isFullAccess;

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
-import '../../core/models/employee.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});

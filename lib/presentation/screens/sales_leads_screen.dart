@@ -13,7 +13,6 @@ import '../../core/models/lead.dart';
 import '../../providers/dio_provider.dart';
 import '../../services/user_service.dart';
 import '../../core/providers/auth_provider.dart';
-import '../../core/models/crm_user.dart';
 
 // ─────────────────────────────────────────────────────────
 //  Smart-paste parser

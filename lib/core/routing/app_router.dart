@@ -52,10 +52,13 @@ DateTime? _parseCalendarFocusDate(String? raw) {
   );
 }
 
-bool _isRouteAllowed(String path, AppRole role) {
+bool isRouteAllowed(String path, AppRole role) {
   if (path == '/' || path == '/auth/loading') return role.canSeeDashboard;
   if (path.startsWith('/client')) return role.canSeeClients;
   if (path.startsWith('/calendar')) return role.canSeeCalendar;
+  if (path.startsWith('/booking/manage')) {
+    return role.canSeeBookings || role == AppRole.fleetManager;
+  }
   if (path.startsWith('/booking')) return role.canSeeBookings;
   if (path.startsWith('/services')) return role.canSeeServices;
   if (path.startsWith('/staff')) return role.canSeeStaff;
@@ -94,7 +97,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       // Role-based route guards
       final role = AppRole.fromString(auth.session?.role);
-      if (!_isRouteAllowed(path, role)) {
+      if (!isRouteAllowed(path, role)) {
         return role.homeRoute;
       }
 
