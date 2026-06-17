@@ -463,72 +463,128 @@ class SettingsScreen extends HookConsumerWidget {
       }
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Settings & Access',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
+    return SelectionArea(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Settings & Access',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-          8.h,
-          Text(
-            'Manage who can log in to the CRM and sign out from this device.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: crmColors.textSecondary,
+            8.h,
+            Text(
+              'Manage who can log in to the CRM and sign out from this device.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: crmColors.textSecondary,
+              ),
             ),
-          ),
-          24.h,
-          _SettingsCard(
-            title: 'Session',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Signed in as ${session?.email ?? ''}',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                16.h,
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    await auth.logout();
-                  },
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Logout From This Device'),
-                ),
-              ],
+            24.h,
+            _SettingsCard(
+              title: 'Session',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Signed in as ${session?.email ?? ''}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  16.h,
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await auth.logout();
+                    },
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Logout From This Device'),
+                  ),
+                ],
+              ),
             ),
-          ),
-          24.h,
-          _SettingsCard(
-            title: 'CRM Users',
-            trailing: ElevatedButton.icon(
-              onPressed: () => openUserDialog(),
-              icon: const Icon(Icons.person_add_alt_1, size: 18),
-              label: const Text('Add User'),
-            ),
-            child: asyncUsers.when(
-              data: (response) {
-                final users = response.items;
-                if (users.isEmpty) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Text('No CRM users found yet.'),
-                  );
-                }
-
-                if (isMobile) {
+            24.h,
+            _SettingsCard(
+              title: 'CRM Users',
+              trailing: ElevatedButton.icon(
+                onPressed: () => openUserDialog(),
+                icon: const Icon(Icons.person_add_alt_1, size: 18),
+                label: const Text('Add User'),
+              ),
+              child: asyncUsers.when(
+                data: (response) {
+                  final users = response.items;
+                  if (users.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('No CRM users found yet.'),
+                    );
+                  }
+      
+                  if (isMobile) {
+                    return Column(
+                      children: [
+                        ...users.map((user) => _MobileUserCard(
+                              user: user,
+                              currentUserId: session?.userId ?? '',
+                              showDelete: session?.role == 'admin' && user.id != session?.userId,
+                              onEdit: () => openUserDialog(user),
+                              onDelete: () => deleteUser(user),
+                            )),
+                        16.h,
+                        PaginatedFooter(
+                          page: response.page,
+                          limit: response.limit,
+                          totalPages: response.totalPages,
+                          totalItems: response.totalItems,
+                          currentItemCount: response.items.length,
+                          onPrevious: response.page > 1
+                              ? () => pageState.value -= 1
+                              : null,
+                          onNext: response.page < response.totalPages
+                              ? () => pageState.value += 1
+                              : null,
+                        ),
+                      ],
+                    );
+                  }
+      
                   return Column(
                     children: [
-                      ...users.map((user) => _MobileUserCard(
-                            user: user,
-                            currentUserId: session?.userId ?? '',
-                            showDelete: session?.role == 'admin' && user.id != session?.userId,
-                            onEdit: () => openUserDialog(user),
-                            onDelete: () => deleteUser(user),
-                          )),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: _HeaderText('User'),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: _HeaderText('Role'),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: _HeaderText('Linked Employee'),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: _HeaderText('Status'),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: _HeaderText('Actions', alignEnd: true),
+                          ),
+                        ],
+                      ),
+                      12.h,
+                      const Divider(height: 1),
+                      ...users.map(
+                        (user) => _DesktopUserRow(
+                          user: user,
+                          currentUserId: session?.userId ?? '',
+                          showDelete: session?.role == 'admin' && user.id != session?.userId,
+                          onEdit: () => openUserDialog(user),
+                          onDelete: () => deleteUser(user),
+                        ),
+                      ),
                       16.h,
                       PaginatedFooter(
                         page: response.page,
@@ -545,76 +601,22 @@ class SettingsScreen extends HookConsumerWidget {
                       ),
                     ],
                   );
-                }
-
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: _HeaderText('User'),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _HeaderText('Role'),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _HeaderText('Linked Employee'),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _HeaderText('Status'),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: _HeaderText('Actions', alignEnd: true),
-                        ),
-                      ],
-                    ),
-                    12.h,
-                    const Divider(height: 1),
-                    ...users.map(
-                      (user) => _DesktopUserRow(
-                        user: user,
-                        currentUserId: session?.userId ?? '',
-                        showDelete: session?.role == 'admin' && user.id != session?.userId,
-                        onEdit: () => openUserDialog(user),
-                        onDelete: () => deleteUser(user),
-                      ),
-                    ),
-                    16.h,
-                    PaginatedFooter(
-                      page: response.page,
-                      limit: response.limit,
-                      totalPages: response.totalPages,
-                      totalItems: response.totalItems,
-                      currentItemCount: response.items.length,
-                      onPrevious: response.page > 1
-                          ? () => pageState.value -= 1
-                          : null,
-                      onNext: response.page < response.totalPages
-                          ? () => pageState.value += 1
-                          : null,
-                    ),
-                  ],
-                );
-              },
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Text(
-                  'Failed to load CRM users: $error',
-                  style: TextStyle(color: crmColors.destructive),
+                },
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text(
+                    'Failed to load CRM users: $error',
+                    style: TextStyle(color: crmColors.destructive),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

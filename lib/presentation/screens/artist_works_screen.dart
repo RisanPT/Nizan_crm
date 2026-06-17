@@ -668,6 +668,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
     final selectedDistrictId = useState<String?>(null);
     final onlyWithMapLink = useState<bool>(false);
     final searchQuery = useState<String>('');
+    final selectedMonth = useState<DateTime>(DateTime(DateTime.now().year, DateTime.now().month, 1));
 
     return Scaffold(
       appBar: AppBar(
@@ -711,8 +712,12 @@ class ArtistWorksScreen extends HookConsumerWidget {
       ),
       backgroundColor: context.crmColors.background,
       body: SelectionArea(
-        child: asyncBookings.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+        child: Column(
+          children: [
+            _buildMonthSelectorHeader(context, selectedMonth),
+            Expanded(
+              child: asyncBookings.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => _ErrorView(
             error: error.toString(),
             onRetry: () => ref.invalidate(bookingProvider),
@@ -723,8 +728,10 @@ class ArtistWorksScreen extends HookConsumerWidget {
               if (!isAssigned) return false;
 
               final dateOnly = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
+              if (dateOnly.year != selectedMonth.value.year || dateOnly.month != selectedMonth.value.month) return false;
+
               if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
-              if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
+              if (filterToDate.value != null && dateOnly.isAfter(dateOnly.add(const Duration(days: 0)))) return false;
 
               if (selectedDistrictId.value != null && b.districtId != selectedDistrictId.value) return false;
 
@@ -783,6 +790,9 @@ class ArtistWorksScreen extends HookConsumerWidget {
             );
           },
         ),
+      ),
+    ],
+  ),
       ),
     );
   }
@@ -3333,5 +3343,231 @@ class _PulsingDot extends HookWidget {
         ],
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Month Selection Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+Widget _buildMonthSelectorHeader(
+  BuildContext context,
+  ValueNotifier<DateTime> selectedMonth,
+) {
+  final theme = Theme.of(context);
+  final crmColors = context.crmColors;
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    decoration: BoxDecoration(
+      color: crmColors.surface,
+      border: Border(
+        bottom: BorderSide(color: crmColors.border),
+      ),
+    ),
+    child: Row(
+      children: [
+        IconButton(
+          onPressed: () {
+            selectedMonth.value = DateTime(
+              selectedMonth.value.year,
+              selectedMonth.value.month - 1,
+              1,
+            );
+          },
+          icon: const Icon(Icons.chevron_left_rounded),
+          color: crmColors.textPrimary,
+        ),
+        Expanded(
+          child: Center(
+            child: InkWell(
+              onTap: () => _openMonthPickerDialog(context, selectedMonth),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.calendar_month_outlined,
+                      size: 16,
+                      color: crmColors.primary,
+                    ),
+                    6.w,
+                    Text(
+                      _getMonthYearLabel(selectedMonth.value),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: crmColors.textPrimary,
+                      ),
+                    ),
+                    2.w,
+                    Icon(
+                      Icons.arrow_drop_down,
+                      size: 16,
+                      color: crmColors.textSecondary,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: () {
+            selectedMonth.value = DateTime(
+              selectedMonth.value.year,
+              selectedMonth.value.month + 1,
+              1,
+            );
+          },
+          icon: const Icon(Icons.chevron_right_rounded),
+          color: crmColors.textPrimary,
+        ),
+        12.w,
+        OutlinedButton(
+          onPressed: () {
+            selectedMonth.value = DateTime(
+              DateTime.now().year,
+              DateTime.now().month,
+              1,
+            );
+          },
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: const Text('Today', style: TextStyle(fontSize: 12)),
+        ),
+      ],
+    ),
+  );
+}
+
+String _getMonthYearLabel(DateTime date) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.year}';
+}
+
+Future<void> _openMonthPickerDialog(
+  BuildContext context,
+  ValueNotifier<DateTime> selectedMonth,
+) async {
+  final theme = Theme.of(context);
+  final crmColors = context.crmColors;
+
+  final pickedMonth = await showDialog<DateTime>(
+    context: context,
+    builder: (dialogContext) {
+      var selectedYear = selectedMonth.value.year;
+      const monthLabels = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+
+      return StatefulBuilder(
+        builder: (context, dialogSetState) {
+          return Dialog(
+            insetPadding: const EdgeInsets.all(20),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Jump To Month',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    16.h,
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () =>
+                              dialogSetState(() => selectedYear -= 1),
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              '$selectedYear',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () =>
+                              dialogSetState(() => selectedYear += 1),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                    16.h,
+                    GridView.builder(
+                      shrinkWrap: true,
+                      itemCount: monthLabels.length,
+                      physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 3,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 2.2,
+                      ),
+                      itemBuilder: (context, index) {
+                        final monthNumber = index + 1;
+                        final isActive =
+                            selectedYear == selectedMonth.value.year &&
+                            monthNumber == selectedMonth.value.month;
+                        return InkWell(
+                          onTap: () => Navigator.of(dialogContext).pop(
+                            DateTime(selectedYear, monthNumber, 1),
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isActive
+                                  ? crmColors.primary
+                                  : crmColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: Text(
+                              monthLabels[index],
+                              style: TextStyle(
+                                color: isActive
+                                    ? Colors.white
+                                    : crmColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+
+  if (pickedMonth != null) {
+    selectedMonth.value = pickedMonth;
   }
 }
