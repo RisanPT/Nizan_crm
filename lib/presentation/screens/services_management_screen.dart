@@ -235,7 +235,7 @@ class ServicesManagementScreen extends HookConsumerWidget {
                     // Zone Filter
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                        initialValue: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
                         decoration: const InputDecoration(labelText: 'Zone', isDense: true),
                         items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
                         onChanged: (val) {
@@ -250,7 +250,7 @@ class ServicesManagementScreen extends HookConsumerWidget {
                     // State Filter
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                        initialValue: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
                         decoration: const InputDecoration(labelText: 'State', isDense: true),
                         items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                         onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
@@ -264,7 +264,7 @@ class ServicesManagementScreen extends HookConsumerWidget {
                     // Region Filter
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                        initialValue: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
                         decoration: const InputDecoration(labelText: 'Region', isDense: true),
                         items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
                         onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
@@ -277,7 +277,7 @@ class ServicesManagementScreen extends HookConsumerWidget {
                     // District Filter
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                        initialValue: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
                         decoration: const InputDecoration(labelText: 'District', isDense: true),
                         items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
                         onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {

@@ -1211,7 +1211,7 @@ class AddBookingScreen extends HookConsumerWidget {
         if (isSubmitting.value)
           Positioned.fill(
             child: Container(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: 0.08),
               child: const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

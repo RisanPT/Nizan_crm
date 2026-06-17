@@ -104,7 +104,7 @@ class EmployeeService {
       final Map<String, dynamic> queryParams = {
         'page': page,
         'limit': limit,
-        if (category != null) 'category': category,
+        'category': ?category,
         if (search != null && search.isNotEmpty) 'search': search,
         if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,

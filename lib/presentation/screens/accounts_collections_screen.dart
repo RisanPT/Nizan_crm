@@ -1,6 +1,5 @@
 
 import 'dart:ui';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -980,7 +979,7 @@ class _CollectionImageViewerDialogState
                             child: CircularProgressIndicator(color: Colors.white),
                           );
                         },
-                        errorBuilder: (ctx, _, __) => const Center(
+                        errorBuilder: (ctx, _, _) => const Center(
                           child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
                         ),
                       ),

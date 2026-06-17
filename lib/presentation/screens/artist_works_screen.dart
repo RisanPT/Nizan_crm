@@ -12,6 +12,8 @@ import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
+import '../../services/district_service.dart';
+import '../../core/models/district.dart';
 
 // Opens a Google Maps URL in the default browser/maps app.
 Future<void> _openMapUrl(String url, BuildContext context) async {
@@ -370,82 +372,433 @@ String _fmtTime(DateTime d) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Main Screen
 // ─────────────────────────────────────────────────────────────────────────────
+BookingPageSummary _computeSummary(List<Booking> list) {
+  double totalSales = 0;
+  double totalAdvance = 0;
+  int completed = 0;
+  int cancelled = 0;
+  for (final b in list) {
+    totalSales += b.totalPrice;
+    totalAdvance += b.advanceAmount;
+    if (b.status.toLowerCase() == 'completed') completed++;
+    if (b.status.toLowerCase() == 'cancelled') cancelled++;
+  }
+  return BookingPageSummary(
+    totalSales: totalSales,
+    totalAdvance: totalAdvance,
+    completedCount: completed,
+    cancelledCount: cancelled,
+  );
+}
+
+void openFilterBottomSheet(
+  BuildContext context,
+  WidgetRef ref,
+  List<District> districts,
+  ValueNotifier<DateTime?> filterFromDate,
+  ValueNotifier<DateTime?> filterToDate,
+  ValueNotifier<String?> selectedDistrictId,
+  ValueNotifier<bool> onlyWithMapLink,
+  ValueNotifier<String> searchQuery,
+) {
+  final theme = Theme.of(context);
+  final crm = context.crmColors;
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        var tempFromDate = filterFromDate.value;
+        var tempToDate = filterToDate.value;
+        var tempDistrictId = selectedDistrictId.value;
+        var tempMapLink = onlyWithMapLink.value;
+        final searchCtrl = TextEditingController(text: searchQuery.value);
+
+        return Container(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          decoration: BoxDecoration(
+            color: theme.scaffoldBackgroundColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    24.h,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Filter Works',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    16.h,
+                    Text(
+                      'SEARCH LOCATION / CLIENT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: crm.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    8.h,
+                    TextFormField(
+                      controller: searchCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Search keyword',
+                        hintText: 'e.g. client name, address, etc.',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      style: TextStyle(fontSize: 13, color: crm.textPrimary),
+                    ),
+                    16.h,
+                    Text(
+                      'DISTRICT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: crm.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    8.h,
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Select District',
+                        prefixIcon: const Icon(Icons.map_outlined),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      value: tempDistrictId,
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: null,
+                          child: Text('All Districts'),
+                        ),
+                        ...districts.map(
+                          (d) => DropdownMenuItem<String>(
+                            value: d.id,
+                            child: Text(d.name),
+                          ),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        setState(() => tempDistrictId = val);
+                      },
+                    ),
+                    16.h,
+                    Text(
+                      'DATE RANGE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: crm.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    8.h,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: ctx,
+                                initialDate: tempFromDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                              );
+                              if (picked != null) {
+                                setState(() => tempFromDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'From Date',
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: Text(
+                                tempFromDate != null ? _fmt(tempFromDate!) : 'Select',
+                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
+                              ),
+                            ),
+                          ),
+                        ),
+                        12.w,
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: ctx,
+                                initialDate: tempToDate ?? DateTime.now(),
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                              );
+                              if (picked != null) {
+                                setState(() => tempToDate = picked);
+                              }
+                            },
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'To Date',
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              child: Text(
+                                tempToDate != null ? _fmt(tempToDate!) : 'Select',
+                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    16.h,
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Only with Google Map link', style: TextStyle(fontSize: 13, color: crm.textPrimary)),
+                      value: tempMapLink,
+                      activeColor: crm.primary,
+                      onChanged: (val) {
+                        setState(() => tempMapLink = val);
+                      },
+                    ),
+                    24.h,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              filterFromDate.value = null;
+                              filterToDate.value = null;
+                              selectedDistrictId.value = null;
+                              onlyWithMapLink.value = false;
+                              searchQuery.value = '';
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('✓ Filters Reset')),
+                              );
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('RESET'),
+                          ),
+                        ),
+                        12.w,
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              filterFromDate.value = tempFromDate;
+                              filterToDate.value = tempToDate;
+                              selectedDistrictId.value = tempDistrictId;
+                              onlyWithMapLink.value = tempMapLink;
+                              searchQuery.value = searchCtrl.text.trim();
+                              Navigator.pop(ctx);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('✓ Filters Applied')),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              backgroundColor: crm.primary,
+                            ),
+                            child: const Text('APPLY FILTERS'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
 class ArtistWorksScreen extends HookConsumerWidget {
   const ArtistWorksScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final pageState = useState(1);
-    final asyncWorks = ref.watch(artistAssignedWorksProvider(pageState.value));
+    final session = ref.watch(authSessionProvider);
+    final employeeId = session?.employeeId ?? '';
+
+    final asyncBookings = ref.watch(bookingProvider);
+    final asyncDistricts = ref.watch(districtsProvider);
+    final districts = asyncDistricts.value ?? [];
+
+    final tabController = useTabController(initialLength: 2);
+
+    final filterFromDate = useState<DateTime?>(null);
+    final filterToDate = useState<DateTime?>(null);
+    final selectedDistrictId = useState<String?>(null);
+    final onlyWithMapLink = useState<bool>(false);
+    final searchQuery = useState<String>('');
 
     return Scaffold(
-      backgroundColor: context.crmColors.background,
-      body: asyncWorks.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorView(
-          error: error.toString(),
-          onRetry: () => ref.invalidate(artistAssignedWorksProvider),
+      appBar: AppBar(
+        title: const Text('My Works', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: context.crmColors.surface,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.filter_list_rounded,
+              color: (filterFromDate.value != null ||
+                      filterToDate.value != null ||
+                      selectedDistrictId.value != null ||
+                      onlyWithMapLink.value ||
+                      searchQuery.value.isNotEmpty)
+                  ? context.crmColors.primary
+                  : context.crmColors.textSecondary,
+            ),
+            onPressed: () => openFilterBottomSheet(
+              context,
+              ref,
+              districts,
+              filterFromDate,
+              filterToDate,
+              selectedDistrictId,
+              onlyWithMapLink,
+              searchQuery,
+            ),
+          ),
+        ],
+        bottom: TabBar(
+          controller: tabController,
+          labelColor: context.crmColors.primary,
+          unselectedLabelColor: context.crmColors.textSecondary,
+          indicatorColor: context.crmColors.primary,
+          tabs: const [
+            Tab(text: 'UPCOMING WORKS'),
+            Tab(text: 'COMPLETED WORKS'),
+          ],
         ),
-        data: (response) {
-          final bookings = response.items;
-          if (bookings.isEmpty) return const _EmptyState();
+      ),
+      backgroundColor: context.crmColors.background,
+      body: SelectionArea(
+        child: asyncBookings.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => _ErrorView(
+            error: error.toString(),
+            onRetry: () => ref.invalidate(bookingProvider),
+          ),
+          data: (bookings) {
+            final filtered = bookings.where((b) {
+              final isAssigned = b.assignedStaff.any((s) => s.employeeId == employeeId);
+              if (!isAssigned) return false;
 
-          // Sort: upcoming first, then by date
-          final now = DateTime.now();
-          final sorted = [...bookings]
-            ..sort((a, b) {
-              final aFuture = a.bookingDate.isAfter(DateTime(now.year, now.month, now.day)) ||
-                  (a.bookingDate.year == now.year &&
-                   a.bookingDate.month == now.month &&
-                   a.bookingDate.day == now.day &&
-                   a.serviceStart.isAfter(now));
-              final bFuture = b.bookingDate.isAfter(DateTime(now.year, now.month, now.day)) ||
-                  (b.bookingDate.year == now.year &&
-                   b.bookingDate.month == now.month &&
-                   b.bookingDate.day == now.day &&
-                   b.serviceStart.isAfter(now));
-              if (aFuture && !bFuture) return -1;
-              if (!aFuture && bFuture) return 1;
-              return a.serviceStart.compareTo(b.serviceStart);
-            });
+              final dateOnly = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
+              if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
+              if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
 
-          return _BookingCardStack(
-            bookings: sorted,
-            summary: response.summary,
-            page: response.page,
-            totalPages: response.totalPages,
-            totalItems: response.totalItems,
-            onPrev: response.page > 1 ? () => pageState.value-- : null,
-            onNext: response.page < response.totalPages
-                ? () => pageState.value++
-                : null,
-          );
-        },
+              if (selectedDistrictId.value != null && b.districtId != selectedDistrictId.value) return false;
+
+              if (onlyWithMapLink.value && b.mapUrl.trim().isEmpty) return false;
+
+              if (searchQuery.value.isNotEmpty) {
+                final query = searchQuery.value.toLowerCase();
+                final match = b.customerName.toLowerCase().contains(query) ||
+                    b.service.toLowerCase().contains(query) ||
+                    b.address.toLowerCase().contains(query) ||
+                    b.region.toLowerCase().contains(query) ||
+                    b.district.toLowerCase().contains(query) ||
+                    b.bookingNumber.toLowerCase().contains(query);
+                if (!match) return false;
+              }
+
+              return true;
+            }).toList();
+
+            final upcomingList = filtered
+                .where((b) =>
+                    b.status.toLowerCase() != 'completed' &&
+                    b.status.toLowerCase() != 'cancelled' &&
+                    b.status.toLowerCase() != 'rejected')
+                .toList()
+              ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+
+            final completedList = filtered
+                .where((b) => b.status.toLowerCase() == 'completed')
+                .toList()
+              ..sort((a, b) => b.serviceStart.compareTo(a.serviceStart));
+
+            final upcomingSummary = _computeSummary(upcomingList);
+            final completedSummary = _computeSummary(completedList);
+
+            if (upcomingList.isEmpty && completedList.isEmpty && filtered.isEmpty) {
+              return const _EmptyState();
+            }
+
+            return TabBarView(
+              controller: tabController,
+              children: [
+                _BookingCardStack(
+                  bookings: upcomingList,
+                  summary: upcomingSummary,
+                  isCompletedTab: false,
+                  totalItems: upcomingList.length,
+                ),
+                _BookingCardStack(
+                  bookings: completedList,
+                  summary: completedSummary,
+                  isCompletedTab: true,
+                  totalItems: completedList.length,
+                ),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Card Stack View
-// ─────────────────────────────────────────────────────────────────────────────
 class _BookingCardStack extends HookWidget {
   final List<Booking> bookings;
   final BookingPageSummary summary;
-  final int page;
-  final int totalPages;
+  final bool isCompletedTab;
   final int totalItems;
-  final VoidCallback? onPrev;
-  final VoidCallback? onNext;
 
   const _BookingCardStack({
     required this.bookings,
     required this.summary,
-    required this.page,
-    required this.totalPages,
+    this.isCompletedTab = false,
     required this.totalItems,
-    required this.onPrev,
-    required this.onNext,
   });
 
   @override
@@ -454,7 +807,52 @@ class _BookingCardStack extends HookWidget {
     final expandedIndex = useState<int?>(null);
     final now = DateTime.now();
 
-    // Separate today, upcoming and past
+    if (isCompletedTab) {
+      return Column(
+        children: [
+          _SummaryStrip(summary: summary, total: totalItems),
+          Expanded(
+            child: ListView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              children: [
+                if (bookings.isEmpty)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: Text('No completed works found.'),
+                    ),
+                  )
+                else ...[
+                  _SectionLabel(
+                    label: "Completed Works",
+                    icon: Icons.task_alt_rounded,
+                    color: const Color(0xFF22C55E),
+                  ),
+                  8.h,
+                  ...bookings.asMap().entries.map(
+                    (e) => _AnimatedWorkCard(
+                      booking: e.value,
+                      index: e.key,
+                      isExpanded: expandedIndex.value == e.value.id.hashCode,
+                      onTap: () {
+                        expandedIndex.value =
+                            expandedIndex.value == e.value.id.hashCode
+                            ? null
+                            : e.value.id.hashCode;
+                      },
+                      isToday: false,
+                      isPast: true,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
     final todayBookings = bookings
         .where(
           (b) =>
@@ -483,16 +881,20 @@ class _BookingCardStack extends HookWidget {
 
     return Column(
       children: [
-        // ── Summary strip ────────────────────────────────
         _SummaryStrip(summary: summary, total: totalItems),
-
-        // ── Card list ────────────────────────────────────
         Expanded(
           child: ListView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
-              // TODAY
+              if (todayBookings.isEmpty && upcomingBookings.isEmpty && pastBookings.isEmpty)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Text('No upcoming works found.'),
+                  ),
+                ),
+
               if (todayBookings.isNotEmpty) ...[
                 _SectionLabel(
                   label: "Today's Work",
@@ -517,7 +919,6 @@ class _BookingCardStack extends HookWidget {
                 20.h,
               ],
 
-              // UPCOMING
               if (upcomingBookings.isNotEmpty) ...[
                 _SectionLabel(
                   label: 'Upcoming',
@@ -542,7 +943,6 @@ class _BookingCardStack extends HookWidget {
                 20.h,
               ],
 
-              // PAST
               if (pastBookings.isNotEmpty) ...[
                 _SectionLabel(
                   label: 'Past Works',
@@ -564,37 +964,6 @@ class _BookingCardStack extends HookWidget {
                     isToday: false,
                     isPast: true,
                   ),
-                ),
-              ],
-
-              // ── Pagination ─────────────────────────────
-              if (totalPages > 1) ...[
-                20.h,
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _PaginationButton(
-                      icon: Icons.chevron_left_rounded,
-                      enabled: onPrev != null,
-                      onTap: onPrev,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        'Page $page of $totalPages',
-                        style: TextStyle(
-                          color: crm.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    _PaginationButton(
-                      icon: Icons.chevron_right_rounded,
-                      enabled: onNext != null,
-                      onTap: onNext,
-                    ),
-                  ],
                 ),
               ],
             ],

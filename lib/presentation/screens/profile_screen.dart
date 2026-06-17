@@ -136,7 +136,7 @@ class ProfileScreen extends ConsumerWidget {
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
                               ),
-                              error: (_, __) => CircleAvatar(
+                              error: (_, _) => CircleAvatar(
                                 radius: 50,
                                 backgroundColor: crm.primary,
                                 child: Text(
@@ -194,7 +194,7 @@ class ProfileScreen extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                error: (_, __) => Text(
+                error: (_, _) => Text(
                   session?.name ?? 'CRM User',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
@@ -254,7 +254,7 @@ class ProfileScreen extends ConsumerWidget {
                       );
                     },
                     loading: () => const SizedBox.shrink(),
-                    error: (_, __) => const SizedBox.shrink(),
+                    error: (_, _) => const SizedBox.shrink(),
                   ),
                 ],
               ),
@@ -306,7 +306,7 @@ class ProfileScreen extends ConsumerWidget {
                     Expanded(child: _StatCardSkeleton(crm: crm)),
                   ],
                 ),
-                error: (_, __) => const Row(
+                error: (_, _) => const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
@@ -436,7 +436,7 @@ class ProfileScreen extends ConsumerWidget {
                     24.h,
                   ],
                 ),
-                error: (_, __) => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
               ),
 
               // Settings Card Group

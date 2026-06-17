@@ -422,7 +422,7 @@ class _DistrictsCard extends StatelessWidget {
             
             // 1. Zone Dropdown
             DropdownButtonFormField<String>(
-              value: selectedZoneId.value.isEmpty ? null : selectedZoneId.value,
+              initialValue: selectedZoneId.value.isEmpty ? null : selectedZoneId.value,
               decoration: _inputDeco('Select Zone', crmColors),
               items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
               onChanged: (val) {
@@ -436,7 +436,7 @@ class _DistrictsCard extends StatelessWidget {
 
             // 2. State Dropdown
             DropdownButtonFormField<String>(
-              value: selectedStateId.value.isEmpty ? null : selectedStateId.value,
+              initialValue: selectedStateId.value.isEmpty ? null : selectedStateId.value,
               decoration: _inputDeco('Select State', crmColors),
               items: availableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
               onChanged: selectedZoneId.value.isEmpty ? null : (val) {
@@ -449,7 +449,7 @@ class _DistrictsCard extends StatelessWidget {
 
             // 3. Region Dropdown
             DropdownButtonFormField<String>(
-              value: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
+              initialValue: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
               decoration: _inputDeco('Select Region', crmColors),
               items: availableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
               onChanged: selectedStateId.value.isEmpty ? null : (val) {
@@ -461,7 +461,7 @@ class _DistrictsCard extends StatelessWidget {
 
             // 4. District Dropdown
             DropdownButtonFormField<String>(
-              value: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
+              initialValue: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
               decoration: _inputDeco('Select District', crmColors),
               items: availableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
               onChanged: selectedRegionId.value.isEmpty ? null : (val) {

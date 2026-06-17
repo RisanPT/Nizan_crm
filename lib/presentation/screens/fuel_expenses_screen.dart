@@ -492,7 +492,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                 // ── Mobile: premium expense cards ──────────────────────
                 return ListView.separated(
                   itemCount: expenses.length,
-                  separatorBuilder: (_, __) => 10.h,
+                  separatorBuilder: (_, _) => 10.h,
                   itemBuilder: (context, index) {
                     final exp = expenses[index];
                     final catColor = _categoryColor(exp.category, crmColors);

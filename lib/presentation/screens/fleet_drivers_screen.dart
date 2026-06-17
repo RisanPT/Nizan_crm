@@ -333,7 +333,7 @@ class FleetDriversScreen extends HookConsumerWidget {
               if (isMobile) {
                 return ListView.separated(
                   itemCount: drivers.length,
-                  separatorBuilder: (_, __) => 10.h,
+                  separatorBuilder: (_, _) => 10.h,
                   itemBuilder: (context, index) {
                     return _buildDriverCard(
                       context,

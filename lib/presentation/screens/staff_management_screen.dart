@@ -166,7 +166,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       8.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: zoneId.isEmpty ? null : zoneId,
+                        initialValue: zoneId.isEmpty ? null : zoneId,
                         items: [
                           const DropdownMenuItem(value: null, child: Text('Select Zone')),
                           ...asyncZones.value?.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))) ?? [],
@@ -185,7 +185,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       12.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: stateId.isEmpty ? null : stateId,
+                        initialValue: stateId.isEmpty ? null : stateId,
                         items: [
                           const DropdownMenuItem(value: null, child: Text('Select State')),
                           ...asyncStates.value
@@ -208,7 +208,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       12.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: regionId.isEmpty ? null : regionId,
+                        initialValue: regionId.isEmpty ? null : regionId,
                         items: [
                           const DropdownMenuItem(value: null, child: Text('Select Region')),
                           ...asyncRegions.value
@@ -230,7 +230,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       12.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: districtId.isEmpty ? null : districtId,
+                        initialValue: districtId.isEmpty ? null : districtId,
                         items: [
                           const DropdownMenuItem(value: null, child: Text('Select District')),
                           ...asyncDistricts.value
@@ -251,7 +251,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       12.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: pincodeId.isEmpty ? null : pincodeId,
+                        initialValue: pincodeId.isEmpty ? null : pincodeId,
                         items: [
                           const DropdownMenuItem(value: null, child: Text('Select Pincode')),
                           ...asyncPincodes.value
@@ -490,7 +490,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       // Zone Filter
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                        initialValue: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
                         decoration: const InputDecoration(labelText: 'Zone', isDense: true),
                         items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
                         onChanged: (val) {
@@ -506,7 +506,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       // State Filter
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                        initialValue: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
                         decoration: const InputDecoration(labelText: 'State', isDense: true),
                         items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                         onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
@@ -521,7 +521,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       // Region Filter
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                        initialValue: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
                         decoration: const InputDecoration(labelText: 'Region', isDense: true),
                         items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
                         onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
@@ -535,7 +535,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       // District Filter
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                        initialValue: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
                         decoration: const InputDecoration(labelText: 'District', isDense: true),
                         items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
                         onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
@@ -548,7 +548,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       // Pincode Filter
                       DropdownButtonFormField<String>(
                         isExpanded: true,
-                        value: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
+                        initialValue: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
                         decoration: const InputDecoration(labelText: 'Pincode', isDense: true),
                         items: mainAvailablePincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))).toList(),
                         onChanged: mainSelectedDistrictId.value.isEmpty ? null : (val) {
@@ -565,7 +565,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                          initialValue: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
                           decoration: const InputDecoration(labelText: 'Zone', isDense: true),
                           items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
                           onChanged: (val) {
@@ -583,7 +583,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                          initialValue: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
                           decoration: const InputDecoration(labelText: 'State', isDense: true),
                           items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                           onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {

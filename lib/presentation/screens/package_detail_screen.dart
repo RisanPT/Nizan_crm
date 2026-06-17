@@ -216,7 +216,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                                   children: [
                                     if (!isEdit) ...[
                                       DropdownButtonFormField<String>(
-                                        value: zoneIdVal.isEmpty ? null : zoneIdVal,
+                                        initialValue: zoneIdVal.isEmpty ? null : zoneIdVal,
                                         decoration: const InputDecoration(labelText: 'Select Zone'),
                                         items: activeZones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
                                         onChanged: (val) {
@@ -229,7 +229,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                                       ),
                                       12.h,
                                       DropdownButtonFormField<String>(
-                                        value: stateIdVal.isEmpty ? null : stateIdVal,
+                                        initialValue: stateIdVal.isEmpty ? null : stateIdVal,
                                         decoration: const InputDecoration(labelText: 'Select State'),
                                         items: filteredStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                                         onChanged: zoneIdVal.isEmpty ? null : (val) {
@@ -241,7 +241,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                                       ),
                                       12.h,
                                       DropdownButtonFormField<String>(
-                                        value: regionIdVal.isEmpty ? null : regionIdVal,
+                                        initialValue: regionIdVal.isEmpty ? null : regionIdVal,
                                         decoration: const InputDecoration(labelText: 'Select Region'),
                                         items: filteredRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
                                         onChanged: stateIdVal.isEmpty ? null : (val) {
@@ -252,7 +252,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                                       ),
                                       12.h,
                                       DropdownButtonFormField<String>(
-                                        value: dialogDistrictId.value.isEmpty ? null : dialogDistrictId.value,
+                                        initialValue: dialogDistrictId.value.isEmpty ? null : dialogDistrictId.value,
                                         decoration: const InputDecoration(labelText: 'Select District'),
                                         items: filteredDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
                                         onChanged: regionIdVal.isEmpty ? null : (val) {
@@ -561,7 +561,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                           // Zone Filter
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: selectedZoneId.value.isEmpty ? null : selectedZoneId.value,
+                              initialValue: selectedZoneId.value.isEmpty ? null : selectedZoneId.value,
                               decoration: const InputDecoration(labelText: 'Zone', isDense: true),
                               items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
                               onChanged: (val) {
@@ -576,7 +576,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                           // State Filter
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: selectedStateId.value.isEmpty ? null : selectedStateId.value,
+                              initialValue: selectedStateId.value.isEmpty ? null : selectedStateId.value,
                               decoration: const InputDecoration(labelText: 'State', isDense: true),
                               items: availableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
                               onChanged: selectedZoneId.value.isEmpty ? null : (val) {
@@ -590,7 +590,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                           // Region Filter
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
+                              initialValue: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
                               decoration: const InputDecoration(labelText: 'Region', isDense: true),
                               items: availableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
                               onChanged: selectedStateId.value.isEmpty ? null : (val) {
@@ -603,7 +603,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                           // District Filter
                           Expanded(
                             child: DropdownButtonFormField<String>(
-                              value: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
+                              initialValue: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
                               decoration: const InputDecoration(labelText: 'District', isDense: true),
                               items: availableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
                               onChanged: selectedRegionId.value.isEmpty ? null : (val) {

@@ -579,7 +579,7 @@ class _TransferLeadDialog extends HookConsumerWidget {
         data: (users) {
           final salesStaff = users.where((u) => u.role == 'sales').toList();
           return DropdownButtonFormField<String?>(
-            value: selectedUser.value,
+            initialValue: selectedUser.value,
             decoration: const InputDecoration(
               labelText: 'Select Sales Executive',
             ),
@@ -678,7 +678,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<String>(
-              value: type.value,
+              initialValue: type.value,
               decoration: const InputDecoration(labelText: 'Log Type'),
               items: const [
                 DropdownMenuItem(value: 'followup', child: Text('Followup')),
@@ -713,7 +713,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
             if (type.value == 'call') ...[
               12.h,
               DropdownButtonFormField<String>(
-                value: callResponse.value,
+                initialValue: callResponse.value,
                 decoration: const InputDecoration(labelText: 'Call Response'),
                 items: const [
                   DropdownMenuItem(value: 'Connected', child: Text('Connected')),
@@ -726,7 +726,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
             ],
             12.h,
             DropdownButtonFormField<String>(
-              value: status.value,
+              initialValue: status.value,
               decoration: const InputDecoration(labelText: 'Log Status'),
               items: const [
                 DropdownMenuItem(value: 'Pending', child: Text('Pending')),
@@ -737,7 +737,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
             ),
             12.h,
             DropdownButtonFormField<String?>(
-              value: leadStatus.value,
+              initialValue: leadStatus.value,
               decoration: const InputDecoration(
                 labelText: 'Change Lead Status To',
                 helperText: 'Select to update current lead status',

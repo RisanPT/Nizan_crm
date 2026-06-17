@@ -408,7 +408,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                 // ── Mobile: premium card list ──────────────────────────
                 return ListView.separated(
                   itemCount: vehicles.length,
-                  separatorBuilder: (_, __) => 10.h,
+                  separatorBuilder: (_, _) => 10.h,
                   itemBuilder: (context, index) {
                     final v = vehicles[index];
                     final isRented = v.ownershipType == 'rented';

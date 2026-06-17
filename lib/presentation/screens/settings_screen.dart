@@ -203,7 +203,7 @@ class SettingsScreen extends HookConsumerWidget {
                               helperText:
                                   'Connects user to an employee profile for geographic limits',
                             ),
-                            value: selEmployeeId.isEmpty ? null : selEmployeeId,
+                            initialValue: selEmployeeId.isEmpty ? null : selEmployeeId,
                             items: employees
                                 .map(
                                   (e) => DropdownMenuItem(
@@ -239,7 +239,7 @@ class SettingsScreen extends HookConsumerWidget {
                         8.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'Zone Limit', prefixIcon: Icon(Icons.map_outlined)),
-                          value: selZoneId.isEmpty ? null : selZoneId,
+                          initialValue: selZoneId.isEmpty ? null : selZoneId,
                           items: [
                             const DropdownMenuItem(value: '', child: Text('No Zone Limit')),
                             ...zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))),
@@ -257,7 +257,7 @@ class SettingsScreen extends HookConsumerWidget {
                         16.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'State Limit', prefixIcon: Icon(Icons.map_outlined)),
-                          value: selStateId.isEmpty ? null : selStateId,
+                          initialValue: selStateId.isEmpty ? null : selStateId,
                           items: [
                             const DropdownMenuItem(value: '', child: Text('No State Limit')),
                             ...filteredStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))),
@@ -274,7 +274,7 @@ class SettingsScreen extends HookConsumerWidget {
                         16.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'Region Limit', prefixIcon: Icon(Icons.map_outlined)),
-                          value: selRegionId.isEmpty ? null : selRegionId,
+                          initialValue: selRegionId.isEmpty ? null : selRegionId,
                           items: [
                             const DropdownMenuItem(value: '', child: Text('No Region Limit')),
                             ...filteredRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))),
@@ -290,7 +290,7 @@ class SettingsScreen extends HookConsumerWidget {
                         16.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'District Limit', prefixIcon: Icon(Icons.map_outlined)),
-                          value: selDistrictId.isEmpty ? null : selDistrictId,
+                          initialValue: selDistrictId.isEmpty ? null : selDistrictId,
                           items: [
                             const DropdownMenuItem(value: '', child: Text('No District Limit')),
                             ...filteredDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))),

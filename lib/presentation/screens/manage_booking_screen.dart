@@ -954,8 +954,9 @@ class ManageBookingScreen extends HookConsumerWidget {
       return currentBookingSnapshot;
     }
 
-    return SingleChildScrollView(
-      child: Column(
+    return SelectionArea(
+      child: SingleChildScrollView(
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────────
@@ -1665,7 +1666,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildTodayWorksSection(

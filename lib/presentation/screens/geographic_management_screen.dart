@@ -268,7 +268,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   16.h,
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedStateId.isEmpty ? null : selectedStateId,
+                    initialValue: selectedStateId.isEmpty ? null : selectedStateId,
                     items: activeStates
                         .map(
                           (s) => DropdownMenuItem(
@@ -359,7 +359,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   16.h,
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedRegionId.isEmpty ? null : selectedRegionId,
+                    initialValue: selectedRegionId.isEmpty ? null : selectedRegionId,
                     items: activeRegions
                         .map(
                           (r) => DropdownMenuItem(
@@ -451,7 +451,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   16.h,
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedDistrictId.isEmpty
+                    initialValue: selectedDistrictId.isEmpty
                         ? null
                         : selectedDistrictId,
                     items: activeDistricts

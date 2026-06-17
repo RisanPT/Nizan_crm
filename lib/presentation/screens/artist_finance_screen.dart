@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:ui';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -99,7 +98,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         ? ref.watch(artistExpensesProvider(myEmployeeId))
         : ref.watch(expensesProvider);
     // ── Filter States ────────────────────────────────────────────────────────
-    final filterStatuses = useState<Set<String>>({'pending', 'verified'});
+    final filterStatuses = useState<Set<String>>({'pending', 'verified', 'rejected'});
     final filterPaymentModes = useState<Set<String>>({'cash', 'bank_transfer', 'upi', 'other'});
     final filterFromDate = useState<DateTime?>(null);
     final filterToDate = useState<DateTime?>(null);
@@ -114,8 +113,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final filteredCollections = collectionItems.where((c) {
       if (!filterStatuses.value.contains(c.status)) return false;
       if (!filterPaymentModes.value.contains(c.paymentMode)) return false;
-      if (filterFromDate.value != null && c.date.isBefore(filterFromDate.value!)) return false;
-      if (filterToDate.value != null && c.date.isAfter(filterToDate.value!.add(const Duration(days: 1)))) return false;
+      final dateOnly = DateTime(c.date.year, c.date.month, c.date.day);
+      if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
+      if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
       if (filterMinAmount.value != null && c.amount < filterMinAmount.value!) return false;
       if (filterMaxAmount.value != null && c.amount > filterMaxAmount.value!) return false;
       return true;
@@ -123,8 +123,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
     final filteredExpenses = expenseItems.where((e) {
       if (!filterStatuses.value.contains(e.status)) return false;
-      if (filterFromDate.value != null && e.date.isBefore(filterFromDate.value!)) return false;
-      if (filterToDate.value != null && e.date.isAfter(filterToDate.value!.add(const Duration(days: 1)))) return false;
+      final dateOnly = DateTime(e.date.year, e.date.month, e.date.day);
+      if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
+      if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
       if (filterMinAmount.value != null && e.amount < filterMinAmount.value!) return false;
       if (filterMaxAmount.value != null && e.amount > filterMaxAmount.value!) return false;
       return true;
@@ -460,7 +461,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               prefixIcon: const Icon(Icons.payments_outlined),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             ),
-                            value: payMode,
+                            initialValue: payMode,
                             items: _paymentModes.map<DropdownMenuItem<String>>((m) => DropdownMenuItem<String>(value: m.$1, child: Text(m.$2))).toList(),
                             onChanged: (v) => setState(() => payMode = v ?? 'cash'),
                           ),
@@ -776,7 +777,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              value: selEmployee.isEmpty
+                              initialValue: selEmployee.isEmpty
                                   ? null
                                   : selEmployee,
                               items: artists
@@ -803,7 +804,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            value: selCategory,
+                            initialValue: selCategory,
                             items: _expenseCategories
                                 .map<DropdownMenuItem<String>>(
                                   (c) => DropdownMenuItem<String>(
@@ -985,8 +986,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                       elevation: 0,
                                     ),
                                     onPressed: () async {
-                                      if (!formKey.currentState!.validate())
+                                      if (!formKey.currentState!.validate()) {
                                         return;
+                                      }
 
                                       final amt =
                                           double.tryParse(amountCtrl.text) ?? 0;
@@ -1558,7 +1560,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
                                   child: Text(
-                                    tempFromDate != null ? _fmt(tempFromDate!) : 'Select',
+                                    tempFromDate != null ? _fmt(tempFromDate) : 'Select',
                                     style: TextStyle(fontSize: 12, color: crm.textPrimary),
                                   ),
                                 ),
@@ -1673,7 +1675,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () {
-                                  filterStatuses.value = {'pending', 'verified'};
+                                  filterStatuses.value = {'pending', 'verified', 'rejected'};
                                   filterPaymentModes.value = {'cash', 'bank_transfer', 'upi', 'other'};
                                   filterFromDate.value = null;
                                   filterToDate.value = null;
@@ -1925,7 +1927,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   labelText: 'Month',
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 ),
-                                value: selectedMonth,
+                                initialValue: selectedMonth,
                                 items: List<DropdownMenuItem<int>>.generate(
                                   12,
                                   (i) => DropdownMenuItem<int>(
@@ -1943,7 +1945,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   labelText: 'Year',
                                   contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 ),
-                                value: selectedYear,
+                                initialValue: selectedYear,
                                 items: [DateTime.now().year - 1, DateTime.now().year]
                                     .map<DropdownMenuItem<int>>((y) => DropdownMenuItem<int>(
                                           value: y,

@@ -947,7 +947,7 @@ class _LeadForm extends HookConsumerWidget {
       // Source
       responsiveField(
         DropdownButtonFormField<String>(
-          value: selectedSource.value,
+          initialValue: selectedSource.value,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Source',
@@ -1006,7 +1006,7 @@ class _LeadForm extends HookConsumerWidget {
       // Status
       responsiveField(
         DropdownButtonFormField<String>(
-          value: status.value,
+          initialValue: status.value,
           isExpanded: true,
           decoration: const InputDecoration(
             labelText: 'Status',
@@ -1083,7 +1083,7 @@ class _LeadForm extends HookConsumerWidget {
       if (isAdminOrManager)
         responsiveField(
           DropdownButtonFormField<String>(
-            value: assignedTo.value,
+            initialValue: assignedTo.value,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Assign Sales Executive',
@@ -2157,7 +2157,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
               
               // Status Dropdown
               DropdownButtonFormField<String>(
-                value: status.value,
+                initialValue: status.value,
                 decoration: const InputDecoration(
                   labelText: 'Select Status / Outcome *',
                   prefixIcon: Icon(Icons.info_outline),
@@ -2192,7 +2192,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
 
                 // Reminder Offset
                 DropdownButtonFormField<int>(
-                  value: reminderMinutes.value,
+                  initialValue: reminderMinutes.value,
                   decoration: const InputDecoration(
                     labelText: 'Set Reminder',
                     prefixIcon: Icon(Icons.alarm_on_outlined),

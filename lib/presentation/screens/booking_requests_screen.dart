@@ -64,7 +64,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncBookings = ref.watch(bookingProvider);
 
-    return asyncBookings.when(
+    return SelectionArea(
+      child: asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) =>
           Center(child: Text('Failed to load booking requests: $error')),
@@ -393,6 +394,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
           ],
         );
       },
+      ),
     );
   }
 }

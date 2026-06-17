@@ -853,7 +853,7 @@ class CalendarScreen extends HookConsumerWidget {
                                       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
                                       child: ListView.separated(
                                         itemCount: filtered.length,
-                                        separatorBuilder: (_, __) => 12.h,
+                                        separatorBuilder: (_, _) => 12.h,
                                         itemBuilder: (ctx, index) {
                                           final entry = filtered[index];
                                           final booking = entry.booking;
