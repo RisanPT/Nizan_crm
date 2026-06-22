@@ -54,6 +54,9 @@ class BookingService {
     String? districtId,
     String? pincodeId,
     String? dateBasis,
+    String? month,
+    bool onlyWithMapLink = false,
+    String? status,
   }) async {
     try {
       final response = await _dio.get(
@@ -73,6 +76,9 @@ class BookingService {
           if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
           if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
           if (dateBasis != null && dateBasis.isNotEmpty) 'dateBasis': dateBasis,
+          if (month != null && month.isNotEmpty) 'month': month,
+          if (onlyWithMapLink) 'onlyWithMapLink': true,
+          if (status != null && status.isNotEmpty) 'status': status,
         },
       );
       return PaginatedBookingsResponse.fromJson(

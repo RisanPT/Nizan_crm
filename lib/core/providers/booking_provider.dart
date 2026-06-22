@@ -23,6 +23,9 @@ class PaginatedBookingsParams {
   final String? districtId;
   final String? pincodeId;
   final String? dateBasis;
+  final String? month;
+  final bool onlyWithMapLink;
+  final String? status;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -37,6 +40,9 @@ class PaginatedBookingsParams {
     this.districtId,
     this.pincodeId,
     this.dateBasis,
+    this.month,
+    this.onlyWithMapLink = false,
+    this.status,
   });
 
   @override
@@ -53,7 +59,10 @@ class PaginatedBookingsParams {
         other.regionId == regionId &&
         other.districtId == districtId &&
         other.pincodeId == pincodeId &&
-        other.dateBasis == dateBasis;
+        other.dateBasis == dateBasis &&
+        other.month == month &&
+        other.onlyWithMapLink == onlyWithMapLink &&
+        other.status == status;
   }
 
   @override
@@ -70,6 +79,9 @@ class PaginatedBookingsParams {
     districtId,
     pincodeId,
     dateBasis,
+    month,
+    onlyWithMapLink,
+    status,
   );
 }
 
@@ -113,6 +125,9 @@ final paginatedBookingsProvider =
             districtId: districtId,
             pincodeId: pincodeId,
             dateBasis: params.dateBasis,
+            month: params.month,
+            onlyWithMapLink: params.onlyWithMapLink,
+            status: params.status,
           );
     });
 
@@ -152,7 +167,7 @@ final singleBookingProvider = FutureProvider.autoDispose.family<Booking?, String
   if (id.isEmpty || id == 'new') return null;
   
   await Future.delayed(const Duration(milliseconds: 400));
-  final asyncBookings = ref.read(bookingProvider);
+  final asyncBookings = ref.watch(bookingProvider);
   final allBookings = asyncBookings.value ?? [];
   final found = allBookings.cast<Booking?>().firstWhere(
     (b) => b?.id == id,

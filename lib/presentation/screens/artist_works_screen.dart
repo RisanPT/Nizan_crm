@@ -12,8 +12,6 @@ import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
-import '../../services/district_service.dart';
-import '../../core/models/district.dart';
 
 // Opens a Google Maps URL in the default browser/maps app.
 Future<void> _openMapUrl(String url, BuildContext context) async {
@@ -372,282 +370,6 @@ String _fmtTime(DateTime d) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  Main Screen
 // ─────────────────────────────────────────────────────────────────────────────
-BookingPageSummary _computeSummary(List<Booking> list) {
-  double totalSales = 0;
-  double totalAdvance = 0;
-  int completed = 0;
-  int cancelled = 0;
-  for (final b in list) {
-    totalSales += b.totalPrice;
-    totalAdvance += b.advanceAmount;
-    if (b.status.toLowerCase() == 'completed') completed++;
-    if (b.status.toLowerCase() == 'cancelled') cancelled++;
-  }
-  return BookingPageSummary(
-    totalSales: totalSales,
-    totalAdvance: totalAdvance,
-    completedCount: completed,
-    cancelledCount: cancelled,
-  );
-}
-
-void openFilterBottomSheet(
-  BuildContext context,
-  WidgetRef ref,
-  List<District> districts,
-  ValueNotifier<DateTime?> filterFromDate,
-  ValueNotifier<DateTime?> filterToDate,
-  ValueNotifier<String?> selectedDistrictId,
-  ValueNotifier<bool> onlyWithMapLink,
-  ValueNotifier<String> searchQuery,
-) {
-  final theme = Theme.of(context);
-  final crm = context.crmColors;
-
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) {
-        var tempFromDate = filterFromDate.value;
-        var tempToDate = filterToDate.value;
-        var tempDistrictId = selectedDistrictId.value;
-        var tempMapLink = onlyWithMapLink.value;
-        final searchCtrl = TextEditingController(text: searchQuery.value);
-
-        return Container(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          decoration: BoxDecoration(
-            color: theme.scaffoldBackgroundColor,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-                    24.h,
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Filter Works',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: crm.textPrimary,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                    16.h,
-                    Text(
-                      'SEARCH LOCATION / CLIENT',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: crm.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    8.h,
-                    TextFormField(
-                      controller: searchCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Search keyword',
-                        hintText: 'e.g. client name, address, etc.',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      style: TextStyle(fontSize: 13, color: crm.textPrimary),
-                    ),
-                    16.h,
-                    Text(
-                      'DISTRICT',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: crm.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    8.h,
-                    DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        labelText: 'Select District',
-                        prefixIcon: const Icon(Icons.map_outlined),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      value: tempDistrictId,
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: null,
-                          child: Text('All Districts'),
-                        ),
-                        ...districts.map(
-                          (d) => DropdownMenuItem<String>(
-                            value: d.id,
-                            child: Text(d.name),
-                          ),
-                        ),
-                      ],
-                      onChanged: (val) {
-                        setState(() => tempDistrictId = val);
-                      },
-                    ),
-                    16.h,
-                    Text(
-                      'DATE RANGE',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: crm.textSecondary,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    8.h,
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final picked = await showDatePicker(
-                                context: ctx,
-                                initialDate: tempFromDate ?? DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (picked != null) {
-                                setState(() => tempFromDate = picked);
-                              }
-                            },
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'From Date',
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: Text(
-                                tempFromDate != null ? _fmt(tempFromDate!) : 'Select',
-                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                              ),
-                            ),
-                          ),
-                        ),
-                        12.w,
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final picked = await showDatePicker(
-                                context: ctx,
-                                initialDate: tempToDate ?? DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime(2100),
-                              );
-                              if (picked != null) {
-                                setState(() => tempToDate = picked);
-                              }
-                            },
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'To Date',
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                              ),
-                              child: Text(
-                                tempToDate != null ? _fmt(tempToDate!) : 'Select',
-                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    16.h,
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Only with Google Map link', style: TextStyle(fontSize: 13, color: crm.textPrimary)),
-                      value: tempMapLink,
-                      activeColor: crm.primary,
-                      onChanged: (val) {
-                        setState(() => tempMapLink = val);
-                      },
-                    ),
-                    24.h,
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              filterFromDate.value = null;
-                              filterToDate.value = null;
-                              selectedDistrictId.value = null;
-                              onlyWithMapLink.value = false;
-                              searchQuery.value = '';
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('✓ Filters Reset')),
-                              );
-                            },
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            child: const Text('RESET'),
-                          ),
-                        ),
-                        12.w,
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              filterFromDate.value = tempFromDate;
-                              filterToDate.value = tempToDate;
-                              selectedDistrictId.value = tempDistrictId;
-                              onlyWithMapLink.value = tempMapLink;
-                              searchQuery.value = searchCtrl.text.trim();
-                              Navigator.pop(ctx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('✓ Filters Applied')),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              backgroundColor: crm.primary,
-                            ),
-                            child: const Text('APPLY FILTERS'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    ),
-  );
-}
 
 class ArtistWorksScreen extends HookConsumerWidget {
   const ArtistWorksScreen({super.key});
@@ -657,18 +379,38 @@ class ArtistWorksScreen extends HookConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final employeeId = session?.employeeId ?? '';
 
-    final asyncBookings = ref.watch(bookingProvider);
-    final asyncDistricts = ref.watch(districtsProvider);
-    final districts = asyncDistricts.value ?? [];
-
     final tabController = useTabController(initialLength: 2);
 
-    final filterFromDate = useState<DateTime?>(null);
-    final filterToDate = useState<DateTime?>(null);
-    final selectedDistrictId = useState<String?>(null);
-    final onlyWithMapLink = useState<bool>(false);
-    final searchQuery = useState<String>('');
     final selectedMonth = useState<DateTime>(DateTime(DateTime.now().year, DateTime.now().month, 1));
+    final upcomingPage = useState<int>(1);
+    final completedPage = useState<int>(1);
+
+    final formattedMonth = '${selectedMonth.value.year}-${selectedMonth.value.month.toString().padLeft(2, '0')}';
+
+    useEffect(() {
+      upcomingPage.value = 1;
+      completedPage.value = 1;
+      return null;
+    }, [selectedMonth.value]);
+
+    final upcomingParams = PaginatedBookingsParams(
+      page: upcomingPage.value,
+      limit: 10,
+      employeeId: employeeId,
+      month: formattedMonth,
+      status: 'upcoming',
+    );
+
+    final completedParams = PaginatedBookingsParams(
+      page: completedPage.value,
+      limit: 10,
+      employeeId: employeeId,
+      month: formattedMonth,
+      status: 'completed',
+    );
+
+    final asyncUpcoming = ref.watch(paginatedBookingsProvider(upcomingParams));
+    final asyncCompleted = ref.watch(paginatedBookingsProvider(completedParams));
 
     return Scaffold(
       appBar: AppBar(
@@ -676,28 +418,8 @@ class ArtistWorksScreen extends HookConsumerWidget {
         backgroundColor: context.crmColors.surface,
         elevation: 0,
         actions: [
-          IconButton(
-            icon: Icon(
-              Icons.filter_list_rounded,
-              color: (filterFromDate.value != null ||
-                      filterToDate.value != null ||
-                      selectedDistrictId.value != null ||
-                      onlyWithMapLink.value ||
-                      searchQuery.value.isNotEmpty)
-                  ? context.crmColors.primary
-                  : context.crmColors.textSecondary,
-            ),
-            onPressed: () => openFilterBottomSheet(
-              context,
-              ref,
-              districts,
-              filterFromDate,
-              filterToDate,
-              selectedDistrictId,
-              onlyWithMapLink,
-              searchQuery,
-            ),
-          ),
+          _buildAppBarMonthChip(context, selectedMonth),
+          const SizedBox(width: 16),
         ],
         bottom: TabBar(
           controller: tabController,
@@ -712,87 +434,65 @@ class ArtistWorksScreen extends HookConsumerWidget {
       ),
       backgroundColor: context.crmColors.background,
       body: SelectionArea(
-        child: Column(
+        child: TabBarView(
+          controller: tabController,
           children: [
-            _buildMonthSelectorHeader(context, selectedMonth),
-            Expanded(
-              child: asyncBookings.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => _ErrorView(
-            error: error.toString(),
-            onRetry: () => ref.invalidate(bookingProvider),
-          ),
-          data: (bookings) {
-            final filtered = bookings.where((b) {
-              final isAssigned = b.assignedStaff.any((s) => s.employeeId == employeeId);
-              if (!isAssigned) return false;
-
-              final dateOnly = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
-              if (dateOnly.year != selectedMonth.value.year || dateOnly.month != selectedMonth.value.month) return false;
-
-              if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
-              if (filterToDate.value != null && dateOnly.isAfter(dateOnly.add(const Duration(days: 0)))) return false;
-
-              if (selectedDistrictId.value != null && b.districtId != selectedDistrictId.value) return false;
-
-              if (onlyWithMapLink.value && b.mapUrl.trim().isEmpty) return false;
-
-              if (searchQuery.value.isNotEmpty) {
-                final query = searchQuery.value.toLowerCase();
-                final match = b.customerName.toLowerCase().contains(query) ||
-                    b.service.toLowerCase().contains(query) ||
-                    b.address.toLowerCase().contains(query) ||
-                    b.region.toLowerCase().contains(query) ||
-                    b.district.toLowerCase().contains(query) ||
-                    b.bookingNumber.toLowerCase().contains(query);
-                if (!match) return false;
-              }
-
-              return true;
-            }).toList();
-
-            final upcomingList = filtered
-                .where((b) =>
-                    b.status.toLowerCase() != 'completed' &&
-                    b.status.toLowerCase() != 'cancelled' &&
-                    b.status.toLowerCase() != 'rejected')
-                .toList()
-              ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
-
-            final completedList = filtered
-                .where((b) => b.status.toLowerCase() == 'completed')
-                .toList()
-              ..sort((a, b) => b.serviceStart.compareTo(a.serviceStart));
-
-            final upcomingSummary = _computeSummary(upcomingList);
-            final completedSummary = _computeSummary(completedList);
-
-            if (upcomingList.isEmpty && completedList.isEmpty && filtered.isEmpty) {
-              return const _EmptyState();
-            }
-
-            return TabBarView(
-              controller: tabController,
-              children: [
-                _BookingCardStack(
-                  bookings: upcomingList,
-                  summary: upcomingSummary,
+            asyncUpcoming.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => _ErrorView(
+                error: error.toString(),
+                onRetry: () => ref.invalidate(paginatedBookingsProvider(upcomingParams)),
+              ),
+              data: (upcomingResponse) {
+                if (upcomingResponse.items.isEmpty) {
+                  return const _EmptyState(
+                    title: 'No Upcoming Works',
+                    message: 'You have no upcoming works for this month.',
+                  );
+                }
+                return _BookingCardStack(
+                  bookings: upcomingResponse.items,
+                  summary: upcomingResponse.summary,
                   isCompletedTab: false,
-                  totalItems: upcomingList.length,
-                ),
-                _BookingCardStack(
-                  bookings: completedList,
-                  summary: completedSummary,
+                  totalItems: upcomingResponse.totalItems,
+                  page: upcomingResponse.page,
+                  limit: upcomingResponse.limit,
+                  totalPages: upcomingResponse.totalPages,
+                  onPageChanged: (newPage) {
+                    upcomingPage.value = newPage;
+                  },
+                );
+              },
+            ),
+            asyncCompleted.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => _ErrorView(
+                error: error.toString(),
+                onRetry: () => ref.invalidate(paginatedBookingsProvider(completedParams)),
+              ),
+              data: (completedResponse) {
+                if (completedResponse.items.isEmpty) {
+                  return const _EmptyState(
+                    title: 'No Completed Works',
+                    message: 'You have no completed works for this month.',
+                  );
+                }
+                return _BookingCardStack(
+                  bookings: completedResponse.items,
+                  summary: completedResponse.summary,
                   isCompletedTab: true,
-                  totalItems: completedList.length,
-                ),
-              ],
-            );
-          },
+                  totalItems: completedResponse.totalItems,
+                  page: completedResponse.page,
+                  limit: completedResponse.limit,
+                  totalPages: completedResponse.totalPages,
+                  onPageChanged: (newPage) {
+                    completedPage.value = newPage;
+                  },
+                );
+              },
+            ),
+          ],
         ),
-      ),
-    ],
-  ),
       ),
     );
   }
@@ -803,12 +503,20 @@ class _BookingCardStack extends HookWidget {
   final BookingPageSummary summary;
   final bool isCompletedTab;
   final int totalItems;
+  final int page;
+  final int limit;
+  final int totalPages;
+  final ValueChanged<int>? onPageChanged;
 
   const _BookingCardStack({
     required this.bookings,
     required this.summary,
     this.isCompletedTab = false,
     required this.totalItems,
+    required this.page,
+    required this.limit,
+    required this.totalPages,
+    this.onPageChanged,
   });
 
   @override
@@ -859,6 +567,19 @@ class _BookingCardStack extends HookWidget {
               ],
             ),
           ),
+          if (totalPages > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: _PaginationBar(
+                page: page,
+                limit: limit,
+                totalPages: totalPages,
+                totalItems: totalItems,
+                currentItemCount: bookings.length,
+                onPrevious: page > 1 ? () => onPageChanged?.call(page - 1) : null,
+                onNext: page < totalPages ? () => onPageChanged?.call(page + 1) : null,
+              ),
+            ),
         ],
       );
     }
@@ -979,7 +700,92 @@ class _BookingCardStack extends HookWidget {
             ],
           ),
         ),
+        if (totalPages > 1)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: _PaginationBar(
+              page: page,
+              limit: limit,
+              totalPages: totalPages,
+              totalItems: totalItems,
+              currentItemCount: bookings.length,
+              onPrevious: page > 1 ? () => onPageChanged?.call(page - 1) : null,
+              onNext: page < totalPages ? () => onPageChanged?.call(page + 1) : null,
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _PaginationBar extends StatelessWidget {
+  final int page;
+  final int limit;
+  final int totalPages;
+  final int totalItems;
+  final int currentItemCount;
+  final VoidCallback? onPrevious;
+  final VoidCallback? onNext;
+
+  const _PaginationBar({
+    required this.page,
+    required this.limit,
+    required this.totalPages,
+    required this.totalItems,
+    required this.currentItemCount,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Page $page of $totalPages ($totalItems total)',
+            style: TextStyle(
+              fontSize: 12,
+              color: crm.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: onPrevious != null ? crm.primary.withValues(alpha: 0.1) : Colors.transparent,
+                  foregroundColor: crm.primary,
+                  disabledForegroundColor: crm.textSecondary.withValues(alpha: 0.3),
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right_rounded),
+                style: IconButton.styleFrom(
+                  backgroundColor: onNext != null ? crm.primary.withValues(alpha: 0.1) : Colors.transparent,
+                  foregroundColor: crm.primary,
+                  disabledForegroundColor: crm.textSecondary.withValues(alpha: 0.3),
+                  padding: const EdgeInsets.all(8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2757,46 +2563,20 @@ class _PayCard extends StatelessWidget {
   }
 }
 
-class _PaginationButton extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  const _PaginationButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: enabled ? crm.primary.withValues(alpha: 0.1) : crm.background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: enabled ? crm.primary.withValues(alpha: 0.3) : crm.border,
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: enabled ? crm.primary : crm.textSecondary,
-        ),
-      ),
-    );
-  }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Empty State
 // ─────────────────────────────────────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final String title;
+  final String message;
+  final IconData icon;
+
+  const _EmptyState({
+    this.title = 'All Clear! 🎉',
+    this.message = 'You have no assigned works right now.\nEnjoy your free time!',
+    this.icon = Icons.celebration_rounded,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2815,14 +2595,14 @@ class _EmptyState extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.celebration_rounded,
+                icon,
                 size: 48,
                 color: crm.primary.withValues(alpha: 0.5),
               ),
             ),
             24.h,
             Text(
-              'All Clear! 🎉',
+              title,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w900,
                 color: crm.textPrimary,
@@ -2830,7 +2610,7 @@ class _EmptyState extends StatelessWidget {
             ),
             12.h,
             Text(
-              'You have no assigned works right now.\nEnjoy your free time!',
+              message,
               style: TextStyle(
                 color: crm.textSecondary,
                 fontSize: 14,
@@ -3350,106 +3130,51 @@ class _PulsingDot extends HookWidget {
 //  Month Selection Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-Widget _buildMonthSelectorHeader(
+Widget _buildAppBarMonthChip(
   BuildContext context,
   ValueNotifier<DateTime> selectedMonth,
 ) {
-  final theme = Theme.of(context);
-  final crmColors = context.crmColors;
+  final crm = context.crmColors;
+  final label = _getMonthYearFullLabel(selectedMonth.value);
 
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    decoration: BoxDecoration(
-      color: crmColors.surface,
-      border: Border(
-        bottom: BorderSide(color: crmColors.border),
+  return InkWell(
+    onTap: () => _openMonthPickerDialog(context, selectedMonth),
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: crm.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crm.primary.withValues(alpha: 0.15)),
       ),
-    ),
-    child: Row(
-      children: [
-        IconButton(
-          onPressed: () {
-            selectedMonth.value = DateTime(
-              selectedMonth.value.year,
-              selectedMonth.value.month - 1,
-              1,
-            );
-          },
-          icon: const Icon(Icons.chevron_left_rounded),
-          color: crmColors.textPrimary,
-        ),
-        Expanded(
-          child: Center(
-            child: InkWell(
-              onTap: () => _openMonthPickerDialog(context, selectedMonth),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_month_outlined,
-                      size: 16,
-                      color: crmColors.primary,
-                    ),
-                    6.w,
-                    Text(
-                      _getMonthYearLabel(selectedMonth.value),
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: crmColors.textPrimary,
-                      ),
-                    ),
-                    2.w,
-                    Icon(
-                      Icons.arrow_drop_down,
-                      size: 16,
-                      color: crmColors.textSecondary,
-                    ),
-                  ],
-                ),
-              ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.calendar_today_rounded,
+            size: 14,
+            color: crm.primary,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: crm.primary,
             ),
           ),
-        ),
-        IconButton(
-          onPressed: () {
-            selectedMonth.value = DateTime(
-              selectedMonth.value.year,
-              selectedMonth.value.month + 1,
-              1,
-            );
-          },
-          icon: const Icon(Icons.chevron_right_rounded),
-          color: crmColors.textPrimary,
-        ),
-        12.w,
-        OutlinedButton(
-          onPressed: () {
-            selectedMonth.value = DateTime(
-              DateTime.now().year,
-              DateTime.now().month,
-              1,
-            );
-          },
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          child: const Text('Today', style: TextStyle(fontSize: 12)),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
 
-String _getMonthYearLabel(DateTime date) {
+String _getMonthYearFullLabel(DateTime date) {
   const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
   return '${months[date.month - 1]} ${date.year}';
 }

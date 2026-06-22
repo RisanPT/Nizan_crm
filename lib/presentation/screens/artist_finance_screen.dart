@@ -99,7 +99,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         : ref.watch(expensesProvider);
     // ── Filter States ────────────────────────────────────────────────────────
     final filterStatuses = useState<Set<String>>({'pending', 'verified', 'rejected'});
-    final filterPaymentModes = useState<Set<String>>({'cash', 'bank_transfer', 'upi', 'other'});
+    final filterPaymentModes = useState<Set<String>>({'cash', 'bank_transfer', 'upi', 'other', 'split'});
+    final filterCategories = useState<Set<String>>({'food', 'travel', 'stay', 'materials', 'fuel', 'other'});
     final filterFromDate = useState<DateTime?>(null);
     final filterToDate = useState<DateTime?>(null);
     final filterMinAmount = useState<double?>(null);
@@ -123,6 +124,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
     final filteredExpenses = expenseItems.where((e) {
       if (!filterStatuses.value.contains(e.status)) return false;
+      if (!filterCategories.value.contains(e.category)) return false;
       final dateOnly = DateTime(e.date.year, e.date.month, e.date.day);
       if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
       if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
@@ -1434,23 +1436,25 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     }
 
     void openFilterBottomSheet() {
+      // ── Temp state lives here, OUTSIDE the builder, so it survives rebuilds ──
+      final tempStatuses = Set<String>.from(filterStatuses.value);
+      final tempPaymentModes = Set<String>.from(filterPaymentModes.value);
+      final tempCategories = Set<String>.from(filterCategories.value);
+      DateTime? tempFromDate = filterFromDate.value;
+      DateTime? tempToDate = filterToDate.value;
+      final minAmountCtrl = TextEditingController(
+        text: filterMinAmount.value != null ? filterMinAmount.value!.toStringAsFixed(0) : '',
+      );
+      final maxAmountCtrl = TextEditingController(
+        text: filterMaxAmount.value != null ? filterMaxAmount.value!.toStringAsFixed(0) : '',
+      );
+
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setState) {
-            final tempStatuses = Set<String>.from(filterStatuses.value);
-            final tempPaymentModes = Set<String>.from(filterPaymentModes.value);
-            var tempFromDate = filterFromDate.value;
-            var tempToDate = filterToDate.value;
-            final minAmountCtrl = TextEditingController(
-              text: filterMinAmount.value != null ? filterMinAmount.value!.toStringAsFixed(0) : '',
-            );
-            final maxAmountCtrl = TextEditingController(
-              text: filterMaxAmount.value != null ? filterMaxAmount.value!.toStringAsFixed(0) : '',
-            );
-
             return Container(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
@@ -1560,7 +1564,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                                   ),
                                   child: Text(
-                                    tempFromDate != null ? _fmt(tempFromDate) : 'Select',
+                                    tempFromDate != null ? _fmt(tempFromDate!) : 'Select',
                                     style: TextStyle(fontSize: 12, color: crm.textPrimary),
                                   ),
                                 ),
@@ -1651,6 +1655,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ('bank_transfer', 'Bank Transfer'),
                           ('upi', 'UPI'),
                           ('other', 'Other'),
+                          ('split', 'Split Payment'),
                         ].map((item) {
                           final isChecked = tempPaymentModes.contains(item.$1);
                           return CheckboxListTile(
@@ -1669,6 +1674,35 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             },
                           );
                         }),
+                        16.h,
+                        Text(
+                          'EXPENSE CATEGORY',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: crm.textSecondary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        8.h,
+                        ..._expenseCategories.map((item) {
+                          final isChecked = tempCategories.contains(item.$1);
+                          return CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(item.$2, style: TextStyle(fontSize: 13, color: crm.textPrimary)),
+                            value: isChecked,
+                            activeColor: crm.primary,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  tempCategories.add(item.$1);
+                                } else {
+                                  tempCategories.remove(item.$1);
+                                }
+                              });
+                            },
+                          );
+                        }),
                         24.h,
                         Row(
                           children: [
@@ -1676,7 +1710,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               child: OutlinedButton(
                                 onPressed: () {
                                   filterStatuses.value = {'pending', 'verified', 'rejected'};
-                                  filterPaymentModes.value = {'cash', 'bank_transfer', 'upi', 'other'};
+                                  filterPaymentModes.value = {'cash', 'bank_transfer', 'upi', 'other', 'split'};
+                                  filterCategories.value = {'food', 'travel', 'stay', 'materials', 'fuel', 'other'};
                                   filterFromDate.value = null;
                                   filterToDate.value = null;
                                   filterMinAmount.value = null;
@@ -1696,6 +1731,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 onPressed: () {
                                   filterStatuses.value = tempStatuses;
                                   filterPaymentModes.value = tempPaymentModes;
+                                  filterCategories.value = tempCategories;
                                   filterFromDate.value = tempFromDate;
                                   filterToDate.value = tempToDate;
                                   filterMinAmount.value = double.tryParse(minAmountCtrl.text);
