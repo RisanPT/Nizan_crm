@@ -177,19 +177,57 @@ class SalesLeadsScreen extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    final asyncLeads = ref.watch(leadsProvider);
     final isMobile = ResponsiveBuilder.isMobile(context);
     final isDesktop = ResponsiveBuilder.isDesktop(context);
 
+    final currentPage = useState(1);
     final searchQuery = useState('');
     final searchCtrl = useTextEditingController();
     final selectedStatus = useState('All');
     final selectedSource = useState('All');
     final selectedSalesperson = useState('All');
+    final selectedMonth = useState('All');
+
+    final monthOptions = useMemoized(() {
+      final options = <Map<String, String>>[{'label': 'All Months', 'value': 'All'}];
+      final now = DateTime.now();
+      for (int i = 0; i < 12; i++) {
+        final d = DateTime(now.year, now.month - i, 1);
+        final label = '${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.month - 1]} ${d.year}';
+        final value = '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        options.add({'label': label, 'value': value});
+      }
+      return options;
+    });
 
     final session = ref.watch(authSessionProvider);
     final isAdminOrManagerOrCRM = session != null && (session.role == 'admin' || session.role == 'manager' || session.role == 'crm');
     final asyncUsers = ref.watch(crmUsersProvider);
+
+    // Debounce search input
+    useEffect(() {
+      currentPage.value = 1; // Reset to page 1 on search change
+      return null;
+    }, [searchQuery.value]);
+
+    final filter = LeadFilter(
+      page: currentPage.value,
+      limit: 20,
+      search: searchQuery.value,
+      status: selectedStatus.value,
+      source: selectedSource.value,
+      salesperson: selectedSalesperson.value,
+      month: selectedMonth.value,
+    );
+
+    final asyncPaginatedLeads = ref.watch(paginatedLeadsProvider(filter));
+
+    void _onFilterChange<T>(ValueNotifier<T> notifier, T newValue) {
+      if (notifier.value != newValue) {
+        notifier.value = newValue;
+        currentPage.value = 1; // Reset to page 1 on any filter change
+      }
+    }
 
     return Scaffold(
       body: SingleChildScrollView(
@@ -211,49 +249,48 @@ class SalesLeadsScreen extends HookConsumerWidget {
               style: TextStyle(color: crm.textSecondary),
             ),
             20.h,
-            asyncLeads.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
+            asyncPaginatedLeads.when(
+              loading: () => const Center(child: Padding(
+                padding: EdgeInsets.all(32.0),
+                child: CircularProgressIndicator(),
+              )),
               error: (err, stack) => Center(child: Text('Error: $err')),
-              data: (leads) {
-                // Filter leads locally
-                final filteredLeads = leads.where((lead) {
-                  final matchesSearch = searchQuery.value.isEmpty ||
-                      lead.name.toLowerCase().contains(searchQuery.value.toLowerCase()) ||
-                      lead.phone.toLowerCase().contains(searchQuery.value.toLowerCase()) ||
-                      lead.location.toLowerCase().contains(searchQuery.value.toLowerCase());
-                  final matchesStatus = selectedStatus.value == 'All' ||
-                      lead.status.toLowerCase() == selectedStatus.value.toLowerCase();
-                  
-                  final matchesSource = selectedSource.value == 'All' ||
-                      lead.source.toLowerCase() == selectedSource.value.toLowerCase() ||
-                      (selectedSource.value == 'Other' && !_isKnownSource(lead.source));
-
-                  final matchesSalesperson = !isAdminOrManagerOrCRM ||
-                      selectedSalesperson.value == 'All' ||
-                      (selectedSalesperson.value == 'Unassigned' && (lead.assignedTo == null || lead.assignedTo!.isEmpty)) ||
-                      (lead.assignedTo == selectedSalesperson.value);
-
-                  return matchesSearch && matchesStatus && matchesSource && matchesSalesperson;
-                }).toList();
+              data: (paginated) {
+                final leads = paginated.items;
 
                 Future<void> exportLeadsReport() async {
                   await _runWithReportLoader(
                     context: context,
                     crmColors: crm,
-                    action: () => downloadLeadsReport(
-                      leads: filteredLeads,
-                      statusFilter: selectedStatus.value,
-                      sourceFilter: selectedSource.value,
-                      searchQuery: searchQuery.value,
-                      users: asyncUsers.value ?? [],
-                    ),
+                    action: () async {
+                      // Fetch all matching leads for the report, ignoring pagination
+                      final allLeadsResponse = await ref.read(leadServiceProvider).getLeads(
+                        LeadFilter(
+                          page: 1,
+                          limit: 10000,
+                          search: searchQuery.value,
+                          status: selectedStatus.value,
+                          source: selectedSource.value,
+                          salesperson: selectedSalesperson.value,
+                          month: selectedMonth.value,
+                        )
+                      );
+                      
+                      await downloadLeadsReport(
+                        leads: allLeadsResponse.items,
+                        statusFilter: selectedStatus.value,
+                        sourceFilter: selectedSource.value,
+                        searchQuery: searchQuery.value,
+                        users: asyncUsers.value ?? [],
+                      );
+                    },
                   );
                 }
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _LeadStatsRow(leads: leads),
+                    _LeadStatsRow(stats: paginated.stats ?? {}), // Stats for all matching leads
                     24.h,
                     // Filter Bar
                     Container(
@@ -269,7 +306,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                               children: [
                                 TextFormField(
                                   controller: searchCtrl,
-                                  onFieldSubmitted: (value) => searchQuery.value = value.trim(),
+                                  onFieldSubmitted: (value) => _onFilterChange(searchQuery, value.trim()),
                                   decoration: InputDecoration(
                                     hintText: 'Search leads...',
                                     hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
@@ -281,20 +318,20 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                     suffixIcon: searchQuery.value.isEmpty
                                         ? IconButton(
-                                            onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                            onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
                                             icon: const Icon(Icons.search, size: 20),
                                           )
                                         : Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               IconButton(
-                                                onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                                onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
                                                 icon: const Icon(Icons.search, size: 20),
                                               ),
                                               IconButton(
                                                 onPressed: () {
                                                   searchCtrl.clear();
-                                                  searchQuery.value = '';
+                                                  _onFilterChange(searchQuery, '');
                                                 },
                                                 icon: const Icon(Icons.close, size: 20),
                                               ),
@@ -311,7 +348,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         value: selectedStatus.value,
                                         isExpanded: true,
                                         onChanged: (val) {
-                                          if (val != null) selectedStatus.value = val;
+                                          if (val != null) _onFilterChange(selectedStatus, val);
                                         },
                                         items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
                                           return DropdownMenuItem(
@@ -330,7 +367,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         value: selectedSource.value,
                                         isExpanded: true,
                                         onChanged: (val) {
-                                          if (val != null) selectedSource.value = val;
+                                          if (val != null) _onFilterChange(selectedSource, val);
                                         },
                                         items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
                                           return DropdownMenuItem(
@@ -345,13 +382,30 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                     ),
                                   ],
                                 ),
+                                const Divider(),
+                                DropdownButton<String>(
+                                  value: selectedMonth.value,
+                                  isExpanded: true,
+                                  onChanged: (val) {
+                                    if (val != null) _onFilterChange(selectedMonth, val);
+                                  },
+                                  items: monthOptions.map((opt) {
+                                    return DropdownMenuItem(
+                                      value: opt['value'],
+                                      child: Text(opt['label']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    );
+                                  }).toList(),
+                                  style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                  underline: const SizedBox(),
+                                  icon: const Icon(Icons.keyboard_arrow_down),
+                                ),
                                 if (isAdminOrManagerOrCRM) ...[
                                   const Divider(),
                                   DropdownButton<String>(
                                     value: selectedSalesperson.value,
                                     isExpanded: true,
                                     onChanged: (val) {
-                                      if (val != null) selectedSalesperson.value = val;
+                                      if (val != null) _onFilterChange(selectedSalesperson, val);
                                     },
                                     items: [
                                       const DropdownMenuItem(
@@ -396,7 +450,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 Expanded(
                                   child: TextFormField(
                                     controller: searchCtrl,
-                                    onFieldSubmitted: (value) => searchQuery.value = value.trim(),
+                                    onFieldSubmitted: (value) => _onFilterChange(searchQuery, value.trim()),
                                     decoration: InputDecoration(
                                       hintText: 'Search leads (name, phone, location)...',
                                       hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
@@ -408,20 +462,20 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                       suffixIcon: searchQuery.value.isEmpty
                                           ? IconButton(
-                                              onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                              onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
                                               icon: const Icon(Icons.search, size: 20),
                                             )
                                           : Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 IconButton(
-                                                  onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                                  onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
                                                   icon: const Icon(Icons.search, size: 20),
                                                 ),
                                                 IconButton(
                                                   onPressed: () {
                                                     searchCtrl.clear();
-                                                    searchQuery.value = '';
+                                                    _onFilterChange(searchQuery, '');
                                                   },
                                                   icon: const Icon(Icons.close, size: 20),
                                                 ),
@@ -434,7 +488,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 DropdownButton<String>(
                                   value: selectedStatus.value,
                                   onChanged: (val) {
-                                    if (val != null) selectedStatus.value = val;
+                                    if (val != null) _onFilterChange(selectedStatus, val);
                                   },
                                   items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
                                     return DropdownMenuItem(
@@ -450,7 +504,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 DropdownButton<String>(
                                   value: selectedSource.value,
                                   onChanged: (val) {
-                                    if (val != null) selectedSource.value = val;
+                                    if (val != null) _onFilterChange(selectedSource, val);
                                   },
                                   items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
                                     return DropdownMenuItem(
@@ -462,12 +516,28 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   underline: const SizedBox(),
                                   icon: const Icon(Icons.keyboard_arrow_down),
                                 ),
+                                Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
+                                DropdownButton<String>(
+                                  value: selectedMonth.value,
+                                  onChanged: (val) {
+                                    if (val != null) _onFilterChange(selectedMonth, val);
+                                  },
+                                  items: monthOptions.map((opt) {
+                                    return DropdownMenuItem(
+                                      value: opt['value'],
+                                      child: Text(opt['label']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    );
+                                  }).toList(),
+                                  style: TextStyle(color: crm.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                                  underline: const SizedBox(),
+                                  icon: const Icon(Icons.keyboard_arrow_down),
+                                ),
                                 if (isAdminOrManagerOrCRM) ...[
                                   Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
                                   DropdownButton<String>(
                                     value: selectedSalesperson.value,
                                     onChanged: (val) {
-                                      if (val != null) selectedSalesperson.value = val;
+                                      if (val != null) _onFilterChange(selectedSalesperson, val);
                                     },
                                     items: [
                                       const DropdownMenuItem(
@@ -522,7 +592,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
-                                '${filteredLeads.length} lead${filteredLeads.length == 1 ? '' : 's'}',
+                                '${paginated.totalItems} total lead${paginated.totalItems == 1 ? '' : 's'}',
                                 style: TextStyle(
                                   color: crm.primary,
                                   fontWeight: FontWeight.bold,
@@ -534,7 +604,42 @@ class SalesLeadsScreen extends HookConsumerWidget {
                         ),
                       ),
                     ],
-                    _LeadsTable(leads: filteredLeads, isDesktop: isDesktop),
+                    _LeadsTable(leads: leads, isDesktop: isDesktop),
+                    
+                    // Pagination Controls
+                    if (paginated.totalPages > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.chevron_left),
+                              onPressed: paginated.page > 1
+                                  ? () => currentPage.value--
+                                  : null,
+                              color: crm.primary,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              child: Text(
+                                'Page ${paginated.page} of ${paginated.totalPages}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: crm.textPrimary,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.chevron_right),
+                              onPressed: paginated.page < paginated.totalPages
+                                  ? () => currentPage.value++
+                                  : null,
+                              color: crm.primary,
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 );
               },
@@ -2267,27 +2372,19 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
 //  Lead Stats Dashboard Card
 // ─────────────────────────────────────────────────────────
 class _LeadStatsRow extends StatelessWidget {
-  final List<Lead> leads;
+  final Map<String, int> stats;
 
-  const _LeadStatsRow({required this.leads});
+  const _LeadStatsRow({required this.stats});
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
 
-    final newCount = leads.where((l) => l.status.toLowerCase() == 'new').length;
-    final followUpCount = leads.where((l) => l.status.toLowerCase() == 'follow-up').length;
-    final closedCount = leads.where((l) => ['converted', 'lost'].contains(l.status.toLowerCase())).length;
-    
-    final now = DateTime.now();
-    final missedCount = leads.where((l) {
-      final statusLower = l.status.toLowerCase();
-      return statusLower != 'converted' &&
-             statusLower != 'lost' &&
-             l.followUpDate != null &&
-             l.followUpDate!.isBefore(now);
-    }).length;
+    final newCount = stats['New'] ?? 0;
+    final followUpCount = stats['Follow-up'] ?? 0;
+    final closedCount = stats['Closed'] ?? 0;
+    final missedCount = stats['Missed'] ?? 0;
 
     Widget buildStatCard(String title, int count, IconData icon, Color color) {
       return Container(

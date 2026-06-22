@@ -1,14 +1,64 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/lead.dart';
+import '../core/models/paginated_response.dart';
 import '../providers/dio_provider.dart';
+
+class LeadFilter {
+  final int page;
+  final int limit;
+  final String search;
+  final String status;
+  final String source;
+  final String salesperson;
+  final String month;
+
+  LeadFilter({
+    this.page = 1,
+    this.limit = 20,
+    this.search = '',
+    this.status = 'All',
+    this.source = 'All',
+    this.salesperson = 'All',
+    this.month = 'All',
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LeadFilter &&
+          runtimeType == other.runtimeType &&
+          page == other.page &&
+          limit == other.limit &&
+          search == other.search &&
+          status == other.status &&
+          source == other.source &&
+          salesperson == other.salesperson &&
+          month == other.month;
+
+  @override
+  int get hashCode =>
+      page.hashCode ^
+      limit.hashCode ^
+      search.hashCode ^
+      status.hashCode ^
+      source.hashCode ^
+      salesperson.hashCode ^
+      month.hashCode;
+}
 
 final leadServiceProvider = Provider<LeadService>((ref) {
   return LeadService(ref.watch(dioProvider));
 });
 
+final paginatedLeadsProvider = FutureProvider.family<PaginatedResponse<Lead>, LeadFilter>((ref, filter) async {
+  return ref.watch(leadServiceProvider).getLeads(filter);
+});
+
+// Deprecated: use paginatedLeadsProvider instead. Keeping for backwards compatibility if needed.
 final leadsProvider = FutureProvider<List<Lead>>((ref) async {
-  return ref.watch(leadServiceProvider).getLeads();
+  final res = await ref.watch(leadServiceProvider).getLeads(LeadFilter(limit: 1000));
+  return res.items;
 });
 
 class LeadService {
@@ -16,21 +66,41 @@ class LeadService {
 
   LeadService(this._dio);
 
-  Future<List<Lead>> getLeads() async {
+  Future<PaginatedResponse<Lead>> getLeads(LeadFilter filter) async {
     try {
-      final response = await _dio.get('/leads');
+      final response = await _dio.get(
+        '/leads',
+        queryParameters: {
+          'page': filter.page,
+          'limit': filter.limit,
+          if (filter.search.isNotEmpty) 'search': filter.search,
+          if (filter.status != 'All') 'status': filter.status,
+          if (filter.source != 'All') 'source': filter.source,
+          if (filter.salesperson != 'All') 'salesperson': filter.salesperson,
+          if (filter.month != 'All') 'month': filter.month,
+        },
+      );
+      
       final data = response.data;
-
-      List leadsList;
-      if (data is Map) {
-        leadsList = (data['data'] ?? data['leads'] ?? data['items'] ?? []) as List;
-      } else if (data is List) {
-        leadsList = data;
+      if (data is Map<String, dynamic> && data.containsKey('items')) {
+        return PaginatedResponse<Lead>.fromJson(data, (json) => Lead.fromJson(json));
       } else {
-        leadsList = [];
+        // Fallback for old API format or missing pagination fields
+        List leadsList = [];
+        if (data is Map) {
+          leadsList = (data['data'] ?? data['leads'] ?? data['items'] ?? []) as List;
+        } else if (data is List) {
+          leadsList = data;
+        }
+        final items = leadsList.map((item) => Lead.fromJson(item as Map<String, dynamic>)).toList();
+        return PaginatedResponse<Lead>(
+          items: items,
+          totalItems: items.length,
+          totalPages: 1,
+          page: 1,
+          limit: filter.limit,
+        );
       }
-
-      return leadsList.map((item) => Lead.fromJson(item as Map<String, dynamic>)).toList();
     } on DioException catch (e) {
       throw Exception('Failed to load leads: ${e.message}');
     }
