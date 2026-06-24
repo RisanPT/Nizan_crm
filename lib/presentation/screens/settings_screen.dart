@@ -305,7 +305,7 @@ class SettingsScreen extends HookConsumerWidget {
                         16.h,
                         DropdownButtonFormField<String>(
                           decoration: const InputDecoration(labelText: 'Pincode Limit', prefixIcon: Icon(Icons.map_outlined)),
-                          value: selPincodeId.isEmpty ? null : selPincodeId,
+                          initialValue: selPincodeId.isEmpty ? null : selPincodeId,
                           items: [
                             const DropdownMenuItem(value: '', child: Text('No Pincode Limit')),
                             ...filteredPincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))),

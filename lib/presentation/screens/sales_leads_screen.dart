@@ -222,7 +222,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
 
     final asyncPaginatedLeads = ref.watch(paginatedLeadsProvider(filter));
 
-    void _onFilterChange<T>(ValueNotifier<T> notifier, T newValue) {
+    void onFilterChange<T>(ValueNotifier<T> notifier, T newValue) {
       if (notifier.value != newValue) {
         notifier.value = newValue;
         currentPage.value = 1; // Reset to page 1 on any filter change
@@ -306,7 +306,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                               children: [
                                 TextFormField(
                                   controller: searchCtrl,
-                                  onFieldSubmitted: (value) => _onFilterChange(searchQuery, value.trim()),
+                                  onFieldSubmitted: (value) => onFilterChange(searchQuery, value.trim()),
                                   decoration: InputDecoration(
                                     hintText: 'Search leads...',
                                     hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
@@ -318,20 +318,20 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                     contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                     suffixIcon: searchQuery.value.isEmpty
                                         ? IconButton(
-                                            onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
+                                            onPressed: () => onFilterChange(searchQuery, searchCtrl.text.trim()),
                                             icon: const Icon(Icons.search, size: 20),
                                           )
                                         : Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               IconButton(
-                                                onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
+                                                onPressed: () => onFilterChange(searchQuery, searchCtrl.text.trim()),
                                                 icon: const Icon(Icons.search, size: 20),
                                               ),
                                               IconButton(
                                                 onPressed: () {
                                                   searchCtrl.clear();
-                                                  _onFilterChange(searchQuery, '');
+                                                  onFilterChange(searchQuery, '');
                                                 },
                                                 icon: const Icon(Icons.close, size: 20),
                                               ),
@@ -348,7 +348,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         value: selectedStatus.value,
                                         isExpanded: true,
                                         onChanged: (val) {
-                                          if (val != null) _onFilterChange(selectedStatus, val);
+                                          if (val != null) onFilterChange(selectedStatus, val);
                                         },
                                         items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
                                           return DropdownMenuItem(
@@ -367,7 +367,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         value: selectedSource.value,
                                         isExpanded: true,
                                         onChanged: (val) {
-                                          if (val != null) _onFilterChange(selectedSource, val);
+                                          if (val != null) onFilterChange(selectedSource, val);
                                         },
                                         items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
                                           return DropdownMenuItem(
@@ -387,7 +387,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   value: selectedMonth.value,
                                   isExpanded: true,
                                   onChanged: (val) {
-                                    if (val != null) _onFilterChange(selectedMonth, val);
+                                    if (val != null) onFilterChange(selectedMonth, val);
                                   },
                                   items: monthOptions.map((opt) {
                                     return DropdownMenuItem(
@@ -405,7 +405,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                     value: selectedSalesperson.value,
                                     isExpanded: true,
                                     onChanged: (val) {
-                                      if (val != null) _onFilterChange(selectedSalesperson, val);
+                                      if (val != null) onFilterChange(selectedSalesperson, val);
                                     },
                                     items: [
                                       const DropdownMenuItem(
@@ -450,7 +450,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 Expanded(
                                   child: TextFormField(
                                     controller: searchCtrl,
-                                    onFieldSubmitted: (value) => _onFilterChange(searchQuery, value.trim()),
+                                    onFieldSubmitted: (value) => onFilterChange(searchQuery, value.trim()),
                                     decoration: InputDecoration(
                                       hintText: 'Search leads (name, phone, location)...',
                                       hintStyle: TextStyle(color: crm.textSecondary, fontSize: 14),
@@ -462,20 +462,20 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                       suffixIcon: searchQuery.value.isEmpty
                                           ? IconButton(
-                                              onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
+                                              onPressed: () => onFilterChange(searchQuery, searchCtrl.text.trim()),
                                               icon: const Icon(Icons.search, size: 20),
                                             )
                                           : Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 IconButton(
-                                                  onPressed: () => _onFilterChange(searchQuery, searchCtrl.text.trim()),
+                                                  onPressed: () => onFilterChange(searchQuery, searchCtrl.text.trim()),
                                                   icon: const Icon(Icons.search, size: 20),
                                                 ),
                                                 IconButton(
                                                   onPressed: () {
                                                     searchCtrl.clear();
-                                                    _onFilterChange(searchQuery, '');
+                                                    onFilterChange(searchQuery, '');
                                                   },
                                                   icon: const Icon(Icons.close, size: 20),
                                                 ),
@@ -488,7 +488,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 DropdownButton<String>(
                                   value: selectedStatus.value,
                                   onChanged: (val) {
-                                    if (val != null) _onFilterChange(selectedStatus, val);
+                                    if (val != null) onFilterChange(selectedStatus, val);
                                   },
                                   items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
                                     return DropdownMenuItem(
@@ -504,7 +504,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 DropdownButton<String>(
                                   value: selectedSource.value,
                                   onChanged: (val) {
-                                    if (val != null) _onFilterChange(selectedSource, val);
+                                    if (val != null) onFilterChange(selectedSource, val);
                                   },
                                   items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
                                     return DropdownMenuItem(
@@ -520,7 +520,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                 DropdownButton<String>(
                                   value: selectedMonth.value,
                                   onChanged: (val) {
-                                    if (val != null) _onFilterChange(selectedMonth, val);
+                                    if (val != null) onFilterChange(selectedMonth, val);
                                   },
                                   items: monthOptions.map((opt) {
                                     return DropdownMenuItem(
@@ -537,7 +537,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   DropdownButton<String>(
                                     value: selectedSalesperson.value,
                                     onChanged: (val) {
-                                      if (val != null) _onFilterChange(selectedSalesperson, val);
+                                      if (val != null) onFilterChange(selectedSalesperson, val);
                                     },
                                     items: [
                                       const DropdownMenuItem(

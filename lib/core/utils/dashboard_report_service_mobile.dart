@@ -47,6 +47,7 @@ Future<void> downloadDashboardReport({
     useEventDate: useEventDate,
     startDate: startDate,
     endDate: endDate,
+    reportType: reportType,
   );
 
   pdf.addPage(
@@ -66,7 +67,7 @@ Future<void> downloadDashboardReport({
           'finance' => 'Team N CRM Finance Report',
           'ceo_daily' => 'DAILY SALES REPORT | Team N Makeovers',
           'forecast' => 'Team N CRM Sales Forecast Report',
-          _ => 'Team N CRM Executive Overview',
+          _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N CRM Executive Overview',
         };
 
         return [
@@ -190,6 +191,23 @@ Future<void> downloadDashboardReport({
             pw.SizedBox(height: 22),
             _sectionTitle('Detailed Sales Records'),
             _bookingTable(report.todaysBookings, districts),
+          ],
+
+          if (reportType.startsWith('month_end_cashflow')) ...[
+            pw.Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                if (reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Advance')
+                  _metricCard('Advances Collected', 'INR ${report.cashFlowAdvances.toStringAsFixed(0)}'),
+                if (reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Collection')
+                  _metricCard('Balances Collected', 'INR ${report.cashFlowCurrentEvents.toStringAsFixed(0)}'),
+                _metricCard('Total Inflow (Filtered)', 'INR ${report.cashFlowTotal.toStringAsFixed(0)}'),
+              ],
+            ),
+            pw.SizedBox(height: 22),
+            _sectionTitle('Cash Flow Ledger'),
+            _cashFlowTable(report.cashFlowTransactions, districts),
           ],
         ];
       },
@@ -316,6 +334,63 @@ pw.Widget _staffTable(List<_StaffMetric> rows) {
   );
 }
 
+pw.Widget _cashFlowTable(List<_CashFlowTransaction> rows, List<District> districts) {
+  final List<List<dynamic>> dataList = rows.map((tx) {
+    String displayDistrict = tx.booking.district.trim();
+    if (displayDistrict.isEmpty && tx.booking.districtId.isNotEmpty && districts.isNotEmpty) {
+      try {
+        final matched = districts.firstWhere((d) => d.id == tx.booking.districtId);
+        if (matched.name.isNotEmpty) {
+          displayDistrict = matched.name.trim();
+        }
+      } catch (_) {}
+    }
+    if (displayDistrict.isEmpty) {
+      displayDistrict = tx.booking.region.trim();
+    }
+    return <dynamic>[
+      _dateLabel(tx.date),
+      tx.clientName,
+      tx.booking.phone,
+      tx.booking.service,
+      displayDistrict,
+      tx.type,
+      'INR ${tx.amount.toStringAsFixed(0)}',
+    ];
+  }).toList();
+
+  if (rows.isNotEmpty) {
+    final totalAmount = rows.fold<double>(0.0, (sum, tx) => sum + tx.amount);
+    dataList.add(<dynamic>[
+      pw.Text('Total', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      '',
+      '',
+      '',
+      '',
+      '',
+      pw.Text('INR ${totalAmount.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+    ]);
+  }
+
+  return pw.TableHelper.fromTextArray(
+    headers: const [
+      'Date',
+      'Client',
+      'Phone',
+      'Service',
+      'District',
+      'Transaction Type',
+      'Amount',
+    ],
+    data: dataList,
+    border: pw.TableBorder.all(color: PdfColors.blueGrey100),
+    headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+    cellStyle: const pw.TextStyle(fontSize: 8),
+    headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+  );
+}
+
 pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
   final List<List<dynamic>> dataList = rows
       .map<List<dynamic>>(
@@ -403,6 +478,7 @@ _DashboardReport _buildReport(
   bool useEventDate = false,
   DateTime? startDate,
   DateTime? endDate,
+  String reportType = '',
 }) {
   final monthBookings = bookings.where((booking) {
     final date = useEventDate
@@ -415,7 +491,7 @@ _DashboardReport _buildReport(
   }).toList();
 
   final activeBookings = monthBookings
-      .where((booking) => booking.status.toLowerCase() != 'cancelled')
+      .where((booking) => booking.status.toLowerCase() != 'cancelled' && booking.status.toLowerCase() != 'rejected')
       .toList();
   final completedWorks = monthBookings
       .where((booking) => booking.status.toLowerCase() == 'completed')
@@ -573,6 +649,63 @@ _DashboardReport _buildReport(
           ),
     );
 
+  double cashFlowAdvances = 0;
+  double cashFlowCurrentEvents = 0;
+  List<_CashFlowTransaction> cashFlowTransactions = [];
+
+  if (reportType.startsWith('month_end_cashflow')) {
+    bool includeAdvance = reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Advance';
+    bool includeCollection = reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Collection';
+
+    for (final booking in bookings) {
+      if (booking.status.toLowerCase() == 'cancelled' || booking.status.toLowerCase() == 'rejected') continue;
+      
+      final bDate = booking.createdAt ?? booking.bookingDate;
+      final eDate = booking.serviceStart;
+      
+      bool bookedThisMonth = bDate.year == month.year && bDate.month == month.month;
+      bool eventThisMonth = eDate.year == month.year && eDate.month == month.month;
+
+      if (bookedThisMonth && booking.advanceAmount > 0 && includeAdvance) {
+        cashFlowAdvances += booking.advanceAmount;
+        cashFlowTransactions.add(_CashFlowTransaction(
+          date: bDate,
+          clientName: booking.customerName,
+          type: 'Advance Amount',
+          amount: booking.advanceAmount,
+          booking: booking,
+        ));
+      }
+      
+      if (eventThisMonth && booking.status.toLowerCase() == 'completed' && includeCollection) {
+        double balance = (booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity);
+        if (balance > 0) {
+          cashFlowCurrentEvents += balance;
+          cashFlowTransactions.add(_CashFlowTransaction(
+            date: eDate,
+            clientName: booking.customerName,
+            type: 'Collection Amount (Balance)',
+            amount: balance,
+            booking: booking,
+          ));
+        }
+      } else if (eventThisMonth && booking.status.toLowerCase() != 'completed' && includeCollection) {
+        double balance = (booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity);
+        if (balance > 0) {
+          cashFlowCurrentEvents += balance;
+          cashFlowTransactions.add(_CashFlowTransaction(
+            date: eDate,
+            clientName: booking.customerName,
+            type: 'Collection Amount (Balance)',
+            amount: balance,
+            booking: booking,
+          ));
+        }
+      }
+    }
+    cashFlowTransactions.sort((a, b) => a.date.compareTo(b.date));
+  }
+
   return _DashboardReport(
     totalWorks: activeBookings.length,
     completedWorks: completedWorks,
@@ -589,6 +722,10 @@ _DashboardReport _buildReport(
     todaysBookings: todaysBookings,
     completedBookingsList: completedBookingsList,
     monthBookingsList: monthBookingsList,
+    cashFlowTotal: cashFlowAdvances + cashFlowCurrentEvents,
+    cashFlowAdvances: cashFlowAdvances,
+    cashFlowCurrentEvents: cashFlowCurrentEvents,
+    cashFlowTransactions: cashFlowTransactions,
   );
 }
 
@@ -651,6 +788,11 @@ class _DashboardReport {
   final List<Booking> completedBookingsList;
   final List<Booking> monthBookingsList;
 
+  final double cashFlowTotal;
+  final double cashFlowAdvances;
+  final double cashFlowCurrentEvents;
+  final List<_CashFlowTransaction> cashFlowTransactions;
+
   const _DashboardReport({
     required this.totalWorks,
     required this.completedWorks,
@@ -667,6 +809,10 @@ class _DashboardReport {
     required this.todaysBookings,
     required this.completedBookingsList,
     required this.monthBookingsList,
+    this.cashFlowTotal = 0,
+    this.cashFlowAdvances = 0,
+    this.cashFlowCurrentEvents = 0,
+    this.cashFlowTransactions = const [],
   });
 }
 
@@ -705,6 +851,22 @@ class _DailyRevenueMetric {
     required this.bookingsCount,
     required this.revenue,
     required this.date,
+  });
+}
+
+class _CashFlowTransaction {
+  final DateTime date;
+  final String clientName;
+  final String type;
+  final double amount;
+  final Booking booking;
+
+  const _CashFlowTransaction({
+    required this.date,
+    required this.clientName,
+    required this.type,
+    required this.amount,
+    required this.booking,
   });
 }
 

@@ -16,6 +16,7 @@ class ExportSalesReportDialog extends StatefulWidget {
   final void Function(bool) onJulSepReport;
   final void Function(bool) onOctDecReport;
   final void Function(bool) onJanMarReport;
+  final void Function(bool, DateTime, String) onMonthEndCashFlowReport;
 
   const ExportSalesReportDialog({
     super.key,
@@ -33,6 +34,7 @@ class ExportSalesReportDialog extends StatefulWidget {
     required this.onJulSepReport,
     required this.onOctDecReport,
     required this.onJanMarReport,
+    required this.onMonthEndCashFlowReport,
   });
 
   @override
@@ -259,6 +261,91 @@ class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
                       onTap: () {
                         Navigator.pop(context);
                         widget.onFullLedger(_useEventDate);
+                      },
+                    ),
+                    12.h,
+                    _OptionCard(
+                      icon: Icons.attach_money,
+                      title: 'Month End Cash Flow Report',
+                      subtitle: 'Accurate cash inflow tracking for the selected month.',
+                      onTap: () async {
+                        final result = await showDialog<List<dynamic>>(
+                          context: context,
+                          builder: (context) {
+                            int selectedYear = DateTime.now().year;
+                            int selectedMonth = DateTime.now().month;
+                            String selectedType = 'All';
+                            final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                            return StatefulBuilder(
+                              builder: (context, setState) {
+                                return AlertDialog(
+                                  title: const Text('Select Month & Year', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                                  content: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          DropdownButton<int>(
+                                            value: selectedMonth,
+                                            items: List.generate(12, (index) => DropdownMenuItem(
+                                              value: index + 1,
+                                              child: Text(months[index]),
+                                            )),
+                                            onChanged: (val) => setState(() => selectedMonth = val!),
+                                          ),
+                                          const SizedBox(width: 16),
+                                          DropdownButton<int>(
+                                            value: selectedYear,
+                                            items: List.generate(10, (index) {
+                                              final year = DateTime.now().year - 5 + index;
+                                              return DropdownMenuItem(
+                                                value: year,
+                                                child: Text(year.toString()),
+                                              );
+                                            }),
+                                            onChanged: (val) => setState(() => selectedYear = val!),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Text('Type: '),
+                                          const SizedBox(width: 8),
+                                          DropdownButton<String>(
+                                            value: selectedType,
+                                            items: ['All', 'Advance', 'Collection'].map((type) => DropdownMenuItem(
+                                              value: type,
+                                              child: Text(type),
+                                            )).toList(),
+                                            onChanged: (val) => setState(() => selectedType = val!),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => Navigator.pop(context, [DateTime(selectedYear, selectedMonth), selectedType]),
+                                      child: const Text('Select'),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        );
+
+                        if (result != null) {
+                          if (context.mounted) Navigator.pop(context);
+                          widget.onMonthEndCashFlowReport(_useEventDate, result[0] as DateTime, result[1] as String);
+                        }
                       },
                     ),
                     24.h,

@@ -600,7 +600,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                          initialValue: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
                           decoration: const InputDecoration(labelText: 'Region', isDense: true),
                           items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
                           onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
@@ -616,7 +616,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                          initialValue: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
                           decoration: const InputDecoration(labelText: 'District', isDense: true),
                           items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
                           onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
@@ -631,7 +631,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           isExpanded: true,
-                          value: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
+                          initialValue: mainSelectedPincodeId.value.isEmpty ? null : mainSelectedPincodeId.value,
                           decoration: const InputDecoration(labelText: 'Pincode', isDense: true),
                           items: mainAvailablePincodes.map((p) => DropdownMenuItem(value: p.id, child: Text(p.code))).toList(),
                           onChanged: mainSelectedDistrictId.value.isEmpty ? null : (val) {

@@ -353,7 +353,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              value: selEmployee.isEmpty ? null : selEmployee,
+                              initialValue: selEmployee.isEmpty ? null : selEmployee,
                               items: artists.map<DropdownMenuItem<String>>((e) => DropdownMenuItem<String>(value: e.id, child: Text(e.name))).toList(),
                               validator: (v) => (v == null || v.isEmpty) ? 'Select artist' : null,
                               onChanged: (v) => setState(() => selEmployee = v ?? ''),
@@ -371,7 +371,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            value: selBooking.isEmpty ? null : selBooking,
+                            initialValue: selBooking.isEmpty ? null : selBooking,
                             items: myBookings.map<DropdownMenuItem<String>>((b) {
                               final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
                               return DropdownMenuItem<String>(
@@ -2001,7 +2001,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               prefixIcon: Icon(Icons.person_outline, size: 18),
                               contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
-                            value: selectedArtist,
+                            initialValue: selectedArtist,
                             items: <DropdownMenuItem<String>>[
                               const DropdownMenuItem<String>(
                                 value: 'all',
@@ -2996,7 +2996,7 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
                             ),
                           );
                         },
-                        errorBuilder: (ctx, _, __) => const Center(
+                        errorBuilder: (ctx, _, _) => const Center(
                           child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
                         ),
                       ),

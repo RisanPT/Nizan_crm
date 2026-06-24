@@ -260,6 +260,20 @@ class SalesBookingsScreen extends HookConsumerWidget {
               activeFilters: activeFiltersStr,
             ),
           ),
+          onMonthEndCashFlowReport: (useEventDate, selectedMonth, transactionType) => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: selectedMonth,
+              bookings: geoFilteredAllBookings,
+              packages: packages,
+              employees: employees,
+              reportType: 'month_end_cashflow_$transactionType',
+              useEventDate: useEventDate,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
+            ),
+          ),
           onForecastReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
