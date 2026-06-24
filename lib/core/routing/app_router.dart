@@ -30,7 +30,7 @@ import '../../presentation/screens/artist_finance_screen.dart';
 import '../../presentation/screens/leave_request_screen.dart';
 import '../../presentation/screens/profile_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
-import '../../presentation/screens/accounts_collections_screen.dart';
+import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
 import '../../presentation/screens/lead_details_screen.dart';
 
