@@ -43,17 +43,11 @@ class FleetDriversScreen extends HookConsumerWidget {
         builder: (dialogContext) {
           final regions = asyncRegions.value ?? const <ServiceRegion>[];
           final regionOptions = [
-            const DropdownMenuItem(
-              value: '',
-              child: Text('Any / All'),
-            ),
+            const DropdownMenuItem(value: '', child: Text('Any / All')),
             ...regions.map(
               (region) => DropdownMenuItem(
                 value: region.id,
-                child: Text(
-                  region.name,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                child: Text(region.name, overflow: TextOverflow.ellipsis),
               ),
             ),
           ];
@@ -165,7 +159,9 @@ class FleetDriversScreen extends HookConsumerWidget {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    await ref.read(employeeServiceProvider).saveEmployee(
+                    await ref
+                        .read(employeeServiceProvider)
+                        .saveEmployee(
                           id: driver?.id,
                           name: nameCtrl.text.trim(),
                           email: emailCtrl.text.trim(),
@@ -217,10 +213,10 @@ class FleetDriversScreen extends HookConsumerWidget {
               ),
               Row(
                 children: [
-                  OutlinedButton(
-                    onPressed: () => context.go('/staff'),
-                    child: const Text('Open Staff Management'),
-                  ),
+                  // OutlinedButton(
+                  //   onPressed: () => context.go('/staff'),
+                  //   child: const Text('Open Staff Management'),
+                  // ),
                   12.w,
                   ElevatedButton.icon(
                     onPressed: () => openDriverDialog(),
@@ -259,10 +255,16 @@ class FleetDriversScreen extends HookConsumerWidget {
                 FilledButton.icon(
                   onPressed: () => openDriverDialog(),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Driver', style: TextStyle(fontSize: 13)),
+                  label: const Text(
+                    'Add Driver',
+                    style: TextStyle(fontSize: 13),
+                  ),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 0,
+                    ),
                   ),
                 ),
               ],
@@ -350,7 +352,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                   crossAxisCount: 3,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
-                  mainAxisExtent: 160,
+                  mainAxisExtent: 190,
                 ),
                 itemCount: drivers.length,
                 itemBuilder: (context, index) {
@@ -431,198 +433,232 @@ class FleetDriversScreen extends HookConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  backgroundImage: employee.profileImage.isNotEmpty
-                      ? NetworkImage(employee.profileImage)
-                      : null,
-                  child: employee.profileImage.isEmpty
-                      ? Text(
-                          employee.name.isNotEmpty
-                              ? employee.name.substring(0, 1).toUpperCase()
-                              : '?',
-                          style: TextStyle(
-                            color: theme.colorScheme.primary,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: theme.colorScheme.primary.withValues(
+                      alpha: 0.1,
+                    ),
+                    backgroundImage: employee.profileImage.isNotEmpty
+                        ? NetworkImage(employee.profileImage)
+                        : null,
+                    child: employee.profileImage.isEmpty
+                        ? Text(
+                            employee.name.isNotEmpty
+                                ? employee.name.substring(0, 1).toUpperCase()
+                                : '?',
+                            style: TextStyle(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                          )
+                        : null,
+                  ),
+                  12.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          employee.name,
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 16,
                           ),
-                        )
-                      : null,
-                ),
-                12.w,
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        employee.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      4.h,
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: crmColors.warning.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Driver',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: crmColors.warning,
-                              ),
-                            ),
-                          ),
-                          if (employee.type == 'in-house') ...[
-                            8.w,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        4.h,
+                        Row(
+                          children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: crmColors.accent.withValues(alpha: 0.1),
+                                color: crmColors.warning.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                'In-House',
+                                'Driver',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: crmColors.accent,
+                                  color: crmColors.warning,
                                 ),
                               ),
                             ),
+                            if (employee.type == 'in-house') ...[
+                              8.w,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: crmColors.accent.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'In-House',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: crmColors.accent,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, size: 20),
-                  onSelected: (value) async {
-                    if (value == 'edit') {
-                      onEdit();
-                    } else if (value == 'delete') {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Delete Driver'),
-                          content: Text(
-                              'Are you sure you want to delete ${employee.name}?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Cancel'),
+                  PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, size: 20),
+                    onSelected: (value) async {
+                      if (value == 'edit') {
+                        onEdit();
+                      } else if (value == 'delete') {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Delete Driver'),
+                            content: Text(
+                              'Are you sure you want to delete ${employee.name}?',
                             ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              style: TextButton.styleFrom(
-                                  foregroundColor: crmColors.destructive),
-                              child: const Text('Delete'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: crmColors.destructive,
+                                ),
+                                child: const Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await ref
+                              .read(employeeServiceProvider)
+                              .deleteEmployee(employee.id);
+                          ref.invalidate(employeesProvider);
+                          ref.invalidate(paginatedEmployeesProvider);
+                        }
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 16),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.delete,
+                              size: 16,
+                              color: crmColors.destructive,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Delete',
+                              style: TextStyle(color: crmColors.destructive),
                             ),
                           ],
                         ),
-                      );
-                      if (confirm == true) {
-                        await ref
-                            .read(employeeServiceProvider)
-                            .deleteEmployee(employee.id);
-                        ref.invalidate(employeesProvider);
-                        ref.invalidate(paginatedEmployeesProvider);
-                      }
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, size: 16),
-                          SizedBox(width: 8),
-                          Text('Edit'),
-                        ],
                       ),
+                    ],
+                  ),
+                ],
+              ),
+              12.h,
+              if (employee.regionName.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.location_on_outlined,
+                      size: 14,
+                      color: crmColors.textSecondary,
                     ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete,
-                              size: 16, color: crmColors.destructive),
-                          const SizedBox(width: 8),
-                          Text('Delete',
-                              style: TextStyle(color: crmColors.destructive)),
-                        ],
+                    6.w,
+                    Expanded(
+                      child: Text(
+                        employee.regionName,
+                        style: TextStyle(
+                          color: crmColors.textSecondary,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
+                6.h,
               ],
-            ),
-            12.h,
-            if (employee.regionName.isNotEmpty) ...[
+              if (employee.phone.isNotEmpty) ...[
+                Row(
+                  children: [
+                    Icon(
+                      Icons.phone_outlined,
+                      size: 14,
+                      color: crmColors.textSecondary,
+                    ),
+                    6.w,
+                    Text(
+                      employee.phone,
+                      style: TextStyle(
+                        color: crmColors.textSecondary,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+                6.h,
+              ],
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined,
-                      size: 14, color: crmColors.textSecondary),
+                  Icon(
+                    Icons.check_circle_outline,
+                    size: 14,
+                    color: crmColors.textSecondary,
+                  ),
                   6.w,
-                  Expanded(
-                    child: Text(
-                      employee.regionName,
-                      style: TextStyle(
-                          color: crmColors.textSecondary, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  Text(
+                    isActive ? 'Active' : 'Inactive',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isActive
+                          ? crmColors.success
+                          : crmColors.destructive,
                     ),
                   ),
                 ],
               ),
-              6.h,
             ],
-            if (employee.phone.isNotEmpty) ...[
-              Row(
-                children: [
-                  Icon(Icons.phone_outlined,
-                      size: 14, color: crmColors.textSecondary),
-                  6.w,
-                  Text(
-                    employee.phone,
-                    style:
-                        TextStyle(color: crmColors.textSecondary, fontSize: 13),
-                  ),
-                ],
-              ),
-              6.h,
-            ],
-            Row(
-              children: [
-                Icon(Icons.check_circle_outline,
-                    size: 14, color: crmColors.textSecondary),
-                6.w,
-                Text(
-                  isActive ? 'Active' : 'Inactive',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: isActive ? crmColors.success : crmColors.destructive,
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
-      ),
       ),
     );
   }

@@ -38,7 +38,10 @@ class FleetVehiclesScreen extends HookConsumerWidget {
       final notesCtrl = TextEditingController(text: vehicle?.notes ?? '');
       var type = vehicle?.type ?? 'car';
       var fuelType = vehicle?.fuelType ?? 'petrol';
-      var status = vehicle?.status ?? 'active';
+      var status = vehicle?.status ?? 'running';
+      if (!['running', 'under_service', 'accident', 'complaint', 'other'].contains(status)) {
+        status = 'running';
+      }
       var driverId = vehicle?.driver?.id ?? '';
       var ownershipType = vehicle?.ownershipType ?? 'in_house';
 
@@ -204,18 +207,11 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                       DropdownButtonFormField<String>(
                         initialValue: status,
                         items: const [
-                          DropdownMenuItem(
-                            value: 'active',
-                            child: Text('Active'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'maintenance',
-                            child: Text('Maintenance'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'inactive',
-                            child: Text('Inactive'),
-                          ),
+                          DropdownMenuItem(value: 'running', child: Text('Running')),
+                          DropdownMenuItem(value: 'under_service', child: Text('Under Service')),
+                          DropdownMenuItem(value: 'accident', child: Text('Accident')),
+                          DropdownMenuItem(value: 'complaint', child: Text('Complaint')),
+                          DropdownMenuItem(value: 'other', child: Text('Other')),
                         ],
                         onChanged: (value) {
                           if (value != null) setState(() => status = value);
@@ -270,10 +266,14 @@ class FleetVehiclesScreen extends HookConsumerWidget {
 
     Color statusColor(String status, CrmTheme colors) {
       switch (status) {
-        case 'active':
+        case 'running':
           return colors.success;
-        case 'maintenance':
+        case 'under_service':
           return colors.warning;
+        case 'accident':
+          return colors.destructive;
+        case 'complaint':
+          return Colors.orange;
         default:
           return colors.textSecondary;
       }
@@ -404,349 +404,203 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                 );
               }
 
-              if (isMobile) {
-                // ── Mobile: premium card list ──────────────────────────
-                return ListView.separated(
-                  itemCount: vehicles.length,
-                  separatorBuilder: (_, _) => 10.h,
-                  itemBuilder: (context, index) {
-                    final v = vehicles[index];
-                    final isRented = v.ownershipType == 'rented';
-                    final accentColor = statusColor(v.status, crmColors);
+              int crossAxisCount = 1;
+              if (!isMobile) {
+                final width = MediaQuery.of(context).size.width;
+                if (width > 1200) {
+                  crossAxisCount = 3;
+                } else if (width > 800) {
+                  crossAxisCount = 2;
+                }
+              }
 
-                    return Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: crmColors.border),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: InkWell(
-                        onTap: () => openVehicleDialog(v),
-                        child: IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Left accent
-                              Container(width: 4, color: accentColor),
-                              // Content
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                      12, 12, 8, 12),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+              return GridView.builder(
+                padding: EdgeInsets.zero,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  mainAxisExtent: 180,
+                ),
+                itemCount: vehicles.length,
+                itemBuilder: (context, index) {
+                  final v = vehicles[index];
+                  final isRented = v.ownershipType == 'rented';
+                  final accentColor = statusColor(v.status, crmColors);
+
+                  return Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: crmColors.border),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Left accent line
+                          Container(width: 6, color: accentColor),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       // Vehicle icon badge
                                       Container(
-                                        width: 42,
-                                        height: 42,
+                                        width: 48,
+                                        height: 48,
                                         decoration: BoxDecoration(
-                                          color: crmColors.primary
-                                              .withValues(alpha: 0.09),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          color: accentColor.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Icon(
                                           vehicleIcon(v.type),
-                                          color: crmColors.primary,
-                                          size: 22,
+                                          color: accentColor,
+                                          size: 26,
                                         ),
                                       ),
                                       12.w,
-                                      // Info
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            // Name + reg
                                             Text(
                                               v.name,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                              ),
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
-                                            3.h,
+                                            4.h,
                                             Text(
-                                              v.registrationNumber.isNotEmpty
-                                                  ? '${v.registrationNumber} • ${v.brand}'
-                                                  : v.brand,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: crmColors.textSecondary,
-                                              ),
+                                              v.registrationNumber.isNotEmpty ? '${v.registrationNumber} • ${v.brand}' : v.brand,
+                                              style: TextStyle(fontSize: 12, color: crmColors.textSecondary),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
-                                            8.h,
-                                            // Tags row
-                                            Wrap(
-                                              spacing: 6,
-                                              runSpacing: 4,
-                                              children: [
-                                                _tag(
-                                                  v.status.toUpperCase(),
-                                                  accentColor,
-                                                ),
-                                                _tag(
-                                                  isRented
-                                                      ? 'RENTED'
-                                                      : 'IN-HOUSE',
-                                                  isRented
-                                                      ? crmColors.warning
-                                                      : crmColors.primary,
-                                                ),
-                                                _tag(
-                                                  v.fuelType
-                                                      .toUpperCase(),
-                                                  crmColors.textSecondary,
-                                                ),
-                                              ],
-                                            ),
-                                            if (v.driver?.name.isNotEmpty ==
-                                                true) ...[
-                                              6.h,
-                                              Row(
-                                                children: [
-                                                  Icon(
-                                                    Icons.person_outline,
-                                                    size: 11,
-                                                    color:
-                                                        crmColors.textSecondary,
-                                                  ),
-                                                  4.w,
-                                                  Expanded(
-                                                    child: Text(
-                                                      v.driver!.name,
-                                                      style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: crmColors
-                                                            .textSecondary,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
                                           ],
                                         ),
                                       ),
                                       // Menu
                                       PopupMenuButton<String>(
-                                        icon: Icon(Icons.more_vert,
-                                            size: 18,
-                                            color: crmColors.textSecondary),
+                                        icon: Icon(Icons.more_vert, size: 20, color: crmColors.textSecondary),
                                         onSelected: (val) async {
                                           if (val == 'edit') {
                                             openVehicleDialog(v);
                                           } else if (val == 'delete') {
-                                            final confirm =
-                                                await showDialog<bool>(
+                                            final confirm = await showDialog<bool>(
                                               context: context,
                                               builder: (ctx) => AlertDialog(
-                                                title: const Text(
-                                                    'Delete Vehicle'),
-                                                content: Text(
-                                                    'Delete ${v.name}?'),
+                                                title: const Text('Delete Vehicle'),
+                                                content: Text('Delete ${v.name}?'),
                                                 actions: [
+                                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                                                   TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(
-                                                            ctx, false),
-                                                    child: const Text('Cancel'),
-                                                  ),
-                                                  TextButton(
-                                                    onPressed: () =>
-                                                        Navigator.pop(
-                                                            ctx, true),
-                                                    style:
-                                                        TextButton.styleFrom(
-                                                      foregroundColor:
-                                                          crmColors.destructive,
-                                                    ),
+                                                    onPressed: () => Navigator.pop(ctx, true),
+                                                    style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
                                                     child: const Text('Delete'),
                                                   ),
                                                 ],
                                               ),
                                             );
                                             if (confirm == true) {
-                                              await ref
-                                                  .read(vehicleServiceProvider)
-                                                  .deleteVehicle(v.id);
+                                              await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
                                               ref.invalidate(vehiclesProvider);
-                                              ref.invalidate(
-                                                  paginatedVehiclesProvider);
+                                              ref.invalidate(paginatedVehiclesProvider);
                                             }
                                           }
                                         },
                                         itemBuilder: (ctx) => [
-                                          const PopupMenuItem(
-                                            value: 'edit',
-                                            child: Row(children: [
-                                              Icon(Icons.edit, size: 16),
-                                              SizedBox(width: 8),
-                                              Text('Edit'),
-                                            ]),
-                                          ),
-                                          PopupMenuItem(
-                                            value: 'delete',
-                                            child: Row(children: [
-                                              Icon(Icons.delete,
-                                                  size: 16,
-                                                  color: crmColors.destructive),
-                                              const SizedBox(width: 8),
-                                              Text('Delete',
-                                                  style: TextStyle(
-                                                      color: crmColors
-                                                          .destructive)),
-                                            ]),
-                                          ),
+                                          const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit')])),
+                                          PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 16, color: crmColors.destructive), SizedBox(width: 8), Text('Delete', style: TextStyle(color: crmColors.destructive))])),
                                         ],
                                       ),
                                     ],
                                   ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              }
-
-              // ── Desktop: Card with ListView ──────────────────────────
-              return Card(
-                child: ListView.separated(
-                  itemCount: vehicles.length,
-                  separatorBuilder: (context, index) =>
-                      Divider(height: 1, color: crmColors.border),
-                  itemBuilder: (context, index) {
-                    final vehicle = vehicles[index];
-                    return ListTile(
-                      title: Text(
-                        '${vehicle.name} • ${vehicle.registrationNumber}',
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(
-                        [
-                          vehicle.brand,
-                          vehicle.type.toUpperCase(),
-                          vehicle.ownershipType == 'rented'
-                              ? 'RENTED'
-                              : 'IN-HOUSE',
-                          vehicle.driver?.name.isNotEmpty == true
-                              ? 'Driver: ${vehicle.driver!.name}'
-                              : 'Unassigned',
-                        ].where((item) => item.isNotEmpty).join(' • '),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: vehicle.status == 'active'
-                                  ? crmColors.success.withValues(alpha: 0.12)
-                                  : crmColors.textSecondary
-                                      .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              vehicle.status.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: vehicle.status == 'active'
-                                    ? crmColors.success
-                                    : crmColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                          8.w,
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, size: 20),
-                            onSelected: (val) async {
-                              if (val == 'edit') {
-                                openVehicleDialog(vehicle);
-                              } else if (val == 'delete') {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (ctx) => AlertDialog(
-                                    title: const Text('Delete Vehicle'),
-                                    content: Text(
-                                        'Are you sure you want to delete ${vehicle.name}?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, false),
-                                        child: const Text('Cancel'),
+                                  const Spacer(),
+                                  if (v.driver?.name.isNotEmpty == true) ...[
+                                    Row(
+                                      children: [
+                                        Icon(Icons.person_outline, size: 14, color: crmColors.textSecondary),
+                                        6.w,
+                                        Expanded(
+                                          child: Text(
+                                            'Driver: ${v.driver!.name}',
+                                            style: TextStyle(fontSize: 12, color: crmColors.textSecondary, fontWeight: FontWeight.w500),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    8.h,
+                                  ],
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Wrap(
+                                        spacing: 8,
+                                        children: [
+                                          _tag(isRented ? 'RENTED' : 'IN-HOUSE', isRented ? crmColors.warning : crmColors.primary),
+                                          _tag(v.fuelType.toUpperCase(), crmColors.textSecondary),
+                                        ],
                                       ),
-                                      TextButton(
-                                        onPressed: () =>
-                                            Navigator.pop(ctx, true),
-                                        style: TextButton.styleFrom(
-                                            foregroundColor:
-                                                crmColors.destructive),
-                                        child: const Text('Delete'),
+                                      // Status Dropdown Toggle
+                                      Container(
+                                        height: 32,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                        decoration: BoxDecoration(
+                                          color: accentColor.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            value: ['running', 'under_service', 'accident', 'complaint', 'other'].contains(v.status) ? v.status : 'running',
+                                            icon: Icon(Icons.arrow_drop_down, size: 18, color: accentColor),
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: accentColor),
+                                            onChanged: (newStatus) async {
+                                              if (newStatus != null && newStatus != v.status) {
+                                                await ref.read(vehicleServiceProvider).saveVehicle(
+                                                  id: v.id,
+                                                  name: v.name,
+                                                  registrationNumber: v.registrationNumber,
+                                                  type: v.type,
+                                                  status: newStatus,
+                                                  brand: v.brand,
+                                                  fuelType: v.fuelType,
+                                                  notes: v.notes,
+                                                  driverId: v.driver?.id,
+                                                  ownershipType: v.ownershipType,
+                                                );
+                                                ref.invalidate(vehiclesProvider);
+                                                ref.invalidate(paginatedVehiclesProvider);
+                                              }
+                                            },
+                                            items: const [
+                                              DropdownMenuItem(value: 'running', child: Text('Running')),
+                                              DropdownMenuItem(value: 'under_service', child: Text('Under Service')),
+                                              DropdownMenuItem(value: 'accident', child: Text('Accident')),
+                                              DropdownMenuItem(value: 'complaint', child: Text('Complaint')),
+                                              DropdownMenuItem(value: 'other', child: Text('Other')),
+                                            ],
+                                          ),
+                                        ),
                                       ),
                                     ],
                                   ),
-                                );
-                                if (confirm == true) {
-                                  await ref
-                                      .read(vehicleServiceProvider)
-                                      .deleteVehicle(vehicle.id);
-                                  ref.invalidate(vehiclesProvider);
-                                  ref.invalidate(paginatedVehiclesProvider);
-                                }
-                              }
-                            },
-                            itemBuilder: (ctx) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit, size: 16),
-                                    SizedBox(width: 8),
-                                    Text('Edit'),
-                                  ],
-                                ),
+                                ],
                               ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete,
-                                        size: 16,
-                                        color: crmColors.destructive),
-                                    const SizedBox(width: 8),
-                                    Text('Delete',
-                                        style: TextStyle(
-                                            color: crmColors.destructive)),
-                                  ],
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),

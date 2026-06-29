@@ -7,6 +7,7 @@ enum AppRole {
   artist,
   accounts,
   fleetManager,
+  driver,
   unknown;
 
   static AppRole fromString(String? raw) {
@@ -26,6 +27,8 @@ enum AppRole {
       case 'fleet_manager':
       case 'fleetmanager':
         return AppRole.fleetManager;
+      case 'driver':
+        return AppRole.driver;
       default:
         return AppRole.unknown;
     }
@@ -98,6 +101,8 @@ enum AppRole {
         return '/accounts/artist-collections';
       case AppRole.fleetManager:
         return '/fleet/assignments';
+      case AppRole.driver:
+        return '/driver/jobs'; // Adjust if driver dashboard path is different
       case AppRole.manager:
         return '/clients';
       case AppRole.admin:

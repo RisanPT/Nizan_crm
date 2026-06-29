@@ -101,6 +101,22 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath.startsWith('/finance'),
                     onTap: () => context.go('/finance'),
                   ),
+                ] else if (role == AppRole.driver) ...[
+                  // ── DRIVER VIEW ───────────────────────────────────────────
+                  _SidebarItem(
+                    icon: Icons.dashboard_outlined,
+                    title: 'Dashboard',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/driver/jobs',
+                    onTap: () => context.go('/driver/jobs'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.list_alt_outlined,
+                    title: 'Works',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/driver/works',
+                    onTap: () => context.go('/driver/works'),
+                  ),
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────
@@ -355,6 +371,36 @@ class Sidebar extends ConsumerWidget {
                           isCollapsed: false,
                           isSelected: currentPath == '/fleet/fuel',
                           onTap: () => context.go('/fleet/fuel'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.warning_amber_rounded,
+                          title: 'Accidents',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/accidents',
+                          onTap: () => context.go('/fleet/accidents'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.task_alt_rounded,
+                          title: 'Completed Works',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/completed-works',
+                          onTap: () => context.go('/fleet/completed-works'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.build_circle_outlined,
+                          title: 'Service Reminders',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/fleet/service-reminders',
+                          onTap: () => context.go('/fleet/service-reminders'),
                         ),
                       ),
                     ],

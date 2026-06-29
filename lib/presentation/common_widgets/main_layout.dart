@@ -49,6 +49,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/fleet/drivers')) return 2;
       if (location == '/calendar') return 3;
       if (location == '/profile') return 4;
+    } else if (role == AppRole.driver) {
+      if (location.startsWith('/driver/jobs')) return 0;
+      if (location.startsWith('/driver/works')) return 1;
+      if (location == '/profile') return 2;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -82,6 +86,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 2: context.go('/fleet/drivers'); break;
         case 3: context.go('/calendar'); break;
         case 4: context.go('/profile'); break;
+      }
+    } else if (role == AppRole.driver) {
+      switch (index) {
+        case 0: context.go('/driver/jobs'); break;
+        case 1: context.go('/driver/works'); break;
+        case 2: context.go('/profile'); break;
       }
     } else {
       switch (index) {
@@ -183,6 +193,24 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                             icon: Icon(Icons.calendar_month_outlined),
                             selectedIcon: Icon(Icons.calendar_month),
                             label: 'Calendar',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.person_outline),
+                            selectedIcon: Icon(Icons.person),
+                            label: 'Profile',
+                          ),
+                        ]
+                  : role == AppRole.driver
+                      ? const [
+                          NavigationDestination(
+                            icon: Icon(Icons.dashboard_outlined),
+                            selectedIcon: Icon(Icons.dashboard),
+                            label: 'Home',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.list_alt_outlined),
+                            selectedIcon: Icon(Icons.list_alt),
+                            label: 'Works',
                           ),
                           NavigationDestination(
                             icon: Icon(Icons.person_outline),

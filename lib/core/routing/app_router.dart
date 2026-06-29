@@ -33,7 +33,15 @@ import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
 import '../../presentation/screens/lead_details_screen.dart';
+import '../../presentation/screens/driver/driver_dashboard.dart';
+import '../../presentation/screens/driver/pre_trip_inspection_screen.dart';
+import '../../presentation/screens/driver/active_job_screen.dart';
+import '../../presentation/screens/driver/driver_works_screen.dart';
+import '../../presentation/screens/driver/driver_add_expense_screen.dart';
 
+import '../../presentation/screens/fleet/fleet_accidents_screen.dart';
+import '../../presentation/screens/fleet/fleet_completed_works_screen.dart';
+import '../../presentation/screens/fleet/fleet_service_reminders_screen.dart';
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -65,6 +73,7 @@ bool isRouteAllowed(String path, AppRole role) {
   if (path.startsWith('/sales')) return role.canSeeSales;
   if (path.startsWith('/finance')) return role.canSeeFinance;
   if (path.startsWith('/fleet')) return role.canSeeFleet;
+  if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || role.isFullAccess;
   if (path.startsWith('/settings')) return role.canSeeSettings;
   return true; // unknown routes — let the 404 handle it
 }
@@ -149,6 +158,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Fleet Assignments';
           } else if (state.uri.path == '/fleet/fuel') {
             title = 'Fleet Expenses';
+          } else if (state.uri.path == '/fleet/accidents') {
+            title = 'Accident Claims';
+          } else if (state.uri.path == '/fleet/completed-works') {
+            title = 'Completed Works';
+          } else if (state.uri.path == '/fleet/service-reminders') {
+            title = 'Service Reminders';
+          } else if (state.uri.path == '/driver/jobs') {
+            title = 'Driver Dashboard';
+          } else if (state.uri.path == '/driver/works') {
+            title = 'Driver Works';
           } else if (state.uri.path == '/accounts/artist-collections') {
             title = 'Artist Collections';
           } else if (state.uri.path == '/finance') {
@@ -267,6 +286,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const FuelExpensesScreen(),
           ),
           GoRoute(
+            path: '/fleet/accidents',
+            builder: (context, state) => const FleetAccidentsScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/completed-works',
+            builder: (context, state) => const FleetCompletedWorksScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/service-reminders',
+            builder: (context, state) => const FleetServiceRemindersScreen(),
+          ),
+          GoRoute(
             path: '/accounts/artist-collections',
             builder: (context, state) => const AccountsCollectionsScreen(),
           ),
@@ -296,6 +327,35 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/driver/jobs',
+            builder: (context, state) => const DriverDashboard(),
+          ),
+          GoRoute(
+            path: '/driver/works',
+            builder: (context, state) => const DriverWorksScreen(),
+          ),
+          GoRoute(
+            path: '/driver/inspection/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return PreTripInspectionScreen(jobId: id);
+            },
+          ),
+          GoRoute(
+            path: '/driver/active_job/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return ActiveJobScreen(jobId: id); 
+            },
+          ),
+          GoRoute(
+            path: '/driver/works/:id/expense',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              return DriverAddExpenseScreen(jobId: id);
+            },
           ),
         ],
       ),

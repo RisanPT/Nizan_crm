@@ -12,6 +12,8 @@ import '../../services/employee_service.dart';
 import '../../services/fuel_expense_service.dart';
 import '../../services/vehicle_service.dart';
 import '../common_widgets/paginated_footer.dart';
+import '../common_widgets/export_report_dialog.dart';
+import 'package:intl/intl.dart';
 
 class FuelExpensesScreen extends HookConsumerWidget {
   const FuelExpensesScreen({super.key});
@@ -399,6 +401,38 @@ class FuelExpensesScreen extends HookConsumerWidget {
                 ),
               ),
               ElevatedButton.icon(
+                onPressed: () {
+                  final items = asyncExpenses.value?.items ?? [];
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => ExportReportDialog<FuelExpense>(
+                      title: 'Fuel Expenses',
+                      items: items,
+                      getVehicleName: (e) => e.vehicle?.name,
+                      getDriverName: (e) => e.driver?.name,
+                      headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
+                      buildRow: (e) => [
+                        DateFormat('yyyy-MM-dd').format(e.date),
+                        e.vehicle?.name ?? 'N/A',
+                        e.driver?.name ?? 'N/A',
+                        _categoryLabel(e.category),
+                        e.totalAmount.toStringAsFixed(2),
+                        e.paymentMode,
+                        e.station,
+                        e.notes,
+                      ],
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Export'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: crmColors.accent,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              12.w,
+              ElevatedButton.icon(
                 onPressed: () => openExpenseDialog(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add Expense'),
@@ -430,14 +464,45 @@ class FuelExpensesScreen extends HookConsumerWidget {
                 ),
                 const Spacer(),
                 FilledButton.icon(
+                  onPressed: () {
+                    final items = asyncExpenses.value?.items ?? [];
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => ExportReportDialog<FuelExpense>(
+                        title: 'Fuel Expenses',
+                        items: items,
+                        getVehicleName: (e) => e.vehicle?.name,
+                        getDriverName: (e) => e.driver?.name,
+                        headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
+                        buildRow: (e) => [
+                          DateFormat('yyyy-MM-dd').format(e.date),
+                          e.vehicle?.name ?? 'N/A',
+                          e.driver?.name ?? 'N/A',
+                          _categoryLabel(e.category),
+                          e.totalAmount.toStringAsFixed(2),
+                          e.paymentMode,
+                          e.station,
+                          e.notes,
+                        ],
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Export', style: TextStyle(fontSize: 13)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: crmColors.accent,
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                  ),
+                ),
+                8.w,
+                FilledButton.icon(
                   onPressed: () => openExpenseDialog(),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Expense',
-                      style: TextStyle(fontSize: 13)),
+                  label: const Text('Add Expense', style: TextStyle(fontSize: 13)),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size(0, 36),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
                   ),
                 ),
               ],

@@ -179,6 +179,14 @@ class SettingsScreen extends HookConsumerWidget {
                                 color: Colors.blueGrey,
                               ),
                             ),
+                            DropdownMenuItem(
+                              value: 'driver',
+                              child: _RoleItem(
+                                label: 'Driver',
+                                sub: 'Driver Dashboard & Inspections',
+                                color: Colors.brown,
+                              ),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
