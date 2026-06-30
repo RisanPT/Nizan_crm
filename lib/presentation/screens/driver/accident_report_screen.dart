@@ -168,7 +168,7 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              color: Colors.red.withOpacity(0.1),
+              color: Colors.red.withValues(alpha:0.1),
               child: Row(
                 children: [
                   const Icon(Icons.warning, color: Colors.red),

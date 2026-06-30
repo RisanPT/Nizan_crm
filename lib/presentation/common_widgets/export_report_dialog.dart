@@ -82,7 +82,7 @@ class ExportReportDialog<T> extends HookWidget {
             const SizedBox(height: 16),
             if (vehicles.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: selectedVehicle.value,
+                initialValue: selectedVehicle.value,
                 decoration: const InputDecoration(labelText: 'Filter by Car', border: OutlineInputBorder()),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('All Cars')),
@@ -93,7 +93,7 @@ class ExportReportDialog<T> extends HookWidget {
             const SizedBox(height: 16),
             if (drivers.isNotEmpty)
               DropdownButtonFormField<String>(
-                value: selectedDriver.value,
+                initialValue: selectedDriver.value,
                 decoration: const InputDecoration(labelText: 'Filter by Driver', border: OutlineInputBorder()),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('All Drivers')),

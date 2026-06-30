@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 import 'package:csv/csv.dart';
 import 'package:universal_html/html.dart' as html;
@@ -71,7 +72,7 @@ class ExportUtils {
       // Ideally we should use a package like share_plus or file_saver to show to user
       // For now, it's saved in app docs.
     } catch (e) {
-      print('Error saving file locally: $e');
+      log('Error saving file locally: $e');
     }
   }
 }

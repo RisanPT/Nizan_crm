@@ -512,7 +512,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                         labelText: 'Select Vehicle',
                         border: OutlineInputBorder(),
                       ),
-                      value: _selectedVehicleId,
+                      initialValue: _selectedVehicleId,
                       items: vehicles.map((v) {
                         return DropdownMenuItem(
                           value: v.id,
@@ -532,7 +532,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                     labelText: 'Service Type',
                     border: OutlineInputBorder(),
                   ),
-                  value: _selectedType,
+                  initialValue: _selectedType,
                   items: _serviceTypes.map((type) {
                     return DropdownMenuItem(
                       value: type,
