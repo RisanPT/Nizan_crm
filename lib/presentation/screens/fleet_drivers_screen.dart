@@ -34,7 +34,13 @@ class FleetDriversScreen extends HookConsumerWidget {
       );
       final phoneCtrl = TextEditingController(text: driver?.phone ?? '');
       var type = driver?.type ?? 'in-house';
+      if (!['in-house', 'outsource'].contains(type)) {
+        type = 'in-house';
+      }
       var status = driver?.status ?? 'active';
+      if (!['active', 'inactive'].contains(status)) {
+        status = 'active';
+      }
       var regionId = driver?.regionId ?? '';
 
       await showDialog(

@@ -37,13 +37,22 @@ class FleetVehiclesScreen extends HookConsumerWidget {
       final brandCtrl = TextEditingController(text: vehicle?.brand ?? '');
       final notesCtrl = TextEditingController(text: vehicle?.notes ?? '');
       var type = vehicle?.type ?? 'car';
+      if (!['car', 'van', 'bike', 'other'].contains(type)) {
+        type = 'car';
+      }
       var fuelType = vehicle?.fuelType ?? 'petrol';
+      if (!['petrol', 'diesel', 'electric', 'hybrid', 'cng', 'other'].contains(fuelType)) {
+        fuelType = 'petrol';
+      }
       var status = vehicle?.status ?? 'running';
       if (!['running', 'under_service', 'accident', 'complaint', 'other'].contains(status)) {
         status = 'running';
       }
       var driverId = vehicle?.driver?.id ?? '';
       var ownershipType = vehicle?.ownershipType ?? 'in_house';
+      if (!['in_house', 'rented'].contains(ownershipType)) {
+        ownershipType = 'in_house';
+      }
 
       await showDialog(
         context: context,

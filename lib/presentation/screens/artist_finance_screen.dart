@@ -2028,29 +2028,29 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ),
                         ),
                         8.h,
-                        Row(
-                          children: [
-                            Expanded(
-                              child: RadioListTile<String>(
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text('PDF', style: TextStyle(fontSize: 12)),
-                                value: 'pdf',
-                                groupValue: selectedFormat,
-                                activeColor: crm.primary,
-                                onChanged: (v) => dialogSetState(() => selectedFormat = v!),
+                        RadioGroup<String>(
+                          groupValue: selectedFormat,
+                          onChanged: (v) => dialogSetState(() => selectedFormat = v!),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: RadioListTile<String>(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('PDF', style: TextStyle(fontSize: 12)),
+                                  value: 'pdf',
+                                  activeColor: crm.primary,
+                                ),
                               ),
-                            ),
-                            Expanded(
-                              child: RadioListTile<String>(
-                                contentPadding: EdgeInsets.zero,
-                                title: const Text('CSV', style: TextStyle(fontSize: 12)),
-                                value: 'csv',
-                                groupValue: selectedFormat,
-                                activeColor: crm.primary,
-                                onChanged: (v) => dialogSetState(() => selectedFormat = v!),
+                              Expanded(
+                                child: RadioListTile<String>(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('CSV', style: TextStyle(fontSize: 12)),
+                                  value: 'csv',
+                                  activeColor: crm.primary,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         24.h,
                         Row(

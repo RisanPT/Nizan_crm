@@ -2160,7 +2160,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DropdownButtonFormField<AddonService>(
-                    value: _selectedService,
+                    initialValue: _selectedService,
                     decoration: InputDecoration(
                       labelText: 'Select Service',
                       labelStyle: TextStyle(color: crm.textSecondary),
