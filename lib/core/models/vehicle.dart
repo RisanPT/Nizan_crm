@@ -35,7 +35,7 @@ class Vehicle {
       type: json['type'] as String? ?? 'car',
       brand: json['brand'] as String? ?? '',
       fuelType: json['fuelType'] as String? ?? 'petrol',
-      status: json['status'] as String? ?? 'active',
+      status: json['status'] as String? ?? 'running',
       notes: json['notes'] as String? ?? '',
       ownershipType: json['ownershipType'] as String? ?? 'in_house',
       driver: driverJson is Map<String, dynamic>

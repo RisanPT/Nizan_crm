@@ -71,7 +71,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     final asyncPackages = ref.watch(packagesProvider);
     final asyncVehicles = ref.watch(vehiclesProvider);
     final availableVehicles = (asyncVehicles.value ?? const <Vehicle>[])
-        .where((v) => v.status.toLowerCase() == 'active')
+        .where((v) => v.status.toLowerCase() == 'running')
         .toList();
     final availableStaff = (asyncEmployees.value ?? const <Employee>[])
         .where((employee) => employee.status.toLowerCase() == 'active')

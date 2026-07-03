@@ -11,6 +11,8 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/vehicle_service.dart';
 
+enum AssignmentFilter { all, unassigned, assigned }
+
 class FleetAssignmentsScreen extends ConsumerStatefulWidget {
   const FleetAssignmentsScreen({super.key});
 
@@ -22,7 +24,7 @@ class FleetAssignmentsScreen extends ConsumerStatefulWidget {
 class _FleetAssignmentsScreenState
     extends ConsumerState<FleetAssignmentsScreen> {
   String _searchQuery = '';
-  bool _showUnassignedOnly = false;
+  AssignmentFilter _assignmentFilter = AssignmentFilter.all;
   String? _activeBookingId;
   DateTime _selectedMonth = DateTime.now();
   bool _filterByMonth = true;
@@ -153,7 +155,7 @@ class _FleetAssignmentsScreenState
       error: (err, stack) => Center(child: Text('Error loading assignments: $err')),
       data: (bookings) {
         // Only show confirmed/completed bookings that have artists assigned
-        final filteredBookings = bookings.where((b) {
+        final baseFilteredBookings = bookings.where((b) {
           final matchesSearch = b.customerName
                   .toLowerCase()
                   .contains(_searchQuery.toLowerCase()) ||
@@ -163,8 +165,6 @@ class _FleetAssignmentsScreenState
           final isConfirmedOrCompleted =
               b.status.toLowerCase() == 'confirmed' ||
                   b.status.toLowerCase() == 'completed';
-          final matchesUnassigned =
-              !_showUnassignedOnly || (b.driverId.isEmpty && b.vehicleId.isEmpty);
           final matchesMonth = !_filterByMonth ||
               (b.serviceStart.year == _selectedMonth.year &&
                   b.serviceStart.month == _selectedMonth.month);
@@ -172,8 +172,20 @@ class _FleetAssignmentsScreenState
           return matchesSearch &&
               hasArtists &&
               isConfirmedOrCompleted &&
-              matchesUnassigned &&
               matchesMonth;
+        }).toList();
+
+        final unassignedCount = baseFilteredBookings.where((b) => b.driverId.isEmpty && b.vehicleId.isEmpty).length;
+        final assignedCount = baseFilteredBookings.where((b) => b.driverId.isNotEmpty || b.vehicleId.isNotEmpty).length;
+        final allCount = baseFilteredBookings.length;
+
+        final filteredBookings = baseFilteredBookings.where((b) {
+          if (_assignmentFilter == AssignmentFilter.unassigned) {
+            return b.driverId.isEmpty && b.vehicleId.isEmpty;
+          } else if (_assignmentFilter == AssignmentFilter.assigned) {
+            return b.driverId.isNotEmpty || b.vehicleId.isNotEmpty;
+          }
+          return true;
         }).toList()
           ..sort((a, b) => b.serviceStart.compareTo(a.serviceStart));
 
@@ -193,15 +205,33 @@ class _FleetAssignmentsScreenState
           });
         }
 
-        // Available Drivers list
-        final drivers = (asyncEmployees.value ?? const <Employee>[])
+        final allEmployees = asyncEmployees.value ?? const <Employee>[];
+        final drivers = allEmployees
             .where((emp) => emp.artistRole.toLowerCase() == 'driver')
             .toList();
+        if (_selectedDriverId != null && _selectedDriverId!.isNotEmpty) {
+          final isPresent = drivers.any((d) => d.id == _selectedDriverId);
+          if (!isPresent) {
+            try {
+              final assignedDriver = allEmployees.firstWhere((e) => e.id == _selectedDriverId);
+              drivers.add(assignedDriver);
+            } catch (_) {}
+          }
+        }
 
-        // Available Vehicles list
-        final vehicles = (asyncVehicles.value ?? const <Vehicle>[])
-            .where((veh) => veh.status.toLowerCase() == 'active')
+        final allVehicles = asyncVehicles.value ?? const <Vehicle>[];
+        final vehicles = allVehicles
+            .where((veh) => veh.status.toLowerCase() == 'running')
             .toList();
+        if (_selectedVehicleId != null && _selectedVehicleId!.isNotEmpty) {
+          final isPresent = vehicles.any((v) => v.id == _selectedVehicleId);
+          if (!isPresent) {
+            try {
+              final assignedVehicle = allVehicles.firstWhere((v) => v.id == _selectedVehicleId);
+              vehicles.add(assignedVehicle);
+            } catch (_) {}
+          }
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,10 +318,12 @@ class _FleetAssignmentsScreenState
                         ),
                       ),
                     ),
-                    // Unassigned-only toggle
+                    // Unassigned toggle (mobile)
                     GestureDetector(
                       onTap: () => setState(() {
-                        _showUnassignedOnly = !_showUnassignedOnly;
+                        _assignmentFilter = _assignmentFilter == AssignmentFilter.unassigned 
+                          ? AssignmentFilter.all 
+                          : AssignmentFilter.unassigned;
                         _activeBookingId = null;
                       }),
                       child: AnimatedContainer(
@@ -299,7 +331,7 @@ class _FleetAssignmentsScreenState
                         padding: const EdgeInsets.all(8),
                         margin: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
                         decoration: BoxDecoration(
-                          color: _showUnassignedOnly
+                          color: _assignmentFilter == AssignmentFilter.unassigned
                               ? crmColors.warning.withValues(alpha: 0.12)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
@@ -307,7 +339,7 @@ class _FleetAssignmentsScreenState
                         child: Icon(
                           Icons.pending_actions_outlined,
                           size: 18,
-                          color: _showUnassignedOnly ? crmColors.warning : crmColors.textSecondary,
+                          color: _assignmentFilter == AssignmentFilter.unassigned ? crmColors.warning : crmColors.textSecondary,
                         ),
                       ),
                     ),
@@ -399,7 +431,7 @@ class _FleetAssignmentsScreenState
               ],
 
               // ── Active filter pill (dismissible) ─────────────────────────
-              if (_showUnassignedOnly)
+              if (_assignmentFilter != AssignmentFilter.all)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -419,7 +451,7 @@ class _FleetAssignmentsScreenState
                                 size: 11, color: crmColors.warning),
                             4.w,
                             Text(
-                              'Unassigned only',
+                              _assignmentFilter == AssignmentFilter.unassigned ? 'Unassigned only' : 'Assigned only',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: crmColors.warning,
@@ -429,7 +461,7 @@ class _FleetAssignmentsScreenState
                             6.w,
                             GestureDetector(
                               onTap: () => setState(() {
-                                _showUnassignedOnly = false;
+                                _assignmentFilter = AssignmentFilter.all;
                                 _activeBookingId = null;
                               }),
                               child: Icon(Icons.close, size: 12, color: crmColors.warning),
@@ -441,134 +473,115 @@ class _FleetAssignmentsScreenState
                   ),
                 ),
             ] else ...[
-              // Desktop Search and filters
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        flex: 3,
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            hintText: 'Search by client name, reference, service...',
-                            prefixIcon: Icon(Icons.search, size: 20),
-                            contentPadding: EdgeInsets.symmetric(vertical: 10),
-                          ),
-                          onChanged: (val) => setState(() => _searchQuery = val),
+              // Desktop Search, Filter, and Month Navigation
+              Row(
+                children: [
+                  // Search
+                  Expanded(
+                    child: Container(
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: crmColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: crmColors.border),
+                      ),
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Search by client, reference...',
+                          hintStyle: TextStyle(fontSize: 14, color: crmColors.textSecondary),
+                          prefixIcon: Icon(Icons.search, size: 20, color: crmColors.textSecondary),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          isDense: true,
                         ),
+                        onChanged: (val) => setState(() => _searchQuery = val),
                       ),
-                      16.w,
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _showUnassignedOnly,
-                            onChanged: (val) {
-                              setState(() {
-                                _showUnassignedOnly = val ?? false;
-                                _activeBookingId = null;
-                              });
-                            },
-                          ),
-                          const Text(
-                            'Unassigned Only',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
-              16.h,
+                  16.w,
+                  
+                  // Segmented Filter
+                  Container(
+                    height: 48,
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: crmColors.border.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildSegmentTab('All $allCount', AssignmentFilter.all, crmColors),
+                        _buildSegmentTab('Unassigned $unassignedCount', AssignmentFilter.unassigned, crmColors),
+                        _buildSegmentTab('Assigned $assignedCount', AssignmentFilter.assigned, crmColors),
+                      ],
+                    ),
+                  ),
+                  16.w,
 
-              // Month Selector / Navigation Header Card (Desktop)
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: crmColors.border),
-                ),
-                color: crmColors.surface,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        tooltip: 'Previous Month',
-                        onPressed: () {
-                          setState(() {
-                            _selectedMonth = DateTime(
-                              _selectedMonth.year,
-                              _selectedMonth.month - 1,
-                              1,
-                            );
+                  // Month Navigation
+                  Container(
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: crmColors.surface,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: crmColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.chevron_left, size: 20, color: crmColors.textSecondary),
+                          tooltip: 'Previous Month',
+                          onPressed: () => setState(() {
+                            _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
                             _activeBookingId = null;
-                          });
-                        },
-                      ),
-                      TextButton.icon(
-                        onPressed: () async {
-                          final DateTime? picked = await showDatePicker(
-                            context: context,
-                            initialDate: _selectedMonth,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2030),
-                            initialDatePickerMode: DatePickerMode.year,
-                            helpText: 'Select Month & Year',
-                          );
-                          if (picked != null) {
-                            setState(() {
-                              _selectedMonth = DateTime(picked.year, picked.month, 1);
-                              _activeBookingId = null;
-                            });
-                          }
-                        },
-                        icon: Icon(Icons.calendar_month, color: crmColors.primary, size: 20),
-                        label: Text(
-                          _formatMonthYear(_selectedMonth),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: crmColors.textPrimary,
+                            _filterByMonth = true;
+                          }),
+                        ),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final DateTime? picked = await showDatePicker(
+                              context: context,
+                              initialDate: _selectedMonth,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2030),
+                              helpText: 'Select Month & Year',
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _selectedMonth = DateTime(picked.year, picked.month, 1);
+                                _activeBookingId = null;
+                                _filterByMonth = true;
+                              });
+                            }
+                          },
+                          icon: Icon(Icons.calendar_month, color: crmColors.textPrimary, size: 18),
+                          label: Text(
+                            _formatMonthYear(_selectedMonth),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: crmColors.textPrimary,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        tooltip: 'Next Month',
-                        onPressed: () {
-                          setState(() {
-                            _selectedMonth = DateTime(
-                              _selectedMonth.year,
-                              _selectedMonth.month + 1,
-                              1,
-                            );
+                        IconButton(
+                          icon: Icon(Icons.chevron_right, size: 20, color: crmColors.textSecondary),
+                          tooltip: 'Next Month',
+                          onPressed: () => setState(() {
+                            _selectedMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 1);
                             _activeBookingId = null;
-                          });
-                        },
-                      ),
-                      const Spacer(),
-                      FilterChip(
-                        selected: _filterByMonth,
-                        label: const Text('Filter by Month'),
-                        onSelected: (val) {
-                          setState(() {
-                            _filterByMonth = val;
-                            _activeBookingId = null;
-                          });
-                        },
-                        selectedColor: crmColors.primary.withValues(alpha: 0.15),
-                        checkmarkColor: crmColors.primary,
-                        labelStyle: TextStyle(
-                          color: _filterByMonth ? crmColors.primary : crmColors.textSecondary,
-                          fontWeight: FontWeight.w600,
+                            _filterByMonth = true;
+                          }),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ],
             16.h,
@@ -952,6 +965,21 @@ class _FleetAssignmentsScreenState
   ) {
     final crmColors = context.crmColors;
 
+    // Sanitize lists to prevent DropdownButton crashes
+    final uniqueDrivers = <String, Employee>{};
+    for (var d in drivers) {
+      uniqueDrivers[d.id] = d;
+    }
+    final safeDrivers = uniqueDrivers.values.toList();
+    final safeDriverId = (_selectedDriverId != null && uniqueDrivers.containsKey(_selectedDriverId)) ? _selectedDriverId : null;
+
+    final uniqueVehicles = <String, Vehicle>{};
+    for (var v in vehicles) {
+      uniqueVehicles[v.id] = v;
+    }
+    final safeVehicles = uniqueVehicles.values.toList();
+    final safeVehicleId = (_selectedVehicleId != null && uniqueVehicles.containsKey(_selectedVehicleId)) ? _selectedVehicleId : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1090,7 +1118,7 @@ class _FleetAssignmentsScreenState
 
         // Driver selection dropdown
         DropdownButtonFormField<String>(
-          initialValue: _selectedDriverId,
+          initialValue: safeDriverId,
           decoration: const InputDecoration(
             labelText: 'Driver',
             prefixIcon: Icon(Icons.person_outline),
@@ -1101,7 +1129,7 @@ class _FleetAssignmentsScreenState
               value: '',
               child: Text('Unassigned'),
             ),
-            ...drivers.map((d) {
+            ...safeDrivers.map((d) {
               return DropdownMenuItem(
                 value: d.id,
                 child: Text(d.name),
@@ -1118,7 +1146,7 @@ class _FleetAssignmentsScreenState
 
         // Vehicle selection dropdown
         DropdownButtonFormField<String>(
-          initialValue: _selectedVehicleId,
+          initialValue: safeVehicleId,
           decoration: const InputDecoration(
             labelText: 'Vehicle',
             prefixIcon: Icon(Icons.directions_car_outlined),
@@ -1129,7 +1157,7 @@ class _FleetAssignmentsScreenState
               value: '',
               child: Text('Unassigned'),
             ),
-            ...vehicles.map((v) {
+            ...safeVehicles.map((v) {
               final isRented = v.ownershipType == 'rented';
               return DropdownMenuItem(
                 value: v.id,
@@ -1440,6 +1468,42 @@ class _FleetAssignmentsScreenState
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSegmentTab(String text, AssignmentFilter filter, CrmTheme crmColors) {
+    final isSelected = _assignmentFilter == filter;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _assignmentFilter = filter;
+          _activeBookingId = null;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? crmColors.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  )
+                ]
+              : null,
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+            color: isSelected ? crmColors.textPrimary : crmColors.textSecondary,
           ),
         ),
       ),
