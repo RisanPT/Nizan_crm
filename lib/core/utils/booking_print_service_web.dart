@@ -677,7 +677,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       </div>
       <div>
         <div class="inv-company">TEAM N MAKEOVERS</div>
-        <div class="inv-doc-type">${variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE — ORIGINAL COPY"}</div>
+        <div class="inv-doc-type">${variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE"}</div>
       </div>
     </div>
     <div class="inv-meta-grid">
@@ -707,14 +707,22 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       ${booking.address.isNotEmpty ? '<div class="info-line"><span class="info-key">Address</span> <span class="info-val">${_escape(booking.address)}${booking.pincode.isNotEmpty ? ', ${_escape(booking.pincode)}' : ''}</span></div>' : ''}
       ${booking.district.isNotEmpty ? '<div class="info-line"><span class="info-key">District</span> <span class="info-val">${_escape(booking.district)}</span></div>' : ''}
     </div>
-    <div class="info-card">
+    ${variant == BookingPrintVariant.clientConfirmation ? '''<div class="info-card">
       <div class="info-card-title">YOUR ARTIST</div>
       $artistNameLine
       $artistRoleLine
       $artistPhoneLine
       $pocLine
       ${booking.eventSlot.isNotEmpty ? '<div class="info-line"><span class="info-key">Slot</span> <span class="info-val">${_escape(booking.eventSlot)}</span></div>' : ''}
-    </div>
+    </div>''' : '''<div class="info-card">
+      <div class="info-card-title">COMPANY DETAILS</div>
+      <div class="info-customer">TEAM N MAKEOVERS</div>
+      <div class="info-line"><span class="info-val" style="line-height: 1.5; color: #1f2937;">Kozhikode Kerala 673014<br>India</span></div>
+      <div style="margin-top: 8px;"></div>
+      <div class="info-line"><span class="info-key" style="min-width: 60px;">GSTIN</span> <span class="info-val">32AAJCN6432D1ZR</span></div>
+      <div class="info-line"><span class="info-key" style="min-width: 60px;">Phone</span> <span class="info-val">9645424283</span></div>
+      <div class="info-line"><span class="info-key" style="min-width: 60px;">Email</span> <span class="info-val">teamnfinance@gmail.com</span></div>
+    </div>'''}
   </div>
 
   <!-- ═══ SERVICES TABLE ═══ -->
