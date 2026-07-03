@@ -13,6 +13,7 @@ import '../../services/fuel_expense_service.dart';
 import '../../services/vehicle_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../common_widgets/export_report_dialog.dart';
+import 'fleet/fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
 
 class FuelExpensesScreen extends HookConsumerWidget {
@@ -37,6 +38,14 @@ class FuelExpensesScreen extends HookConsumerWidget {
 
   String _formatCurrency(double value) {
     return '₹ ${value.toStringAsFixed(0)}';
+  }
+
+  /// Short currency for KPI pills: ₹1.2Cr / ₹3.4L / ₹56k / ₹900.
+  String _compactCurrency(double value) {
+    if (value >= 10000000) return '₹${(value / 10000000).toStringAsFixed(1)}Cr';
+    if (value >= 100000) return '₹${(value / 100000).toStringAsFixed(1)}L';
+    if (value >= 1000) return '₹${(value / 1000).toStringAsFixed(1)}k';
+    return '₹${value.toStringAsFixed(0)}';
   }
 
   String _categoryLabel(String category) {
@@ -96,6 +105,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
     );
     final asyncVehicles = ref.watch(vehiclesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
+    // Full list drives the KPI totals in the mobile header.
+    final allExpenses = ref.watch(fuelExpensesProvider).value ?? const <FuelExpense>[];
 
     Future<void> openExpenseDialog([FuelExpense? expense]) async {
       final odometerCtrl = TextEditingController(
@@ -376,7 +387,14 @@ class FuelExpensesScreen extends HookConsumerWidget {
       );
     }
 
-    return Column(
+    final now = DateTime.now();
+    final totalSpend =
+        allExpenses.fold<double>(0, (sum, e) => sum + e.totalAmount);
+    final monthSpend = allExpenses
+        .where((e) => e.date.year == now.year && e.date.month == now.month)
+        .fold<double>(0, (sum, e) => sum + e.totalAmount);
+
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ── Desktop header ──────────────────────────────────────────────
@@ -443,71 +461,63 @@ class FuelExpensesScreen extends HookConsumerWidget {
         ],
 
         // ── Mobile header ───────────────────────────────────────────────
-        if (isMobile)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: [
-                asyncExpenses.maybeWhen(
-                  data: (r) {
-                    final count = r.totalItems;
-                    return Text(
-                      '$count expense${count == 1 ? '' : 's'}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: crmColors.textSecondary,
-                      ),
-                    );
-                  },
-                  orElse: () => const SizedBox.shrink(),
-                ),
-                const Spacer(),
-                FilledButton.icon(
-                  onPressed: () {
-                    final items = asyncExpenses.value?.items ?? [];
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => ExportReportDialog<FuelExpense>(
-                        title: 'Fuel Expenses',
-                        items: items,
-                        getVehicleName: (e) => e.vehicle?.name,
-                        getDriverName: (e) => e.driver?.name,
-                        headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
-                        buildRow: (e) => [
-                          DateFormat('yyyy-MM-dd').format(e.date),
-                          e.vehicle?.name ?? 'N/A',
-                          e.driver?.name ?? 'N/A',
-                          _categoryLabel(e.category),
-                          e.totalAmount.toStringAsFixed(2),
-                          e.paymentMode,
-                          e.station,
-                          e.notes,
-                        ],
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Export', style: TextStyle(fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: crmColors.accent,
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+        if (isMobile) ...[
+          FleetMobileHeader(
+            title: 'Fleet Expenses',
+            actionLabel: 'Add',
+            onAction: () => openExpenseDialog(),
+            trailing: IconButton(
+              onPressed: () {
+                final items = asyncExpenses.value?.items ?? [];
+                showDialog(
+                  context: context,
+                  builder: (ctx) => ExportReportDialog<FuelExpense>(
+                    title: 'Fuel Expenses',
+                    items: items,
+                    getVehicleName: (e) => e.vehicle?.name,
+                    getDriverName: (e) => e.driver?.name,
+                    headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
+                    buildRow: (e) => [
+                      DateFormat('yyyy-MM-dd').format(e.date),
+                      e.vehicle?.name ?? 'N/A',
+                      e.driver?.name ?? 'N/A',
+                      _categoryLabel(e.category),
+                      e.totalAmount.toStringAsFixed(2),
+                      e.paymentMode,
+                      e.station,
+                      e.notes,
+                    ],
                   ),
+                );
+              },
+              icon: const Icon(Icons.download_outlined, size: 20),
+              tooltip: 'Export',
+              style: IconButton.styleFrom(
+                foregroundColor: crmColors.accent,
+                backgroundColor: crmColors.accent.withValues(alpha: 0.10),
+                minimumSize: const Size(40, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                8.w,
-                FilledButton.icon(
-                  onPressed: () => openExpenseDialog(),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add Expense', style: TextStyle(fontSize: 13)),
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                  ),
-                ),
-              ],
+              ),
             ),
+            stats: [
+              FleetStat(
+                  value: _compactCurrency(totalSpend),
+                  label: 'Total',
+                  color: crmColors.primary),
+              FleetStat(
+                  value: _compactCurrency(monthSpend),
+                  label: 'This Month',
+                  color: crmColors.accent),
+              FleetStat(
+                  value: '${allExpenses.length}',
+                  label: 'Entries',
+                  color: crmColors.success),
+            ],
           ),
+          16.h,
+        ],
 
         // ── List ────────────────────────────────────────────────────────
         Expanded(
@@ -960,5 +970,13 @@ class FuelExpensesScreen extends HookConsumerWidget {
         ),
       ],
     );
+
+    // Mobile supplies its own horizontal insets; desktop gets them from MainLayout.
+    return isMobile
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: content,
+          )
+        : content;
   }
 }

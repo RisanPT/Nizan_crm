@@ -9,6 +9,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
 import '../common_widgets/paginated_footer.dart';
+import 'fleet/fleet_mobile_ui.dart';
 import 'staff_details_screen.dart';
 
 class FleetDriversScreen extends HookConsumerWidget {
@@ -190,6 +191,79 @@ class FleetDriversScreen extends HookConsumerWidget {
             ),
           );
         },
+      );
+    }
+
+    // ── Mobile: title header + KPI strip + card list ──────────────────────
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: asyncEmployees.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(
+            child: Text(
+              'Failed to load drivers: $error',
+              style: TextStyle(color: crmColors.textSecondary),
+            ),
+          ),
+          data: (employees) {
+            final drivers = employees
+                .where((e) => e.artistRole == 'driver')
+                .toList();
+            final active = drivers.where((e) => e.status == 'active').length;
+            final inHouse = drivers.where((e) => e.type == 'in-house').length;
+            final outsource =
+                drivers.where((e) => e.type == 'outsource').length;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FleetMobileHeader(
+                  title: 'Fleet Drivers',
+                  actionLabel: 'Add',
+                  onAction: () => openDriverDialog(),
+                  stats: [
+                    FleetStat(
+                        value: '${drivers.length}',
+                        label: 'Total',
+                        color: crmColors.primary),
+                    FleetStat(
+                        value: '$active',
+                        label: 'Active',
+                        color: crmColors.success),
+                    FleetStat(
+                        value: '$inHouse',
+                        label: 'In-House',
+                        color: crmColors.accent),
+                    FleetStat(
+                        value: '$outsource',
+                        label: 'Outsource',
+                        color: crmColors.textSecondary),
+                  ],
+                ),
+                16.h,
+                Expanded(
+                  child: drivers.isEmpty
+                      ? const FleetEmptyState(
+                          icon: Icons.drive_eta_outlined,
+                          title: 'No drivers yet',
+                          subtitle: 'Tap "Add" to register your first driver.',
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemCount: drivers.length,
+                          separatorBuilder: (_, _) => 12.h,
+                          itemBuilder: (context, index) => _buildDriverCard(
+                            context,
+                            ref,
+                            drivers[index],
+                            onEdit: () => openDriverDialog(drivers[index]),
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
       );
     }
 

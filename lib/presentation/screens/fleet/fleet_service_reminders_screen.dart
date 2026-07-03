@@ -1,289 +1,347 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/extensions/space_extension.dart';
+import '../../../core/theme/crm_theme.dart';
 import '../../../services/fleet_service.dart';
 import '../../../models/fleet_models.dart';
 import '../../../services/vehicle_service.dart';
+import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+
+enum _Urgency { completed, overdue, dueSoon, upcoming }
+
+_Urgency _urgencyOf(ServiceReminder r) {
+  if (r.status == 'completed') return _Urgency.completed;
+  var overdue = false;
+  var urgent = false;
+  if (r.dueDate != null) {
+    final diff = r.dueDate!.difference(DateTime.now()).inDays;
+    if (diff < 0) {
+      overdue = true;
+    } else if (diff <= 3) {
+      urgent = true;
+    }
+  }
+  if (r.dueKm != null && r.vehicle is Map) {
+    final currentKm = ((r.vehicle as Map)['currentKm'] as num?)?.toDouble() ?? 0.0;
+    final diffKm = r.dueKm! - currentKm;
+    if (diffKm < 0) {
+      overdue = true;
+    } else if (diffKm <= 500) {
+      urgent = true;
+    }
+  }
+  if (overdue) return _Urgency.overdue;
+  if (urgent) return _Urgency.dueSoon;
+  return _Urgency.upcoming;
+}
+
+Color _urgencyColor(_Urgency u, CrmTheme c) {
+  switch (u) {
+    case _Urgency.completed:
+      return c.success;
+    case _Urgency.overdue:
+      return c.destructive;
+    case _Urgency.dueSoon:
+      return c.warning;
+    case _Urgency.upcoming:
+      return c.accent;
+  }
+}
+
+String _urgencyText(_Urgency u) {
+  switch (u) {
+    case _Urgency.completed:
+      return 'Completed';
+    case _Urgency.overdue:
+      return 'Overdue';
+    case _Urgency.dueSoon:
+      return 'Due Soon';
+    case _Urgency.upcoming:
+      return 'Upcoming';
+  }
+}
+
+IconData _iconForType(String type) {
+  switch (type.toLowerCase()) {
+    case 'pollution':
+      return Icons.cloud_outlined;
+    case 'insurance':
+      return Icons.shield_outlined;
+    case 'tax':
+      return Icons.receipt_long_outlined;
+    case 'maintenance':
+      return Icons.build_outlined;
+    case 'oil change':
+      return Icons.water_drop_outlined;
+    default:
+      return Icons.car_repair_outlined;
+  }
+}
+
+String _extractVehicleName(dynamic obj) {
+  if (obj is Map) {
+    final name = obj['name'];
+    final reg = obj['registrationNumber'];
+    if (name != null && reg != null) return '$name ($reg)';
+    if (name != null) return name.toString();
+    if (reg != null) return reg.toString();
+  }
+  return 'Unknown Vehicle';
+}
 
 class FleetServiceRemindersScreen extends ConsumerStatefulWidget {
   const FleetServiceRemindersScreen({super.key});
 
   @override
-  ConsumerState<FleetServiceRemindersScreen> createState() => _FleetServiceRemindersScreenState();
+  ConsumerState<FleetServiceRemindersScreen> createState() =>
+      _FleetServiceRemindersScreenState();
 }
 
-class _FleetServiceRemindersScreenState extends ConsumerState<FleetServiceRemindersScreen> {
+class _FleetServiceRemindersScreenState
+    extends ConsumerState<FleetServiceRemindersScreen> {
   bool _hasShownPopup = false;
 
   @override
   Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
     final remindersAsync = ref.watch(managerServiceRemindersProvider);
 
-    // Show popup for urgent reminders after build phase
+    // Show popup for urgent reminders after the build phase.
     if (remindersAsync.hasValue && !_hasShownPopup) {
-      final reminders = remindersAsync.value!;
-      final urgentReminders = reminders.where((r) {
-        if (r.status == 'completed') return false;
-        
-        // Check date
-        if (r.dueDate != null) {
-          final diff = r.dueDate!.difference(DateTime.now()).inDays;
-          if (diff <= 3) return true; // Due within 3 days or overdue
-        }
-        
-        // Check KM
-        if (r.dueKm != null && r.vehicle != null && r.vehicle is Map) {
-          final currentKm = (r.vehicle['currentKm'] as num?)?.toDouble() ?? 0.0;
-          if (r.dueKm! - currentKm <= 500) return true; // Due within 500 km or overdue
-        }
-        
-        return false;
+      final urgent = remindersAsync.value!.where((r) {
+        final u = _urgencyOf(r);
+        return u == _Urgency.overdue || u == _Urgency.dueSoon;
       }).toList();
-
-      if (urgentReminders.isNotEmpty) {
+      if (urgent.isNotEmpty) {
         _hasShownPopup = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showUrgentRemindersPopup(urgentReminders);
+          _showUrgentRemindersPopup(urgent);
         });
       }
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      body: Column(
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: remindersAsync.when(
-              data: (reminders) {
-                if (reminders.isEmpty) {
-                  return const Center(child: Text('No service reminders found.', style: TextStyle(color: Colors.grey)));
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: reminders.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 16),
-                  itemBuilder: (context, index) {
-                    final reminder = reminders[index];
-                    return _buildReminderCard(context, reminder);
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, stack) => Center(child: Text('Error: $err')),
+      backgroundColor: crmColors.background,
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: remindersAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, stack) => Center(
+            child: Text(
+              'Failed to load reminders: $err',
+              style: TextStyle(color: crmColors.textSecondary),
             ),
           ),
-        ],
+          data: (reminders) {
+            final overdue = reminders
+                .where((r) => _urgencyOf(r) == _Urgency.overdue)
+                .length;
+            final dueSoon = reminders
+                .where((r) => _urgencyOf(r) == _Urgency.dueSoon)
+                .length;
+            final completed = reminders
+                .where((r) => _urgencyOf(r) == _Urgency.completed)
+                .length;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FleetMobileHeader(
+                  title: 'Service Reminders',
+                  stats: [
+                    FleetStat(
+                        value: '${reminders.length}',
+                        label: 'Total',
+                        color: crmColors.primary),
+                    FleetStat(
+                        value: '$overdue',
+                        label: 'Overdue',
+                        color: crmColors.destructive),
+                    FleetStat(
+                        value: '$dueSoon',
+                        label: 'Due Soon',
+                        color: crmColors.warning),
+                    FleetStat(
+                        value: '$completed',
+                        label: 'Done',
+                        color: crmColors.success),
+                  ],
+                ),
+                16.h,
+                Expanded(
+                  child: reminders.isEmpty
+                      ? const FleetEmptyState(
+                          icon: Icons.build_circle_outlined,
+                          title: 'No service reminders',
+                          subtitle:
+                              'Tap the + button to schedule maintenance, tax, insurance and more.',
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 88),
+                          itemCount: reminders.length,
+                          separatorBuilder: (_, _) => 12.h,
+                          itemBuilder: (context, index) =>
+                              _buildReminderCard(context, reminders[index]),
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAddReminderDialog(context),
-        backgroundColor: const Color(0xFF4A1942),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add Reminder', style: TextStyle(color: Colors.white)),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.black12)),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Service Reminders', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
-              SizedBox(height: 4),
-              Text('Manage vehicle maintenance, pollution, tax, and insurance', style: TextStyle(fontSize: 14, color: Colors.grey)),
-            ],
-          ),
-        ],
+        backgroundColor: crmColors.primary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Reminder'),
       ),
     );
   }
 
   Widget _buildReminderCard(BuildContext context, ServiceReminder reminder) {
+    final crmColors = context.crmColors;
     final dateFormat = DateFormat('MMM d, yyyy');
-    final isCompleted = reminder.status == 'completed';
-    
-    // Determine urgency color
-    Color statusColor = Colors.grey;
-    String statusText = 'Normal';
-    
-    if (isCompleted) {
-      statusColor = const Color(0xFF4CAF50);
-      statusText = 'Completed';
-    } else {
-      bool isUrgent = false;
-      bool isOverdue = false;
-      
-      if (reminder.dueDate != null) {
-        final diff = reminder.dueDate!.difference(DateTime.now()).inDays;
-        if (diff < 0) {
-          isOverdue = true;
-        } else if (diff <= 3) {
-          isUrgent = true;
-        }
-      }
-      
-      if (reminder.dueKm != null && reminder.vehicle != null && reminder.vehicle is Map) {
-        final currentKm = (reminder.vehicle['currentKm'] as num?)?.toDouble() ?? 0.0;
-        final diffKm = reminder.dueKm! - currentKm;
-        if (diffKm < 0) {
-          isOverdue = true;
-        } else if (diffKm <= 500) {
-          isUrgent = true;
-        }
-      }
-      
-      if (isOverdue) {
-        statusColor = Colors.red;
-        statusText = 'Overdue';
-      } else if (isUrgent) {
-        statusColor = Colors.orange;
-        statusText = 'Due Soon';
-      } else {
-        statusColor = Colors.blue;
-        statusText = 'Upcoming';
-      }
-    }
+    final urgency = _urgencyOf(reminder);
+    final color = _urgencyColor(urgency, crmColors);
+    final isCompleted = urgency == _Urgency.completed;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: crmColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withValues(alpha: 0.3)),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
-        ],
+        border: Border.all(color: color.withValues(alpha: 0.30)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(_getIconForType(reminder.serviceType), color: statusColor, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(reminder.serviceType,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text(
-                        _extractVehicleName(reminder.vehicle),
-                        style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
+                  color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(_iconForType(reminder.serviceType),
+                    color: color, size: 21),
+              ),
+              12.w,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      reminder.serviceType,
+                      style: TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: crmColors.textPrimary,
+                      ),
+                    ),
+                    2.h,
+                    Text(
+                      _extractVehicleName(reminder.vehicle),
+                      style: TextStyle(
+                          fontSize: 12.5, color: crmColors.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              8.w,
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: color.withValues(alpha: 0.30)),
+                ),
                 child: Text(
-                  statusText,
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: statusColor),
+                  _urgencyText(urgency),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          12.h,
           if (reminder.dueDate != null)
-             _buildDetailRow(Icons.calendar_month, 'Due Date: ', dateFormat.format(reminder.dueDate!)),
+            _buildDetailRow(context, Icons.calendar_month_outlined, 'Due date',
+                dateFormat.format(reminder.dueDate!)),
           if (reminder.dueKm != null)
-             _buildDetailRow(Icons.speed, 'Due KM: ', '${reminder.dueKm} km'),
+            _buildDetailRow(context, Icons.speed_outlined, 'Due at',
+                '${reminder.dueKm!.toStringAsFixed(0)} km'),
           if (reminder.notes != null && reminder.notes!.isNotEmpty)
-             _buildDetailRow(Icons.notes, 'Notes: ', reminder.notes!),
-          
+            _buildDetailRow(
+                context, Icons.notes_outlined, 'Notes', reminder.notes!),
           if (!isCompleted) ...[
-            const SizedBox(height: 16),
+            12.h,
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton.icon(
+              child: OutlinedButton.icon(
                 onPressed: () => _completeReminder(reminder.id),
-                icon: const Icon(Icons.check, size: 18),
+                icon: const Icon(Icons.check_circle_outline, size: 18),
                 label: const Text('Mark as Completed'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
-                  foregroundColor: Colors.white,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  foregroundColor: crmColors.success,
+                  side: BorderSide(color: crmColors.success.withValues(alpha: 0.5)),
                 ),
               ),
             ),
-          ]
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+  Widget _buildDetailRow(
+      BuildContext context, IconData icon, String label, String value) {
+    final crmColors = context.crmColors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 7),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: Colors.grey[600]),
-          const SizedBox(width: 8),
-          Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-          Expanded(child: Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500))),
+          Icon(icon, size: 16, color: crmColors.textSecondary),
+          8.w,
+          Text('$label: ',
+              style: TextStyle(fontSize: 13, color: crmColors.textSecondary)),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: crmColors.textPrimary,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  IconData _getIconForType(String type) {
-    switch (type.toLowerCase()) {
-      case 'pollution': return Icons.cloud_outlined;
-      case 'insurance': return Icons.shield_outlined;
-      case 'tax': return Icons.receipt_long_outlined;
-      case 'maintenance': return Icons.build_outlined;
-      case 'oil change': return Icons.water_drop_outlined;
-      default: return Icons.car_repair_outlined;
-    }
-  }
-
-  String _extractVehicleName(dynamic obj) {
-    if (obj is Map) {
-      final name = obj['name'];
-      final reg = obj['registrationNumber'];
-      if (name != null && reg != null) return '$name ($reg)';
-      if (name != null) return name.toString();
-      if (reg != null) return reg.toString();
-    }
-    return 'Unknown Vehicle';
-  }
-
   void _showUrgentRemindersPopup(List<ServiceReminder> urgentReminders) {
+    final crmColors = context.crmColors;
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: Container(
-          width: 500,
-          padding: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 480),
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: crmColors.surface,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Column(
@@ -295,55 +353,69 @@ class _FleetServiceRemindersScreenState extends ConsumerState<FleetServiceRemind
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.15),
+                      color: crmColors.warning.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.notification_important_rounded, color: Colors.orange, size: 24),
+                    child: Icon(Icons.notification_important_rounded,
+                        color: crmColors.warning, size: 24),
                   ),
-                  const SizedBox(width: 16),
-                  const Expanded(
+                  16.w,
+                  Expanded(
                     child: Text(
                       'Urgent Service Reminders',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E)),
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textPrimary),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              20.h,
               Flexible(
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: urgentReminders.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  separatorBuilder: (_, _) => 12.h,
                   itemBuilder: (context, index) {
                     final r = urgentReminders[index];
+                    final color = _urgencyColor(_urgencyOf(r), crmColors);
                     return Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.05),
-                        border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+                        color: color.withValues(alpha: 0.06),
+                        border: Border.all(color: color.withValues(alpha: 0.25)),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          Icon(_getIconForType(r.serviceType), color: Colors.red, size: 28),
-                          const SizedBox(width: 16),
+                          Icon(_iconForType(r.serviceType), color: color, size: 26),
+                          14.w,
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${r.serviceType} for ${_extractVehicleName(r.vehicle)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1A1A2E)),
+                                  '${r.serviceType} · ${_extractVehicleName(r.vehicle)}',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: crmColors.textPrimary),
                                 ),
-                                const SizedBox(height: 4),
+                                4.h,
                                 Row(
                                   children: [
-                                    const Icon(Icons.warning_rounded, color: Colors.red, size: 14),
-                                    const SizedBox(width: 4),
+                                    Icon(Icons.warning_rounded,
+                                        color: color, size: 14),
+                                    4.w,
                                     Text(
-                                      r.dueDate != null ? 'Due: ${DateFormat('MMM d, yyyy').format(r.dueDate!)}' : 'Due at ${r.dueKm} km',
-                                      style: const TextStyle(color: Colors.red, fontSize: 13, fontWeight: FontWeight.w500),
+                                      r.dueDate != null
+                                          ? 'Due: ${DateFormat('MMM d, yyyy').format(r.dueDate!)}'
+                                          : 'Due at ${r.dueKm?.toStringAsFixed(0)} km',
+                                      style: TextStyle(
+                                          color: color,
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600),
                                     ),
                                   ],
                                 ),
@@ -356,20 +428,21 @@ class _FleetServiceRemindersScreenState extends ConsumerState<FleetServiceRemind
                   },
                 ),
               ),
-              const SizedBox(height: 24),
+              22.h,
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.pop(ctx),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: const Color(0xFF4A1942),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    backgroundColor: crmColors.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Acknowledge', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: const Text('Acknowledge',
+                      style:
+                          TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -384,11 +457,15 @@ class _FleetServiceRemindersScreenState extends ConsumerState<FleetServiceRemind
       await ref.read(fleetServiceProvider).completeServiceReminder(id);
       ref.invalidate(managerServiceRemindersProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as completed!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Marked as completed!')),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }
@@ -447,7 +524,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_dueDate == null && _kmController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please provide either a Due Date or a Due KM.')),
@@ -468,9 +545,9 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
             dueKm: dueKm,
             notes: _notesController.text.trim(),
           );
-      
+
       ref.invalidate(managerServiceRemindersProvider);
-      
+
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -489,6 +566,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
     final vehiclesAsync = ref.watch(vehiclesProvider);
 
     return AlertDialog(
@@ -508,9 +586,9 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                       return const Text('No vehicles available. Add vehicles first.');
                     }
                     return DropdownButtonFormField<String>(
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Select Vehicle',
-                        border: OutlineInputBorder(),
                       ),
                       initialValue: _selectedVehicleId,
                       items: vehicles.map((v) {
@@ -526,22 +604,17 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                   loading: () => const CircularProgressIndicator(),
                   error: (err, _) => Text('Error loading vehicles: $err'),
                 ),
-                const SizedBox(height: 16),
+                16.h,
                 DropdownButtonFormField<String>(
-                  decoration: const InputDecoration(
-                    labelText: 'Service Type',
-                    border: OutlineInputBorder(),
-                  ),
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Service Type'),
                   initialValue: _selectedType,
                   items: _serviceTypes.map((type) {
-                    return DropdownMenuItem(
-                      value: type,
-                      child: Text(type),
-                    );
+                    return DropdownMenuItem(value: type, child: Text(type));
                   }).toList(),
                   onChanged: (val) => setState(() => _selectedType = val!),
                 ),
-                const SizedBox(height: 16),
+                16.h,
                 Row(
                   children: [
                     Expanded(
@@ -553,7 +626,8 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                             : DateFormat('MMM d, yyyy').format(_dueDate!)),
                         style: OutlinedButton.styleFrom(
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 16),
                         ),
                       ),
                     ),
@@ -564,24 +638,20 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                16.h,
                 TextFormField(
                   controller: _kmController,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     labelText: 'Due at KM (Optional)',
                     hintText: 'e.g. 50000',
-                    border: OutlineInputBorder(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                16.h,
                 TextFormField(
                   controller: _notesController,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Notes (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Notes (Optional)'),
                 ),
               ],
             ),
@@ -596,15 +666,18 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submit,
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF4A1942),
+            backgroundColor: crmColors.primary,
             foregroundColor: Colors.white,
           ),
           child: _isSubmitting
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
               : const Text('Save'),
         ),
       ],
     );
   }
 }
-

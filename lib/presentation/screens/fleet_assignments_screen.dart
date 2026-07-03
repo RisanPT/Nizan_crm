@@ -10,6 +10,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/vehicle_service.dart';
+import 'fleet/fleet_mobile_ui.dart';
 
 enum AssignmentFilter { all, unassigned, assigned }
 
@@ -233,7 +234,7 @@ class _FleetAssignmentsScreenState
           }
         }
 
-        return Column(
+        final content = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Screen Header
@@ -266,92 +267,88 @@ class _FleetAssignmentsScreenState
 
             // Responsive Search & Filters
             if (isMobile) ...[
-              // ── Compact Search + Icon-Toggle Bar ──────────────────────────
-              Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: crmColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: crmColors.border),
-                ),
-                child: Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Icon(Icons.search, size: 18, color: crmColors.textSecondary),
-                    ),
-                    Expanded(
+              // ── Title ─────────────────────────────────────────────────────
+              const FleetMobileHeader(title: 'Assignments'),
+              14.h,
+
+              // ── Search + filter menu + month toggle ──────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: crmColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: crmColors.border),
+                      ),
                       child: TextField(
                         decoration: InputDecoration(
                           hintText: 'Search bookings...',
-                          hintStyle: TextStyle(fontSize: 13, color: crmColors.textSecondary),
+                          hintStyle: TextStyle(
+                              fontSize: 13.5, color: crmColors.textSecondary),
+                          prefixIcon: Icon(Icons.search,
+                              size: 19, color: crmColors.textSecondary),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 13),
                           isDense: true,
                         ),
-                        style: const TextStyle(fontSize: 13),
+                        style: const TextStyle(fontSize: 13.5),
                         onChanged: (val) => setState(() => _searchQuery = val),
                       ),
                     ),
-                    // Month filter toggle
-                    GestureDetector(
-                      onTap: () => setState(() {
-                        _filterByMonth = !_filterByMonth;
-                        _activeBookingId = null;
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.all(8),
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        decoration: BoxDecoration(
+                  ),
+                  8.w,
+                  // Filter menu (All / Unassigned / Assigned)
+                  _buildFilterMenuButton(
+                      crmColors, allCount, unassignedCount, assignedCount),
+                  8.w,
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _filterByMonth = !_filterByMonth;
+                      _activeBookingId = null;
+                    }),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      height: 46,
+                      width: 46,
+                      decoration: BoxDecoration(
+                        color: _filterByMonth
+                            ? crmColors.primary.withValues(alpha: 0.10)
+                            : crmColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
                           color: _filterByMonth
-                              ? crmColors.primary.withValues(alpha: 0.12)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.calendar_month_outlined,
-                          size: 18,
-                          color: _filterByMonth ? crmColors.primary : crmColors.textSecondary,
+                              ? crmColors.primary.withValues(alpha: 0.35)
+                              : crmColors.border,
                         ),
                       ),
-                    ),
-                    // Unassigned toggle (mobile)
-                    GestureDetector(
-                      onTap: () => setState(() {
-                        _assignmentFilter = _assignmentFilter == AssignmentFilter.unassigned 
-                          ? AssignmentFilter.all 
-                          : AssignmentFilter.unassigned;
-                        _activeBookingId = null;
-                      }),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.all(8),
-                        margin: const EdgeInsets.only(right: 8, top: 6, bottom: 6),
-                        decoration: BoxDecoration(
-                          color: _assignmentFilter == AssignmentFilter.unassigned
-                              ? crmColors.warning.withValues(alpha: 0.12)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(
-                          Icons.pending_actions_outlined,
-                          size: 18,
-                          color: _assignmentFilter == AssignmentFilter.unassigned ? crmColors.warning : crmColors.textSecondary,
-                        ),
+                      child: Icon(
+                        Icons.calendar_month_outlined,
+                        size: 20,
+                        color: _filterByMonth
+                            ? crmColors.primary
+                            : crmColors.textSecondary,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              8.h,
+
+              // ── Active filter chip (shows current filter · tap ✕ to clear) ─
+              if (_assignmentFilter != AssignmentFilter.all) ...[
+                10.h,
+                Row(children: [_buildActiveFilterChip(crmColors)]),
+              ],
 
               // ── Slim month navigator (shown when month filter is on) ──────
               if (_filterByMonth) ...[
+                10.h,
                 Container(
-                  height: 38,
+                  height: 40,
                   decoration: BoxDecoration(
                     color: crmColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
@@ -360,7 +357,7 @@ class _FleetAssignmentsScreenState
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 38,
+                        width: 40,
                         child: IconButton(
                           icon: Icon(Icons.chevron_left, size: 18, color: crmColors.primary),
                           onPressed: () => setState(() {
@@ -395,12 +392,12 @@ class _FleetAssignmentsScreenState
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.calendar_month, size: 13, color: crmColors.primary),
-                              5.w,
+                              Icon(Icons.calendar_month, size: 14, color: crmColors.primary),
+                              6.w,
                               Text(
                                 _formatMonthYear(_selectedMonth),
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 13.5,
                                   fontWeight: FontWeight.bold,
                                   color: crmColors.primary,
                                 ),
@@ -410,7 +407,7 @@ class _FleetAssignmentsScreenState
                         ),
                       ),
                       SizedBox(
-                        width: 38,
+                        width: 40,
                         child: IconButton(
                           icon: Icon(Icons.chevron_right, size: 18, color: crmColors.primary),
                           onPressed: () => setState(() {
@@ -427,51 +424,7 @@ class _FleetAssignmentsScreenState
                     ],
                   ),
                 ),
-                8.h,
               ],
-
-              // ── Active filter pill (dismissible) ─────────────────────────
-              if (_assignmentFilter != AssignmentFilter.all)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: crmColors.warning.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: crmColors.warning.withValues(alpha: 0.30)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.pending_actions_outlined,
-                                size: 11, color: crmColors.warning),
-                            4.w,
-                            Text(
-                              _assignmentFilter == AssignmentFilter.unassigned ? 'Unassigned only' : 'Assigned only',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: crmColors.warning,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            6.w,
-                            GestureDetector(
-                              onTap: () => setState(() {
-                                _assignmentFilter = AssignmentFilter.all;
-                                _activeBookingId = null;
-                              }),
-                              child: Icon(Icons.close, size: 12, color: crmColors.warning),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
             ] else ...[
               // Desktop Search, Filter, and Month Navigation
               Row(
@@ -953,6 +906,15 @@ class _FleetAssignmentsScreenState
               ),
           ],
         );
+
+        // Mobile gets its own horizontal insets (the shell adds none on phones);
+        // desktop already receives padding from MainLayout.
+        return isMobile
+            ? Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: content,
+              )
+            : content;
       },
     );
   }
@@ -1470,6 +1432,152 @@ class _FleetAssignmentsScreenState
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Color _filterColor(AssignmentFilter filter, CrmTheme crmColors) {
+    switch (filter) {
+      case AssignmentFilter.unassigned:
+        return crmColors.warning;
+      case AssignmentFilter.assigned:
+        return crmColors.success;
+      case AssignmentFilter.all:
+        return crmColors.primary;
+    }
+  }
+
+  String _filterLabel(AssignmentFilter filter) {
+    switch (filter) {
+      case AssignmentFilter.unassigned:
+        return 'Unassigned';
+      case AssignmentFilter.assigned:
+        return 'Assigned';
+      case AssignmentFilter.all:
+        return 'All';
+    }
+  }
+
+  /// Mobile filter menu — a funnel icon that opens a popup with
+  /// All / Unassigned / Assigned (with live counts). Tints when a filter is on.
+  Widget _buildFilterMenuButton(
+    CrmTheme crmColors,
+    int allCount,
+    int unassignedCount,
+    int assignedCount,
+  ) {
+    final active = _assignmentFilter != AssignmentFilter.all;
+    final color = _filterColor(_assignmentFilter, crmColors);
+    return PopupMenuButton<AssignmentFilter>(
+      tooltip: 'Filter bookings',
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onSelected: (f) => setState(() {
+        _assignmentFilter = f;
+        _activeBookingId = null;
+      }),
+      itemBuilder: (ctx) => [
+        _filterMenuItem(AssignmentFilter.all, allCount, crmColors),
+        _filterMenuItem(AssignmentFilter.unassigned, unassignedCount, crmColors),
+        _filterMenuItem(AssignmentFilter.assigned, assignedCount, crmColors),
+      ],
+      child: Container(
+        height: 46,
+        width: 46,
+        decoration: BoxDecoration(
+          color: active ? color.withValues(alpha: 0.10) : crmColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active ? color.withValues(alpha: 0.35) : crmColors.border,
+          ),
+        ),
+        child: Icon(
+          Icons.filter_list_rounded,
+          size: 20,
+          color: active ? color : crmColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<AssignmentFilter> _filterMenuItem(
+    AssignmentFilter filter,
+    int count,
+    CrmTheme crmColors,
+  ) {
+    final selected = _assignmentFilter == filter;
+    final color = _filterColor(filter, crmColors);
+    return PopupMenuItem<AssignmentFilter>(
+      value: filter,
+      child: Row(
+        children: [
+          Icon(
+            selected ? Icons.check_circle : Icons.circle_outlined,
+            size: 18,
+            color: selected ? color : crmColors.textSecondary,
+          ),
+          10.w,
+          Text(
+            _filterLabel(filter),
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: crmColors.textPrimary,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Shows the currently applied filter with a ✕ to reset back to All.
+  Widget _buildActiveFilterChip(CrmTheme crmColors) {
+    final color = _filterColor(_assignmentFilter, crmColors);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.filter_list_rounded, size: 13, color: color),
+          5.w,
+          Text(
+            '${_filterLabel(_assignmentFilter)} only',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          6.w,
+          GestureDetector(
+            onTap: () => setState(() {
+              _assignmentFilter = AssignmentFilter.all;
+              _activeBookingId = null;
+            }),
+            child: Icon(Icons.close, size: 13, color: color),
+          ),
+        ],
       ),
     );
   }

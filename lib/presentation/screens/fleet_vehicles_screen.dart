@@ -10,6 +10,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/vehicle_service.dart';
 import '../common_widgets/paginated_footer.dart';
+import 'fleet/fleet_mobile_ui.dart';
 
 class FleetVehiclesScreen extends HookConsumerWidget {
   const FleetVehiclesScreen({super.key});
@@ -27,6 +28,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         ListPageParams(page: pageState.value, limit: pageSize),
       ),
     );
+    // Full (un-paginated) list — used for mobile list + KPI stat counts.
+    final asyncAllVehicles = ref.watch(vehiclesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
 
     Future<void> openVehicleDialog([Vehicle? vehicle]) async {
@@ -297,6 +300,295 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         default:
           return Icons.directions_car_outlined;
       }
+    }
+
+    Future<void> deleteVehicle(Vehicle v) async {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete Vehicle'),
+          content: Text('Delete ${v.name}?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: TextButton.styleFrom(foregroundColor: crmColors.destructive),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (confirm == true) {
+        await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
+        ref.invalidate(vehiclesProvider);
+        ref.invalidate(paginatedVehiclesProvider);
+      }
+    }
+
+    Future<void> changeStatus(Vehicle v, String newStatus) async {
+      if (newStatus == v.status) return;
+      await ref.read(vehicleServiceProvider).saveVehicle(
+            id: v.id,
+            name: v.name,
+            registrationNumber: v.registrationNumber,
+            type: v.type,
+            status: newStatus,
+            brand: v.brand,
+            fuelType: v.fuelType,
+            notes: v.notes,
+            driverId: v.driver?.id,
+            ownershipType: v.ownershipType,
+          );
+      ref.invalidate(vehiclesProvider);
+      ref.invalidate(paginatedVehiclesProvider);
+    }
+
+    Widget statusPill(Vehicle v, Color accent) {
+      final safeStatus =
+          ['running', 'under_service', 'accident', 'complaint', 'other']
+                  .contains(v.status)
+              ? v.status
+              : 'running';
+      return Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<String>(
+            value: safeStatus,
+            isDense: true,
+            borderRadius: BorderRadius.circular(12),
+            icon: Icon(Icons.arrow_drop_down, size: 18, color: accent),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: accent,
+            ),
+            onChanged: (s) {
+              if (s != null) changeStatus(v, s);
+            },
+            items: const [
+              DropdownMenuItem(value: 'running', child: Text('Running')),
+              DropdownMenuItem(value: 'under_service', child: Text('Under Service')),
+              DropdownMenuItem(value: 'accident', child: Text('Accident')),
+              DropdownMenuItem(value: 'complaint', child: Text('Complaint')),
+              DropdownMenuItem(value: 'other', child: Text('Other')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget mobileVehicleCard(Vehicle v) {
+      final accent = statusColor(v.status, crmColors);
+      final isRented = v.ownershipType == 'rented';
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: crmColors.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => openVehicleDialog(v),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 5, color: accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(vehicleIcon(v.type),
+                                  color: accent, size: 24),
+                            ),
+                            12.w,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    v.name,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold, fontSize: 16),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  2.h,
+                                  Text(
+                                    v.registrationNumber.isNotEmpty
+                                        ? '${v.registrationNumber}${v.brand.isNotEmpty ? ' • ${v.brand}' : ''}'
+                                        : v.brand,
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: crmColors.textSecondary),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              icon: Icon(Icons.more_vert,
+                                  size: 20, color: crmColors.textSecondary),
+                              onSelected: (val) {
+                                if (val == 'edit') {
+                                  openVehicleDialog(v);
+                                } else if (val == 'delete') {
+                                  deleteVehicle(v);
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                const PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(children: [
+                                    Icon(Icons.edit, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Edit')
+                                  ]),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(children: [
+                                    Icon(Icons.delete,
+                                        size: 16, color: crmColors.destructive),
+                                    const SizedBox(width: 8),
+                                    Text('Delete',
+                                        style: TextStyle(
+                                            color: crmColors.destructive))
+                                  ]),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        if (v.driver?.name.isNotEmpty == true) ...[
+                          10.h,
+                          Row(
+                            children: [
+                              Icon(Icons.person_outline,
+                                  size: 15, color: crmColors.textSecondary),
+                              6.w,
+                              Expanded(
+                                child: Text(
+                                  v.driver!.name,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: crmColors.textSecondary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                        12.h,
+                        Row(
+                          children: [
+                            _tag(isRented ? 'RENTED' : 'IN-HOUSE',
+                                isRented ? crmColors.warning : crmColors.primary),
+                            8.w,
+                            _tag(v.fuelType.toUpperCase(), crmColors.textSecondary),
+                            const Spacer(),
+                            statusPill(v, accent),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ── Mobile: title header + KPI strip + content-sized card list ─────────
+    if (isMobile) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: asyncAllVehicles.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, stack) => Center(
+            child: Text(
+              'Failed to load vehicles: $error',
+              style: TextStyle(color: crmColors.textSecondary),
+            ),
+          ),
+          data: (all) {
+            final running = all.where((v) => v.status == 'running').length;
+            final service = all.where((v) => v.status == 'under_service').length;
+            final alerts = all
+                .where((v) => v.status == 'accident' || v.status == 'complaint')
+                .length;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FleetMobileHeader(
+                  title: 'Fleet Vehicles',
+                  actionLabel: 'Add',
+                  onAction: () => openVehicleDialog(),
+                  stats: [
+                    FleetStat(
+                        value: '${all.length}',
+                        label: 'Total',
+                        color: crmColors.primary),
+                    FleetStat(
+                        value: '$running',
+                        label: 'Running',
+                        color: crmColors.success),
+                    FleetStat(
+                        value: '$service',
+                        label: 'Service',
+                        color: crmColors.warning),
+                    FleetStat(
+                        value: '$alerts',
+                        label: 'Alerts',
+                        color: crmColors.destructive),
+                  ],
+                ),
+                16.h,
+                Expanded(
+                  child: all.isEmpty
+                      ? const FleetEmptyState(
+                          icon: Icons.directions_car_outlined,
+                          title: 'No vehicles yet',
+                          subtitle: 'Tap "Add" to register your first vehicle.',
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemCount: all.length,
+                          separatorBuilder: (_, _) => 12.h,
+                          itemBuilder: (context, index) =>
+                              mobileVehicleCard(all[index]),
+                        ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
     }
 
     return Column(

@@ -1,207 +1,345 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/extensions/space_extension.dart';
+import '../../../core/models/employee.dart';
+import '../../../core/models/vehicle.dart';
+import '../../../core/theme/crm_theme.dart';
+import '../../../services/employee_service.dart';
 import '../../../services/fleet_service.dart';
+import '../../../services/vehicle_service.dart';
 import '../../../models/fleet_models.dart';
 import '../../common_widgets/export_report_dialog.dart';
+import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+
+String _extractId(dynamic obj) {
+  if (obj is String) return obj;
+  if (obj is Map && obj.containsKey('_id')) return obj['_id'].toString();
+  if (obj is Map && obj.containsKey('id')) return obj['id'].toString();
+  return '';
+}
 
 class FleetCompletedWorksScreen extends ConsumerWidget {
   const FleetCompletedWorksScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final crmColors = context.crmColors;
     final worksAsync = ref.watch(managerCompletedWorksProvider);
+    final reviews = ref.watch(managerReviewsProvider).value ?? const <DriverReview>[];
+    final vehicles = ref.watch(vehiclesProvider).value ?? const <Vehicle>[];
+    final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
-      body: worksAsync.when(
+    String vehicleNameOf(dynamic obj) {
+      if (obj is Map) {
+        if (obj['name'] != null) return obj['name'].toString();
+        if (obj['registrationNumber'] != null) {
+          return obj['registrationNumber'].toString();
+        }
+      }
+      if (obj is String && obj.isNotEmpty) {
+        final v = vehicles.cast<Vehicle?>().firstWhere(
+              (item) => item?.id == obj,
+              orElse: () => null,
+            );
+        if (v != null) {
+          return v.registrationNumber.isNotEmpty
+              ? '${v.name} · ${v.registrationNumber}'
+              : v.name;
+        }
+      }
+      return '—';
+    }
+
+    String driverNameOf(dynamic obj) {
+      if (obj is Map && obj['name'] != null) return obj['name'].toString();
+      if (obj is String && obj.isNotEmpty) {
+        final e = employees.cast<Employee?>().firstWhere(
+              (item) => item?.id == obj,
+              orElse: () => null,
+            );
+        if (e != null) return e.name;
+      }
+      return '—';
+    }
+
+    DriverReview? reviewFor(FleetJob job) {
+      for (final r in reviews) {
+        if (_extractId(r.job) == job.id) return r;
+      }
+      return null;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: worksAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, stack) => Center(
+          child: Text(
+            'Failed to load completed works: $err',
+            style: TextStyle(color: crmColors.textSecondary),
+          ),
+        ),
         data: (works) {
+          final reviewed = works.where((j) => reviewFor(j) != null).length;
+          final pending = works.length - reviewed;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Completed Works',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    if (works.isNotEmpty)
-                      ElevatedButton.icon(
+              FleetMobileHeader(
+                title: 'Completed Works',
+                trailing: works.isEmpty
+                    ? null
+                    : IconButton(
                         onPressed: () {
                           showDialog(
                             context: context,
                             builder: (ctx) => ExportReportDialog<FleetJob>(
                               title: 'Completed Works',
                               items: works,
-                              getVehicleName: (j) => _extractName(j.vehicleId),
-                              getDriverName: (j) => _extractName(j.driverId),
-                              headers: const ['Booking Number', 'Service', 'Date', 'Customer', 'Vehicle', 'Driver', 'Status'],
+                              getVehicleName: (j) => vehicleNameOf(j.vehicleId),
+                              getDriverName: (j) => driverNameOf(j.driverId),
+                              headers: const [
+                                'Booking Number',
+                                'Service',
+                                'Date',
+                                'Customer',
+                                'Vehicle',
+                                'Driver',
+                                'Status'
+                              ],
                               buildRow: (j) => [
                                 j.bookingNumber,
                                 j.service,
                                 DateFormat('yyyy-MM-dd').format(j.serviceStart),
                                 j.customerName,
-                                _extractName(j.vehicleId),
-                                _extractName(j.driverId),
+                                vehicleNameOf(j.vehicleId),
+                                driverNameOf(j.driverId),
                                 j.tripStatus,
                               ],
                             ),
                           );
                         },
-                        icon: const Icon(Icons.download, size: 18),
-                        label: const Text('Export'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1976D2),
-                          foregroundColor: Colors.white,
+                        icon: const Icon(Icons.download_outlined, size: 20),
+                        tooltip: 'Export',
+                        style: IconButton.styleFrom(
+                          foregroundColor: crmColors.accent,
+                          backgroundColor: crmColors.accent.withValues(alpha: 0.10),
+                          minimumSize: const Size(40, 40),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                  ],
-                ),
+                stats: [
+                  FleetStat(
+                      value: '${works.length}',
+                      label: 'Total',
+                      color: crmColors.primary),
+                  FleetStat(
+                      value: '$reviewed',
+                      label: 'Reviewed',
+                      color: crmColors.success),
+                  FleetStat(
+                      value: '$pending',
+                      label: 'No Review',
+                      color: crmColors.textSecondary),
+                ],
               ),
+              16.h,
               Expanded(
                 child: works.isEmpty
-                    ? const Center(
-                        child: Text('No completed works found.', style: TextStyle(color: Colors.grey)),
+                    ? const FleetEmptyState(
+                        icon: Icons.task_alt_rounded,
+                        title: 'No completed works',
+                        subtitle: 'Finished trips will be listed here.',
                       )
                     : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.only(bottom: 16),
                         itemCount: works.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 16),
+                        separatorBuilder: (_, _) => 12.h,
                         itemBuilder: (context, index) {
                           final job = works[index];
-                          return _buildCompletedJobCard(context, job, ref);
+                          return _CompletedJobCard(
+                            job: job,
+                            review: reviewFor(job),
+                            driver: driverNameOf(job.driverId),
+                            vehicle: vehicleNameOf(job.vehicleId),
+                          );
                         },
                       ),
               ),
             ],
           );
         },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
       ),
     );
   }
+}
 
-  Widget _buildCompletedJobCard(BuildContext context, FleetJob job, WidgetRef ref) {
-    // Attempt to find if there is a review for this job
-    // To do this fully optimized, the backend should return the review attached to the job
-    // But for now, we can cross-reference if we load managerReviewsProvider
-    final reviewsAsync = ref.watch(managerReviewsProvider);
-    
-    DriverReview? review;
-    if (reviewsAsync.hasValue) {
-      final reviews = reviewsAsync.value!;
-      try {
-        review = reviews.firstWhere((r) => _extractId(r.job) == job.id);
-      } catch (_) {}
-    }
+class _CompletedJobCard extends StatelessWidget {
+  final FleetJob job;
+  final DriverReview? review;
+  final String driver;
+  final String vehicle;
 
+  const _CompletedJobCard({
+    required this.job,
+    required this.review,
+    required this.driver,
+    required this.vehicle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
     final dateFormat = DateFormat('MMM d, yyyy');
-
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: crmColors.surface,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4))
-        ],
+        border: Border.all(color: crmColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.task_alt_rounded, color: Color(0xFF2E7D32), size: 20),
-                  const SizedBox(width: 8),
-                  Text('Job #${job.bookingNumber}',
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
-                ],
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 5, color: crmColors.success),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.task_alt_rounded,
+                            color: crmColors.success, size: 19),
+                        8.w,
+                        Expanded(
+                          child: Text(
+                            'Job #${job.bookingNumber}',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: crmColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          dateFormat.format(job.serviceStart),
+                          style: TextStyle(
+                              fontSize: 12, color: crmColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                    10.h,
+                    Text(
+                      job.service,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: crmColors.textPrimary,
+                      ),
+                    ),
+                    6.h,
+                    _metaRow(crmColors, Icons.person_outline, job.customerName),
+                    if (driver != '—') ...[
+                      4.h,
+                      _metaRow(crmColors, Icons.badge_outlined, 'Driver · $driver'),
+                    ],
+                    if (vehicle != '—') ...[
+                      4.h,
+                      _metaRow(crmColors, Icons.directions_car_outlined,
+                          'Vehicle · $vehicle'),
+                    ],
+                    12.h,
+                    if (review != null)
+                      _reviewSection(context, review!)
+                    else
+                      Text(
+                        'No review submitted by artist yet.',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: crmColors.textSecondary,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-              Text(dateFormat.format(job.serviceStart),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(job.service, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text('Customer: ${job.customerName}', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-          
-          if (job.driverId != null) ...[
-             const SizedBox(height: 4),
-             Text('Driver: ${_extractName(job.driverId)}', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+            ),
           ],
-          if (job.vehicleId != null) ...[
-             const SizedBox(height: 4),
-             Text('Vehicle: ${_extractName(job.vehicleId)}', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
-          ],
-          const SizedBox(height: 12),
-          const Divider(),
-          const SizedBox(height: 8),
-          
-          if (review != null)
-            _buildReviewSection(review)
-          else
-            const Text('No review submitted by artist yet.', style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey, fontSize: 13)),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildReviewSection(DriverReview review) {
+  Widget _metaRow(CrmTheme crmColors, IconData icon, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: crmColors.textSecondary),
+        6.w,
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 13, color: crmColors.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _reviewSection(BuildContext context, DriverReview review) {
+    final crmColors = context.crmColors;
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.1),
+        color: crmColors.accent.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        border: Border.all(color: crmColors.accent.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text('Artist Review: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text(
+                'Artist Review',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.5,
+                    color: crmColors.textPrimary),
+              ),
+              8.w,
               ...List.generate(5, (index) {
                 return Icon(
-                  index < review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                  color: Colors.amber[700],
+                  index < review.rating
+                      ? Icons.star_rounded
+                      : Icons.star_outline_rounded,
+                  color: crmColors.accent,
                   size: 16,
                 );
               }),
             ],
           ),
           if (review.comment != null && review.comment!.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text('"${review.comment}"', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+            6.h,
+            Text(
+              '"${review.comment}"',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontStyle: FontStyle.italic,
+                color: crmColors.textPrimary,
+              ),
+            ),
           ],
         ],
       ),
     );
-  }
-
-  String _extractId(dynamic obj) {
-    if (obj is String) return obj;
-    if (obj is Map && obj.containsKey('_id')) return obj['_id'].toString();
-    if (obj is Map && obj.containsKey('id')) return obj['id'].toString();
-    return '';
-  }
-
-  String _extractName(dynamic obj) {
-    if (obj is String) return 'ID: $obj';
-    if (obj is Map) {
-      if (obj.containsKey('name')) return obj['name'].toString();
-      if (obj.containsKey('registrationNumber')) return obj['registrationNumber'].toString();
-    }
-    return 'Unknown';
   }
 }

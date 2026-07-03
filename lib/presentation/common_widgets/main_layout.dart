@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/responsive_builder.dart';
+import 'fleet_menu_sheet.dart';
 import 'sidebar.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
@@ -48,7 +49,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/fleet/vehicles')) return 1;
       if (location.startsWith('/fleet/drivers')) return 2;
       if (location == '/calendar') return 3;
-      if (location == '/profile') return 4;
+      // Everything else the fleet manager can reach (profile + the fleet
+      // sections that live in the "Menu" sheet) highlights the Menu tab.
+      return 4;
     } else if (role == AppRole.driver) {
       if (location.startsWith('/driver/jobs')) return 0;
       if (location.startsWith('/driver/works')) return 1;
@@ -85,7 +88,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 1: context.go('/fleet/vehicles'); break;
         case 2: context.go('/fleet/drivers'); break;
         case 3: context.go('/calendar'); break;
-        case 4: context.go('/profile'); break;
+        case 4: showFleetMenuSheet(context, ref); break; // opens the hamburger menu
       }
     } else if (role == AppRole.driver) {
       switch (index) {
@@ -195,9 +198,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                             label: 'Calendar',
                           ),
                           NavigationDestination(
-                            icon: Icon(Icons.person_outline),
-                            selectedIcon: Icon(Icons.person),
-                            label: 'Profile',
+                            icon: Icon(Icons.menu),
+                            selectedIcon: Icon(Icons.menu_open),
+                            label: 'Menu',
                           ),
                         ]
                   : role == AppRole.driver
