@@ -312,6 +312,16 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/accounts/budget'),
                         ),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Invoices',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/accounts/invoices',
+                          onTap: () => context.go('/accounts/invoices'),
+                        ),
+                      ),
                     ],
                   ],
                   if (role.canSeeFleet) ...[

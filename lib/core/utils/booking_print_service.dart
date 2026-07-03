@@ -4,7 +4,7 @@ import 'booking_print_service_stub.dart'
     if (dart.library.html) 'booking_print_service_web.dart'
     as impl;
 
-enum BookingPrintVariant { client, artist }
+enum BookingPrintVariant { clientInvoice, clientConfirmation, artist }
 
 Future<void> printBookingDetails(
   Booking booking, {

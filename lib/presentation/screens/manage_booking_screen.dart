@@ -737,7 +737,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       } else if (action == 'client') {
         await printBookingDetails(
           updatedBooking,
-          variant: BookingPrintVariant.client,
+          variant: BookingPrintVariant.clientConfirmation,
         );
       } else if (action == 'artist') {
         await printBookingDetails(

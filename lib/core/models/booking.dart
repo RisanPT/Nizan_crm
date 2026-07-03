@@ -371,6 +371,9 @@ class Booking {
   final String pocId; // Selected Point of Contact (employeeId from assignedStaff)
   final String pocName; // POC display name (denormalized for PDF)
   final String pocPhone; // POC phone number (denormalized for PDF)
+  // GST invoice fields
+  final String paymentMode; // e.g. 'UPI', 'Cash', 'Card'
+  final String hsnCode; // HSN/SAC code, default 998361 for beauty services
 
   const Booking({
     required this.id,
@@ -421,6 +424,8 @@ class Booking {
     this.pocId = '',
     this.pocName = '',
     this.pocPhone = '',
+    this.paymentMode = '',
+    this.hsnCode = '998361',
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -665,6 +670,8 @@ class Booking {
       pocId: json['pocId'] as String? ?? '',
       pocName: json['pocName'] as String? ?? '',
       pocPhone: json['pocPhone'] as String? ?? '',
+      paymentMode: json['paymentMode'] as String? ?? '',
+      hsnCode: json['hsnCode'] as String? ?? '998361',
     );
   }
 
@@ -717,6 +724,8 @@ class Booking {
       'pocId': pocId,
       'pocName': pocName,
       'pocPhone': pocPhone,
+      'paymentMode': paymentMode,
+      'hsnCode': hsnCode,
     };
   }
 
@@ -769,6 +778,8 @@ class Booking {
     String? pocId,
     String? pocName,
     String? pocPhone,
+    String? paymentMode,
+    String? hsnCode,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -821,6 +832,8 @@ class Booking {
       pocId: pocId ?? this.pocId,
       pocName: pocName ?? this.pocName,
       pocPhone: pocPhone ?? this.pocPhone,
+      paymentMode: paymentMode ?? this.paymentMode,
+      hsnCode: hsnCode ?? this.hsnCode,
     );
   }
 }

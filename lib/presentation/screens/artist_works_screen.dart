@@ -1933,7 +1933,7 @@ class _ExpandedDetails extends ConsumerWidget {
                     try {
                       await printBookingDetails(
                         booking,
-                        variant: BookingPrintVariant.client,
+                        variant: BookingPrintVariant.clientConfirmation,
                       );
                     } catch (e) {
                       if (context.mounted) {

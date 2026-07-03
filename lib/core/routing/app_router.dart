@@ -19,6 +19,9 @@ import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/package_detail_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
 import '../../presentation/screens/accounts_budget_screen.dart';
+import '../../presentation/screens/accounts_invoices_screen.dart';
+
+
 import '../../presentation/screens/login_screen.dart';
 import '../../presentation/screens/sales_bookings_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
@@ -170,6 +173,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Driver Works';
           } else if (state.uri.path == '/accounts/artist-collections') {
             title = 'Artist Collections';
+          } else if (state.uri.path == '/accounts/invoices') {
+            title = 'Invoices';
           } else if (state.uri.path == '/finance') {
             title = 'Artist Finance';
           } else if (state.uri.path == '/works') {
@@ -304,6 +309,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/budget',
             builder: (context, state) => const AccountsBudgetScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/invoices',
+            builder: (context, state) => const AccountsInvoicesScreen(),
           ),
           GoRoute(
             path: '/booking/add',
