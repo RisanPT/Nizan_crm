@@ -675,7 +675,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       </div>
       <div>
         <div class="inv-company">TEAM N MAKEOVERS</div>
-        <div class="inv-doc-type">${variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE"}</div>
+        <div class="inv-doc-type">${variant == BookingPrintVariant.clientConfirmation ? "ADVANCE RECEIPT" : "GST INVOICE"}</div>
       </div>
     </div>
     <div class="inv-meta-grid">

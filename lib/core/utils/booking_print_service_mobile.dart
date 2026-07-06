@@ -120,7 +120,7 @@ Future<void> printBookingDetails(
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                variant == BookingPrintVariant.clientConfirmation ? 'BOOKING CONFIRMATION' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
+                variant == BookingPrintVariant.clientConfirmation ? 'ADVANCE RECEIPT' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
                 style: pw.TextStyle(fontSize: 10, color: secondaryColor),
               ),
             ],
@@ -160,7 +160,7 @@ Future<void> printBookingDetails(
           if (variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation) ...[
             // Invoice subtitle
             pw.Text(
-              variant == BookingPrintVariant.clientConfirmation ? 'BOOKING CONFIRMATION' : 'GST INVOICE — ORIGINAL COPY',
+              variant == BookingPrintVariant.clientConfirmation ? 'ADVANCE RECEIPT' : 'GST INVOICE — ORIGINAL COPY',
               style: pw.TextStyle(
                 fontSize: 10,
                 color: secondaryColor,

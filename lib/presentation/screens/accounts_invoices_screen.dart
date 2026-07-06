@@ -21,7 +21,6 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   String _searchQuery = '';
   DateTime? _selectedMonth;
   String _paymentStatusFilter = 'All';
-  String _dateFilterType = 'Event Date';
   int _currentPage = 1;
   static const int _itemsPerPage = 15;
 
@@ -65,15 +64,22 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
             }
 
             if (_selectedMonth != null) {
-              if (_dateFilterType == 'Event Date') {
-                final eventInSelectedMonth = b.bookingDate.year == _selectedMonth!.year &&
-                    b.bookingDate.month == _selectedMonth!.month;
-                if (!eventInSelectedMonth) return false;
-              } else {
-                final bookedInSelectedMonth = b.createdAt != null &&
-                    b.createdAt!.year == _selectedMonth!.year &&
-                    b.createdAt!.month == _selectedMonth!.month;
-                if (!bookedInSelectedMonth) return false;
+              final eventInSelectedMonth = b.bookingDate.year == _selectedMonth!.year &&
+                  b.bookingDate.month == _selectedMonth!.month;
+
+              final bookedInSelectedMonth = b.createdAt != null &&
+                  b.createdAt!.year == _selectedMonth!.year &&
+                  b.createdAt!.month == _selectedMonth!.month;
+
+              final isFutureMonth = (b.bookingDate.year > _selectedMonth!.year) ||
+                  (b.bookingDate.year == _selectedMonth!.year && b.bookingDate.month > _selectedMonth!.month);
+
+              final isConfirmedFutureWork = b.status.toLowerCase() == 'confirmed' &&
+                  bookedInSelectedMonth &&
+                  isFutureMonth;
+
+              if (!eventInSelectedMonth && !isConfirmedFutureWork) {
+                return false;
               }
             }
 
@@ -85,12 +91,20 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
 
             return true;
           }).toList()..sort((a, b) {
-            if (_dateFilterType == 'Booked Date') {
-              final dateA = a.createdAt ?? a.bookingDate;
-              final dateB = b.createdAt ?? b.bookingDate;
-              return dateB.compareTo(dateA);
-            }
-            return b.bookingDate.compareTo(a.bookingDate);
+            final isAdvA = _selectedMonth != null &&
+                a.createdAt != null &&
+                a.createdAt!.year == _selectedMonth!.year &&
+                a.createdAt!.month == _selectedMonth!.month &&
+                a.bookingDate.isAfter(a.createdAt!);
+            final isAdvB = _selectedMonth != null &&
+                b.createdAt != null &&
+                b.createdAt!.year == _selectedMonth!.year &&
+                b.createdAt!.month == _selectedMonth!.month &&
+                b.bookingDate.isAfter(b.createdAt!);
+
+            final dateA = isAdvA ? a.createdAt! : a.bookingDate;
+            final dateB = isAdvB ? b.createdAt! : b.bookingDate;
+            return dateB.compareTo(dateA);
           });
 
           final totalPages = (filteredInvoices.length / _itemsPerPage).ceil();
@@ -167,48 +181,6 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                                   tooltip: 'Clear Month Filter',
                                 ),
                             ],
-                          ),
-                        ),
-                        16.w,
-                        // Date Type Filter
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: crm.border),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _dateFilterType,
-                              isDense: true,
-                              items: ['Event Date', 'Booked Date'].map((s) {
-                                return DropdownMenuItem(
-                                  value: s,
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        s == 'Event Date'
-                                            ? Icons.calendar_month
-                                            : Icons.bookmark_outline,
-                                        size: 16,
-                                        color: crm.textSecondary,
-                                      ),
-                                      8.w,
-                                      Text(s),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _dateFilterType = val;
-                                    _currentPage = 1;
-                                    _selectedInvoice = null;
-                                  });
-                                }
-                              },
-                            ),
                           ),
                         ),
                         16.w,
@@ -550,8 +522,18 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
         final b = invoices[index];
         final isSelected = _selectedInvoice?.id == b.id;
         final bal = b.balanceDue;
-        final status = b.isFullyPaid ? 'PAID' : 'DUE';
-        final statusColor = b.isFullyPaid ? Colors.green : Colors.orange;
+
+        final isAdvanceRow = _selectedMonth != null &&
+            b.createdAt != null &&
+            b.createdAt!.year == _selectedMonth!.year &&
+            b.createdAt!.month == _selectedMonth!.month &&
+            ((b.bookingDate.year > _selectedMonth!.year) ||
+             (b.bookingDate.year == _selectedMonth!.year && b.bookingDate.month > _selectedMonth!.month));
+
+        final status = isAdvanceRow ? 'PAID' : (b.isFullyPaid ? 'PAID' : 'DUE');
+        final statusColor = (isAdvanceRow || b.isFullyPaid) ? Colors.green : Colors.orange;
+        final amountToDisplay = isAdvanceRow ? b.advanceAmount : b.totalPrice;
+        final customerNameSuffix = isAdvanceRow ? ' (ADVANCE)' : '';
 
         return ListTile(
           selected: isSelected,
@@ -574,7 +556,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               ),
               Expanded(
                 flex: 3,
-                child: Text(b.customerName.toUpperCase(), style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
+                child: Text('${b.customerName}$customerNameSuffix'.toUpperCase(), style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
               ),
               Expanded(
                 flex: 2,
@@ -588,9 +570,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(_currency(b.totalPrice), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                    2.h,
-                    Text('Adv: ${_currency(b.advanceAmount)}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary, fontSize: 11)),
+                    Text(_currency(amountToDisplay), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    if (!isAdvanceRow) ...[
+                      2.h,
+                      Text('Adv: ${_currency(b.advanceAmount)}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary, fontSize: 11)),
+                    ],
                   ],
                 ),
               ),
@@ -659,11 +643,30 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     onPressed: () async {
                       await printBookingDetails(
                         b,
+                        variant: BookingPrintVariant.clientConfirmation,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.receipt_long, size: 16),
+                    label: const Text('Print Advance Receipt'),
+                  ),
+                  12.w,
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await printBookingDetails(
+                        b,
                         variant: BookingPrintVariant.clientInvoice,
                       );
                     },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: crm.primary,
+                      foregroundColor: Colors.white,
+                    ),
                     icon: const Icon(Icons.print, size: 16),
-                    label: const Text('PDF / Print'),
+                    label: const Text('Print Full GST Invoice'),
                   ),
                   12.w,
                   IconButton(
@@ -704,6 +707,13 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   }
 
   Widget _buildPreviewPaper(Booking b, ThemeData theme, CrmTheme crm) {
+    final isAdvanceRow = _selectedMonth != null &&
+        b.createdAt != null &&
+        b.createdAt!.year == _selectedMonth!.year &&
+        b.createdAt!.month == _selectedMonth!.month &&
+        ((b.bookingDate.year > _selectedMonth!.year) ||
+         (b.bookingDate.year == _selectedMonth!.year && b.bookingDate.month > _selectedMonth!.month));
+
     final bal = b.balanceDue;
     final pkgAmount = b.totalPrice - b.addons.fold<double>(0, (s, a) => s + (a.amount * a.persons));
     final maroon = const Color(0xFF601a29);
@@ -715,7 +725,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
 
     return Stack(
       children: [
-        if (bal <= 0)
+        if (isAdvanceRow || bal <= 0)
           Positioned(
             top: 40,
             left: -40,
@@ -753,7 +763,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   ),
                   8.h,
                   Text('TEAM N MAKEOVERS', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: maroon, letterSpacing: 1.2)),
-                  Text('GST INVOICE', style: theme.textTheme.bodySmall?.copyWith(letterSpacing: 1, color: Colors.grey.shade700)),
+                  Text(isAdvanceRow ? 'ADVANCE RECEIPT' : 'GST INVOICE', style: theme.textTheme.bodySmall?.copyWith(letterSpacing: 1, color: Colors.grey.shade700)),
                 ],
               ),
               24.h,
@@ -782,7 +792,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     children: [
                       Text('STATUS', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade500, letterSpacing: 1, fontSize: 10)),
                       4.h,
-                      Text(bal <= 0 ? 'PAID' : invoiceStatus, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey.shade400)),
+                      Text((isAdvanceRow || bal <= 0) ? 'PAID' : invoiceStatus, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey.shade400)),
                     ]
                   ),
                 ],
@@ -854,32 +864,43 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               // SERVICES TABLE
               Table(
                 border: TableBorder.all(color: Colors.grey.shade300),
-                columnWidths: const {
-                  0: FlexColumnWidth(2.5),
-                  1: FlexColumnWidth(0.8),
-                  2: FlexColumnWidth(1),
-                  3: FlexColumnWidth(1),
-                  4: FlexColumnWidth(1),
-                  5: FlexColumnWidth(1.2),
-                },
+                columnWidths: isAdvanceRow
+                    ? const {
+                        0: FlexColumnWidth(3.5),
+                        1: FlexColumnWidth(1),
+                        2: FlexColumnWidth(1.5),
+                        3: FlexColumnWidth(1.5),
+                      }
+                    : const {
+                        0: FlexColumnWidth(2.5),
+                        1: FlexColumnWidth(0.8),
+                        2: FlexColumnWidth(1),
+                        3: FlexColumnWidth(1),
+                        4: FlexColumnWidth(1),
+                        5: FlexColumnWidth(1.2),
+                      },
                 children: [
                   TableRow(
                     children: [
                       _pdfTh('SERVICE', theme),
                       _pdfTh('HSN / SAC', theme, center: true),
-                      _pdfTh('BASE AMT', theme, right: true),
-                      _pdfTh('CGST 2.5%', theme, right: true),
-                      _pdfTh('SGST 2.5%', theme, right: true),
-                      _pdfTh('TOTAL (INCL. GST)', theme, right: true),
+                      _pdfTh(isAdvanceRow ? 'RATE' : 'BASE AMT', theme, right: true),
+                      if (!isAdvanceRow) ...[
+                        _pdfTh('CGST 2.5%', theme, right: true),
+                        _pdfTh('SGST 2.5%', theme, right: true),
+                      ],
+                      _pdfTh(isAdvanceRow ? 'AMOUNT' : 'TOTAL (INCL. GST)', theme, right: true),
                     ],
                   ),
                   TableRow(
                     children: [
                       _pdfTd(b.service, theme),
                       _pdfTdCenter(GstCalculator.defaultSacCode, theme),
-                      _pdfTdRight(_currency(GstCalculator.baseAmount(pkgAmount)), theme),
-                      _pdfTdBoldRight(_currency(GstCalculator.cgst(pkgAmount)), theme),
-                      _pdfTdBoldRight(_currency(GstCalculator.sgst(pkgAmount)), theme),
+                      _pdfTdRight(_currency(isAdvanceRow ? pkgAmount : GstCalculator.baseAmount(pkgAmount)), theme),
+                      if (!isAdvanceRow) ...[
+                        _pdfTdBoldRight(_currency(GstCalculator.cgst(pkgAmount)), theme),
+                        _pdfTdBoldRight(_currency(GstCalculator.sgst(pkgAmount)), theme),
+                      ],
                       _pdfTdBoldRight(_currency(pkgAmount), theme),
                     ],
                   ),
@@ -888,9 +909,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       children: [
                         _pdfTd('${addon.service}${addon.persons > 1 ? ' × ${addon.persons}' : ''}', theme),
                         _pdfTdCenter(GstCalculator.defaultSacCode, theme),
-                        _pdfTdRight(_currency(GstCalculator.baseAmount(addon.amount * addon.persons)), theme),
-                        _pdfTdBoldRight(_currency(GstCalculator.cgst(addon.amount * addon.persons)), theme),
-                        _pdfTdBoldRight(_currency(GstCalculator.sgst(addon.amount * addon.persons)), theme),
+                        _pdfTdRight(_currency(isAdvanceRow ? addon.amount * addon.persons : GstCalculator.baseAmount(addon.amount * addon.persons)), theme),
+                        if (!isAdvanceRow) ...[
+                          _pdfTdBoldRight(_currency(GstCalculator.cgst(addon.amount * addon.persons)), theme),
+                          _pdfTdBoldRight(_currency(GstCalculator.sgst(addon.amount * addon.persons)), theme),
+                        ],
                         _pdfTdBoldRight(_currency(addon.amount * addon.persons), theme),
                       ],
                     )
@@ -907,14 +930,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     border: TableBorder.all(color: Colors.grey.shade300),
                     columnWidths: const { 0: FlexColumnWidth(2), 1: FlexColumnWidth(1) },
                     children: [
-                      _summaryTableRow('Subtotal (Incl. GST)', _currency(b.totalPrice), theme),
+                      _summaryTableRow(isAdvanceRow ? 'Subtotal' : 'Subtotal (Incl. GST)', _currency(b.totalPrice), theme),
                       if (b.discountAmount > 0)
                         _summaryTableRow('Discount', '- ${_currency(b.discountAmount)}', theme),
-                      _summaryTableRowGST('CGST @ 2.5%', _currency(totalCgst), theme),
-                      _summaryTableRowGST('SGST @ 2.5%', _currency(totalSgst), theme),
-                      _summaryTableRow('Total GST', _currency(totalGst), theme),
+                      if (!isAdvanceRow) ...[
+                        _summaryTableRowGST('CGST @ 2.5%', _currency(totalCgst), theme),
+                        _summaryTableRowGST('SGST @ 2.5%', _currency(totalSgst), theme),
+                        _summaryTableRow('Total GST', _currency(totalGst), theme),
+                      ],
                       _summaryTableRow('Advance Paid', _currency(b.advanceAmount), theme),
-                      if (b.collectedAmount > 0)
+                      if (!isAdvanceRow && b.collectedAmount > 0)
                         _summaryTableRow('Artist Collected', _currency(b.collectedAmount), theme),
                       _summaryTableRowBalance('BALANCE DUE', _currency(bal), theme),
                     ],
