@@ -120,7 +120,7 @@ Future<void> printBookingDetails(
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                variant == BookingPrintVariant.clientConfirmation ? 'ADVANCE RECEIPT' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
+                variant == BookingPrintVariant.clientAdvanceReceipt ? 'ADVANCE RECEIPT' : variant == BookingPrintVariant.clientConfirmation ? 'BOOKING CONFIRMATION' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
                 style: pw.TextStyle(fontSize: 10, color: secondaryColor),
               ),
             ],
@@ -157,10 +157,14 @@ Future<void> printBookingDetails(
           pw.SizedBox(height: 20),
 
           // Variant-specific Details
-          if (variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation) ...[
+          if (variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ...[
             // Invoice subtitle
             pw.Text(
-              variant == BookingPrintVariant.clientConfirmation ? 'ADVANCE RECEIPT' : 'GST INVOICE — ORIGINAL COPY',
+              variant == BookingPrintVariant.clientAdvanceReceipt
+                  ? 'ADVANCE RECEIPT'
+                  : variant == BookingPrintVariant.clientConfirmation
+                      ? 'BOOKING CONFIRMATION'
+                      : 'GST INVOICE — ORIGINAL COPY',
               style: pw.TextStyle(
                 fontSize: 10,
                 color: secondaryColor,
@@ -283,14 +287,20 @@ Future<void> printBookingDetails(
             pw.SizedBox(height: 6),
             pw.Table(
               border: pw.TableBorder.all(color: borderColor),
-              columnWidths: const {
-                0: pw.FlexColumnWidth(3.0),
-                1: pw.FlexColumnWidth(1.2),
-                2: pw.FlexColumnWidth(1.5),
-                3: pw.FlexColumnWidth(1.2),
-                4: pw.FlexColumnWidth(1.2),
-                5: pw.FlexColumnWidth(1.5),
-              },
+              columnWidths: variant == BookingPrintVariant.clientAdvanceReceipt
+                  ? const {
+                      0: pw.FlexColumnWidth(3),
+                      1: pw.FlexColumnWidth(1),
+                      2: pw.FlexColumnWidth(1.5),
+                    }
+                  : const {
+                      0: pw.FlexColumnWidth(3.0),
+                      1: pw.FlexColumnWidth(1.2),
+                      2: pw.FlexColumnWidth(1.5),
+                      3: pw.FlexColumnWidth(1.2),
+                      4: pw.FlexColumnWidth(1.2),
+                      5: pw.FlexColumnWidth(1.5),
+                    },
               children: [
                 pw.TableRow(
                   decoration: pw.BoxDecoration(color: primaryColor),
@@ -310,33 +320,35 @@ Future<void> printBookingDetails(
                                 fontWeight: pw.FontWeight.bold,
                                 fontSize: 8),
                             textAlign: pw.TextAlign.center)),
+                    if (variant != BookingPrintVariant.clientConfirmation && variant != BookingPrintVariant.clientAdvanceReceipt) ...[
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text('BASE AMT',
+                              style: pw.TextStyle(
+                                  color: PdfColors.white,
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text('CGST 2.5%',
+                              style: pw.TextStyle(
+                                  color: PdfColors.white,
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text('SGST 2.5%',
+                              style: pw.TextStyle(
+                                  color: PdfColors.white,
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                    ],
                     pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('BASE AMT',
-                            style: pw.TextStyle(
-                                color: PdfColors.white,
-                                fontWeight: pw.FontWeight.bold,
-                                fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('CGST 2.5%',
-                            style: pw.TextStyle(
-                                color: PdfColors.white,
-                                fontWeight: pw.FontWeight.bold,
-                                fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('SGST 2.5%',
-                            style: pw.TextStyle(
-                                color: PdfColors.white,
-                                fontWeight: pw.FontWeight.bold,
-                                fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text('TOTAL',
+                        child: pw.Text((variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? 'AMOUNT' : 'TOTAL',
                             style: pw.TextStyle(
                                 color: PdfColors.white,
                                 fontWeight: pw.FontWeight.bold,
@@ -348,80 +360,85 @@ Future<void> printBookingDetails(
                   children: [
                     pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(booking.service,
+                        child: pw.Text(variant == BookingPrintVariant.clientAdvanceReceipt ? '${booking.service} (Advance Payment)' : booking.service,
                             style: const pw.TextStyle(fontSize: 8))),
                     pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
                         child: pw.Text(hsnCode,
                             style: const pw.TextStyle(fontSize: 8),
                             textAlign: pw.TextAlign.center)),
+                    if (variant != BookingPrintVariant.clientConfirmation && variant != BookingPrintVariant.clientAdvanceReceipt) ...[
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(inr(pkgBase),
+                              style: const pw.TextStyle(fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(inr(pkgCgst),
+                              style: const pw.TextStyle(fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(5),
+                          child: pw.Text(inr(pkgSgst),
+                              style: const pw.TextStyle(fontSize: 8),
+                              textAlign: pw.TextAlign.right)),
+                    ],
                     pw.Padding(
                         padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(inr(pkgBase),
-                            style: const pw.TextStyle(fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(inr(pkgCgst),
-                            style: const pw.TextStyle(fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(inr(pkgSgst),
-                            style: const pw.TextStyle(fontSize: 8),
-                            textAlign: pw.TextAlign.right)),
-                    pw.Padding(
-                        padding: const pw.EdgeInsets.all(5),
-                        child: pw.Text(inr(basePrice),
+                        child: pw.Text(inr(variant == BookingPrintVariant.clientAdvanceReceipt ? booking.advanceAmount : basePrice),
                             style: pw.TextStyle(
                                 fontSize: 8, fontWeight: pw.FontWeight.bold),
                             textAlign: pw.TextAlign.right)),
                   ],
                 ),
-                ...booking.addons.map((addon) {
-                  final addonIncl = addon.amount * addon.persons;
-                  final addonBase = gstBase(addonIncl);
-                  final addonCgst = gstCgst(addonIncl);
-                  final addonSgst = gstSgst(addonIncl);
-                  return pw.TableRow(
-                    decoration: pw.BoxDecoration(color: lightBg),
-                    children: [
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(
-                              addon.persons > 1
-                                  ? '${addon.service} x${addon.persons}'
-                                  : addon.service,
-                              style: const pw.TextStyle(fontSize: 8))),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(hsnCode,
-                              style: const pw.TextStyle(fontSize: 8),
-                              textAlign: pw.TextAlign.center)),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(inr(addonBase),
-                              style: const pw.TextStyle(fontSize: 8),
-                              textAlign: pw.TextAlign.right)),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(inr(addonCgst),
-                              style: const pw.TextStyle(fontSize: 8),
-                              textAlign: pw.TextAlign.right)),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(inr(addonSgst),
-                              style: const pw.TextStyle(fontSize: 8),
-                              textAlign: pw.TextAlign.right)),
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(5),
-                          child: pw.Text(inr(addonIncl),
-                              style: pw.TextStyle(
-                                  fontSize: 8, fontWeight: pw.FontWeight.bold),
-                              textAlign: pw.TextAlign.right)),
-                    ],
-                  );
-                }),
+                if (variant != BookingPrintVariant.clientAdvanceReceipt)
+                  ...booking.addons.map((addon) {
+                    final addonIncl = addon.amount * addon.persons;
+                    final addonBase = gstBase(addonIncl);
+                    final addonCgst = gstCgst(addonIncl);
+                    final addonSgst = gstSgst(addonIncl);
+                    return pw.TableRow(
+                      decoration: pw.BoxDecoration(color: lightBg),
+                      children: [
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(
+                                addon.persons > 1
+                                    ? '${addon.service} x${addon.persons}'
+                                    : addon.service,
+                                style: const pw.TextStyle(fontSize: 8))),
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(hsnCode,
+                                style: const pw.TextStyle(fontSize: 8),
+                                textAlign: pw.TextAlign.center)),
+                        if (variant != BookingPrintVariant.clientConfirmation) ...[
+                          pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Text(inr(addonBase),
+                                  style: const pw.TextStyle(fontSize: 8),
+                                  textAlign: pw.TextAlign.right)),
+                          pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Text(inr(addonCgst),
+                                  style: const pw.TextStyle(fontSize: 8),
+                                  textAlign: pw.TextAlign.right)),
+                          pw.Padding(
+                              padding: const pw.EdgeInsets.all(5),
+                              child: pw.Text(inr(addonSgst),
+                                  style: const pw.TextStyle(fontSize: 8),
+                                  textAlign: pw.TextAlign.right)),
+                        ],
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(5),
+                            child: pw.Text(inr(addonIncl),
+                                style: pw.TextStyle(
+                                    fontSize: 8, fontWeight: pw.FontWeight.bold),
+                                textAlign: pw.TextAlign.right)),
+                      ],
+                    );
+                  }),
               ],
             ),
             pw.SizedBox(height: 12),
@@ -435,44 +452,50 @@ Future<void> printBookingDetails(
                   child: pw.Table(
                     border: pw.TableBorder.all(color: borderColor),
                     children: [
-                      _buildTableRow('Subtotal (Incl. GST)',
-                          inr(booking.totalPrice), lightBg),
-                      _buildTableRow(
-                          '  CGST @ 2.5%', inr(totalCgst), PdfColors.white),
-                      _buildTableRow('  SGST @ 2.5%', inr(totalSgst), lightBg),
-                      _buildTableRow(
-                          'Total GST', inr(totalGst), PdfColors.white),
-                      if (booking.discountAmount > 0)
-                        _buildTableRow('Discount',
-                            'Discount Applied', lightBg),
-                      _buildTableRow('Advance Paid',
-                          inr(booking.advanceAmount), PdfColors.white),
-                      if (booking.collectedAmount > 0)
-                        _buildTableRow('Artist Collected',
-                            inr(booking.collectedAmount), lightBg),
-                      pw.TableRow(
-                        decoration: pw.BoxDecoration(color: primaryColor),
-                        children: [
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 7),
-                            child: pw.Text('BALANCE DUE',
-                                style: pw.TextStyle(
-                                    fontWeight: pw.FontWeight.bold,
-                                    fontSize: 10,
-                                    color: PdfColors.white)),
+                      if (variant == BookingPrintVariant.clientConfirmation) ...[
+                        _buildTableRow('Total Received',
+                            inr(booking.advanceAmount), lightBg),
+                      ] else ...[
+                        _buildTableRow('Subtotal (Incl. GST)',
+                            inr(booking.totalPrice), lightBg),
+                        _buildTableRow(
+                            '  CGST @ 2.5%', inr(totalCgst), PdfColors.white),
+                        _buildTableRow('  SGST @ 2.5%', inr(totalSgst), lightBg),
+                        _buildTableRow(
+                            'Total GST', inr(totalGst), PdfColors.white),
+                        if (booking.discountAmount > 0)
+                          _buildTableRow('Discount',
+                              'Discount Applied', lightBg),
+                        _buildTableRow('Advance Paid',
+                            inr(booking.advanceAmount), PdfColors.white),
+                        if (booking.collectedAmount > 0)
+                          _buildTableRow('Artist Collected',
+                              inr(booking.collectedAmount), lightBg),
+                        if (balanceDue > 0)
+                          pw.TableRow(
+                            decoration: pw.BoxDecoration(color: primaryColor),
+                            children: [
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 7),
+                                child: pw.Text('BALANCE DUE',
+                                    style: pw.TextStyle(
+                                        fontWeight: pw.FontWeight.bold,
+                                        fontSize: 10,
+                                        color: PdfColors.white)),
+                              ),
+                              pw.Padding(
+                                padding: const pw.EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 7),
+                                child: pw.Text(inr(balanceDue),
+                                    style: pw.TextStyle(
+                                        fontWeight: pw.FontWeight.bold,
+                                        fontSize: 10,
+                                        color: PdfColors.white)),
+                              ),
+                            ],
                           ),
-                          pw.Padding(
-                            padding: const pw.EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 7),
-                            child: pw.Text(inr(balanceDue),
-                                style: pw.TextStyle(
-                                    fontWeight: pw.FontWeight.bold,
-                                    fontSize: 10,
-                                    color: PdfColors.white)),
-                          ),
-                        ],
-                      ),
+                      ],
                     ],
                   ),
                 ),
@@ -580,7 +603,7 @@ Future<void> printBookingDetails(
   final bytes = await pdf.save();
   final tempDir = await getTemporaryDirectory();
   final cleanName = booking.customerName.replaceAll(RegExp(r'[^\w\s\-]'), '').trim().replaceAll(RegExp(r'\s+'), '_');
-  final fileName = '${(variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation) ? "Client" : "Artist"}_Booking_${booking.displayBookingNumber}_$cleanName.pdf';
+  final fileName = '${(variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "Client" : "Artist"}_Booking_${booking.displayBookingNumber}_$cleanName.pdf';
   final file = File('${tempDir.path}/$fileName');
   await file.writeAsBytes(bytes);
 

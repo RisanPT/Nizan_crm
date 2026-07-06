@@ -643,7 +643,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     onPressed: () async {
                       await printBookingDetails(
                         b,
-                        variant: BookingPrintVariant.clientConfirmation,
+                        variant: BookingPrintVariant.clientAdvanceReceipt,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -930,18 +930,18 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     border: TableBorder.all(color: Colors.grey.shade300),
                     columnWidths: const { 0: FlexColumnWidth(2), 1: FlexColumnWidth(1) },
                     children: [
-                      _summaryTableRow(isAdvanceRow ? 'Subtotal' : 'Subtotal (Incl. GST)', _currency(b.totalPrice), theme),
-                      if (b.discountAmount > 0)
+                      _summaryTableRow(isAdvanceRow ? 'Total Received' : 'Subtotal (Incl. GST)', _currency(isAdvanceRow ? b.advanceAmount : b.totalPrice), theme),
+                      if (!isAdvanceRow && b.discountAmount > 0)
                         _summaryTableRow('Discount', '- ${_currency(b.discountAmount)}', theme),
                       if (!isAdvanceRow) ...[
                         _summaryTableRowGST('CGST @ 2.5%', _currency(totalCgst), theme),
                         _summaryTableRowGST('SGST @ 2.5%', _currency(totalSgst), theme),
                         _summaryTableRow('Total GST', _currency(totalGst), theme),
+                        _summaryTableRow('Advance Paid', _currency(b.advanceAmount), theme),
                       ],
-                      _summaryTableRow('Advance Paid', _currency(b.advanceAmount), theme),
                       if (!isAdvanceRow && b.collectedAmount > 0)
                         _summaryTableRow('Artist Collected', _currency(b.collectedAmount), theme),
-                      _summaryTableRowBalance('BALANCE DUE', _currency(bal), theme),
+                      _summaryTableRowBalance('BALANCE DUE', _currency(isAdvanceRow ? 0.0 : bal), theme),
                     ],
                   ),
                 ),

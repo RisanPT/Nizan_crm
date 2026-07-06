@@ -237,7 +237,7 @@ String _buildSingleBookingHtml(
   BookingDisplayEntry? selectedArtistEntry,
   String artistName,
 ) {
-  final isClientCopy = variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation;
+  final isClientCopy = variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt;
   final isArtistCopy = variant == BookingPrintVariant.artist;
   
   if (isClientCopy) {
@@ -618,19 +618,20 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   final pkgSgst = _gstSgst(packageAmount);
   serviceRows.write('''
 <tr>
-  <td>${_escape(booking.service)}</td>
+  <td>${_escape(booking.service)}${variant == BookingPrintVariant.clientAdvanceReceipt ? " (Advance Payment)" : ""}</td>
   <td class="center">${_escape(hsnCode)}</td>
-  <td class="right">${variant == BookingPrintVariant.clientConfirmation ? _inr(packageAmount) : _inr(pkgBase)}</td>
-  ${variant == BookingPrintVariant.clientConfirmation ? "" : "<td class=\"right\">${_inr(pkgCgst)}</td><td class=\"right\">${_inr(pkgSgst)}</td>"}
-  <td class="right fw600">${_inr(packageAmount)}</td>
+  <td class="right">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : (variant == BookingPrintVariant.clientConfirmation ? _inr(packageAmount) : _inr(pkgBase))}</td>
+  ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : "<td class=\"right\">${_inr(pkgCgst)}</td><td class=\"right\">${_inr(pkgSgst)}</td>"}
+  <td class="right fw600">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : _inr(packageAmount)}</td>
 </tr>''');
   // Add-on rows
-  for (final addon in booking.addons) {
-    final addonIncl  = addon.amount * addon.persons;
-    final addonBase  = _gstBase(addonIncl);
-    final addonCgst  = _gstCgst(addonIncl);
-    final addonSgst  = _gstSgst(addonIncl);
-    serviceRows.write('''
+  if (variant != BookingPrintVariant.clientAdvanceReceipt) {
+    for (final addon in booking.addons) {
+      final addonIncl  = addon.amount * addon.persons;
+      final addonBase  = _gstBase(addonIncl);
+      final addonCgst  = _gstCgst(addonIncl);
+      final addonSgst  = _gstSgst(addonIncl);
+      serviceRows.write('''
 <tr>
   <td>${_escape(addon.service)}${addon.persons > 1 ? ' × ${addon.persons}' : ''}</td>
   <td class="center">${_escape(hsnCode)}</td>
@@ -638,6 +639,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   ${variant == BookingPrintVariant.clientConfirmation ? "" : "<td class=\"right\">${_inr(addonCgst)}</td><td class=\"right\">${_inr(addonSgst)}</td>"}
   <td class="right fw600">${_inr(addonIncl)}</td>
 </tr>''');
+    }
   }
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
@@ -675,7 +677,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       </div>
       <div>
         <div class="inv-company">TEAM N MAKEOVERS</div>
-        <div class="inv-doc-type">${variant == BookingPrintVariant.clientConfirmation ? "ADVANCE RECEIPT" : "GST INVOICE"}</div>
+        <div class="inv-doc-type">${variant == BookingPrintVariant.clientAdvanceReceipt ? "ADVANCE RECEIPT" : (variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE")}</div>
       </div>
     </div>
     <div class="inv-meta-grid">
@@ -689,7 +691,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       </div>
       <div class="inv-meta-cell">
         <span class="meta-label">STATUS</span>
-        <span class="status-badge" style="background:${statusBadgeColor}">$invoiceStatus</span>
+        <span class="status-badge" style="background:$statusBadgeColor">$invoiceStatus</span>
       </div>
     </div>
   </div>
@@ -705,7 +707,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       ${booking.address.isNotEmpty ? '<div class="info-line"><span class="info-key">Address</span> <span class="info-val">${_escape(booking.address)}${booking.pincode.isNotEmpty ? ', ${_escape(booking.pincode)}' : ''}</span></div>' : ''}
       ${booking.district.isNotEmpty ? '<div class="info-line"><span class="info-key">District</span> <span class="info-val">${_escape(booking.district)}</span></div>' : ''}
     </div>
-    ${variant == BookingPrintVariant.clientConfirmation ? '''<div class="info-card">
+    ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? '''<div class="info-card">
       <div class="info-card-title">YOUR ARTIST</div>
       $artistNameLine
       $artistRoleLine
@@ -730,9 +732,9 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       <tr>
         <th>SERVICE</th>
         <th class="center">HSN / SAC</th>
-        <th class="right">${variant == BookingPrintVariant.clientConfirmation ? "RATE" : "BASE AMT"}</th>
-        ${variant == BookingPrintVariant.clientConfirmation ? "" : "<th class=\"right\">CGST 2.5%</th>\n        <th class=\"right\">SGST 2.5%</th>"}
-        <th class="right">${variant == BookingPrintVariant.clientConfirmation ? "AMOUNT" : "TOTAL (INCL. GST)"}</th>
+        <th class="right">${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "RATE" : "BASE AMT"}</th>
+        ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : "<th class=\"right\">CGST 2.5%</th>\n        <th class=\"right\">SGST 2.5%</th>"}
+        <th class="right">${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "AMOUNT" : "TOTAL (INCL. GST)"}</th>
       </tr>
     </thead>
     <tbody>
@@ -744,10 +746,10 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   <div class="summary-outer">
     <table class="summary-table">
       <tr class="sum-row">
-        <td colspan="2" class="right sum-label">${variant == BookingPrintVariant.clientConfirmation ? "Subtotal" : "Subtotal (Incl. GST)"}</td>
-        <td class="right sum-val">${_inr(booking.totalPrice)}</td>
+        <td colspan="2" class="right sum-label">${variant == BookingPrintVariant.clientAdvanceReceipt ? "Total Received" : (variant == BookingPrintVariant.clientConfirmation ? "Subtotal" : "Subtotal (Incl. GST)")}</td>
+        <td class="right sum-val">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : _inr(booking.totalPrice)}</td>
       </tr>
-      ${variant == BookingPrintVariant.clientConfirmation ? "" : '''<tr class="sum-row gst-breakdown-row">
+      ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : '''<tr class="sum-row gst-breakdown-row">
         <td class="right sum-label sub-indent" colspan="2">CGST @ 2.5%</td>
         <td class="right sum-val sub-val">${_inr(totalCgst)}</td>
       </tr>
@@ -759,21 +761,21 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
         <td colspan="2" class="right sum-label">Total GST</td>
         <td class="right sum-val">${_inr(totalGst)}</td>
       </tr>'''}
-      $discountLine
-      <tr class="sum-row">
+      ${variant == BookingPrintVariant.clientAdvanceReceipt ? "" : discountLine}
+      ${variant == BookingPrintVariant.clientAdvanceReceipt ? "" : '''<tr class="sum-row">
         <td colspan="2" class="right sum-label">Advance Paid</td>
         <td class="right sum-val">${_inr(booking.advanceAmount)}</td>
-      </tr>
-      <tr class="balance-due-row">
+      </tr>'''}
+      ${(variant == BookingPrintVariant.clientAdvanceReceipt || remainingBalance <= 0) ? "" : '''<tr class="balance-due-row">
         <td colspan="2" class="right balance-label">BALANCE DUE</td>
         <td class="right balance-val">${_inr(remainingBalance)}</td>
-      </tr>
+      </tr>'''}
     </table>
   </div>
 
   <!-- ═══ FOOTER ═══ -->
   <div class="inv-footer">
-    ${variant == BookingPrintVariant.clientConfirmation ? "" : '''<div class="gst-note">
+    ${variant == BookingPrintVariant.clientAdvanceReceipt ? "" : '''<div class="gst-note">
       ✓ Price inclusive of GST @ 5% &nbsp;|&nbsp; SAC: $hsnCode
     </div>'''}
     <div class="terms-title">Terms &amp; Conditions</div>
