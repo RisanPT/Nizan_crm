@@ -371,6 +371,11 @@ class Booking {
   final String pocId; // Selected Point of Contact (employeeId from assignedStaff)
   final String pocName; // POC display name (denormalized for PDF)
   final String pocPhone; // POC phone number (denormalized for PDF)
+  // Payment tracking
+  /// Sum of all *verified* artist collection amounts for this booking.
+  /// Synced by the backend whenever a Collection is verified/rejected/deleted.
+  /// Use [balanceDue] for the true outstanding amount.
+  final double collectedAmount;
   // GST invoice fields
   final String paymentMode; // e.g. 'UPI', 'Cash', 'Card'
   final String hsnCode; // HSN/SAC code, default 998361 for beauty services
@@ -424,6 +429,7 @@ class Booking {
     this.pocId = '',
     this.pocName = '',
     this.pocPhone = '',
+    this.collectedAmount = 0,
     this.paymentMode = '',
     this.hsnCode = '998361',
   });
@@ -450,6 +456,24 @@ class Booking {
 
   String get initials =>
       customerName.isNotEmpty ? customerName[0].toUpperCase() : '?';
+
+  /// The true outstanding balance for this booking.
+  /// Formula: totalPrice − discountAmount − advanceAmount − collectedAmount.
+  /// If the service start date is before today, the amount is considered
+  /// collected (past works are automatically marked as having 0 balance due).
+  double get balanceDue {
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    if (serviceStart.isBefore(todayStart)) {
+      return 0.0;
+    }
+    return (totalPrice - discountAmount - advanceAmount - collectedAmount)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+  }
+
+  /// True when the balance has been fully settled.
+  bool get isFullyPaid => balanceDue <= 0;
 
   String get displayBookingNumber {
     final explicitNumber = bookingNumber.trim();
@@ -651,6 +675,7 @@ class Booking {
       discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
       discountType: json['discountType'] as String? ?? 'inr',
       discountValue: (json['discountValue'] as num?)?.toDouble() ?? 0.0,
+      collectedAmount: (json['collectedAmount'] as num?)?.toDouble() ?? 0.0,
       duplicateCount: (json['duplicateCount'] as num?)?.toInt() ?? 0,
       assignedStaff: ((json['assignedStaff'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -778,6 +803,7 @@ class Booking {
     String? pocId,
     String? pocName,
     String? pocPhone,
+    double? collectedAmount,
     String? paymentMode,
     String? hsnCode,
   }) {
@@ -832,6 +858,7 @@ class Booking {
       pocId: pocId ?? this.pocId,
       pocName: pocName ?? this.pocName,
       pocPhone: pocPhone ?? this.pocPhone,
+      collectedAmount: collectedAmount ?? this.collectedAmount,
       paymentMode: paymentMode ?? this.paymentMode,
       hsnCode: hsnCode ?? this.hsnCode,
     );

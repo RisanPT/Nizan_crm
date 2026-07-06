@@ -546,9 +546,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // ── Booking info ────────────────────────────────────────────────────────────
   final addonTotal      = _addonTotal(booking);
   final packageAmount   = _packageAmountFromTotal(booking.totalPrice, addonTotal);
-  final remainingBalance =
-      (booking.totalPrice - booking.advanceAmount - booking.discountAmount)
-          .clamp(0.0, double.infinity);
+  final remainingBalance = booking.balanceDue;
 
   final invoiceDate = booking.bookingDate;
   final invoiceDateStr =

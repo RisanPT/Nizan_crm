@@ -86,10 +86,7 @@ Future<void> printBookingDetails(
         final totalSgst = gstSgst(booking.totalPrice);
         final totalGst =
             double.parse((totalCgst + totalSgst).toStringAsFixed(2));
-        final balanceDue = (booking.totalPrice -
-                booking.advanceAmount -
-                booking.discountAmount)
-            .clamp(0.0, double.infinity);
+        final balanceDue = booking.balanceDue;
 
         return [
           // Header / Logo
@@ -450,6 +447,9 @@ Future<void> printBookingDetails(
                             'Discount Applied', lightBg),
                       _buildTableRow('Advance Paid',
                           inr(booking.advanceAmount), PdfColors.white),
+                      if (booking.collectedAmount > 0)
+                        _buildTableRow('Artist Collected',
+                            inr(booking.collectedAmount), lightBg),
                       pw.TableRow(
                         decoration: pw.BoxDecoration(color: primaryColor),
                         children: [

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
@@ -22,6 +21,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   String _searchQuery = '';
   DateTime? _selectedMonth;
   String _paymentStatusFilter = 'All';
+  String _dateFilterType = 'Event Date';
   int _currentPage = 1;
   static const int _itemsPerPage = 15;
 
@@ -65,20 +65,33 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
             }
 
             if (_selectedMonth != null) {
-               if (b.bookingDate.year != _selectedMonth!.year || b.bookingDate.month != _selectedMonth!.month) {
-                 return false;
-               }
+              if (_dateFilterType == 'Event Date') {
+                final eventInSelectedMonth = b.bookingDate.year == _selectedMonth!.year &&
+                    b.bookingDate.month == _selectedMonth!.month;
+                if (!eventInSelectedMonth) return false;
+              } else {
+                final bookedInSelectedMonth = b.createdAt != null &&
+                    b.createdAt!.year == _selectedMonth!.year &&
+                    b.createdAt!.month == _selectedMonth!.month;
+                if (!bookedInSelectedMonth) return false;
+              }
             }
 
             if (_paymentStatusFilter != 'All') {
-               final bal = (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0.0, double.infinity);
-               final isPaid = bal <= 0;
+               final isPaid = b.isFullyPaid;
                if (_paymentStatusFilter == 'Paid' && !isPaid) return false;
                if (_paymentStatusFilter == 'Due' && isPaid) return false;
             }
 
             return true;
-          }).toList()..sort((a, b) => b.bookingDate.compareTo(a.bookingDate));
+          }).toList()..sort((a, b) {
+            if (_dateFilterType == 'Booked Date') {
+              final dateA = a.createdAt ?? a.bookingDate;
+              final dateB = b.createdAt ?? b.bookingDate;
+              return dateB.compareTo(dateA);
+            }
+            return b.bookingDate.compareTo(a.bookingDate);
+          });
 
           final totalPages = (filteredInvoices.length / _itemsPerPage).ceil();
           if (_currentPage > totalPages && totalPages > 0) {
@@ -157,6 +170,48 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                           ),
                         ),
                         16.w,
+                        // Date Type Filter
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: crm.border),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _dateFilterType,
+                              isDense: true,
+                              items: ['Event Date', 'Booked Date'].map((s) {
+                                return DropdownMenuItem(
+                                  value: s,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        s == 'Event Date'
+                                            ? Icons.calendar_month
+                                            : Icons.bookmark_outline,
+                                        size: 16,
+                                        color: crm.textSecondary,
+                                      ),
+                                      8.w,
+                                      Text(s),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() {
+                                    _dateFilterType = val;
+                                    _currentPage = 1;
+                                    _selectedInvoice = null;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                        16.w,
                         // Status Filter
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -219,7 +274,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               const Divider(height: 1),
               
               // Summary Blocks
-              _buildSummaryHeader(filteredInvoices, theme, crm),
+              _buildSummaryHeader(filteredInvoices, allBookings, theme, crm),
               const Divider(height: 1),
 
               // Split View
@@ -263,17 +318,19 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     );
   }
 
-  Widget _buildSummaryHeader(List<Booking> invoices, ThemeData theme, CrmTheme crm) {
+  Widget _buildSummaryHeader(List<Booking> invoices, List<Booking> allBookings, ThemeData theme, CrmTheme crm) {
     double outstanding = 0;
     double dueToday = 0;
     double dueWithin30 = 0;
     double overdue = 0;
+    double advanceCollected = 0;
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
     for (var b in invoices) {
-      final bal = (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0.0, double.infinity);
+      advanceCollected += b.advanceAmount;
+      final bal = b.balanceDue;
       if (bal > 0) {
         outstanding += bal;
         final dDate = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
@@ -286,6 +343,36 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
         } else if (diff <= 30) {
           dueWithin30 += bal;
         }
+      }
+    }
+
+    final targetMonth = _selectedMonth ?? DateTime.now();
+    final isCurrentMonth = targetMonth.year == now.year && targetMonth.month == now.month;
+    final monthStr = isCurrentMonth ? 'This Month (${_formatMonthYear(targetMonth)})' : _formatMonthYear(targetMonth);
+
+    int eventCount = 0;
+    double eventCollected = 0;
+    int bookedCount = 0;
+    double bookedAdvance = 0;
+
+    for (var b in allBookings) {
+      final status = b.status.toLowerCase();
+      if (status != 'confirmed' && status != 'completed') continue;
+
+      if (b.bookingDate.year == targetMonth.year && b.bookingDate.month == targetMonth.month) {
+        eventCount++;
+        double collected = b.advanceAmount + b.collectedAmount;
+        if (b.isFullyPaid) {
+          collected = b.totalPrice - b.discountAmount;
+        }
+        eventCollected += collected;
+      }
+
+      if (b.createdAt != null &&
+          b.createdAt!.year == targetMonth.year &&
+          b.createdAt!.month == targetMonth.month) {
+        bookedCount++;
+        bookedAdvance += b.advanceAmount;
       }
     }
 
@@ -317,11 +404,136 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               ),
               16.w,
               Expanded(child: statCard('Total Outstanding Receivables', _currency(outstanding), crm.textPrimary)),
+              Expanded(child: statCard('Advance Collected', _currency(advanceCollected), Colors.green.shade700)),
               Expanded(child: statCard('Due Today', _currency(dueToday), Colors.orange.shade700)),
               Expanded(child: statCard('Due Within 30 Days', _currency(dueWithin30), crm.textPrimary)),
               Expanded(child: statCard('Overdue Invoice', _currency(overdue), Colors.red.shade700)),
             ],
-          )
+          ),
+          const Divider(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: crm.primary.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: crm.primary.withOpacity(0.12)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: crm.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.calendar_month, color: crm.primary, size: 24),
+                      ),
+                      16.w,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Events in $monthStr',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: crm.primary,
+                              ),
+                            ),
+                            4.h,
+                            Text(
+                              'We have $eventCount works with event date in $monthStr',
+                              style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _currency(eventCollected),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                          4.h,
+                          Text(
+                            'Amount Collected',
+                            style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              16.w,
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.shade50.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.teal.shade200.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.shade100.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.bookmark_outline, color: Colors.teal.shade700, size: 24),
+                      ),
+                      16.w,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Bookings in $monthStr',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal.shade700,
+                              ),
+                            ),
+                            4.h,
+                            Text(
+                              'We have $bookedCount bookings created in $monthStr',
+                              style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            _currency(bookedAdvance),
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.teal.shade700,
+                            ),
+                          ),
+                          4.h,
+                          Text(
+                            'Advance Collected',
+                            style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -337,9 +549,9 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       itemBuilder: (context, index) {
         final b = invoices[index];
         final isSelected = _selectedInvoice?.id == b.id;
-        final bal = (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0.0, double.infinity);
-        final status = bal <= 0 ? 'PAID' : 'DUE';
-        final statusColor = bal <= 0 ? Colors.green : Colors.orange;
+        final bal = b.balanceDue;
+        final status = b.isFullyPaid ? 'PAID' : 'DUE';
+        final statusColor = b.isFullyPaid ? Colors.green : Colors.orange;
 
         return ListTile(
           selected: isSelected,
@@ -373,9 +585,13 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               ),
               Expanded(
                 flex: 2,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Text(_currency(b.totalPrice), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(_currency(b.totalPrice), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    2.h,
+                    Text('Adv: ${_currency(b.advanceAmount)}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary, fontSize: 11)),
+                  ],
                 ),
               ),
             ],
@@ -488,7 +704,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   }
 
   Widget _buildPreviewPaper(Booking b, ThemeData theme, CrmTheme crm) {
-    final bal = (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0.0, double.infinity);
+    final bal = b.balanceDue;
     final pkgAmount = b.totalPrice - b.addons.fold<double>(0, (s, a) => s + (a.amount * a.persons));
     final maroon = const Color(0xFF601a29);
     final totalCgst = GstCalculator.cgst(b.totalPrice);
@@ -698,6 +914,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       _summaryTableRowGST('SGST @ 2.5%', _currency(totalSgst), theme),
                       _summaryTableRow('Total GST', _currency(totalGst), theme),
                       _summaryTableRow('Advance Paid', _currency(b.advanceAmount), theme),
+                      if (b.collectedAmount > 0)
+                        _summaryTableRow('Artist Collected', _currency(b.collectedAmount), theme),
                       _summaryTableRowBalance('BALANCE DUE', _currency(bal), theme),
                     ],
                   ),

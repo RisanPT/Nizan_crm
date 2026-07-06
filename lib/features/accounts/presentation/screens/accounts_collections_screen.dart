@@ -9,26 +9,85 @@ import '../../../../services/collection_service.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../providers/collection_filters_provider.dart';
 import '../../../../core/models/artist_collection.dart';
+import '../../../../core/models/booking.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../services/report_service.dart';
+import '../../../../services/booking_service.dart';
 
-class AccountsCollectionsScreen extends ConsumerWidget {
+// ─── Provider: bookings that have at least one verified collection ────────────
+final _bookingInvoiceSummariesProvider =
+    FutureProvider<List<_BookingInvoiceSummary>>((ref) async {
+  // 1. Fetch all verified collections
+  final collections = await ref
+      .watch(collectionServiceProvider)
+      .getCollections(status: 'verified');
+
+  // 2. Group by bookingId
+  final byBooking = <String, List<ArtistCollection>>{};
+  for (final c in collections) {
+    final id = c.booking?.id ?? '';
+    if (id.isEmpty) continue;
+    byBooking.putIfAbsent(id, () => []).add(c);
+  }
+
+  // 3. Fetch each booking to get the authoritative collectedAmount + totalPrice
+  final bookingService = ref.watch(bookingServiceProvider);
+  final summaries = <_BookingInvoiceSummary>[];
+  for (final entry in byBooking.entries) {
+    try {
+      final booking = await bookingService.getBookingById(entry.key);
+      summaries.add(_BookingInvoiceSummary(
+        booking: booking,
+        collections: entry.value,
+      ));
+    } catch (_) {
+      // Booking may have been deleted — skip
+    }
+  }
+
+  summaries.sort((a, b) =>
+      b.booking.serviceStart.compareTo(a.booking.serviceStart));
+  return summaries;
+});
+
+class _BookingInvoiceSummary {
+  final Booking booking;
+  final List<ArtistCollection> collections;
+  const _BookingInvoiceSummary({
+    required this.booking,
+    required this.collections,
+  });
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+class AccountsCollectionsScreen extends ConsumerStatefulWidget {
   const AccountsCollectionsScreen({super.key});
+  @override
+  ConsumerState<AccountsCollectionsScreen> createState() =>
+      _AccountsCollectionsScreenState();
+}
+
+class _AccountsCollectionsScreenState
+    extends ConsumerState<AccountsCollectionsScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   String _fmt(DateTime d) {
     const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
     ];
     return '${d.day.toString().padLeft(2, '0')} ${months[d.month - 1]} ${d.year}';
   }
@@ -42,18 +101,18 @@ class AccountsCollectionsScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
 
     final asyncCollections = ref.watch(filteredCollectionsProvider);
     final filters = ref.watch(collectionFiltersProvider);
-    final canVerify = true; // accounts view
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Header ──────────────────────────────────────────────────────────
         Row(
           children: [
             Expanded(
@@ -61,13 +120,13 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Artist Collections Dashboard',
+                    'Finance & Invoices',
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
-                    'Comprehensive view of all artist fund collections with advanced filtering.',
+                    'Artist collections and booking invoice balances.',
                     style: TextStyle(color: crm.textSecondary),
                   ),
                 ],
@@ -114,22 +173,42 @@ class AccountsCollectionsScreen extends ConsumerWidget {
             ],
           ),
         ],
-        20.h,
+        16.h,
+
+        // ── Tab Bar ─────────────────────────────────────────────────────────
+        TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(icon: Icon(Icons.account_balance_wallet_outlined), text: 'Collections'),
+            Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Invoice Balances'),
+          ],
+        ),
+        16.h,
+
+        // ── Active Filters (collections tab only) ────────────────────────────
         _buildActiveFilters(context, ref, filters),
-        20.h,
+
+        // ── Tab Views ────────────────────────────────────────────────────────
         Expanded(
-          child: asyncCollections.when(
-            data: (items) => _buildCollectionsList(
-              context,
-              ref,
-              items,
-              crm,
-              theme,
-              canVerify,
-            ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) =>
-                Center(child: Text('Error loading collections: $e')),
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Tab 1: Collections
+              asyncCollections.when(
+                data: (items) => _buildCollectionsList(
+                  context, ref, items, crm, theme, true,
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) =>
+                    Center(child: Text('Error loading collections: $e')),
+              ),
+
+              // Tab 2: Invoice Balances
+              _InvoiceBalancesTab(
+                fmt: _fmt,
+                currency: _currency,
+              ),
+            ],
           ),
         ),
       ],
@@ -390,6 +469,7 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                       verifiedBy: session?.userId ?? '',
                     );
                 ref.invalidate(filteredCollectionsProvider);
+                ref.invalidate(_bookingInvoiceSummariesProvider);
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               child: Text('Reject', style: TextStyle(color: crm.destructive)),
@@ -405,6 +485,8 @@ class AccountsCollectionsScreen extends ConsumerWidget {
                       verifiedBy: session?.userId ?? '',
                     );
                 ref.invalidate(filteredCollectionsProvider);
+                // Also refresh the invoice balances tab
+                ref.invalidate(_bookingInvoiceSummariesProvider);
                 if (ctx.mounted) Navigator.pop(ctx);
               },
               style: ElevatedButton.styleFrom(
@@ -738,20 +820,228 @@ class AccountsCollectionsScreen extends ConsumerWidget {
 
   String _getMonthName(int m) {
     const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
     ];
     return months[m - 1];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+/// Tab 2: Booking Invoice Balances
+/// Shows each booking's payment breakdown: Total → Advance → Collected → Balance
+// ─────────────────────────────────────────────────────────────────────────────
+class _InvoiceBalancesTab extends ConsumerWidget {
+  final String Function(DateTime) fmt;
+  final String Function(double) currency;
+
+  const _InvoiceBalancesTab({required this.fmt, required this.currency});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final theme = Theme.of(context);
+    final async = ref.watch(_bookingInvoiceSummariesProvider);
+
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Error: $e')),
+      data: (summaries) {
+        if (summaries.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.receipt_long_outlined,
+                    size: 48, color: crm.textSecondary),
+                12.h,
+                Text('No bookings with verified collections yet.',
+                    style: TextStyle(color: crm.textSecondary)),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          itemCount: summaries.length,
+          separatorBuilder: (_, _) => 12.h,
+          padding: const EdgeInsets.only(bottom: 24),
+          itemBuilder: (ctx, i) {
+            final summary = summaries[i];
+            final booking = summary.booking;
+            final balanceDue = booking.balanceDue;
+            final isPaid = booking.isFullyPaid;
+
+            return Card(
+              elevation: 1,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: isPaid
+                      ? crm.success.withValues(alpha: 0.3)
+                      : crm.warning.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Booking header ────────────────────────────────────
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                booking.customerName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              4.h,
+                              Text(
+                                '${booking.service}  •  #${booking.displayBookingNumber}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: crm.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                fmt(booking.serviceStart),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: crm.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // PAID / BALANCE badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: isPaid
+                                ? crm.success.withValues(alpha: 0.1)
+                                : crm.warning.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isPaid
+                                  ? crm.success.withValues(alpha: 0.4)
+                                  : crm.warning.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            isPaid ? '✓ PAID' : 'DUE ${currency(balanceDue)}',
+                            style: TextStyle(
+                              color: isPaid ? crm.success : crm.warning,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    12.h,
+                    const Divider(height: 1),
+                    12.h,
+
+                    // ── Payment breakdown ─────────────────────────────────
+                    _InvoiceRow(
+                      label: 'Total Price',
+                      value: currency(booking.totalPrice),
+                      bold: true,
+                    ),
+                    if (booking.discountAmount > 0)
+                      _InvoiceRow(
+                        label: 'Less: Discount',
+                        value: '− ${currency(booking.discountAmount)}',
+                        color: crm.textSecondary,
+                      ),
+                    _InvoiceRow(
+                      label: 'Less: Advance Paid',
+                      value: '− ${currency(booking.advanceAmount)}',
+                      color: crm.textSecondary,
+                    ),
+                    if (booking.collectedAmount > 0)
+                      _InvoiceRow(
+                        label: 'Less: Artist Collected',
+                        value: '− ${currency(booking.collectedAmount)}',
+                        color: crm.textSecondary,
+                      ),
+                    4.h,
+                    const Divider(height: 1),
+                    4.h,
+                    _InvoiceRow(
+                      label: 'Balance Due',
+                      value: isPaid ? '₹ 0' : currency(balanceDue),
+                      bold: true,
+                      color: isPaid ? crm.success : crm.destructive,
+                    ),
+                    if (summary.collections.isNotEmpty) ...[
+                      12.h,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: summary.collections
+                            .map((c) => Chip(
+                                  label: Text(
+                                    '${c.employee?.name ?? 'Artist'}: ${currency(c.amount)} (${c.paymentMode.toUpperCase()})',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  avatar: Icon(
+                                    Icons.check_circle,
+                                    size: 14,
+                                    color: crm.success,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                ))
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _InvoiceRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool bold;
+  final Color? color;
+
+  const _InvoiceRow({
+    required this.label,
+    required this.value,
+    this.bold = false,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+      fontSize: bold ? 14 : 13,
+      color: color,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: style),
+          Text(value, style: style),
+        ],
+      ),
+    );
   }
 }
 
