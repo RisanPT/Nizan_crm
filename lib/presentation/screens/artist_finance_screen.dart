@@ -21,6 +21,8 @@ import '../../services/expense_service.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../services/upload_service.dart';
 import '../../services/report_service.dart';
+import '../../core/models/booking.dart';
+import '../../core/utils/booking_print_service.dart';
 
 class ArtistFinanceScreen extends HookConsumerWidget {
   const ArtistFinanceScreen({super.key});
@@ -1276,6 +1278,56 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                           ),
                         );
+                      }
+
+                      final allBookings = asyncBookings.value ?? <Booking>[];
+                      final bookingId = c.booking?.id;
+                      Booking? fullBooking;
+                      if (bookingId != null && bookingId.isNotEmpty) {
+                        for (final b in allBookings) {
+                          if (b.id == bookingId) {
+                            fullBooking = b;
+                            break;
+                          }
+                        }
+                      }
+
+                      if (fullBooking != null) {
+                        final balance = (fullBooking.totalPrice - fullBooking.advanceAmount - fullBooking.discountAmount)
+                            .clamp(0, double.infinity)
+                            .toDouble();
+                        if (balance <= 0) {
+                          if (actionsList.isNotEmpty) {
+                            actionsList.add(8.w);
+                          }
+                          actionsList.add(
+                            IconButton(
+                              tooltip: 'Download GST Invoice',
+                              icon: const Icon(Icons.receipt_long_rounded, size: 14),
+                              onPressed: () async {
+                                try {
+                                  await printBookingDetails(
+                                    fullBooking!,
+                                    variant: BookingPrintVariant.clientInvoice,
+                                  );
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error downloading GST Invoice: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                              style: IconButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                backgroundColor: const Color(0xFF22C55E),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.all(8),
+                                minimumSize: const Size(36, 36),
+                              ),
+                            ),
+                          );
+                        }
                       }
 
                       return _FinanceEntryCard(
