@@ -34,6 +34,7 @@ import '../../presentation/screens/leave_request_screen.dart';
 import '../../presentation/screens/profile_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
+import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
 import '../../presentation/screens/lead_details_screen.dart';
 import '../../presentation/screens/driver/driver_dashboard.dart';
@@ -171,6 +172,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Driver Dashboard';
           } else if (state.uri.path == '/driver/works') {
             title = 'Driver Works';
+          } else if (state.uri.path == '/accounts/dashboard') {
+            title = 'Accounts Dashboard';
           } else if (state.uri.path == '/accounts/artist-collections') {
             title = 'Artist Collections';
           } else if (state.uri.path == '/accounts/invoices') {
@@ -301,6 +304,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/fleet/service-reminders',
             builder: (context, state) => const FleetServiceRemindersScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/dashboard',
+            builder: (context, state) => const AccountsDashboardScreen(),
           ),
           GoRoute(
             path: '/accounts/artist-collections',

@@ -14,6 +14,9 @@ class Sidebar extends ConsumerWidget {
   final bool accountsExpanded;
   final bool accountsUserCollapsed;
   final ValueChanged<bool> onAccountsExpandToggle;
+  final bool operationsExpanded;
+  final bool operationsUserCollapsed;
+  final ValueChanged<bool> onOperationsExpandToggle;
   final bool salesExpanded;
   final bool salesUserCollapsed;
   final ValueChanged<bool> onSalesExpandToggle;
@@ -29,6 +32,9 @@ class Sidebar extends ConsumerWidget {
     required this.accountsExpanded,
     required this.accountsUserCollapsed,
     required this.onAccountsExpandToggle,
+    required this.operationsExpanded,
+    required this.operationsUserCollapsed,
+    required this.onOperationsExpandToggle,
     required this.salesExpanded,
     required this.salesUserCollapsed,
     required this.onSalesExpandToggle,
@@ -45,7 +51,12 @@ class Sidebar extends ConsumerWidget {
     final isTablet = ResponsiveBuilder.isTablet(context);
     final currentPath = GoRouterState.of(context).uri.path;
     final isFleetRoute = currentPath.startsWith('/fleet');
-    final isAccountsRoute = currentPath.startsWith('/accounts');
+    // Operations (Dashboard / Artist Finance / Artist Collection) live under Accounts.
+    final isOperationsRoute = currentPath == '/accounts/dashboard' ||
+        currentPath == '/finance' ||
+        currentPath == '/accounts/artist-collections';
+    final isAccountsRoute =
+        currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
     final isCollapsed = isTablet && !isMobile;
@@ -53,6 +64,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
     final effectiveAccountsExpanded =
         !isCollapsed && (accountsExpanded || (isAccountsRoute && !accountsUserCollapsed));
+    final effectiveOperationsExpanded = !isCollapsed &&
+        (operationsExpanded || (isOperationsRoute && !operationsUserCollapsed));
     final effectiveSalesExpanded =
         !isCollapsed && (salesExpanded || (isSalesRoute && !salesUserCollapsed));
     final effectiveHrExpanded =
@@ -282,44 +295,77 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveAccountsExpanded) ...[
+                      // Operations — nested expandable group.
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
-                          icon: Icons.account_balance_wallet_outlined,
-                          title: 'Artist Collections',
+                          icon: Icons.dashboard_customize_outlined,
+                          title: 'Operations',
                           isCollapsed: false,
-                          isSelected: currentPath == '/accounts/artist-collections',
-                          onTap: () => context.go('/accounts/artist-collections'),
+                          isSelected: isOperationsRoute,
+                          trailing: Icon(
+                            effectiveOperationsExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 18,
+                          ),
+                          onTap: () => onOperationsExpandToggle(
+                              !operationsExpanded || operationsUserCollapsed),
                         ),
                       ),
+                      if (effectiveOperationsExpanded) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32),
+                          child: _SidebarItem(
+                            icon: Icons.donut_small_outlined,
+                            title: 'Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/dashboard',
+                            onTap: () => context.go('/accounts/dashboard'),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32),
+                          child: _SidebarItem(
+                            icon: Icons.receipt_outlined,
+                            title: 'Artist Finance',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/finance',
+                            onTap: () => context.go('/finance'),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32),
+                          child: _SidebarItem(
+                            icon: Icons.account_balance_wallet_outlined,
+                            title: 'Artist Collection',
+                            isCollapsed: false,
+                            isSelected:
+                                currentPath == '/accounts/artist-collections',
+                            onTap: () =>
+                                context.go('/accounts/artist-collections'),
+                          ),
+                        ),
+                      ],
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
-                          icon: Icons.receipt_outlined,
-                          title: 'Artist Finance',
+                          icon: Icons.receipt_long_outlined,
+                          title: 'Invoice',
                           isCollapsed: false,
-                          isSelected: currentPath == '/finance',
-                          onTap: () => context.go('/finance'),
+                          isSelected: currentPath == '/accounts/invoices',
+                          onTap: () => context.go('/accounts/invoices'),
                         ),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
                           icon: Icons.pie_chart_outline,
-                          title: 'Budget Analysis',
+                          title: 'Budget',
                           isCollapsed: false,
                           isSelected: currentPath == '/accounts/budget',
                           onTap: () => context.go('/accounts/budget'),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Invoices',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/accounts/invoices',
-                          onTap: () => context.go('/accounts/invoices'),
                         ),
                       ),
                     ],

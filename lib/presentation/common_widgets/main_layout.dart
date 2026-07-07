@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/responsive_builder.dart';
+import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
 import 'sidebar.dart';
 
@@ -26,6 +27,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _fleetUserCollapsed = false;
   bool _accountsExpanded = false;
   bool _accountsUserCollapsed = false;
+  bool _operationsExpanded = false;
+  bool _operationsUserCollapsed = false;
   bool _salesExpanded = false;
   bool _salesUserCollapsed = false;
   bool _hrExpanded = false;
@@ -56,6 +59,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/driver/jobs')) return 0;
       if (location.startsWith('/driver/works')) return 1;
       if (location == '/profile') return 2;
+    } else if (role == AppRole.accounts) {
+      if (location == '/accounts/dashboard') return 0;
+      if (location.startsWith('/finance')) return 1;
+      if (location == '/accounts/artist-collections') return 2;
+      // Invoice / Budget / Profile live in the Menu sheet.
+      return 3;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -95,6 +104,13 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 0: context.go('/driver/jobs'); break;
         case 1: context.go('/driver/works'); break;
         case 2: context.go('/profile'); break;
+      }
+    } else if (role == AppRole.accounts) {
+      switch (index) {
+        case 0: context.go('/accounts/dashboard'); break;
+        case 1: context.go('/finance'); break;
+        case 2: context.go('/accounts/artist-collections'); break;
+        case 3: showAccountsMenuSheet(context, ref); break; // opens the menu
       }
     } else {
       switch (index) {
@@ -221,7 +237,32 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                             label: 'Profile',
                           ),
                         ]
-                      : const [
+                      : role == AppRole.accounts
+                          ? const [
+                              NavigationDestination(
+                                icon: Icon(Icons.donut_small_outlined),
+                                selectedIcon: Icon(Icons.donut_small),
+                                label: 'Dashboard',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.receipt_outlined),
+                                selectedIcon: Icon(Icons.receipt),
+                                label: 'Finance',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(
+                                    Icons.account_balance_wallet_outlined),
+                                selectedIcon:
+                                    Icon(Icons.account_balance_wallet),
+                                label: 'Collection',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.menu),
+                                selectedIcon: Icon(Icons.menu_open),
+                                label: 'Menu',
+                              ),
+                            ]
+                          : const [
                           NavigationDestination(
                             icon: Icon(Icons.dashboard_outlined),
                             selectedIcon: Icon(Icons.dashboard),
@@ -279,6 +320,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                 } else {
                   _accountsUserCollapsed = false;
                 }
+              });
+            },
+            operationsExpanded: _operationsExpanded,
+            operationsUserCollapsed: _operationsUserCollapsed,
+            onOperationsExpandToggle: (expanded) {
+              setState(() {
+                _operationsExpanded = expanded;
+                _operationsUserCollapsed = !expanded;
               });
             },
             salesExpanded: _salesExpanded,

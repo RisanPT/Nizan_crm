@@ -98,7 +98,7 @@ enum AppRole {
       case AppRole.crm:
         return '/booking/requests';
       case AppRole.accounts:
-        return '/accounts/artist-collections';
+        return '/accounts/dashboard';
       case AppRole.fleetManager:
         return '/fleet/assignments';
       case AppRole.driver:
