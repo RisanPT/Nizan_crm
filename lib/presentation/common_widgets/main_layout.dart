@@ -6,6 +6,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
+import 'inventory_menu_sheet.dart';
 import 'sidebar.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
@@ -29,6 +30,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _accountsUserCollapsed = false;
   bool _operationsExpanded = false;
   bool _operationsUserCollapsed = false;
+  bool _inventoryExpanded = false;
+  bool _inventoryUserCollapsed = false;
   bool _salesExpanded = false;
   bool _salesUserCollapsed = false;
   bool _hrExpanded = false;
@@ -37,10 +40,21 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   int _calculateSelectedIndex(BuildContext context, AppRole role) {
     final location = GoRouterState.of(context).uri.path;
     if (role == AppRole.artist) {
+      final inv = ref.read(authSessionProvider)?.inventoryAccess ?? false;
       if (location == '/') return 0;
       if (location == '/works') return 1;
       if (location == '/finance') return 2;
-      if (location == '/profile') return 3;
+      if (inv) {
+        if (location.startsWith('/inventory')) return 3;
+        if (location == '/profile') return 4;
+      } else {
+        if (location == '/profile') return 3;
+      }
+    } else if (role == AppRole.inventoryManager) {
+      if (location == '/inventory') return 0;
+      if (location == '/inventory/stock') return 1;
+      if (location == '/inventory/kits') return 2;
+      return 3; // Alerts / Expiry / Reports / Profile live in the Menu sheet.
     } else if (role == AppRole.sales) {
       if (location.startsWith('/sales/leads')) return 0;
       if (location == '/calendar') return 1;
@@ -77,11 +91,29 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
   void _onItemTapped(int index, AppRole role) {
     if (role == AppRole.artist) {
+      final inv = ref.read(authSessionProvider)?.inventoryAccess ?? false;
+      if (inv) {
+        switch (index) {
+          case 0: context.go('/'); break;
+          case 1: context.go('/works'); break;
+          case 2: context.go('/finance'); break;
+          case 3: context.go('/inventory/my'); break;
+          case 4: context.go('/profile'); break;
+        }
+      } else {
+        switch (index) {
+          case 0: context.go('/'); break;
+          case 1: context.go('/works'); break;
+          case 2: context.go('/finance'); break;
+          case 3: context.go('/profile'); break;
+        }
+      }
+    } else if (role == AppRole.inventoryManager) {
       switch (index) {
-        case 0: context.go('/'); break;
-        case 1: context.go('/works'); break;
-        case 2: context.go('/finance'); break;
-        case 3: context.go('/profile'); break;
+        case 0: context.go('/inventory'); break;
+        case 1: context.go('/inventory/stock'); break;
+        case 2: context.go('/inventory/kits'); break;
+        case 3: showInventoryMenuSheet(context, ref); break;
       }
     } else if (role == AppRole.sales) {
       switch (index) {
@@ -130,6 +162,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     final role = session != null
         ? AppRole.fromString(session.role)
         : AppRole.artist;
+    final invAccess = session?.inventoryAccess ?? false;
 
     if (isMobile) {
       return Scaffold(
@@ -141,28 +174,57 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           backgroundColor: Theme.of(context).colorScheme.surface,
           indicatorColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
           destinations: role == AppRole.artist
-              ? const [
-                  NavigationDestination(
+              ? [
+                  const NavigationDestination(
                     icon: Icon(Icons.dashboard_outlined),
                     selectedIcon: Icon(Icons.dashboard),
                     label: 'Home',
                   ),
-                  NavigationDestination(
+                  const NavigationDestination(
                     icon: Icon(Icons.event_note_outlined),
                     selectedIcon: Icon(Icons.event_note),
                     label: 'Works',
                   ),
-                  NavigationDestination(
+                  const NavigationDestination(
                     icon: Icon(Icons.account_balance_wallet_outlined),
                     selectedIcon: Icon(Icons.account_balance_wallet),
                     label: 'Finance',
                   ),
-                  NavigationDestination(
+                  if (invAccess)
+                    const NavigationDestination(
+                      icon: Icon(Icons.inventory_2_outlined),
+                      selectedIcon: Icon(Icons.inventory_2),
+                      label: 'Inventory',
+                    ),
+                  const NavigationDestination(
                     icon: Icon(Icons.person_outline),
                     selectedIcon: Icon(Icons.person),
                     label: 'Profile',
                   ),
                 ]
+              : role == AppRole.inventoryManager
+                  ? const [
+                      NavigationDestination(
+                        icon: Icon(Icons.dashboard_outlined),
+                        selectedIcon: Icon(Icons.dashboard),
+                        label: 'Dashboard',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.list_alt_outlined),
+                        selectedIcon: Icon(Icons.list_alt),
+                        label: 'Stock',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.work_outline),
+                        selectedIcon: Icon(Icons.work),
+                        label: 'Kits',
+                      ),
+                      NavigationDestination(
+                        icon: Icon(Icons.menu),
+                        selectedIcon: Icon(Icons.menu_open),
+                        label: 'Menu',
+                      ),
+                    ]
               : role == AppRole.sales
                   ? const [
                       NavigationDestination(
@@ -328,6 +390,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               setState(() {
                 _operationsExpanded = expanded;
                 _operationsUserCollapsed = !expanded;
+              });
+            },
+            inventoryExpanded: _inventoryExpanded,
+            inventoryUserCollapsed: _inventoryUserCollapsed,
+            onInventoryExpandToggle: (expanded) {
+              setState(() {
+                _inventoryExpanded = expanded;
+                _inventoryUserCollapsed = !expanded;
               });
             },
             salesExpanded: _salesExpanded,

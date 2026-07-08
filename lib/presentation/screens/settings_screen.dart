@@ -47,6 +47,7 @@ class SettingsScreen extends HookConsumerWidget {
       final passwordCtrl = TextEditingController();
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
+      var inventoryAccess = user?.inventoryAccess ?? false;
       var selEmployeeId = user?.employeeId ?? '';
       var selZoneId = user?.zoneId ?? '';
       var selStateId = user?.stateId ?? '';
@@ -187,6 +188,14 @@ class SettingsScreen extends HookConsumerWidget {
                                 color: Colors.brown,
                               ),
                             ),
+                            DropdownMenuItem(
+                              value: 'inventory_manager',
+                              child: _RoleItem(
+                                label: 'Inventory Manager',
+                                sub: 'Studio inventory & staff kits',
+                                color: Colors.pink,
+                              ),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
@@ -196,6 +205,29 @@ class SettingsScreen extends HookConsumerWidget {
                             }
                           },
                         ),
+
+                        // ── Inventory access (artists only) ─────────────────
+                        if (role == 'artist') ...[
+                          8.h,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: crmColors.secondary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: SwitchListTile(
+                              value: inventoryAccess,
+                              onChanged: (v) =>
+                                  setState(() => inventoryAccess = v),
+                              title: const Text('Access to Inventory'),
+                              subtitle: const Text(
+                                  'Let this artist manage & upload their own inventory',
+                                  style: TextStyle(fontSize: 12)),
+                              secondary:
+                                  const Icon(Icons.inventory_2_outlined),
+                            ),
+                          ),
+                        ],
 
                         // ── Employee link ────────────
                         16.h,
@@ -382,6 +414,7 @@ class SettingsScreen extends HookConsumerWidget {
                             password: password,
                             role: role,
                             active: active,
+                            inventoryAccess: inventoryAccess,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,
                             zoneId: selZoneId.isEmpty ? null : selZoneId,
@@ -397,6 +430,7 @@ class SettingsScreen extends HookConsumerWidget {
                             email: email,
                             role: role,
                             active: active,
+                            inventoryAccess: inventoryAccess,
                             password: password.isEmpty ? null : password,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,

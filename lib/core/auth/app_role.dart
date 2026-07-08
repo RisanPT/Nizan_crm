@@ -8,6 +8,7 @@ enum AppRole {
   accounts,
   fleetManager,
   driver,
+  inventoryManager,
   unknown;
 
   static AppRole fromString(String? raw) {
@@ -29,6 +30,9 @@ enum AppRole {
         return AppRole.fleetManager;
       case 'driver':
         return AppRole.driver;
+      case 'inventory_manager':
+      case 'inventorymanager':
+        return AppRole.inventoryManager;
       default:
         return AppRole.unknown;
     }
@@ -71,6 +75,11 @@ enum AppRole {
   /// Fleet (vehicles, drivers, fuel)
   bool get canSeeFleet => isFullAccess || this == fleetManager;
 
+  /// Studio Inventory — the full manager app (studio stock + staff kits).
+  /// Artists reach a scoped "My Inventory" view only when their account has the
+  /// inventoryAccess flag (checked against the session, not the role alone).
+  bool get canManageInventory => isFullAccess || this == inventoryManager;
+
   /// Settings (user management etc.)
   bool get canSeeSettings => isFullAccess;
 
@@ -101,6 +110,8 @@ enum AppRole {
         return '/accounts/dashboard';
       case AppRole.fleetManager:
         return '/fleet/assignments';
+      case AppRole.inventoryManager:
+        return '/inventory';
       case AppRole.driver:
         return '/driver/jobs'; // Adjust if driver dashboard path is different
       case AppRole.manager:

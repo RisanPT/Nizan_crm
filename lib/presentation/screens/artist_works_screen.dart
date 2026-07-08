@@ -10,6 +10,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/models/booking.dart';
 import '../../core/utils/booking_print_service.dart';
+import '../../services/inventory_service.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
 
@@ -2849,12 +2850,35 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
           const SnackBar(content: Text('✓ Work Marked as Completed')),
         );
       }
+      await _depleteInventoryTubes();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error updating status: $e')),
         );
       }
+    }
+  }
+
+  /// When an inventory-access artist completes a work, auto-deplete the tubes
+  /// of the products in their kit by each product's usage-per-work %.
+  Future<void> _depleteInventoryTubes() async {
+    final session = ref.read(authSessionProvider);
+    if (session == null || !session.inventoryAccess) return;
+    try {
+      final count =
+          await ref.read(inventoryServiceProvider).consumeForWork();
+      ref.invalidate(inventoryProductsProvider);
+      if (mounted && count > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text('Inventory updated · $count product${count == 1 ? '' : 's'} depleted'),
+          ),
+        );
+      }
+    } catch (_) {
+      // Inventory depletion is best-effort; never block work completion.
     }
   }
 

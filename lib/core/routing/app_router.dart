@@ -35,6 +35,14 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
+import '../../presentation/screens/inventory/inventory_dashboard_screen.dart';
+import '../../presentation/screens/inventory/inventory_stock_screen.dart';
+import '../../presentation/screens/inventory/inventory_kits_screen.dart';
+import '../../presentation/screens/inventory/inventory_alerts_screen.dart';
+import '../../presentation/screens/inventory/inventory_expiry_screen.dart';
+import '../../presentation/screens/inventory/inventory_reports_screen.dart';
+import '../../presentation/screens/inventory/inventory_purchases_screen.dart';
+import '../../presentation/screens/inventory/artist_inventory_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
 import '../../presentation/screens/lead_details_screen.dart';
 import '../../presentation/screens/driver/driver_dashboard.dart';
@@ -64,7 +72,7 @@ DateTime? _parseCalendarFocusDate(String? raw) {
   );
 }
 
-bool isRouteAllowed(String path, AppRole role) {
+bool isRouteAllowed(String path, AppRole role, {bool inventoryAccess = false}) {
   if (path == '/' || path == '/auth/loading') return role.canSeeDashboard;
   if (path.startsWith('/client')) return role.canSeeClients;
   if (path.startsWith('/calendar')) return role.canSeeCalendar;
@@ -77,6 +85,14 @@ bool isRouteAllowed(String path, AppRole role) {
   if (path.startsWith('/sales')) return role.canSeeSales;
   if (path.startsWith('/finance')) return role.canSeeFinance;
   if (path.startsWith('/fleet')) return role.canSeeFleet;
+  // Artist "My Inventory" needs the inventoryAccess flag; the manager views
+  // need the inventory-manager (or full-access) role.
+  // Artists with inventory access reach their own inventory + their own kit.
+  if (path == '/inventory/my' || path == '/inventory/kits') {
+    return role.canManageInventory ||
+        (role == AppRole.artist && inventoryAccess);
+  }
+  if (path.startsWith('/inventory')) return role.canManageInventory;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || role.isFullAccess;
   if (path.startsWith('/settings')) return role.canSeeSettings;
   return true; // unknown routes — let the 404 handle it
@@ -110,7 +126,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       // Role-based route guards
       final role = AppRole.fromString(auth.session?.role);
-      if (!isRouteAllowed(path, role)) {
+      if (!isRouteAllowed(path, role,
+          inventoryAccess: auth.session?.inventoryAccess ?? false)) {
         return role.homeRoute;
       }
 
@@ -172,6 +189,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Driver Dashboard';
           } else if (state.uri.path == '/driver/works') {
             title = 'Driver Works';
+          } else if (state.uri.path == '/inventory') {
+            title = 'Inventory Dashboard';
+          } else if (state.uri.path == '/inventory/stock') {
+            title = 'Stock List';
+          } else if (state.uri.path == '/inventory/kits') {
+            title = 'Staff Kits';
+          } else if (state.uri.path == '/inventory/alerts') {
+            title = 'Restock Alerts';
+          } else if (state.uri.path == '/inventory/expiry') {
+            title = 'Expiry Tracker';
+          } else if (state.uri.path == '/inventory/reports') {
+            title = 'Inventory Reports';
+          } else if (state.uri.path == '/inventory/purchases') {
+            title = 'Purchases';
+          } else if (state.uri.path == '/inventory/my') {
+            title = 'My Inventory';
           } else if (state.uri.path == '/accounts/dashboard') {
             title = 'Accounts Dashboard';
           } else if (state.uri.path == '/accounts/artist-collections') {
@@ -308,6 +341,39 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/dashboard',
             builder: (context, state) => const AccountsDashboardScreen(),
+          ),
+          // ── Inventory ────────────────────────────────────────────────
+          GoRoute(
+            path: '/inventory',
+            builder: (context, state) => const InventoryDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/stock',
+            builder: (context, state) => const InventoryStockScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/kits',
+            builder: (context, state) => const InventoryKitsScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/alerts',
+            builder: (context, state) => const InventoryAlertsScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/expiry',
+            builder: (context, state) => const InventoryExpiryScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/reports',
+            builder: (context, state) => const InventoryReportsScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/purchases',
+            builder: (context, state) => const InventoryPurchasesScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/my',
+            builder: (context, state) => const ArtistInventoryScreen(),
           ),
           GoRoute(
             path: '/accounts/artist-collections',

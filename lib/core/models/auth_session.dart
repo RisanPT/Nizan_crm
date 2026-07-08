@@ -6,6 +6,8 @@ class AuthSession {
   final String name;
   final String email;
   final String role;
+  /// Whether this account may access the Inventory feature (artist opt-in).
+  final bool inventoryAccess;
   /// The Employee record linked to this user (set for artist accounts).
   final String employeeId;
   final String zoneId;
@@ -20,6 +22,7 @@ class AuthSession {
     required this.name,
     required this.email,
     required this.role,
+    this.inventoryAccess = false,
     this.employeeId = '',
     this.zoneId = '',
     this.stateId = '',
@@ -35,6 +38,7 @@ class AuthSession {
       'name': name,
       'email': email,
       'role': role,
+      'inventoryAccess': inventoryAccess,
       'employeeId': employeeId,
       'zoneId': zoneId,
       'stateId': stateId,
@@ -55,6 +59,7 @@ class AuthSession {
       name: user['name'] as String? ?? '',
       email: user['email'] as String? ?? '',
       role: user['role'] as String? ?? '',
+      inventoryAccess: user['inventoryAccess'] as bool? ?? false,
       employeeId: user['employeeId'] as String? ?? '',
       zoneId: user['zoneId'] as String? ?? '',
       stateId: user['stateId'] as String? ?? '',

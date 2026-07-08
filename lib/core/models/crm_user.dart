@@ -4,6 +4,7 @@ class CrmUser {
   final String email;
   final String role;
   final bool active;
+  final bool inventoryAccess;
   final String employeeId;
   final String zoneId;
   final String stateId;
@@ -19,6 +20,7 @@ class CrmUser {
     required this.email,
     required this.role,
     required this.active,
+    this.inventoryAccess = false,
     this.employeeId = '',
     this.zoneId = '',
     this.stateId = '',
@@ -36,6 +38,7 @@ class CrmUser {
       email: json['email'] as String? ?? '',
       role: json['role'] as String? ?? 'manager',
       active: json['active'] as bool? ?? true,
+      inventoryAccess: json['inventoryAccess'] as bool? ?? false,
       employeeId: json['employeeId'] as String? ?? '',
       zoneId: json['zoneId'] as String? ?? '',
       stateId: json['stateId'] as String? ?? '',
@@ -53,6 +56,7 @@ class CrmUser {
     String? email,
     String? role,
     bool? active,
+    bool? inventoryAccess,
     String? employeeId,
     String? zoneId,
     String? stateId,
@@ -68,6 +72,7 @@ class CrmUser {
       email: email ?? this.email,
       role: role ?? this.role,
       active: active ?? this.active,
+      inventoryAccess: inventoryAccess ?? this.inventoryAccess,
       employeeId: employeeId ?? this.employeeId,
       zoneId: zoneId ?? this.zoneId,
       stateId: stateId ?? this.stateId,

@@ -17,6 +17,9 @@ class Sidebar extends ConsumerWidget {
   final bool operationsExpanded;
   final bool operationsUserCollapsed;
   final ValueChanged<bool> onOperationsExpandToggle;
+  final bool inventoryExpanded;
+  final bool inventoryUserCollapsed;
+  final ValueChanged<bool> onInventoryExpandToggle;
   final bool salesExpanded;
   final bool salesUserCollapsed;
   final ValueChanged<bool> onSalesExpandToggle;
@@ -35,6 +38,9 @@ class Sidebar extends ConsumerWidget {
     required this.operationsExpanded,
     required this.operationsUserCollapsed,
     required this.onOperationsExpandToggle,
+    required this.inventoryExpanded,
+    required this.inventoryUserCollapsed,
+    required this.onInventoryExpandToggle,
     required this.salesExpanded,
     required this.salesUserCollapsed,
     required this.onSalesExpandToggle,
@@ -57,6 +63,7 @@ class Sidebar extends ConsumerWidget {
         currentPath == '/accounts/artist-collections';
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
+    final isInventoryRoute = currentPath.startsWith('/inventory');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
     final isCollapsed = isTablet && !isMobile;
@@ -66,6 +73,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (accountsExpanded || (isAccountsRoute && !accountsUserCollapsed));
     final effectiveOperationsExpanded = !isCollapsed &&
         (operationsExpanded || (isOperationsRoute && !operationsUserCollapsed));
+    final effectiveInventoryExpanded = !isCollapsed &&
+        (inventoryExpanded || (isInventoryRoute && !inventoryUserCollapsed));
     final effectiveSalesExpanded =
         !isCollapsed && (salesExpanded || (isSalesRoute && !salesUserCollapsed));
     final effectiveHrExpanded =
@@ -113,6 +122,73 @@ class Sidebar extends ConsumerWidget {
                     isCollapsed: isCollapsed,
                     isSelected: currentPath.startsWith('/finance'),
                     onTap: () => context.go('/finance'),
+                  ),
+                  if (session?.inventoryAccess ?? false) ...[
+                    _SidebarItem(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'My Inventory',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/inventory/my',
+                      onTap: () => context.go('/inventory/my'),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.work_outline,
+                      title: 'My Kits',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/inventory/kits',
+                      onTap: () => context.go('/inventory/kits'),
+                    ),
+                  ],
+                ] else if (role == AppRole.inventoryManager) ...[
+                  // ── INVENTORY MANAGER VIEW ────────────────────────────────
+                  _SidebarItem(
+                    icon: Icons.dashboard_outlined,
+                    title: 'Dashboard',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory',
+                    onTap: () => context.go('/inventory'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.list_alt_outlined,
+                    title: 'Stock List',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/stock',
+                    onTap: () => context.go('/inventory/stock'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.work_outline,
+                    title: 'Staff Kits',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/kits',
+                    onTap: () => context.go('/inventory/kits'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.warning_amber_rounded,
+                    title: 'Restock Alerts',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/alerts',
+                    onTap: () => context.go('/inventory/alerts'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.hourglass_bottom_outlined,
+                    title: 'Expiry Tracker',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/expiry',
+                    onTap: () => context.go('/inventory/expiry'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.bar_chart_outlined,
+                    title: 'Reports',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/reports',
+                    onTap: () => context.go('/inventory/reports'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.add_shopping_cart_outlined,
+                    title: 'Purchases',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/purchases',
+                    onTap: () => context.go('/inventory/purchases'),
                   ),
                 ] else if (role == AppRole.driver) ...[
                   // ── DRIVER VIEW ───────────────────────────────────────────
@@ -366,6 +442,98 @@ class Sidebar extends ConsumerWidget {
                           isCollapsed: false,
                           isSelected: currentPath == '/accounts/budget',
                           onTap: () => context.go('/accounts/budget'),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (role.canManageInventory) ...[
+                    _SidebarItem(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'Inventory',
+                      isCollapsed: isCollapsed,
+                      isSelected: isInventoryRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveInventoryExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () {
+                        onInventoryExpandToggle(
+                            !inventoryExpanded || inventoryUserCollapsed);
+                      },
+                    ),
+                    if (!isCollapsed && effectiveInventoryExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.donut_small_outlined,
+                          title: 'Dashboard',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory',
+                          onTap: () => context.go('/inventory'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.list_alt_outlined,
+                          title: 'Stock List',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/stock',
+                          onTap: () => context.go('/inventory/stock'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.work_outline,
+                          title: 'Staff Kits',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/kits',
+                          onTap: () => context.go('/inventory/kits'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.warning_amber_rounded,
+                          title: 'Restock Alerts',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/alerts',
+                          onTap: () => context.go('/inventory/alerts'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.hourglass_bottom_outlined,
+                          title: 'Expiry Tracker',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/expiry',
+                          onTap: () => context.go('/inventory/expiry'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.bar_chart_outlined,
+                          title: 'Reports',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/reports',
+                          onTap: () => context.go('/inventory/reports'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.add_shopping_cart_outlined,
+                          title: 'Purchases',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/inventory/purchases',
+                          onTap: () => context.go('/inventory/purchases'),
                         ),
                       ),
                     ],
