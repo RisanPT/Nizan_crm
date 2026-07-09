@@ -13,6 +13,7 @@ import '../../../../core/models/booking.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../services/report_service.dart';
 import '../../../../services/booking_service.dart';
+import '../../../../core/utils/export_utils.dart';
 
 // ─── Provider: bookings that have at least one verified collection ────────────
 final _bookingInvoiceSummariesProvider =
@@ -690,130 +691,225 @@ class _AccountsCollectionsScreenState
   }
 
   void _showReportDialog(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
     final now = DateTime.now();
     int selMonth = now.month;
     int selYear = now.year;
     String? selArtist = 'all';
     String selFormat = 'pdf';
+    bool busy = false;
 
     final asyncEmployees = ref.read(employeesProvider);
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Download Finance Report'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Select report parameters:',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+        builder: (ctx, setLocal) {
+          Future<void> download() async {
+            setLocal(() => busy = true);
+            try {
+              await ref.read(reportServiceProvider).downloadFinanceReport(
+                    month: selMonth,
+                    year: selYear,
+                    employeeId: selArtist,
+                    format: selFormat,
+                  );
+              if (ctx.mounted) Navigator.pop(ctx);
+            } catch (e) {
+              setLocal(() => busy = false);
+              if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                    SnackBar(content: Text('Could not open report: $e')));
+              }
+            }
+          }
+
+          Widget preset(String label, VoidCallback onTap) => ActionChip(
+                label: Text(label, style: const TextStyle(fontSize: 12)),
+                onPressed: busy ? null : onTap,
+                visualDensity: VisualDensity.compact,
+              );
+
+          Widget formatCard(
+              String value, IconData icon, String label, String sub) {
+            final sel = selFormat == value;
+            return Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: busy ? null : () => setLocal(() => selFormat = value),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? crm.primary.withValues(alpha: 0.08)
+                        : crm.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: sel ? crm.primary : crm.border,
+                        width: sel ? 1.5 : 1),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(icon,
+                          color: sel ? crm.primary : crm.textSecondary,
+                          size: 24),
+                      6.h,
+                      Text(label,
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: sel ? crm.primary : crm.textPrimary)),
+                      Text(sub,
+                          style: TextStyle(
+                              fontSize: 10.5, color: crm.textSecondary)),
+                    ],
+                  ),
+                ),
               ),
-              16.h,
-              Row(
+            );
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(9),
+                  decoration: BoxDecoration(
+                      color: crm.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Icon(Icons.summarize_outlined, color: crm.primary),
+                ),
+                12.w,
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Finance Report',
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 430,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      decoration: const InputDecoration(labelText: 'Month'),
-                      initialValue: selMonth,
-                      items: List.generate(
-                        12,
-                        (i) => DropdownMenuItem(
-                          value: i + 1,
-                          child: Text(_getMonthName(i + 1)),
+                  Text('Collections & invoice balances for a month.',
+                      style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                  14.h,
+                  Row(
+                    children: [
+                      preset('This month', () => setLocal(() {
+                            selMonth = now.month;
+                            selYear = now.year;
+                          })),
+                      8.w,
+                      preset('Last month', () => setLocal(() {
+                            final lm = DateTime(now.year, now.month - 1);
+                            selMonth = lm.month;
+                            selYear = lm.year;
+                          })),
+                    ],
+                  ),
+                  14.h,
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<int>(
+                          decoration:
+                              const InputDecoration(labelText: 'Month'),
+                          initialValue: selMonth,
+                          items: List.generate(
+                            12,
+                            (i) => DropdownMenuItem(
+                              value: i + 1,
+                              child: Text(_getMonthName(i + 1)),
+                            ),
+                          ),
+                          onChanged: busy
+                              ? null
+                              : (v) => setLocal(() => selMonth = v!),
                         ),
                       ),
-                      onChanged: (v) => setState(() => selMonth = v!),
-                    ),
+                      12.w,
+                      Expanded(
+                        flex: 2,
+                        child: DropdownButtonFormField<int>(
+                          decoration: const InputDecoration(labelText: 'Year'),
+                          initialValue: selYear,
+                          items: [now.year - 1, now.year]
+                              .map((y) => DropdownMenuItem(
+                                  value: y, child: Text(y.toString())))
+                              .toList(),
+                          onChanged: busy
+                              ? null
+                              : (v) => setLocal(() => selYear = v!),
+                        ),
+                      ),
+                    ],
                   ),
-                  12.w,
-                  Expanded(
-                    child: DropdownButtonFormField<int>(
-                      decoration: const InputDecoration(labelText: 'Year'),
-                      initialValue: selYear,
-                      items: [now.year - 1, now.year]
-                          .map(
-                            (y) => DropdownMenuItem(
-                              value: y,
-                              child: Text(y.toString()),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) => setState(() => selYear = v!),
+                  14.h,
+                  DropdownButtonFormField<String>(
+                    decoration: const InputDecoration(
+                      labelText: 'Artist',
+                      prefixIcon: Icon(Icons.person_outline),
                     ),
+                    initialValue: selArtist,
+                    items: [
+                      const DropdownMenuItem(
+                          value: 'all', child: Text('All Artists')),
+                      ...(asyncEmployees.value ?? []).map((e) =>
+                          DropdownMenuItem(value: e.id, child: Text(e.name))),
+                    ],
+                    onChanged:
+                        busy ? null : (v) => setLocal(() => selArtist = v),
+                  ),
+                  18.h,
+                  Text('FORMAT',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: crm.textSecondary)),
+                  8.h,
+                  Row(
+                    children: [
+                      formatCard('pdf', Icons.picture_as_pdf_outlined, 'PDF',
+                          'Printable'),
+                      10.w,
+                      formatCard('csv', Icons.table_chart_outlined, 'CSV',
+                          'Opens in Excel'),
+                    ],
                   ),
                 ],
               ),
-              16.h,
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Artist (Optional)',
-                  prefixIcon: Icon(Icons.person_outline),
-                ),
-                initialValue: selArtist,
-                items: [
-                  const DropdownMenuItem(
-                    value: 'all',
-                    child: Text('All Artists'),
-                  ),
-                  ...(asyncEmployees.value ?? []).map(
-                    (e) => DropdownMenuItem(value: e.id, child: Text(e.name)),
-                  ),
-                ],
-                onChanged: (v) => setState(() => selArtist = v),
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
               ),
-              16.h,
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Format'),
-                initialValue: selFormat,
-                items: [
-                  DropdownMenuItem(
-                    value: 'pdf',
-                    child: Row(
-                      children: [
-                        Icon(Icons.picture_as_pdf, size: 18),
-                        8.w,
-                        Text('PDF Document'),
-                      ],
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'csv',
-                    child: Row(
-                      children: [
-                        Icon(Icons.table_chart, size: 18),
-                        8.w,
-                        Text('CSV Spreadsheet'),
-                      ],
-                    ),
-                  ),
-                ],
-                onChanged: (v) => setState(() => selFormat = v!),
+              FilledButton.icon(
+                onPressed: busy ? null : download,
+                icon: busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.download, size: 18),
+                label: Text(busy ? 'Preparing…' : 'Download'),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                ref
-                    .read(reportServiceProvider)
-                    .downloadFinanceReport(
-                      month: selMonth,
-                      year: selYear,
-                      employeeId: selArtist,
-                      format: selFormat,
-                    );
-                Navigator.pop(ctx);
-              },
-              child: const Text('Download'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -831,218 +927,456 @@ class _AccountsCollectionsScreenState
 /// Tab 2: Booking Invoice Balances
 /// Shows each booking's payment breakdown: Total → Advance → Collected → Balance
 // ─────────────────────────────────────────────────────────────────────────────
-class _InvoiceBalancesTab extends ConsumerWidget {
+class _InvoiceBalancesTab extends ConsumerStatefulWidget {
   final String Function(DateTime) fmt;
   final String Function(double) currency;
 
   const _InvoiceBalancesTab({required this.fmt, required this.currency});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_InvoiceBalancesTab> createState() =>
+      _InvoiceBalancesTabState();
+}
+
+class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
+  static const _rowsPerPage = 12;
+  String? _monthKey; // 'yyyy-mm', or null = all months
+  int _page = 0;
+
+  // Excel-like columns: (label, base width, right-aligned).
+  static const List<(String, double, bool)> _cols = [
+    ('Date', 94, false),
+    ('Customer', 146, false),
+    ('Service', 112, false),
+    ('Invoice #', 110, false),
+    ('Total', 92, true),
+    ('Discount', 90, true),
+    ('Advance', 90, true),
+    ('Collected', 96, true),
+    ('Collected By', 150, false),
+    ('Balance', 100, true),
+    ('Status', 82, false),
+  ];
+
+  static const _mAbbr = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  String _mKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  String _mLabel(DateTime d) => '${_mAbbr[d.month - 1]} ${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final theme = Theme.of(context);
     final async = ref.watch(_bookingInvoiceSummariesProvider);
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Error: $e')),
-      data: (summaries) {
-        if (summaries.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.receipt_long_outlined,
-                    size: 48, color: crm.textSecondary),
-                12.h,
-                Text('No bookings with verified collections yet.',
-                    style: TextStyle(color: crm.textSecondary)),
-              ],
-            ),
-          );
+      data: (all) {
+        if (all.isEmpty) {
+          return _empty(crm, 'No bookings with verified collections yet.');
         }
 
-        return ListView.separated(
-          itemCount: summaries.length,
-          separatorBuilder: (_, _) => 12.h,
-          padding: const EdgeInsets.only(bottom: 24),
-          itemBuilder: (ctx, i) {
-            final summary = summaries[i];
-            final booking = summary.booking;
-            final balanceDue = booking.balanceDue;
-            final isPaid = booking.isFullyPaid;
+        // Months present in the data (newest first).
+        final months = <String, DateTime>{};
+        for (final s in all) {
+          final d = s.booking.serviceStart;
+          months.putIfAbsent(_mKey(d), () => DateTime(d.year, d.month));
+        }
+        final monthList = months.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
-            return Card(
-              elevation: 1,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                  color: isPaid
-                      ? crm.success.withValues(alpha: 0.3)
-                      : crm.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Booking header ────────────────────────────────────
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                booking.customerName,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              4.h,
-                              Text(
-                                '${booking.service}  •  #${booking.displayBookingNumber}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: crm.textSecondary,
-                                ),
-                              ),
-                              Text(
-                                fmt(booking.serviceStart),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: crm.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // PAID / BALANCE badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+        final filtered = _monthKey == null
+            ? all
+            : all
+                .where((s) => _mKey(s.booking.serviceStart) == _monthKey)
+                .toList();
+
+        final totalPages =
+            filtered.isEmpty ? 1 : (filtered.length / _rowsPerPage).ceil();
+        final page = _page.clamp(0, totalPages - 1);
+        final start = page * _rowsPerPage;
+        final endI = (start + _rowsPerPage).clamp(0, filtered.length);
+        final pageItems =
+            filtered.isEmpty ? const [] : filtered.sublist(start, endI);
+
+        // Column totals over the whole filtered set (Excel footer).
+        final t = _totals(filtered);
+        final baseWidth = _cols.fold<double>(0, (a, c) => a + c.$2);
+
+        return Column(
+          children: [
+            _toolbar(crm, monthList, filtered),
+            10.h,
+            Expanded(
+              child: filtered.isEmpty
+                  ? _empty(crm, 'No invoices for this month.')
+                  : LayoutBuilder(
+                      builder: (ctx, cons) {
+                        final scale = cons.maxWidth > baseWidth
+                            ? cons.maxWidth / baseWidth
+                            : 1.0;
+                        return Container(
                           decoration: BoxDecoration(
-                            color: isPaid
-                                ? crm.success.withValues(alpha: 0.1)
-                                : crm.warning.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: isPaid
-                                  ? crm.success.withValues(alpha: 0.4)
-                                  : crm.warning.withValues(alpha: 0.4),
+                            border: Border.all(color: crm.border),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: SizedBox(
+                              width: baseWidth * scale,
+                              child: Column(
+                                children: [
+                                  _headerRow(crm, scale),
+                                  Expanded(
+                                    child: ListView.builder(
+                                      itemCount: pageItems.length,
+                                      itemBuilder: (c, i) => _dataRow(
+                                          crm,
+                                          pageItems[i],
+                                          start + i,
+                                          scale),
+                                    ),
+                                  ),
+                                  _totalsRow(crm, scale, t),
+                                ],
+                              ),
                             ),
                           ),
-                          child: Text(
-                            isPaid ? '✓ PAID' : 'DUE ${currency(balanceDue)}',
-                            style: TextStyle(
-                              color: isPaid ? crm.success : crm.warning,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                    12.h,
-                    const Divider(height: 1),
-                    12.h,
-
-                    // ── Payment breakdown ─────────────────────────────────
-                    _InvoiceRow(
-                      label: 'Total Price',
-                      value: currency(booking.totalPrice),
-                      bold: true,
-                    ),
-                    if (booking.discountAmount > 0)
-                      _InvoiceRow(
-                        label: 'Less: Discount',
-                        value: '− ${currency(booking.discountAmount)}',
-                        color: crm.textSecondary,
-                      ),
-                    _InvoiceRow(
-                      label: 'Less: Advance Paid',
-                      value: '− ${currency(booking.advanceAmount)}',
-                      color: crm.textSecondary,
-                    ),
-                    if (booking.collectedAmount > 0)
-                      _InvoiceRow(
-                        label: 'Less: Artist Collected',
-                        value: '− ${currency(booking.collectedAmount)}',
-                        color: crm.textSecondary,
-                      ),
-                    4.h,
-                    const Divider(height: 1),
-                    4.h,
-                    _InvoiceRow(
-                      label: 'Balance Due',
-                      value: isPaid ? '₹ 0' : currency(balanceDue),
-                      bold: true,
-                      color: isPaid ? crm.success : crm.destructive,
-                    ),
-                    if (summary.collections.isNotEmpty) ...[
-                      12.h,
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: summary.collections
-                            .map((c) => Chip(
-                                  label: Text(
-                                    '${c.employee?.name ?? 'Artist'}: ${currency(c.amount)} (${c.paymentMode.toUpperCase()})',
-                                    style: const TextStyle(fontSize: 11),
-                                  ),
-                                  avatar: Icon(
-                                    Icons.check_circle,
-                                    size: 14,
-                                    color: crm.success,
-                                  ),
-                                  visualDensity: VisualDensity.compact,
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          },
+            ),
+            _pagination(crm, page, totalPages, filtered.length),
+          ],
         );
       },
     );
   }
-}
 
-class _InvoiceRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool bold;
-  final Color? color;
-
-  const _InvoiceRow({
-    required this.label,
-    required this.value,
-    this.bold = false,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-      fontSize: bold ? 14 : 13,
-      color: color,
+  // ── Toolbar: month filter + count + download ────────────────────────────
+  Widget _toolbar(CrmTheme crm, List<MapEntry<String, DateTime>> monthList,
+      List<_BookingInvoiceSummary> filtered) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border.all(color: crm.border),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String?>(
+              value: _monthKey,
+              icon: const Icon(Icons.calendar_month_outlined, size: 18),
+              borderRadius: BorderRadius.circular(10),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('All months')),
+                for (final e in monthList)
+                  DropdownMenuItem(value: e.key, child: Text(_mLabel(e.value))),
+              ],
+              onChanged: (v) => setState(() {
+                _monthKey = v;
+                _page = 0;
+              }),
+            ),
+          ),
+        ),
+        12.w,
+        Text('${filtered.length} invoices',
+            style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+        const Spacer(),
+        FilledButton.tonalIcon(
+          onPressed:
+              filtered.isEmpty ? null : () => _download(filtered),
+          icon: const Icon(Icons.download_outlined, size: 18),
+          label: const Text('Download'),
+        ),
+      ],
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+  }
+
+  // ── Rows ────────────────────────────────────────────────────────────────
+  Widget _cellBox(double w, bool right, Widget child) => Container(
+        width: w,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+        alignment: right ? Alignment.centerRight : Alignment.centerLeft,
+        child: child,
+      );
+
+  Widget _headerRow(CrmTheme crm, double scale) => Container(
+        color: crm.primary.withValues(alpha: 0.08),
+        child: Row(
+          children: [
+            for (final c in _cols)
+              _cellBox(
+                c.$2 * scale,
+                c.$3,
+                Text(c.$1,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                        color: crm.primary)),
+              ),
+          ],
+        ),
+      );
+
+  String _collectedBy(_BookingInvoiceSummary s) {
+    final names = s.collections
+        .map((c) => c.employee?.name ?? '')
+        .where((n) => n.trim().isNotEmpty)
+        .toSet()
+        .toList();
+    return names.isEmpty ? '—' : names.join(', ');
+  }
+
+  Widget _dataRow(
+      CrmTheme crm, _BookingInvoiceSummary s, int index, double scale) {
+    final b = s.booking;
+    final paid = b.isFullyPaid;
+    final bal = paid ? 0.0 : b.balanceDue;
+    final cur = widget.currency;
+    final collectedBy = _collectedBy(s);
+    return Container(
+      decoration: BoxDecoration(
+        color: index.isEven
+            ? Colors.transparent
+            : crm.primary.withValues(alpha: 0.03),
+        border: Border(
+            bottom: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: style),
-          Text(value, style: style),
+          _cellBox(_cols[0].$2 * scale, false,
+              Text(widget.fmt(b.serviceStart), style: const TextStyle(fontSize: 12))),
+          _cellBox(
+              _cols[1].$2 * scale,
+              false,
+              Text(b.customerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600))),
+          _cellBox(
+              _cols[2].$2 * scale,
+              false,
+              Text(b.service,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary))),
+          _cellBox(
+              _cols[3].$2 * scale,
+              false,
+              Text('#${b.displayBookingNumber}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary))),
+          _cellBox(_cols[4].$2 * scale, true,
+              Text(cur(b.totalPrice), style: const TextStyle(fontSize: 12.5))),
+          _cellBox(
+              _cols[5].$2 * scale,
+              true,
+              Text(b.discountAmount > 0 ? '− ${cur(b.discountAmount)}' : '—',
+                  style: TextStyle(fontSize: 12.5, color: crm.textSecondary))),
+          _cellBox(_cols[6].$2 * scale, true,
+              Text(cur(b.advanceAmount), style: const TextStyle(fontSize: 12.5))),
+          _cellBox(_cols[7].$2 * scale, true,
+              Text(cur(b.collectedAmount), style: const TextStyle(fontSize: 12.5))),
+          _cellBox(
+              _cols[8].$2 * scale,
+              false,
+              Row(
+                children: [
+                  if (collectedBy != '—')
+                    Padding(
+                      padding: const EdgeInsets.only(right: 5),
+                      child: Icon(Icons.person_outline,
+                          size: 13, color: crm.primary),
+                    ),
+                  Expanded(
+                    child: Text(collectedBy,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: collectedBy == '—'
+                                ? crm.textSecondary
+                                : crm.textPrimary)),
+                  ),
+                ],
+              )),
+          _cellBox(
+              _cols[9].$2 * scale,
+              true,
+              Text(cur(bal),
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: paid ? crm.success : crm.destructive))),
+          _cellBox(_cols[10].$2 * scale, false, _statusChip(crm, paid)),
         ],
       ),
     );
   }
+
+  Widget _totalsRow(CrmTheme crm, double scale, _Totals t) {
+    final cur = widget.currency;
+    Widget num(int i, String s) => _cellBox(_cols[i].$2 * scale, _cols[i].$3,
+        Text(s, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)));
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.primary.withValues(alpha: 0.05),
+        border: Border(top: BorderSide(color: crm.primary.withValues(alpha: 0.3))),
+      ),
+      child: Row(
+        children: [
+          _cellBox(
+              _cols[0].$2 * scale,
+              false,
+              Text('TOTAL',
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: crm.primary))),
+          _cellBox(_cols[1].$2 * scale, false, const SizedBox()),
+          _cellBox(_cols[2].$2 * scale, false, const SizedBox()),
+          _cellBox(_cols[3].$2 * scale, false, const SizedBox()),
+          num(4, cur(t.total)),
+          num(5, t.discount > 0 ? '− ${cur(t.discount)}' : '—'),
+          num(6, cur(t.advance)),
+          num(7, cur(t.collected)),
+          _cellBox(_cols[8].$2 * scale, false, const SizedBox()),
+          _cellBox(
+              _cols[9].$2 * scale,
+              true,
+              Text(cur(t.balance),
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: crm.destructive))),
+          _cellBox(_cols[10].$2 * scale, false, const SizedBox()),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusChip(CrmTheme crm, bool paid) {
+    final color = paid ? crm.success : crm.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(paid ? 'PAID' : 'DUE',
+          style:
+              TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: color)),
+    );
+  }
+
+  Widget _pagination(CrmTheme crm, int page, int totalPages, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Row(
+        children: [
+          Text('$count total',
+              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed:
+                page > 0 ? () => setState(() => _page = page - 1) : null,
+          ),
+          Text('Page ${page + 1} / $totalPages',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: page < totalPages - 1
+                ? () => setState(() => _page = page + 1)
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _empty(CrmTheme crm, String msg) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.receipt_long_outlined, size: 48, color: crm.textSecondary),
+            12.h,
+            Text(msg, style: TextStyle(color: crm.textSecondary)),
+          ],
+        ),
+      );
+
+  _Totals _totals(List<_BookingInvoiceSummary> rows) {
+    double total = 0, disc = 0, adv = 0, coll = 0, bal = 0;
+    for (final s in rows) {
+      final b = s.booking;
+      total += b.totalPrice;
+      disc += b.discountAmount;
+      adv += b.advanceAmount;
+      coll += b.collectedAmount;
+      bal += b.isFullyPaid ? 0 : b.balanceDue;
+    }
+    return _Totals(total, disc, adv, coll, bal);
+  }
+
+  // ── CSV / Excel download ────────────────────────────────────────────────
+  Future<void> _download(List<_BookingInvoiceSummary> rows) async {
+    final data = <List<dynamic>>[
+      ['Date', 'Customer', 'Service', 'Invoice #', 'Total', 'Discount',
+        'Advance', 'Collected', 'Collected By', 'Balance', 'Status'],
+    ];
+    for (final s in rows) {
+      final b = s.booking;
+      final paid = b.isFullyPaid;
+      data.add([
+        widget.fmt(b.serviceStart),
+        b.customerName,
+        b.service,
+        b.displayBookingNumber,
+        b.totalPrice,
+        b.discountAmount,
+        b.advanceAmount,
+        b.collectedAmount,
+        _collectedBy(s),
+        paid ? 0 : b.balanceDue,
+        paid ? 'PAID' : 'DUE',
+      ]);
+    }
+    final t = _totals(rows);
+    data.add(['TOTAL', '', '', '', t.total, t.discount, t.advance, t.collected,
+      '', t.balance, '']);
+
+    final label = _monthKey ?? 'all-months';
+    try {
+      await ExportUtils.exportCsv('invoice-balances-$label.csv', data);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invoice report downloaded')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      }
+    }
+  }
+}
+
+class _Totals {
+  final double total, discount, advance, collected, balance;
+  const _Totals(
+      this.total, this.discount, this.advance, this.collected, this.balance);
 }
 
 class _FilterChip extends StatelessWidget {

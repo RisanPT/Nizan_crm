@@ -2,13 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/extensions/space_extension.dart';
-import '../../../core/models/employee.dart';
-import '../../../core/models/vehicle.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../models/fleet_models.dart';
-import '../../../services/employee_service.dart';
 import '../../../services/fleet_service.dart';
-import '../../../services/vehicle_service.dart';
 import 'fleet_mobile_ui.dart';
 
 bool _isResolved(String status) {
@@ -36,27 +32,6 @@ class FleetAccidentsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crmColors = context.crmColors;
     final accidentsAsync = ref.watch(managerAccidentsProvider);
-    final vehicles = ref.watch(vehiclesProvider).value ?? const <Vehicle>[];
-    final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
-
-    String vehicleLabel(String id) {
-      final v = vehicles.cast<Vehicle?>().firstWhere(
-            (item) => item?.id == id,
-            orElse: () => null,
-          );
-      if (v == null) return 'Unassigned vehicle';
-      return v.registrationNumber.isNotEmpty
-          ? '${v.name} · ${v.registrationNumber}'
-          : v.name;
-    }
-
-    String driverLabel(String id) {
-      final e = employees.cast<Employee?>().firstWhere(
-            (item) => item?.id == id,
-            orElse: () => null,
-          );
-      return e?.name ?? 'Unassigned driver';
-    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -107,8 +82,9 @@ class FleetAccidentsScreen extends ConsumerWidget {
                           final a = accidents[index];
                           return _AccidentCard(
                             accident: a,
-                            vehicle: vehicleLabel(a.vehicle),
-                            driver: driverLabel(a.driver),
+                            vehicle:
+                                a.vehicle.isEmpty ? 'Vehicle' : a.vehicle,
+                            driver: a.driver.isEmpty ? 'Driver' : a.driver,
                             color: _accidentStatusColor(a.status, crmColors),
                           );
                         },
@@ -146,6 +122,31 @@ class _AccidentCard extends StatelessWidget {
         const SnackBar(content: Text('Could not open the map link.')),
       );
     }
+  }
+
+  Widget _oppRow(
+      BuildContext context, IconData icon, String label, String value) {
+    if (value.trim().isEmpty) return const SizedBox.shrink();
+    final crm = context.crmColors;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: crm.textSecondary),
+          6.w,
+          Text('$label: ',
+              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+          Expanded(
+            child: Text(value.trim(),
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: crm.textPrimary)),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -246,6 +247,24 @@ class _AccidentCard extends StatelessWidget {
                     ),
                   ],
                 ),
+                if ((accident.location.address ?? '').trim().isNotEmpty) ...[
+                  8.h,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.place_outlined,
+                          size: 15, color: crmColors.textSecondary),
+                      6.w,
+                      Expanded(
+                        child: Text(
+                          accident.location.address!.trim(),
+                          style: TextStyle(
+                              fontSize: 12.5, color: crmColors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 if (accident.description.trim().isNotEmpty) ...[
                   10.h,
                   Text(
@@ -254,6 +273,44 @@ class _AccidentCard extends StatelessWidget {
                       fontSize: 13.5,
                       height: 1.4,
                       color: crmColors.textPrimary,
+                    ),
+                  ),
+                ],
+                if (accident.opposite?.hasData ?? false) ...[
+                  12.h,
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: color.withValues(alpha: 0.2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.groups_outlined, size: 15, color: color),
+                            6.w,
+                            Text('Other Party Involved',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: color)),
+                          ],
+                        ),
+                        8.h,
+                        _oppRow(context, Icons.person_outline, 'Name',
+                            accident.opposite!.name),
+                        _oppRow(context, Icons.call_outlined, 'Phone',
+                            accident.opposite!.phone),
+                        _oppRow(context, Icons.directions_car_outlined,
+                            'Vehicle', accident.opposite!.vehicleNumber),
+                        _oppRow(context, Icons.notes_outlined, 'Notes',
+                            accident.opposite!.notes),
+                      ],
                     ),
                   ),
                 ],

@@ -21,6 +21,11 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
   final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _addressController = TextEditingController();
+  final TextEditingController _oppNameController = TextEditingController();
+  final TextEditingController _oppPhoneController = TextEditingController();
+  final TextEditingController _oppVehicleController = TextEditingController();
+  final TextEditingController _oppNotesController = TextEditingController();
   bool _isSubmitting = false;
   Position? _currentPosition;
   String? _locationError;
@@ -34,6 +39,11 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   @override
   void dispose() {
     _descriptionController.dispose();
+    _addressController.dispose();
+    _oppNameController.dispose();
+    _oppPhoneController.dispose();
+    _oppVehicleController.dispose();
+    _oppNotesController.dispose();
     super.dispose();
   }
 
@@ -128,8 +138,13 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
         jobId: widget.jobId,
         lat: _currentPosition!.latitude,
         lng: _currentPosition!.longitude,
+        address: _addressController.text,
         photos: photoUrls,
         description: _descriptionController.text,
+        oppositeName: _oppNameController.text,
+        oppositePhone: _oppPhoneController.text,
+        oppositeVehicle: _oppVehicleController.text,
+        oppositeNotes: _oppNotesController.text,
       );
 
       if (mounted) {
@@ -198,6 +213,17 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
                 ],
               ),
             const SizedBox(height: 16),
+            const Text('Address / Landmark', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'e.g. near XYZ junction, MG Road',
+                prefixIcon: Icon(Icons.place_outlined),
+              ),
+            ),
+            const SizedBox(height: 16),
             const Text('Description', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             TextField(
@@ -206,6 +232,56 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 hintText: 'Describe the accident...',
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Other Party Involved (optional)',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _oppNameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Name',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _oppPhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Phone',
+                      prefixIcon: Icon(Icons.call_outlined),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _oppVehicleController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Vehicle no.',
+                      prefixIcon: Icon(Icons.directions_car_outlined),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _oppNotesController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Notes (insurance, injuries…)',
               ),
             ),
             const SizedBox(height: 16),

@@ -58,13 +58,19 @@ _AccidentReport _$AccidentReportFromJson(
   Map<String, dynamic> json,
 ) => _AccidentReport(
   id: json['_id'] as String,
-  driver: json['driver'] as String,
-  vehicle: json['vehicle'] as String,
-  job: json['job'] as String?,
+  driver: _driverName(json['driver']),
+  vehicle: _vehicleName(json['vehicle']),
+  job: _jobRef(json['job']),
   location: AccidentLocation.fromJson(json['location'] as Map<String, dynamic>),
   photos: (json['photos'] as List<dynamic>).map((e) => e as String).toList(),
   description: json['description'] as String,
+  opposite: json['opposite'] == null
+      ? null
+      : AccidentOpposite.fromJson(json['opposite'] as Map<String, dynamic>),
   status: json['status'] as String,
+  createdAt: json['createdAt'] == null
+      ? null
+      : DateTime.parse(json['createdAt'] as String),
 );
 
 Map<String, dynamic> _$AccidentReportToJson(_AccidentReport instance) =>
@@ -76,7 +82,25 @@ Map<String, dynamic> _$AccidentReportToJson(_AccidentReport instance) =>
       'location': instance.location,
       'photos': instance.photos,
       'description': instance.description,
+      'opposite': instance.opposite,
       'status': instance.status,
+      'createdAt': instance.createdAt?.toIso8601String(),
+    };
+
+_AccidentOpposite _$AccidentOppositeFromJson(Map<String, dynamic> json) =>
+    _AccidentOpposite(
+      name: json['name'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
+      vehicleNumber: json['vehicleNumber'] as String? ?? '',
+      notes: json['notes'] as String? ?? '',
+    );
+
+Map<String, dynamic> _$AccidentOppositeToJson(_AccidentOpposite instance) =>
+    <String, dynamic>{
+      'name': instance.name,
+      'phone': instance.phone,
+      'vehicleNumber': instance.vehicleNumber,
+      'notes': instance.notes,
     };
 
 _AccidentLocation _$AccidentLocationFromJson(Map<String, dynamic> json) =>

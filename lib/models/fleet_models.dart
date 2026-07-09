@@ -28,20 +28,73 @@ abstract class FleetJob with _$FleetJob {
   factory FleetJob.fromJson(Map<String, dynamic> json) => _$FleetJobFromJson(json);
 }
 
+// Reference fields arrive either as an id string (unpopulated) or a populated
+// object; extract a display string either way so parsing never crashes.
+String _driverName(dynamic v) {
+  if (v == null) return '';
+  if (v is String) return v;
+  if (v is Map) return (v['name'] ?? v['_id'] ?? '').toString();
+  return v.toString();
+}
+
+String _vehicleName(dynamic v) {
+  if (v == null) return '';
+  if (v is String) return v;
+  if (v is Map) {
+    final reg = (v['registrationNumber'] ?? '').toString();
+    final type = (v['type'] ?? '').toString();
+    if (reg.isNotEmpty && type.isNotEmpty) return '$type · $reg';
+    if (reg.isNotEmpty) return reg;
+    if (type.isNotEmpty) return type;
+    return (v['_id'] ?? '').toString();
+  }
+  return v.toString();
+}
+
+String? _jobRef(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  if (v is Map) return (v['bookingNumber'] ?? v['_id'] ?? '').toString();
+  return v.toString();
+}
+
 @freezed
 abstract class AccidentReport with _$AccidentReport {
   const factory AccidentReport({
     @JsonKey(name: '_id') required String id,
-    required String driver,
-    required String vehicle,
-    String? job,
+    @JsonKey(fromJson: _driverName) required String driver,
+    @JsonKey(fromJson: _vehicleName) required String vehicle,
+    @JsonKey(fromJson: _jobRef) String? job,
     required AccidentLocation location,
     required List<String> photos,
     required String description,
+    AccidentOpposite? opposite,
     required String status,
+    DateTime? createdAt,
   }) = _AccidentReport;
 
   factory AccidentReport.fromJson(Map<String, dynamic> json) => _$AccidentReportFromJson(json);
+}
+
+@freezed
+abstract class AccidentOpposite with _$AccidentOpposite {
+  const factory AccidentOpposite({
+    @Default('') String name,
+    @Default('') String phone,
+    @Default('') String vehicleNumber,
+    @Default('') String notes,
+  }) = _AccidentOpposite;
+
+  factory AccidentOpposite.fromJson(Map<String, dynamic> json) =>
+      _$AccidentOppositeFromJson(json);
+}
+
+extension AccidentOppositeX on AccidentOpposite {
+  bool get hasData =>
+      name.trim().isNotEmpty ||
+      phone.trim().isNotEmpty ||
+      vehicleNumber.trim().isNotEmpty ||
+      notes.trim().isNotEmpty;
 }
 
 @freezed

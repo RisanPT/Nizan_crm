@@ -58,8 +58,13 @@ class FleetService {
     required String jobId,
     required double lat,
     required double lng,
+    String? address,
     required List<String> photos,
     required String description,
+    String oppositeName = '',
+    String oppositePhone = '',
+    String oppositeVehicle = '',
+    String oppositeNotes = '',
   }) async {
     try {
       final response = await _dio.post(
@@ -67,9 +72,20 @@ class FleetService {
         data: {
           'vehicleId': vehicleId,
           'jobId': jobId,
-          'location': {'lat': lat, 'lng': lng},
+          'location': {
+            'lat': lat,
+            'lng': lng,
+            if (address != null && address.trim().isNotEmpty)
+              'address': address.trim(),
+          },
           'photos': photos,
           'description': description,
+          'opposite': {
+            'name': oppositeName.trim(),
+            'phone': oppositePhone.trim(),
+            'vehicleNumber': oppositeVehicle.trim(),
+            'notes': oppositeNotes.trim(),
+          },
         },
       );
       return AccidentReport.fromJson(response.data['accident']);

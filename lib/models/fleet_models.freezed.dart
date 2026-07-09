@@ -341,7 +341,7 @@ as List<Map<String, dynamic>>,
 /// @nodoc
 mixin _$AccidentReport {
 
-@JsonKey(name: '_id') String get id; String get driver; String get vehicle; String? get job; AccidentLocation get location; List<String> get photos; String get description; String get status;
+@JsonKey(name: '_id') String get id;@JsonKey(fromJson: _driverName) String get driver;@JsonKey(fromJson: _vehicleName) String get vehicle;@JsonKey(fromJson: _jobRef) String? get job; AccidentLocation get location; List<String> get photos; String get description; AccidentOpposite? get opposite; String get status; DateTime? get createdAt;
 /// Create a copy of AccidentReport
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -354,16 +354,16 @@ $AccidentReportCopyWith<AccidentReport> get copyWith => _$AccidentReportCopyWith
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is AccidentReport&&(identical(other.id, id) || other.id == id)&&(identical(other.driver, driver) || other.driver == driver)&&(identical(other.vehicle, vehicle) || other.vehicle == vehicle)&&(identical(other.job, job) || other.job == job)&&(identical(other.location, location) || other.location == location)&&const DeepCollectionEquality().equals(other.photos, photos)&&(identical(other.description, description) || other.description == description)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AccidentReport&&(identical(other.id, id) || other.id == id)&&(identical(other.driver, driver) || other.driver == driver)&&(identical(other.vehicle, vehicle) || other.vehicle == vehicle)&&(identical(other.job, job) || other.job == job)&&(identical(other.location, location) || other.location == location)&&const DeepCollectionEquality().equals(other.photos, photos)&&(identical(other.description, description) || other.description == description)&&(identical(other.opposite, opposite) || other.opposite == opposite)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,driver,vehicle,job,location,const DeepCollectionEquality().hash(photos),description,status);
+int get hashCode => Object.hash(runtimeType,id,driver,vehicle,job,location,const DeepCollectionEquality().hash(photos),description,opposite,status,createdAt);
 
 @override
 String toString() {
-  return 'AccidentReport(id: $id, driver: $driver, vehicle: $vehicle, job: $job, location: $location, photos: $photos, description: $description, status: $status)';
+  return 'AccidentReport(id: $id, driver: $driver, vehicle: $vehicle, job: $job, location: $location, photos: $photos, description: $description, opposite: $opposite, status: $status, createdAt: $createdAt)';
 }
 
 
@@ -374,11 +374,11 @@ abstract mixin class $AccidentReportCopyWith<$Res>  {
   factory $AccidentReportCopyWith(AccidentReport value, $Res Function(AccidentReport) _then) = _$AccidentReportCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: '_id') String id, String driver, String vehicle, String? job, AccidentLocation location, List<String> photos, String description, String status
+@JsonKey(name: '_id') String id,@JsonKey(fromJson: _driverName) String driver,@JsonKey(fromJson: _vehicleName) String vehicle,@JsonKey(fromJson: _jobRef) String? job, AccidentLocation location, List<String> photos, String description, AccidentOpposite? opposite, String status, DateTime? createdAt
 });
 
 
-$AccidentLocationCopyWith<$Res> get location;
+$AccidentLocationCopyWith<$Res> get location;$AccidentOppositeCopyWith<$Res>? get opposite;
 
 }
 /// @nodoc
@@ -391,7 +391,7 @@ class _$AccidentReportCopyWithImpl<$Res>
 
 /// Create a copy of AccidentReport
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? driver = null,Object? vehicle = null,Object? job = freezed,Object? location = null,Object? photos = null,Object? description = null,Object? status = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? driver = null,Object? vehicle = null,Object? job = freezed,Object? location = null,Object? photos = null,Object? description = null,Object? opposite = freezed,Object? status = null,Object? createdAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,driver: null == driver ? _self.driver : driver // ignore: cast_nullable_to_non_nullable
@@ -400,8 +400,10 @@ as String,job: freezed == job ? _self.job : job // ignore: cast_nullable_to_non_
 as String?,location: null == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
 as AccidentLocation,photos: null == photos ? _self.photos : photos // ignore: cast_nullable_to_non_nullable
 as List<String>,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
-as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
-as String,
+as String,opposite: freezed == opposite ? _self.opposite : opposite // ignore: cast_nullable_to_non_nullable
+as AccidentOpposite?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 /// Create a copy of AccidentReport
@@ -412,6 +414,18 @@ $AccidentLocationCopyWith<$Res> get location {
   
   return $AccidentLocationCopyWith<$Res>(_self.location, (value) {
     return _then(_self.copyWith(location: value));
+  });
+}/// Create a copy of AccidentReport
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$AccidentOppositeCopyWith<$Res>? get opposite {
+    if (_self.opposite == null) {
+    return null;
+  }
+
+  return $AccidentOppositeCopyWith<$Res>(_self.opposite!, (value) {
+    return _then(_self.copyWith(opposite: value));
   });
 }
 }
@@ -495,10 +509,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String driver,  String vehicle,  String? job,  AccidentLocation location,  List<String> photos,  String description,  String status)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id, @JsonKey(fromJson: _driverName)  String driver, @JsonKey(fromJson: _vehicleName)  String vehicle, @JsonKey(fromJson: _jobRef)  String? job,  AccidentLocation location,  List<String> photos,  String description,  AccidentOpposite? opposite,  String status,  DateTime? createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _AccidentReport() when $default != null:
-return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.status);case _:
+return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.opposite,_that.status,_that.createdAt);case _:
   return orElse();
 
 }
@@ -516,10 +530,10 @@ return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String driver,  String vehicle,  String? job,  AccidentLocation location,  List<String> photos,  String description,  String status)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id, @JsonKey(fromJson: _driverName)  String driver, @JsonKey(fromJson: _vehicleName)  String vehicle, @JsonKey(fromJson: _jobRef)  String? job,  AccidentLocation location,  List<String> photos,  String description,  AccidentOpposite? opposite,  String status,  DateTime? createdAt)  $default,) {final _that = this;
 switch (_that) {
 case _AccidentReport():
-return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.status);case _:
+return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.opposite,_that.status,_that.createdAt);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -536,10 +550,10 @@ return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String id,  String driver,  String vehicle,  String? job,  AccidentLocation location,  List<String> photos,  String description,  String status)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String id, @JsonKey(fromJson: _driverName)  String driver, @JsonKey(fromJson: _vehicleName)  String vehicle, @JsonKey(fromJson: _jobRef)  String? job,  AccidentLocation location,  List<String> photos,  String description,  AccidentOpposite? opposite,  String status,  DateTime? createdAt)?  $default,) {final _that = this;
 switch (_that) {
 case _AccidentReport() when $default != null:
-return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.status);case _:
+return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_that.photos,_that.description,_that.opposite,_that.status,_that.createdAt);case _:
   return null;
 
 }
@@ -551,13 +565,13 @@ return $default(_that.id,_that.driver,_that.vehicle,_that.job,_that.location,_th
 @JsonSerializable()
 
 class _AccidentReport implements AccidentReport {
-  const _AccidentReport({@JsonKey(name: '_id') required this.id, required this.driver, required this.vehicle, this.job, required this.location, required final  List<String> photos, required this.description, required this.status}): _photos = photos;
+  const _AccidentReport({@JsonKey(name: '_id') required this.id, @JsonKey(fromJson: _driverName) required this.driver, @JsonKey(fromJson: _vehicleName) required this.vehicle, @JsonKey(fromJson: _jobRef) this.job, required this.location, required final  List<String> photos, required this.description, this.opposite, required this.status, this.createdAt}): _photos = photos;
   factory _AccidentReport.fromJson(Map<String, dynamic> json) => _$AccidentReportFromJson(json);
 
 @override@JsonKey(name: '_id') final  String id;
-@override final  String driver;
-@override final  String vehicle;
-@override final  String? job;
+@override@JsonKey(fromJson: _driverName) final  String driver;
+@override@JsonKey(fromJson: _vehicleName) final  String vehicle;
+@override@JsonKey(fromJson: _jobRef) final  String? job;
 @override final  AccidentLocation location;
  final  List<String> _photos;
 @override List<String> get photos {
@@ -567,7 +581,9 @@ class _AccidentReport implements AccidentReport {
 }
 
 @override final  String description;
+@override final  AccidentOpposite? opposite;
 @override final  String status;
+@override final  DateTime? createdAt;
 
 /// Create a copy of AccidentReport
 /// with the given fields replaced by the non-null parameter values.
@@ -582,16 +598,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AccidentReport&&(identical(other.id, id) || other.id == id)&&(identical(other.driver, driver) || other.driver == driver)&&(identical(other.vehicle, vehicle) || other.vehicle == vehicle)&&(identical(other.job, job) || other.job == job)&&(identical(other.location, location) || other.location == location)&&const DeepCollectionEquality().equals(other._photos, _photos)&&(identical(other.description, description) || other.description == description)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AccidentReport&&(identical(other.id, id) || other.id == id)&&(identical(other.driver, driver) || other.driver == driver)&&(identical(other.vehicle, vehicle) || other.vehicle == vehicle)&&(identical(other.job, job) || other.job == job)&&(identical(other.location, location) || other.location == location)&&const DeepCollectionEquality().equals(other._photos, _photos)&&(identical(other.description, description) || other.description == description)&&(identical(other.opposite, opposite) || other.opposite == opposite)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,driver,vehicle,job,location,const DeepCollectionEquality().hash(_photos),description,status);
+int get hashCode => Object.hash(runtimeType,id,driver,vehicle,job,location,const DeepCollectionEquality().hash(_photos),description,opposite,status,createdAt);
 
 @override
 String toString() {
-  return 'AccidentReport(id: $id, driver: $driver, vehicle: $vehicle, job: $job, location: $location, photos: $photos, description: $description, status: $status)';
+  return 'AccidentReport(id: $id, driver: $driver, vehicle: $vehicle, job: $job, location: $location, photos: $photos, description: $description, opposite: $opposite, status: $status, createdAt: $createdAt)';
 }
 
 
@@ -602,11 +618,11 @@ abstract mixin class _$AccidentReportCopyWith<$Res> implements $AccidentReportCo
   factory _$AccidentReportCopyWith(_AccidentReport value, $Res Function(_AccidentReport) _then) = __$AccidentReportCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: '_id') String id, String driver, String vehicle, String? job, AccidentLocation location, List<String> photos, String description, String status
+@JsonKey(name: '_id') String id,@JsonKey(fromJson: _driverName) String driver,@JsonKey(fromJson: _vehicleName) String vehicle,@JsonKey(fromJson: _jobRef) String? job, AccidentLocation location, List<String> photos, String description, AccidentOpposite? opposite, String status, DateTime? createdAt
 });
 
 
-@override $AccidentLocationCopyWith<$Res> get location;
+@override $AccidentLocationCopyWith<$Res> get location;@override $AccidentOppositeCopyWith<$Res>? get opposite;
 
 }
 /// @nodoc
@@ -619,7 +635,7 @@ class __$AccidentReportCopyWithImpl<$Res>
 
 /// Create a copy of AccidentReport
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? driver = null,Object? vehicle = null,Object? job = freezed,Object? location = null,Object? photos = null,Object? description = null,Object? status = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? driver = null,Object? vehicle = null,Object? job = freezed,Object? location = null,Object? photos = null,Object? description = null,Object? opposite = freezed,Object? status = null,Object? createdAt = freezed,}) {
   return _then(_AccidentReport(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,driver: null == driver ? _self.driver : driver // ignore: cast_nullable_to_non_nullable
@@ -628,8 +644,10 @@ as String,job: freezed == job ? _self.job : job // ignore: cast_nullable_to_non_
 as String?,location: null == location ? _self.location : location // ignore: cast_nullable_to_non_nullable
 as AccidentLocation,photos: null == photos ? _self._photos : photos // ignore: cast_nullable_to_non_nullable
 as List<String>,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
-as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
-as String,
+as String,opposite: freezed == opposite ? _self.opposite : opposite // ignore: cast_nullable_to_non_nullable
+as AccidentOpposite?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
+as String,createdAt: freezed == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -642,7 +660,291 @@ $AccidentLocationCopyWith<$Res> get location {
   return $AccidentLocationCopyWith<$Res>(_self.location, (value) {
     return _then(_self.copyWith(location: value));
   });
+}/// Create a copy of AccidentReport
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$AccidentOppositeCopyWith<$Res>? get opposite {
+    if (_self.opposite == null) {
+    return null;
+  }
+
+  return $AccidentOppositeCopyWith<$Res>(_self.opposite!, (value) {
+    return _then(_self.copyWith(opposite: value));
+  });
 }
+}
+
+
+/// @nodoc
+mixin _$AccidentOpposite {
+
+ String get name; String get phone; String get vehicleNumber; String get notes;
+/// Create a copy of AccidentOpposite
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$AccidentOppositeCopyWith<AccidentOpposite> get copyWith => _$AccidentOppositeCopyWithImpl<AccidentOpposite>(this as AccidentOpposite, _$identity);
+
+  /// Serializes this AccidentOpposite to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is AccidentOpposite&&(identical(other.name, name) || other.name == name)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.vehicleNumber, vehicleNumber) || other.vehicleNumber == vehicleNumber)&&(identical(other.notes, notes) || other.notes == notes));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,name,phone,vehicleNumber,notes);
+
+@override
+String toString() {
+  return 'AccidentOpposite(name: $name, phone: $phone, vehicleNumber: $vehicleNumber, notes: $notes)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $AccidentOppositeCopyWith<$Res>  {
+  factory $AccidentOppositeCopyWith(AccidentOpposite value, $Res Function(AccidentOpposite) _then) = _$AccidentOppositeCopyWithImpl;
+@useResult
+$Res call({
+ String name, String phone, String vehicleNumber, String notes
+});
+
+
+
+
+}
+/// @nodoc
+class _$AccidentOppositeCopyWithImpl<$Res>
+    implements $AccidentOppositeCopyWith<$Res> {
+  _$AccidentOppositeCopyWithImpl(this._self, this._then);
+
+  final AccidentOpposite _self;
+  final $Res Function(AccidentOpposite) _then;
+
+/// Create a copy of AccidentOpposite
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? name = null,Object? phone = null,Object? vehicleNumber = null,Object? notes = null,}) {
+  return _then(_self.copyWith(
+name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String,phone: null == phone ? _self.phone : phone // ignore: cast_nullable_to_non_nullable
+as String,vehicleNumber: null == vehicleNumber ? _self.vehicleNumber : vehicleNumber // ignore: cast_nullable_to_non_nullable
+as String,notes: null == notes ? _self.notes : notes // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [AccidentOpposite].
+extension AccidentOppositePatterns on AccidentOpposite {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _AccidentOpposite value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _AccidentOpposite() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _AccidentOpposite value)  $default,){
+final _that = this;
+switch (_that) {
+case _AccidentOpposite():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _AccidentOpposite value)?  $default,){
+final _that = this;
+switch (_that) {
+case _AccidentOpposite() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String name,  String phone,  String vehicleNumber,  String notes)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _AccidentOpposite() when $default != null:
+return $default(_that.name,_that.phone,_that.vehicleNumber,_that.notes);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String name,  String phone,  String vehicleNumber,  String notes)  $default,) {final _that = this;
+switch (_that) {
+case _AccidentOpposite():
+return $default(_that.name,_that.phone,_that.vehicleNumber,_that.notes);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String name,  String phone,  String vehicleNumber,  String notes)?  $default,) {final _that = this;
+switch (_that) {
+case _AccidentOpposite() when $default != null:
+return $default(_that.name,_that.phone,_that.vehicleNumber,_that.notes);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _AccidentOpposite implements AccidentOpposite {
+  const _AccidentOpposite({this.name = '', this.phone = '', this.vehicleNumber = '', this.notes = ''});
+  factory _AccidentOpposite.fromJson(Map<String, dynamic> json) => _$AccidentOppositeFromJson(json);
+
+@override@JsonKey() final  String name;
+@override@JsonKey() final  String phone;
+@override@JsonKey() final  String vehicleNumber;
+@override@JsonKey() final  String notes;
+
+/// Create a copy of AccidentOpposite
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$AccidentOppositeCopyWith<_AccidentOpposite> get copyWith => __$AccidentOppositeCopyWithImpl<_AccidentOpposite>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$AccidentOppositeToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _AccidentOpposite&&(identical(other.name, name) || other.name == name)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.vehicleNumber, vehicleNumber) || other.vehicleNumber == vehicleNumber)&&(identical(other.notes, notes) || other.notes == notes));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,name,phone,vehicleNumber,notes);
+
+@override
+String toString() {
+  return 'AccidentOpposite(name: $name, phone: $phone, vehicleNumber: $vehicleNumber, notes: $notes)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$AccidentOppositeCopyWith<$Res> implements $AccidentOppositeCopyWith<$Res> {
+  factory _$AccidentOppositeCopyWith(_AccidentOpposite value, $Res Function(_AccidentOpposite) _then) = __$AccidentOppositeCopyWithImpl;
+@override @useResult
+$Res call({
+ String name, String phone, String vehicleNumber, String notes
+});
+
+
+
+
+}
+/// @nodoc
+class __$AccidentOppositeCopyWithImpl<$Res>
+    implements _$AccidentOppositeCopyWith<$Res> {
+  __$AccidentOppositeCopyWithImpl(this._self, this._then);
+
+  final _AccidentOpposite _self;
+  final $Res Function(_AccidentOpposite) _then;
+
+/// Create a copy of AccidentOpposite
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? name = null,Object? phone = null,Object? vehicleNumber = null,Object? notes = null,}) {
+  return _then(_AccidentOpposite(
+name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
+as String,phone: null == phone ? _self.phone : phone // ignore: cast_nullable_to_non_nullable
+as String,vehicleNumber: null == vehicleNumber ? _self.vehicleNumber : vehicleNumber // ignore: cast_nullable_to_non_nullable
+as String,notes: null == notes ? _self.notes : notes // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
 }
 
 

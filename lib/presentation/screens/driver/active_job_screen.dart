@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../services/fleet_service.dart';
 import '../../../models/fleet_models.dart';
+import 'accident_report_screen.dart';
 
 class ActiveJobScreen extends ConsumerStatefulWidget {
   final String jobId;
@@ -348,7 +349,7 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
       child: OutlinedButton.icon(
         onPressed: _isCompleting
             ? null
-            : () => _showAccidentComingSoon(context),
+            : () => _openAccidentReport(context, job),
         icon: const Icon(Icons.warning_amber_rounded,
             size: 20, color: Color(0xFFB71C1C)),
         label: const Text('Report Accident',
@@ -496,27 +497,15 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
     }
   }
 
-  void _showAccidentComingSoon(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
-            SizedBox(width: 8),
-            Text('Report Accident'),
-          ],
-        ),
-        content: const Text(
-            'Please contact your fleet manager immediately and report the details.'),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('OK', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+  void _openAccidentReport(BuildContext context, FleetJob job) {
+    final v = job.vehicleId;
+    final vehicleId = v is Map
+        ? (v['_id'] ?? '').toString()
+        : (v ?? '').toString();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            AccidentReportScreen(jobId: job.id, vehicleId: vehicleId),
       ),
     );
   }
