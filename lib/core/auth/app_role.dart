@@ -63,7 +63,7 @@ enum AppRole {
   bool get canSeeServices => isFullAccess;
 
   /// Staff management
-  bool get canSeeStaff => isFullAccess;
+  bool get canSeeStaff => isFullAccess || this == crm;
 
   /// Sales & invoices
   bool get canSeeSales => isFullAccess || this == sales || this == accounts;
