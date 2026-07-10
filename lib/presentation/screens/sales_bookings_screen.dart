@@ -1517,6 +1517,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crmColors = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncBookings = ref.watch(bookingProvider);
     final asyncStates = ref.watch(statesProvider);
     final asyncRegions = ref.watch(regionsProvider);
@@ -1612,6 +1613,64 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
         final statsList = List.generate(12, (index) => monthlyStats[index]!);
 
+        // Shared download action for both the desktop table and mobile cards.
+        Future<void> downloadMonth(_MonthStats stats, bool useEventDate) async {
+          final asyncPackages = ref.read(packagesProvider);
+          final asyncEmployees = ref.read(employeesProvider);
+          if (asyncPackages.value == null || asyncEmployees.value == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Loading requirements...')),
+            );
+            return;
+          }
+          final reportMonth = DateTime(stats.year, stats.month);
+          final activeFiltersStr = (() {
+            final List<String> parts = [];
+            if (zoneId != null && zoneId!.isNotEmpty) {
+              final zone = allZones.cast<ZoneModel?>().firstWhere((z) => z?.id == zoneId, orElse: () => null);
+              if (zone != null) parts.add('Zone: ${zone.name}');
+            }
+            if (stateId != null && stateId!.isNotEmpty) {
+              final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == stateId, orElse: () => null);
+              if (state != null) parts.add('State: ${state.name}');
+            }
+            if (regionId != null && regionId!.isNotEmpty) {
+              final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == regionId, orElse: () => null);
+              if (region != null) parts.add('Region: ${region.name}');
+            }
+            if (districtId != null && districtId!.isNotEmpty) {
+              final district = allDistricts.cast<District?>().firstWhere((d) => d?.id == districtId, orElse: () => null);
+              if (district != null) parts.add('District: ${district.name}');
+            }
+            return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
+          })();
+          await _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => downloadDashboardReport(
+              month: reportMonth,
+              bookings: geoFilteredAllBookings,
+              packages: asyncPackages.value!,
+              employees: asyncEmployees.value!,
+              useEventDate: useEventDate,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
+            ),
+          );
+        }
+
+        Widget downloadMenu(_MonthStats stats) => PopupMenuButton<String>(
+              icon: Icon(Icons.download, size: 20, color: crmColors.primary),
+              tooltip: 'Download Monthly Report',
+              onSelected: (value) => downloadMonth(stats, value == 'event_date'),
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                    value: 'booking_date', child: Text('By Booking Date')),
+                PopupMenuItem(
+                    value: 'event_date', child: Text('By Event Date')),
+              ],
+            );
+
         return Column(
           children: [
             _FYPerformanceChart(
@@ -1619,119 +1678,156 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
               financialYear: financialYear,
             ),
             24.h,
-            Container(
-              decoration: BoxDecoration(
-                color: crmColors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: crmColors.border),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                    crmColors.primary.withValues(alpha: 0.05),
+            if (isMobile)
+              _mobileMonthCards(context, crmColors, statsList, downloadMenu)
+            else
+              Container(
+                decoration: BoxDecoration(
+                  color: crmColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: crmColors.border),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(
+                      crmColors.primary.withValues(alpha: 0.05),
+                    ),
+                    columns: const [
+                      DataColumn(label: _HeaderText('MONTH')),
+                      DataColumn(label: _HeaderText('BOOKINGS'), numeric: true),
+                      DataColumn(label: _HeaderText('PACKAGE COUNT'), numeric: true),
+                      DataColumn(label: _HeaderText('GROSS SALES'), numeric: true),
+                      DataColumn(label: _HeaderText('ADVANCE'), numeric: true),
+                      DataColumn(label: _HeaderText('FORECAST'), numeric: true),
+                      DataColumn(label: _HeaderText('COMPLETED'), numeric: true),
+                      DataColumn(label: _HeaderText('CANCELLED'), numeric: true),
+                      DataColumn(label: _HeaderText('ACTION')),
+                    ],
+                    rows: statsList.map((stats) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text('${_monthName(stats.month)} ${stats.year}',
+                              style: const TextStyle(fontWeight: FontWeight.bold))),
+                          DataCell(Text(stats.totalBookings.toString())),
+                          DataCell(Text(stats.totalPackages.toString())),
+                          DataCell(Text('₹${_money(stats.totalSales)}')),
+                          DataCell(Text('₹${_money(stats.advanceCollected)}')),
+                          DataCell(Text('₹${_money(stats.forecastAmount)}')),
+                          DataCell(Text(stats.completedCount.toString())),
+                          DataCell(Text(stats.cancelledCount.toString())),
+                          DataCell(downloadMenu(stats)),
+                        ],
+                      );
+                    }).toList(),
                   ),
-                  columns: const [
-                    DataColumn(label: _HeaderText('MONTH')),
-                    DataColumn(label: _HeaderText('BOOKINGS'), numeric: true),
-                    DataColumn(label: _HeaderText('PACKAGE COUNT'), numeric: true),
-                    DataColumn(label: _HeaderText('GROSS SALES'), numeric: true),
-                    DataColumn(label: _HeaderText('ADVANCE'), numeric: true),
-                    DataColumn(label: _HeaderText('FORECAST'), numeric: true),
-                    DataColumn(label: _HeaderText('COMPLETED'), numeric: true),
-                    DataColumn(label: _HeaderText('CANCELLED'), numeric: true),
-                    DataColumn(label: _HeaderText('ACTION')),
-                  ],
-                  rows: statsList.map((stats) {
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            '${_monthName(stats.month)} ${stats.year}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        DataCell(Text(stats.totalBookings.toString())),
-                        DataCell(Text(stats.totalPackages.toString())),
-                        DataCell(Text('₹${_money(stats.totalSales)}')),
-                        DataCell(Text('₹${_money(stats.advanceCollected)}')),
-                        DataCell(Text('₹${_money(stats.forecastAmount)}')),
-                        DataCell(Text(stats.completedCount.toString())),
-                        DataCell(Text(stats.cancelledCount.toString())),
-                        DataCell(
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.download, size: 20),
-                            tooltip: 'Download Monthly Report',
-                            onSelected: (value) async {
-                              final asyncPackages = ref.read(packagesProvider);
-                              final asyncEmployees = ref.read(employeesProvider);
-                              
-                              if (asyncPackages.value == null || asyncEmployees.value == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Loading requirements...')),
-                                );
-                                return;
-                              }
-
-                              final reportMonth = DateTime(stats.year, stats.month);
-                              final useEventDate = value == 'event_date';
-                              
-                              final activeFiltersStr = (() {
-                                final List<String> parts = [];
-                                if (zoneId != null && zoneId!.isNotEmpty) {
-                                  final zone = allZones.cast<ZoneModel?>().firstWhere((z) => z?.id == zoneId, orElse: () => null);
-                                  if (zone != null) parts.add('Zone: ${zone.name}');
-                                }
-                                if (stateId != null && stateId!.isNotEmpty) {
-                                  final state = allStates.cast<GeographicState?>().firstWhere((s) => s?.id == stateId, orElse: () => null);
-                                  if (state != null) parts.add('State: ${state.name}');
-                                }
-                                if (regionId != null && regionId!.isNotEmpty) {
-                                  final region = allRegions.cast<ServiceRegion?>().firstWhere((r) => r?.id == regionId, orElse: () => null);
-                                  if (region != null) parts.add('Region: ${region.name}');
-                                }
-                                if (districtId != null && districtId!.isNotEmpty) {
-                                  final district = allDistricts.cast<District?>().firstWhere((d) => d?.id == districtId, orElse: () => null);
-                                  if (district != null) parts.add('District: ${district.name}');
-                                }
-                                return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
-                              })();
-
-                              await _runWithReportLoader(
-                                context: context,
-                                crmColors: crmColors,
-                                action: () => downloadDashboardReport(
-                                  month: reportMonth,
-                                  bookings: geoFilteredAllBookings,
-                                  packages: asyncPackages.value!,
-                                  employees: asyncEmployees.value!,
-                                  useEventDate: useEventDate,
-                                  districts: allDistricts,
-                                  activeFilters: activeFiltersStr,
-                                ),
-                              );
-                            },
-                            itemBuilder: (context) => const [
-                              PopupMenuItem(
-                                value: 'booking_date',
-                                child: Text('By Booking Date'),
-                              ),
-                              PopupMenuItem(
-                                value: 'event_date',
-                                child: Text('By Event Date'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
                 ),
               ),
-            ),
           ],
         );
       },
+    );
+  }
+
+  /// Mobile replacement for the monthly DataTable — one compact card per month
+  /// that has activity, so nothing overflows off-screen.
+  Widget _mobileMonthCards(BuildContext context, CrmTheme crm,
+      List<_MonthStats> statsList, Widget Function(_MonthStats) downloadMenu) {
+    final active = statsList.where((s) => s.totalBookings > 0).toList();
+    if (active.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: crm.border),
+        ),
+        child: Center(
+          child: Text('No bookings this year yet.',
+              style: TextStyle(color: crm.textSecondary)),
+        ),
+      );
+    }
+
+    Widget stat(String label, String value, {Color? color}) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(value,
+                style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w800,
+                    color: color ?? crm.textPrimary)),
+            2.h,
+            Text(label,
+                style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+          ],
+        );
+
+    return Column(
+      children: [
+        for (final s in active) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: crm.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: crm.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                          color: crm.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text('${_monthName(s.month)} ${s.year}',
+                          style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              color: crm.primary)),
+                    ),
+                    const Spacer(),
+                    downloadMenu(s),
+                  ],
+                ),
+                12.h,
+                Row(
+                  children: [
+                    Expanded(child: stat('Bookings', '${s.totalBookings}')),
+                    Expanded(child: stat('Packages', '${s.totalPackages}')),
+                    Expanded(
+                        child: stat('Completed', '${s.completedCount}',
+                            color: crm.success)),
+                    Expanded(
+                        child: stat('Cancelled', '${s.cancelledCount}',
+                            color: crm.destructive)),
+                  ],
+                ),
+                12.h,
+                Divider(height: 1, color: crm.border),
+                12.h,
+                Row(
+                  children: [
+                    Expanded(child: stat('Gross', '₹${_money(s.totalSales)}')),
+                    Expanded(
+                        child:
+                            stat('Advance', '₹${_money(s.advanceCollected)}')),
+                    Expanded(
+                        child: stat('Forecast', '₹${_money(s.forecastAmount)}',
+                            color: crm.primary)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          12.h,
+        ],
+      ],
     );
   }
 
