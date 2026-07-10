@@ -409,6 +409,39 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
     await showKitEditor(context, ref, kit: kit);
   }
 
+  Future<void> _confirmDeleteKit(StaffKit kit) async {
+    final crm = context.crmColors;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete kit?'),
+        content: Text(
+            'Remove "${kit.name}" and its ${kit.items.length} '
+            'item${kit.items.length == 1 ? '' : 's'}? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: crm.destructive),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(inventoryServiceProvider).deleteKit(kit.id);
+      ref.invalidate(staffKitsProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
@@ -523,11 +556,33 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: Icon(Icons.edit_outlined,
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert,
                       size: 18, color: crm.textSecondary),
-                  onPressed: () => _editKit(k),
-                  visualDensity: VisualDensity.compact,
+                  onSelected: (v) {
+                    if (v == 'edit') _editKit(k);
+                    if (v == 'delete') _confirmDeleteKit(k);
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined, size: 16),
+                        SizedBox(width: 8),
+                        Text('Edit'),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete_outline,
+                            size: 16, color: crm.destructive),
+                        const SizedBox(width: 8),
+                        Text('Delete',
+                            style: TextStyle(color: crm.destructive)),
+                      ]),
+                    ),
+                  ],
                 ),
                 Icon(Icons.chevron_right, size: 18, color: crm.textSecondary),
               ],

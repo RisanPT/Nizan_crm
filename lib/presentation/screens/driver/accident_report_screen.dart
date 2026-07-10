@@ -27,6 +27,8 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   final TextEditingController _oppVehicleController = TextEditingController();
   final TextEditingController _oppNotesController = TextEditingController();
   bool _isSubmitting = false;
+  bool _locating = true;
+  bool _permBlocked = false;
   Position? _currentPosition;
   String? _locationError;
 
@@ -34,6 +36,15 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   void initState() {
     super.initState();
     _determinePosition();
+  }
+
+  void _setLocError(String msg, {bool blocked = false}) {
+    if (!mounted) return;
+    setState(() {
+      _locationError = msg;
+      _permBlocked = blocked;
+      _locating = false;
+    });
   }
 
   @override
@@ -48,45 +59,63 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   }
 
   Future<void> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
+    if (mounted) {
       setState(() {
-        _locationError = 'Location services are disabled.';
+        _locating = true;
+        _locationError = null;
+        _permBlocked = false;
       });
-      return;
     }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        setState(() {
-          _locationError = 'Location permissions are denied';
-        });
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _setLocError('Location (GPS) is turned off. Enable it, then Retry.');
         return;
       }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      setState(() {
-        _locationError = 'Location permissions are permanently denied.';
-      });
-      return;
-    } 
 
-    try {
-      final position = await Geolocator.getCurrentPosition();
-      setState(() {
-        _currentPosition = position;
-        _locationError = null;
-      });
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        _setLocError('Location permission denied. Tap Retry to allow it.');
+        return;
+      }
+      if (permission == LocationPermission.deniedForever) {
+        _setLocError(
+            'Location permission is blocked. Enable it in Settings, then Retry.',
+            blocked: true);
+        return;
+      }
+
+      // Bounded fix so we never hang on "Getting precise location…".
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 15),
+          ),
+        );
+      } catch (_) {
+        // High-accuracy fix timed out / failed — fall back to last known.
+        position = await Geolocator.getLastKnownPosition();
+      }
+
+      if (position == null) {
+        _setLocError('Could not get a location fix. Move to open sky and Retry.');
+        return;
+      }
+
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+          _locationError = null;
+          _locating = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _locationError = 'Failed to get location: $e';
-      });
+      _setLocError('Failed to get location: $e');
     }
   }
 
@@ -102,7 +131,9 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
   Future<void> _submitReport() async {
     if (_currentPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Wait for location to be determined.')),
+        const SnackBar(
+            content: Text(
+                'Location not captured yet — tap Retry under Incident Location.')),
       );
       return;
     }
@@ -200,16 +231,68 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
             const SizedBox(height: 16),
             const Text('Incident Location', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
-            if (_locationError != null)
-              Text(_locationError!, style: const TextStyle(color: Colors.red))
-            else if (_currentPosition != null)
-              Text('Lat: ${_currentPosition!.latitude}, Lng: ${_currentPosition!.longitude}')
-            else
+            if (_currentPosition != null)
+              Row(
+                children: [
+                  const Icon(Icons.check_circle,
+                      color: Colors.green, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Location captured · ${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}',
+                      style: const TextStyle(color: Colors.green),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _locating ? null : _determinePosition,
+                    child: const Text('Refresh'),
+                  ),
+                ],
+              )
+            else if (_locating)
               const Row(
                 children: [
-                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
                   SizedBox(width: 8),
                   Text('Getting precise location...'),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.location_off_outlined,
+                          color: Colors.red, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_locationError ?? 'Location unavailable.',
+                            style: const TextStyle(color: Colors.red)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _determinePosition,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: const Text('Retry'),
+                      ),
+                      if (_permBlocked) ...[
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () => Geolocator.openAppSettings(),
+                          icon: const Icon(Icons.settings, size: 18),
+                          label: const Text('Open Settings'),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             const SizedBox(height: 16),

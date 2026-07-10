@@ -73,6 +73,10 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>The camera is used to scan product barcodes when adding inventory purchases.</string>
+	<string>The camera is used to scan product barcodes and to photograph accident scenes.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is attached to accident reports so the fleet manager knows where it happened.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photos are used to attach images to accident reports and inventory items.</string>
 </dict>
 </plist>

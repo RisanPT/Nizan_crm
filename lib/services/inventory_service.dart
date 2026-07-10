@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/inventory_product.dart';
 import '../core/models/purchase.dart';
 import '../core/models/staff_kit.dart';
+import '../core/models/vendor.dart';
 import '../providers/dio_provider.dart';
 
 final inventoryServiceProvider = Provider<InventoryService>((ref) {
@@ -22,6 +23,10 @@ final staffKitsProvider = FutureProvider<List<StaffKit>>((ref) async {
 
 final purchasesProvider = FutureProvider<List<Purchase>>((ref) async {
   return ref.watch(inventoryServiceProvider).getPurchases();
+});
+
+final vendorsProvider = FutureProvider<List<Vendor>>((ref) async {
+  return ref.watch(inventoryServiceProvider).getVendors();
 });
 
 /// A product suggestion resolved from a public barcode database.
@@ -211,7 +216,9 @@ class InventoryService {
 
   Future<Purchase> createPurchase({
     String supplier = '',
+    String vendorId = '',
     String invoiceNo = '',
+    String billImage = '',
     DateTime? date,
     required List<PurchaseItem> items,
     bool paid = false,
@@ -220,7 +227,9 @@ class InventoryService {
     try {
       final res = await _dio.post('/inventory/purchases', data: {
         'supplier': supplier,
+        if (vendorId.isNotEmpty) 'vendorId': vendorId,
         'invoiceNo': invoiceNo,
+        if (billImage.isNotEmpty) 'billImage': billImage,
         'date': (date ?? DateTime.now()).toIso8601String(),
         'items': items.map((e) => e.toJson()).toList(),
         'paid': paid,
@@ -229,6 +238,49 @@ class InventoryService {
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to record purchase'));
+    }
+  }
+
+  // ── Vendors ────────────────────────────────────────────────────────────
+
+  Future<List<Vendor>> getVendors() async {
+    try {
+      final res = await _dio.get('/inventory/vendors');
+      final data = res.data as List;
+      return data
+          .map((e) => Vendor.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to load vendors'));
+    }
+  }
+
+  Future<Vendor> saveVendor(Vendor vendor) async {
+    try {
+      final res = vendor.id.isEmpty
+          ? await _dio.post('/inventory/vendors', data: vendor.toJson())
+          : await _dio.put('/inventory/vendors/${vendor.id}',
+              data: vendor.toJson());
+      return Vendor.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to save vendor'));
+    }
+  }
+
+  Future<void> deleteVendor(String id) async {
+    try {
+      await _dio.delete('/inventory/vendors/$id');
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to delete vendor'));
+    }
+  }
+
+  /// Remove a purchase from the ledger.
+  Future<void> deletePurchase(String id) async {
+    try {
+      await _dio.delete('/inventory/purchases/$id');
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to delete purchase'));
     }
   }
 

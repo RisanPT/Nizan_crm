@@ -42,6 +42,7 @@ import '../../presentation/screens/inventory/inventory_alerts_screen.dart';
 import '../../presentation/screens/inventory/inventory_expiry_screen.dart';
 import '../../presentation/screens/inventory/inventory_reports_screen.dart';
 import '../../presentation/screens/inventory/inventory_purchases_screen.dart';
+import '../../presentation/screens/inventory/inventory_vendors_screen.dart';
 import '../../presentation/screens/inventory/artist_inventory_screen.dart';
 import '../../presentation/screens/sales_leads_screen.dart';
 import '../../presentation/screens/lead_details_screen.dart';
@@ -203,6 +204,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Inventory Reports';
           } else if (state.uri.path == '/inventory/purchases') {
             title = 'Purchases';
+          } else if (state.uri.path == '/inventory/vendors') {
+            title = 'Vendors';
           } else if (state.uri.path == '/inventory/my') {
             title = 'My Inventory';
           } else if (state.uri.path == '/accounts/dashboard') {
@@ -370,6 +373,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/inventory/purchases',
             builder: (context, state) => const InventoryPurchasesScreen(),
+          ),
+          GoRoute(
+            path: '/inventory/vendors',
+            builder: (context, state) => const InventoryVendorsScreen(),
           ),
           GoRoute(
             path: '/inventory/my',

@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/extensions/space_extension.dart';
 import '../../../core/models/inventory_product.dart';
 import '../../../core/models/purchase.dart';
+import '../../../core/models/vendor.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../services/inventory_service.dart';
+import '../../../services/upload_service.dart';
 import 'barcode_scanner_page.dart';
+import 'inventory_vendors_screen.dart';
 import 'inventory_widgets.dart';
 
 /// New Purchase composer — scan or type a barcode to add items, adjust
@@ -25,8 +29,12 @@ class _InventoryPurchaseScreenState
   final _invoiceCtrl = TextEditingController();
   final _barcodeCtrl = TextEditingController();
   final _barcodeFocus = FocusNode();
+  final _picker = ImagePicker();
   DateTime _date = DateTime.now();
   final List<PurchaseItem> _items = [];
+  Vendor? _vendor;
+  String? _billImage;
+  bool _uploadingBill = false;
   bool _paid = false;
   bool _saving = false;
   bool _looking = false;
@@ -124,13 +132,120 @@ class _InventoryPurchaseScreenState
     if (code != null) _handleBarcode(code);
   }
 
+  Future<void> _pickBill() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Wrap(children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take a photo'),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (source == null) return;
+    final img = await _picker.pickImage(source: source, imageQuality: 70);
+    if (img == null) return;
+    setState(() => _uploadingBill = true);
+    try {
+      final url = await ref.read(uploadServiceProvider).uploadImage(img);
+      if (mounted) {
+        setState(() {
+          _billImage = url;
+          _uploadingBill = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploadingBill = false);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Bill upload failed: $e')));
+      }
+    }
+  }
+
+  Widget _billSection(CrmTheme crm) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        children: [
+          if (_billImage != null)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(_billImage!,
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) =>
+                      Icon(Icons.receipt_long, color: crm.textSecondary)),
+            )
+          else
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                  color: crm.input, borderRadius: BorderRadius.circular(10)),
+              child: Icon(Icons.receipt_long_outlined,
+                  color: crm.textSecondary),
+            ),
+          12.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_billImage != null ? 'Bill attached' : 'Attach bill / invoice',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13.5)),
+                2.h,
+                Text(
+                    _billImage != null
+                        ? 'Photo saved with this purchase'
+                        : 'Photo of the supplier tax invoice',
+                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+              ],
+            ),
+          ),
+          if (_uploadingBill)
+            const SizedBox(
+                width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+          else ...[
+            if (_billImage != null)
+              IconButton(
+                icon: Icon(Icons.close, color: crm.destructive),
+                onPressed: () => setState(() => _billImage = null),
+              ),
+            TextButton.icon(
+              onPressed: _pickBill,
+              icon: const Icon(Icons.upload_outlined, size: 18),
+              label: Text(_billImage != null ? 'Replace' : 'Upload'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (_items.isEmpty) return;
     setState(() => _saving = true);
     try {
       await ref.read(inventoryServiceProvider).createPurchase(
-            supplier: _supplierCtrl.text.trim(),
+            supplier: _vendor?.name ?? _supplierCtrl.text.trim(),
+            vendorId: _vendor?.id ?? '',
             invoiceNo: _invoiceCtrl.text.trim(),
+            billImage: _billImage ?? '',
             date: _date,
             items: _items,
             paid: _paid,
@@ -155,6 +270,7 @@ class _InventoryPurchaseScreenState
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    final vendors = ref.watch(vendorsProvider).value ?? const <Vendor>[];
     return Scaffold(
       appBar: AppBar(title: const Text('New Purchase')),
       body: Column(
@@ -163,17 +279,45 @@ class _InventoryPurchaseScreenState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               children: [
-                // ── Supplier / invoice / date ──────────────────────────
+                // ── Vendor / invoice / date ────────────────────────────
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        controller: _supplierCtrl,
-                        decoration:
-                            const InputDecoration(labelText: 'Supplier'),
+                      child: DropdownButtonFormField<Vendor>(
+                        initialValue: _vendor,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Vendor / Supplier',
+                          prefixIcon: Icon(Icons.storefront_outlined),
+                        ),
+                        hint: Text(vendors.isEmpty
+                            ? 'No vendors — tap +'
+                            : 'Select vendor'),
+                        items: [
+                          for (final v in vendors)
+                            DropdownMenuItem(
+                              value: v,
+                              child: Text(v.name,
+                                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: (v) => setState(() => _vendor = v),
                       ),
                     ),
-                    12.w,
+                    8.w,
+                    SizedBox(
+                      height: 52,
+                      child: IconButton.filledTonal(
+                        onPressed: () => showVendorDialog(context, ref),
+                        icon: const Icon(Icons.add),
+                        tooltip: 'Add vendor',
+                      ),
+                    ),
+                  ],
+                ),
+                12.h,
+                Row(
+                  children: [
                     Expanded(
                       child: TextField(
                         controller: _invoiceCtrl,
@@ -229,6 +373,9 @@ class _InventoryPurchaseScreenState
                     ),
                   ],
                 ),
+                12.h,
+                // ── Bill / invoice photo ───────────────────────────────
+                _billSection(crm),
                 16.h,
                 // ── Scan / type barcode ────────────────────────────────
                 Row(
@@ -452,6 +599,17 @@ class _InventoryPurchaseScreenState
                       fontSize: 15, fontWeight: FontWeight.w800)),
             ],
           ),
+          4.h,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${it.quantity} × ${fmtINR(it.unitCost)}  =  ${fmtINR(it.subtotal)}',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: crm.textSecondary),
+            ),
+          ),
         ],
       ),
     );
@@ -595,6 +753,7 @@ class _InventoryPurchaseScreenState
                       child: TextField(
                           controller: qtyCtrl,
                           keyboardType: TextInputType.number,
+                          onChanged: (_) => setLocal(() {}),
                           decoration:
                               const InputDecoration(labelText: 'Qty')),
                     ),
@@ -603,11 +762,42 @@ class _InventoryPurchaseScreenState
                       child: TextField(
                           controller: costCtrl,
                           keyboardType: TextInputType.number,
+                          onChanged: (_) => setLocal(() {}),
                           decoration: InputDecoration(
                               labelText:
                                   stockIn ? 'Unit cost (₹)' : 'Amount (₹)')),
                     ),
                   ]),
+                  const SizedBox(height: 10),
+                  Builder(builder: (context) {
+                    final crm = context.crmColors;
+                    final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                    final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: crm.primary.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: crm.primary.withValues(alpha: 0.18)),
+                      ),
+                      child: Row(
+                        children: [
+                          Text('$qty × ${fmtINR(cost)}',
+                              style: TextStyle(
+                                  fontSize: 13, color: crm.textSecondary)),
+                          const Spacer(),
+                          Text('Total  ${fmtINR(qty * cost)}',
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: crm.primary)),
+                        ],
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 12),
                   if (stockIn)
                     DropdownButtonFormField<String>(

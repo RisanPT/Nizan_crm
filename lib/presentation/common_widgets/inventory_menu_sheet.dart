@@ -15,6 +15,7 @@ class _Section {
 // the bottom bar).
 const _sections = <_Section>[
   _Section('Purchases', Icons.add_shopping_cart_outlined, '/inventory/purchases'),
+  _Section('Vendors', Icons.storefront_outlined, '/inventory/vendors'),
   _Section('Restock Alerts', Icons.warning_amber_rounded, '/inventory/alerts'),
   _Section('Expiry Tracker', Icons.hourglass_bottom_outlined, '/inventory/expiry'),
   _Section('Reports', Icons.bar_chart_outlined, '/inventory/reports'),

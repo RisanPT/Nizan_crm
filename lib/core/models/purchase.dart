@@ -70,7 +70,9 @@ class PurchaseItem {
 class Purchase {
   final String id;
   final String supplier;
+  final String vendorId;
   final String invoiceNo;
+  final String billImage;
   final DateTime date;
   final List<PurchaseItem> items;
   final double total;
@@ -80,7 +82,9 @@ class Purchase {
   const Purchase({
     required this.id,
     this.supplier = '',
+    this.vendorId = '',
     this.invoiceNo = '',
+    this.billImage = '',
     required this.date,
     this.items = const [],
     this.total = 0,
@@ -99,7 +103,11 @@ class Purchase {
     return Purchase(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       supplier: json['supplier'] as String? ?? '',
+      vendorId: (json['vendor'] is Map)
+          ? (json['vendor']['_id'] ?? '').toString()
+          : (json['vendor'] ?? '').toString(),
       invoiceNo: json['invoiceNo'] as String? ?? '',
+      billImage: json['billImage'] as String? ?? '',
       date: DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
       items: rawItems
           .map((e) => PurchaseItem.fromJson(e as Map<String, dynamic>))

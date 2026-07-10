@@ -182,6 +182,13 @@ class InventoryPurchasesScreen extends ConsumerWidget {
               ],
             ),
           ),
+          if (p.billImage.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.receipt_long, size: 18, color: crm.primary),
+              tooltip: 'View bill',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _viewBill(context, crm, p.billImage),
+            ),
           8.w,
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -193,7 +200,98 @@ class InventoryPurchasesScreen extends ConsumerWidget {
               _paidPill(context, ref, crm, p),
             ],
           ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, size: 18, color: crm.textSecondary),
+            onSelected: (v) {
+              if (v == 'delete') _confirmDeletePurchase(context, ref, crm, p);
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'delete',
+                child: Row(children: [
+                  Icon(Icons.delete_outline, size: 16, color: crm.destructive),
+                  const SizedBox(width: 8),
+                  Text('Delete purchase',
+                      style: TextStyle(color: crm.destructive)),
+                ]),
+              ),
+            ],
+          ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeletePurchase(
+      BuildContext context, WidgetRef ref, CrmTheme crm, Purchase p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete purchase?'),
+        content: Text(
+            'Remove this purchase${p.supplier.isNotEmpty ? ' from ${p.supplier}' : ''} '
+            '(${p.items.length} item${p.items.length == 1 ? '' : 's'} · ${fmtINR(p.total)})?\n\n'
+            'Stock already added is not reversed.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: crm.destructive),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(inventoryServiceProvider).deletePurchase(p.id);
+      ref.invalidate(purchasesProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
+      }
+    }
+  }
+
+  void _viewBill(BuildContext context, CrmTheme crm, String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.receipt_long, color: crm.primary),
+                  8.w,
+                  const Expanded(
+                      child: Text('Supplier Bill',
+                          style: TextStyle(fontWeight: FontWeight.bold))),
+                  IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+            ),
+            Flexible(
+              child: InteractiveViewer(
+                child: Image.network(url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) => Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Text('Could not load bill image',
+                              style: TextStyle(color: crm.textSecondary)),
+                        )),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

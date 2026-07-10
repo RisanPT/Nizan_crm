@@ -190,6 +190,13 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/inventory/purchases',
                     onTap: () => context.go('/inventory/purchases'),
                   ),
+                  _SidebarItem(
+                    icon: Icons.storefront_outlined,
+                    title: 'Vendors',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/inventory/vendors',
+                    onTap: () => context.go('/inventory/vendors'),
+                  ),
                 ] else if (role == AppRole.driver) ...[
                   // ── DRIVER VIEW ───────────────────────────────────────────
                   _SidebarItem(

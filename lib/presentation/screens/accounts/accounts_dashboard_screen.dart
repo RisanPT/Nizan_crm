@@ -7,11 +7,13 @@ import '../../../core/extensions/space_extension.dart';
 import '../../../core/models/artist_collection.dart';
 import '../../../core/models/artist_expense.dart';
 import '../../../core/models/booking.dart';
+import '../../../core/models/purchase.dart';
 import '../../../core/providers/booking_provider.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../core/utils/responsive_builder.dart';
 import '../../../services/collection_service.dart';
 import '../../../services/expense_service.dart';
+import '../../../services/inventory_service.dart';
 import '../../common_widgets/export_report_dialog.dart';
 
 const _monthNames = [
@@ -117,6 +119,8 @@ Color _catColor(String c, CrmTheme crm) {
       return crm.warning;
     case 'fuel':
       return const Color(0xFF2F6BB0);
+    case 'inventory':
+      return const Color(0xFF8E5AA8);
     default:
       return crm.textSecondary;
   }
@@ -134,6 +138,8 @@ IconData _catIcon(String c) {
       return Icons.inventory_2_rounded;
     case 'fuel':
       return Icons.local_gas_station_rounded;
+    case 'inventory':
+      return Icons.storefront_rounded;
     default:
       return Icons.receipt_long_rounded;
   }
@@ -203,6 +209,9 @@ class _AccountsDashboardScreenState
     final asyncCollections = ref.watch(collectionsProvider);
     final asyncExpenses = ref.watch(expensesProvider);
     final asyncBookings = ref.watch(bookingProvider);
+    // Inventory purchases are supplementary — never block the dashboard on them.
+    final purchases =
+        ref.watch(purchasesProvider).value ?? const <Purchase>[];
 
     final loading = asyncCollections.isLoading ||
         asyncExpenses.isLoading ||
@@ -225,6 +234,7 @@ class _AccountsDashboardScreenState
         asyncCollections.value ?? const <ArtistCollection>[],
         asyncExpenses.value ?? const <ArtistExpense>[],
         asyncBookings.value ?? const <Booking>[],
+        purchases,
       );
     }
 
@@ -281,6 +291,7 @@ class _AccountsDashboardScreenState
     List<ArtistCollection> allCollections,
     List<ArtistExpense> allExpenses,
     List<Booking> allBookings,
+    List<Purchase> allPurchases,
   ) {
     final prevMonth = DateTime(_month.year, _month.month - 1);
     final lastDay = DateTime(_month.year, _month.month + 1, 0).day;
@@ -291,6 +302,8 @@ class _AccountsDashboardScreenState
     List<ArtistExpense> expIn(DateTime m) => allExpenses
         .where((e) => e.status != 'rejected' && _inMonth(e.date, m))
         .toList();
+    List<Purchase> purchIn(DateTime m) =>
+        allPurchases.where((p) => _inMonth(p.date, m)).toList();
     List<Booking> advIn(DateTime m) => allBookings.where((b) {
           final s = b.status.toLowerCase();
           if (s == 'cancelled' || s == 'rejected') return false;
@@ -301,13 +314,21 @@ class _AccountsDashboardScreenState
     final collections = collIn(_month);
     final expenses = expIn(_month);
     final advances = advIn(_month);
+    final purchases = purchIn(_month);
 
     double sumC(List<ArtistCollection> l) => l.fold(0, (s, c) => s + c.amount);
     double sumE(List<ArtistExpense> l) => l.fold(0, (s, e) => s + e.amount);
     double sumA(List<Booking> l) => l.fold(0, (s, b) => s + b.advanceAmount);
+    double sumP(List<Purchase> l) => l.fold(0, (s, p) => s + p.total);
+
+    // Inventory purchases count as expenses (linked from the Inventory module).
+    final invSpend = sumP(purchases);
+    final invDues = purchases
+        .where((p) => !p.paid)
+        .fold<double>(0, (s, p) => s + p.total);
 
     final totalIn = sumC(collections) + sumA(advances);
-    final totalExpenses = sumE(expenses);
+    final totalExpenses = sumE(expenses) + invSpend;
     final net = totalIn - totalExpenses;
     final pending = collections.where((c) => c.status == 'pending').length +
         expenses.where((e) => e.status == 'pending').length;
@@ -315,7 +336,7 @@ class _AccountsDashboardScreenState
     final advanceTotal = sumA(advances);
 
     final prevIn = sumC(collIn(prevMonth)) + sumA(advIn(prevMonth));
-    final prevExp = sumE(expIn(prevMonth));
+    final prevExp = sumE(expIn(prevMonth)) + sumP(purchIn(prevMonth));
 
     // Daily series for sparklines.
     final dailyIn = List<double>.filled(lastDay, 0);
@@ -331,6 +352,10 @@ class _AccountsDashboardScreenState
     for (final e in expenses) {
       dailyExp[e.date.day - 1] += e.amount;
       if (e.status == 'pending') dailyPending[e.date.day - 1] += 1;
+    }
+    for (final p in purchases) {
+      final d = p.date.day;
+      if (d >= 1 && d <= lastDay) dailyExp[d - 1] += p.total;
     }
     final dailyNet = [for (var i = 0; i < lastDay; i++) dailyIn[i] - dailyExp[i]];
 
@@ -405,7 +430,10 @@ class _AccountsDashboardScreenState
     final collWeekly = weeklySum(collections.map((c) => (c.date.day, c.amount)));
     final advWeekly = weeklySum(
         advances.map((b) => ((b.createdAt ?? b.bookingDate).day, b.advanceAmount)));
-    final expWeekly = weeklySum(expenses.map((e) => (e.date.day, e.amount)));
+    final expWeekly = weeklySum([
+      ...expenses.map((e) => (e.date.day, e.amount)),
+      ...purchases.map((p) => (p.date.day, p.total)),
+    ]);
 
     // ── Tab 1: Collection vs Advance ───────────────────────────────────────
     final collAdvSlices = <_Slice>[
@@ -419,6 +447,9 @@ class _AccountsDashboardScreenState
     for (final e in expenses) {
       final k = e.category.isEmpty ? 'other' : e.category;
       catTotals[k] = (catTotals[k] ?? 0) + e.amount;
+    }
+    if (invSpend > 0) {
+      catTotals['inventory'] = (catTotals['inventory'] ?? 0) + invSpend;
     }
     final expenseSlices = catTotals.entries
         .map((e) => _Slice(_cap(e.key), e.value, _catColor(e.key, crm)))
@@ -442,11 +473,9 @@ class _AccountsDashboardScreenState
             slices: expenseSlices,
             total: totalExpenses,
             footer: [
-              ('Total Transactions', '${expenses.length}'),
-              ('Average Expense',
-                  _compact(expenses.isEmpty
-                      ? 0
-                      : totalExpenses / expenses.length)),
+              ('Inventory Spend', _rupees(invSpend)),
+              ('Supplier Dues', _rupees(invDues)),
+              ('Transactions', '${expenses.length + purchases.length}'),
             ],
           );
 
@@ -551,23 +580,41 @@ class _AccountsDashboardScreenState
       }),
     ]..sort((a, b) => b.$2.compareTo(a.$2));
 
-    final expRows = expenses.map((e) {
-      final dt = e.createdAt;
-      return (
-        _Row(
-          icon: _catIcon(e.category),
-          color: _catColor(e.category, crm),
-          title: _cap(e.category.isEmpty ? 'expense' : e.category),
-          subtitle:
-              '${e.notes.isEmpty ? 'Payment' : e.notes} · ${_dtLabel(dt)}',
-          amount: e.amount,
-          status: e.status,
-          statusColor: _statusColor(e.status, crm),
-        ),
-        dt,
-      );
-    }).toList()
-      ..sort((a, b) => b.$2.compareTo(a.$2));
+    final expRows = <(_Row, DateTime)>[
+      ...expenses.map((e) {
+        final dt = e.createdAt;
+        return (
+          _Row(
+            icon: _catIcon(e.category),
+            color: _catColor(e.category, crm),
+            title: _cap(e.category.isEmpty ? 'expense' : e.category),
+            subtitle:
+                '${e.notes.isEmpty ? 'Payment' : e.notes} · ${_dtLabel(dt)}',
+            amount: e.amount,
+            status: e.status,
+            statusColor: _statusColor(e.status, crm),
+          ),
+          dt,
+        );
+      }),
+      // Inventory purchases (linked from the Inventory module).
+      ...purchases.map((p) {
+        final dt = p.date;
+        return (
+          _Row(
+            icon: _catIcon('inventory'),
+            color: _catColor('inventory', crm),
+            title: p.supplier.isEmpty ? 'Inventory purchase' : p.supplier,
+            subtitle:
+                'Inventory · ${p.items.length} item${p.items.length == 1 ? '' : 's'} · ${_dtLabel(dt)}',
+            amount: p.total,
+            status: p.paid ? 'paid' : 'due',
+            statusColor: p.paid ? crm.success : crm.warning,
+          ),
+          dt,
+        );
+      }),
+    ]..sort((a, b) => b.$2.compareTo(a.$2));
 
     final recentColl = _RecentCard(
       title: 'Recent Collections + Advance',
