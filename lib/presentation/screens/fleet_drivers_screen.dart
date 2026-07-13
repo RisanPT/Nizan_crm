@@ -8,6 +8,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/region_service.dart';
+import '../../services/user_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import 'fleet/fleet_mobile_ui.dart';
 import 'staff_details_screen.dart';
@@ -26,6 +27,8 @@ class FleetDriversScreen extends HookConsumerWidget {
     final asyncRegions = ref.watch(regionsProvider);
 
     Future<void> openDriverDialog([Employee? driver]) async {
+      final messenger = ScaffoldMessenger.of(context);
+      final rootContext = context;
       final nameCtrl = TextEditingController(text: driver?.name ?? '');
       final emailCtrl = TextEditingController(text: driver?.email ?? '');
       final roleCtrl = TextEditingController(
@@ -34,6 +37,11 @@ class FleetDriversScreen extends HookConsumerWidget {
             : 'Fleet Driver',
       );
       final phoneCtrl = TextEditingController(text: driver?.phone ?? '');
+      final passwordCtrl = TextEditingController();
+      // New drivers get a login by default; editing an existing one doesn't
+      // create a second account unless explicitly turned on.
+      var createLogin = driver == null;
+      var savingDriver = false;
       var type = driver?.type ?? 'in-house';
       if (!['in-house', 'outsource'].contains(type)) {
         type = 'in-house';
@@ -76,8 +84,15 @@ class FleetDriversScreen extends HookConsumerWidget {
                       16.h,
                       TextField(
                         controller: emailCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Email (Optional)',
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          labelText: createLogin
+                              ? 'Login email (required)'
+                              : 'Email (Optional)',
+                          prefixIcon: const Icon(Icons.email_outlined),
+                          helperText: createLogin
+                              ? 'The driver signs in with this email'
+                              : null,
                         ),
                       ),
                       16.h,
@@ -154,6 +169,51 @@ class FleetDriversScreen extends HookConsumerWidget {
                         },
                         decoration: const InputDecoration(labelText: 'Status'),
                       ),
+                      16.h,
+                      // ── App login access ─────────────────────────────
+                      Container(
+                        decoration: BoxDecoration(
+                          color: crmColors.primary.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: crmColors.border),
+                        ),
+                        child: Column(
+                          children: [
+                            SwitchListTile(
+                              value: createLogin,
+                              onChanged: savingDriver
+                                  ? null
+                                  : (v) => setState(() => createLogin = v),
+                              title: const Text('Allow app login',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
+                              subtitle: Text(
+                                  'Creates a driver account so they can sign in',
+                                  style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: crmColors.textSecondary)),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                            ),
+                            if (createLogin)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                child: TextField(
+                                  controller: passwordCtrl,
+                                  obscureText: true,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Login password (min 6 chars)',
+                                    prefixIcon: Icon(Icons.lock_outline),
+                                    helperText:
+                                        'Driver signs in with the email above',
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -164,28 +224,111 @@ class FleetDriversScreen extends HookConsumerWidget {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    await ref
-                        .read(employeeServiceProvider)
-                        .saveEmployee(
-                          id: driver?.id,
-                          name: nameCtrl.text.trim(),
-                          email: emailCtrl.text.trim(),
-                          type: type,
-                          artistRole: 'driver',
-                          specialization: roleCtrl.text.trim(),
-                          phone: phoneCtrl.text.trim(),
-                          status: status,
-                          regionId: regionId,
-                          category: 'administrative',
-                        );
-                    ref.invalidate(employeesProvider);
-                    ref.invalidate(paginatedEmployeesProvider);
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                  child: const Text('Save'),
+                  onPressed: savingDriver
+                      ? null
+                      : () async {
+                          final email = emailCtrl.text.trim();
+                          final password = passwordCtrl.text.trim();
+                          if (nameCtrl.text.trim().isEmpty) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Driver name is required.')),
+                            );
+                            return;
+                          }
+                          if (createLogin && email.isEmpty) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'Add a login email — the driver signs in with it.')),
+                            );
+                            return;
+                          }
+                          if (createLogin && password.length < 6) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'Enter a login password of at least 6 characters.')),
+                            );
+                            return;
+                          }
+                          setState(() => savingDriver = true);
+                          try {
+                            final emp = await ref
+                                .read(employeeServiceProvider)
+                                .saveEmployee(
+                                  id: driver?.id,
+                                  name: nameCtrl.text.trim(),
+                                  email: email,
+                                  type: type,
+                                  artistRole: 'driver',
+                                  specialization: roleCtrl.text.trim(),
+                                  phone: phoneCtrl.text.trim(),
+                                  status: status,
+                                  regionId: regionId,
+                                  category: 'administrative',
+                                );
+
+                            String? loginError;
+                            if (createLogin) {
+                              try {
+                                await ref
+                                    .read(userServiceProvider)
+                                    .grantDriverLogin(
+                                      name: nameCtrl.text.trim(),
+                                      email: email,
+                                      password: password,
+                                      employeeId: emp.id,
+                                    );
+                              } catch (e) {
+                                loginError = '$e';
+                              }
+                            }
+
+                            ref.invalidate(employeesProvider);
+                            ref.invalidate(paginatedEmployeesProvider);
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                            if (loginError != null && rootContext.mounted) {
+                              // Blocking dialog so the exact reason can't be missed.
+                              showDialog(
+                                context: rootContext,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Login not created'),
+                                  content: Text(
+                                      'The driver profile was saved, but the login could not be created.\n\nReason:\n$loginError'),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: const Text('OK')),
+                                  ],
+                                ),
+                              );
+                            } else {
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text(createLogin
+                                      ? 'Driver added with login access.'
+                                      : 'Driver saved.'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setState(() => savingDriver = false);
+                            if (dialogContext.mounted) {
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                SnackBar(content: Text('Failed to save: $e')),
+                              );
+                            }
+                          }
+                        },
+                  child: savingDriver
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Save'),
                 ),
               ],
             ),

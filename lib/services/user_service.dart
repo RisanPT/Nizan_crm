@@ -146,6 +146,26 @@ class UserService {
     }
   }
 
+  /// Create or refresh a driver's login (upsert by email). Works for a new
+  /// driver and for an existing driver whose email is already registered.
+  Future<void> grantDriverLogin({
+    required String name,
+    required String email,
+    required String password,
+    String? employeeId,
+  }) async {
+    try {
+      await _dio.post('/auth/users/driver-login', data: {
+        'name': name,
+        'email': email,
+        'password': password,
+        if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
+      });
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to grant login access'));
+    }
+  }
+
   String _message(DioException e, String fallback) {
     final data = e.response?.data;
     if (data is Map<String, dynamic>) {
