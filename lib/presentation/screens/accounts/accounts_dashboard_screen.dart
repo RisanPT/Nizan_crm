@@ -319,13 +319,12 @@ class _AccountsDashboardScreenState
     double sumC(List<ArtistCollection> l) => l.fold(0, (s, c) => s + c.amount);
     double sumE(List<ArtistExpense> l) => l.fold(0, (s, e) => s + e.amount);
     double sumA(List<Booking> l) => l.fold(0, (s, b) => s + b.advanceAmount);
-    double sumP(List<Purchase> l) => l.fold(0, (s, p) => s + p.total);
+    // Include GST so spend/dues match the Bills & Payables view.
+    double sumP(List<Purchase> l) => l.fold(0, (s, p) => s + p.grandTotal);
 
     // Inventory purchases count as expenses (linked from the Inventory module).
     final invSpend = sumP(purchases);
-    final invDues = purchases
-        .where((p) => !p.paid)
-        .fold<double>(0, (s, p) => s + p.total);
+    final invDues = purchases.fold<double>(0, (s, p) => s + p.balance);
 
     final totalIn = sumC(collections) + sumA(advances);
     final totalExpenses = sumE(expenses) + invSpend;

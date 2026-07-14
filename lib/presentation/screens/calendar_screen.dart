@@ -2607,14 +2607,24 @@ class _WorkForm {
         customer = TextEditingController(text: entry.booking.customerName),
         phone = TextEditingController(text: entry.booking.phone),
         phone2 = TextEditingController(text: entry.booking.secondaryContact),
+        email = TextEditingController(text: entry.booking.email),
+        service = TextEditingController(text: entry.booking.service),
+        eventSlot = TextEditingController(text: entry.booking.eventSlot),
+        address = TextEditingController(text: entry.booking.address),
+        mapUrl = TextEditingController(text: entry.booking.mapUrl),
         outfit = TextEditingController(text: entry.booking.outfitDetails),
         room = TextEditingController(text: entry.booking.requiredRoomDetail),
         travelMode = TextEditingController(text: entry.booking.travelMode),
         travelTime = TextEditingController(text: entry.booking.travelTime),
+        driverName = TextEditingController(text: entry.booking.driverName),
         pocName = TextEditingController(text: entry.booking.pocName),
         pocPhone = TextEditingController(text: entry.booking.pocPhone),
         capture =
             TextEditingController(text: entry.booking.captureStaffDetails),
+        tempStaff =
+            TextEditingController(text: entry.booking.temporaryStaffDetails),
+        staffInstructions =
+            TextEditingController(text: entry.booking.staffInstructions),
         remarks = TextEditingController(text: entry.booking.internalRemarks);
 
   final BookingDisplayEntry entry;
@@ -2626,19 +2636,28 @@ class _WorkForm {
   final TextEditingController customer;
   final TextEditingController phone;
   final TextEditingController phone2;
+  final TextEditingController email;
+  final TextEditingController service;
+  final TextEditingController eventSlot;
+  final TextEditingController address;
+  final TextEditingController mapUrl;
   final TextEditingController outfit;
   final TextEditingController room;
   final TextEditingController travelMode;
   final TextEditingController travelTime;
+  final TextEditingController driverName;
   final TextEditingController pocName;
   final TextEditingController pocPhone;
   final TextEditingController capture;
+  final TextEditingController tempStaff;
+  final TextEditingController staffInstructions;
   final TextEditingController remarks;
 
   void dispose() {
     for (final c in [
-      customer, phone, phone2, outfit, room, travelMode, travelTime,
-      pocName, pocPhone, capture, remarks
+      customer, phone, phone2, email, service, eventSlot, address, mapUrl,
+      outfit, room, travelMode, travelTime, driverName, pocName, pocPhone,
+      capture, tempStaff, staffInstructions, remarks
     ]) {
       c.dispose();
     }
@@ -2696,13 +2715,21 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
               customerName: f.customer.text.trim(),
               phone: f.phone.text.trim(),
               secondaryContact: f.phone2.text.trim(),
+              email: f.email.text.trim(),
+              service: f.service.text.trim(),
+              eventSlot: f.eventSlot.text.trim(),
+              address: f.address.text.trim(),
+              mapUrl: f.mapUrl.text.trim(),
               outfitDetails: f.outfit.text.trim(),
               requiredRoomDetail: f.room.text.trim(),
               travelMode: f.travelMode.text.trim(),
               travelTime: f.travelTime.text.trim(),
+              driverName: f.driverName.text.trim(),
               pocName: f.pocName.text.trim(),
               pocPhone: f.pocPhone.text.trim(),
               captureStaffDetails: f.capture.text.trim(),
+              temporaryStaffDetails: f.tempStaff.text.trim(),
+              staffInstructions: f.staffInstructions.text.trim(),
               internalRemarks: f.remarks.text.trim(),
             ),
           );
@@ -2899,17 +2926,27 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
 
     if (f.editing) {
       Widget editField(String label, TextEditingController c,
-              {int maxLines = 1}) =>
+              {int maxLines = 1, TextInputType? keyboard}) =>
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: TextField(
               controller: c,
               maxLines: maxLines,
+              keyboardType: keyboard,
               decoration: InputDecoration(
                   labelText: label,
                   isDense: true,
                   border: const OutlineInputBorder()),
             ),
+          );
+      Widget section(String t) => Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 8),
+            child: Text(t.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: crm.primary)),
           );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2931,25 +2968,42 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
             onChanged: (v) => setState(() => f.status = v ?? f.status),
           ),
           12.h,
-          editField('Customer', f.customer),
+          section('Customer'),
+          editField('Customer name', f.customer),
           Row(children: [
-            Expanded(child: editField('Phone', f.phone)),
+            Expanded(
+                child: editField('Phone', f.phone,
+                    keyboard: TextInputType.phone)),
             10.w,
-            Expanded(child: editField('Secondary phone', f.phone2)),
+            Expanded(
+                child: editField('Secondary phone', f.phone2,
+                    keyboard: TextInputType.phone)),
           ]),
-          editField('Outfit', f.outfit),
-          editField('Required room', f.room),
+          editField('Email', f.email, keyboard: TextInputType.emailAddress),
+          section('Service'),
+          editField('Package / service', f.service),
+          editField('Event slot', f.eventSlot),
+          section('Location & travel'),
+          editField('Address', f.address, maxLines: 2),
+          editField('Map link (URL)', f.mapUrl, keyboard: TextInputType.url),
           Row(children: [
             Expanded(child: editField('Travel mode', f.travelMode)),
             10.w,
             Expanded(child: editField('Travel time', f.travelTime)),
           ]),
+          editField('Driver', f.driverName),
+          section('Requirements'),
+          editField('Outfit', f.outfit),
+          editField('Required room', f.room),
+          editField('Capture', f.capture),
+          editField('Temporary staff / needs', f.tempStaff, maxLines: 2),
+          editField('Staff instructions', f.staffInstructions, maxLines: 2),
+          section('Point of contact'),
           Row(children: [
             Expanded(child: editField('POC name', f.pocName)),
             10.w,
             Expanded(child: editField('POC phone', f.pocPhone)),
           ]),
-          editField('Capture', f.capture),
           editField('Remarks', f.remarks, maxLines: 3),
           Row(children: [
             Expanded(

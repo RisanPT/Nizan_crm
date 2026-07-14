@@ -67,6 +67,30 @@ class PurchaseItem {
       };
 }
 
+/// One payment made against a vendor bill (Zoho "Payments Made").
+class PurchasePayment {
+  final double amount;
+  final DateTime date;
+  final String mode; // cash / upi / bank_transfer / cheque / card / other
+  final String note;
+
+  const PurchasePayment({
+    required this.amount,
+    required this.date,
+    this.mode = 'cash',
+    this.note = '',
+  });
+
+  factory PurchasePayment.fromJson(Map<String, dynamic> json) =>
+      PurchasePayment(
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        date:
+            DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
+        mode: json['mode'] as String? ?? 'cash',
+        note: json['note'] as String? ?? '',
+      );
+}
+
 class Purchase {
   final String id;
   final String supplier;
@@ -74,10 +98,20 @@ class Purchase {
   final String invoiceNo;
   final String billImage;
   final DateTime date;
+  final DateTime? dueDate;
   final List<PurchaseItem> items;
-  final double total;
+  final double total; // taxable base (sum of line items)
   final bool paid;
   final String notes;
+  // GST (input tax) on the vendor bill.
+  final bool gstEnabled;
+  final String gstin;
+  final double gstRate; // percentage e.g. 18
+  final double gstAmount; // tax value in currency
+  final bool interState; // true => IGST, false => CGST + SGST
+  // Payments made against grandTotal.
+  final double amountPaid;
+  final List<PurchasePayment> payments;
 
   const Purchase({
     required this.id,
@@ -86,10 +120,18 @@ class Purchase {
     this.invoiceNo = '',
     this.billImage = '',
     required this.date,
+    this.dueDate,
     this.items = const [],
     this.total = 0,
     this.paid = false,
     this.notes = '',
+    this.gstEnabled = false,
+    this.gstin = '',
+    this.gstRate = 0,
+    this.gstAmount = 0,
+    this.interState = false,
+    this.amountPaid = 0,
+    this.payments = const [],
   });
 
   int get unitCount => items.fold(0, (a, i) => a + i.quantity);
@@ -98,8 +140,44 @@ class Purchase {
   int get stockedUnitCount =>
       items.where((i) => i.stockIn).fold(0, (a, i) => a + i.quantity);
 
+  /// Amount payable to the vendor = taxable base + GST.
+  double get grandTotal => total + gstAmount;
+
+  /// Effective amount paid. Legacy bills only carry the `paid` flag with no
+  /// amountPaid — treat those as fully settled.
+  double get paidAmount =>
+      (paid && amountPaid < grandTotal) ? grandTotal : amountPaid;
+
+  /// Outstanding amount still owed on this bill.
+  double get balance {
+    final b = grandTotal - paidAmount;
+    return b < 0 ? 0 : b;
+  }
+
+  bool get isFullyPaid =>
+      paid || (grandTotal > 0 && amountPaid >= grandTotal - 0.01);
+  bool get isPartiallyPaid => paidAmount > 0.01 && !isFullyPaid;
+  bool get isUnpaid => paidAmount <= 0.01 && !paid;
+
+  /// GST split (equal CGST/SGST for intra-state, full IGST for inter-state).
+  double get cgst => interState ? 0 : gstAmount / 2;
+  double get sgst => interState ? 0 : gstAmount / 2;
+  double get igst => interState ? gstAmount : 0;
+
+  bool get isOverdue =>
+      !isFullyPaid && dueDate != null && dueDate!.isBefore(DateTime.now());
+
+  /// 'paid' | 'partial' | 'overdue' | 'unpaid'
+  String get status {
+    if (isFullyPaid || paid) return 'paid';
+    if (isPartiallyPaid) return 'partial';
+    if (isOverdue) return 'overdue';
+    return 'unpaid';
+  }
+
   factory Purchase.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'] as List? ?? const [];
+    final rawPayments = json['payments'] as List? ?? const [];
     return Purchase(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       supplier: json['supplier'] as String? ?? '',
@@ -109,12 +187,22 @@ class Purchase {
       invoiceNo: json['invoiceNo'] as String? ?? '',
       billImage: json['billImage'] as String? ?? '',
       date: DateTime.tryParse(json['date'] as String? ?? '') ?? DateTime.now(),
+      dueDate: DateTime.tryParse(json['dueDate'] as String? ?? ''),
       items: rawItems
           .map((e) => PurchaseItem.fromJson(e as Map<String, dynamic>))
           .toList(),
       total: (json['total'] as num?)?.toDouble() ?? 0,
       paid: json['paid'] as bool? ?? false,
       notes: json['notes'] as String? ?? '',
+      gstEnabled: json['gstEnabled'] as bool? ?? false,
+      gstin: json['gstin'] as String? ?? '',
+      gstRate: (json['gstRate'] as num?)?.toDouble() ?? 0,
+      gstAmount: (json['gstAmount'] as num?)?.toDouble() ?? 0,
+      interState: json['interState'] as bool? ?? false,
+      amountPaid: (json['amountPaid'] as num?)?.toDouble() ?? 0,
+      payments: rawPayments
+          .map((e) => PurchasePayment.fromJson(e as Map<String, dynamic>))
+          .toList(),
     );
   }
 }

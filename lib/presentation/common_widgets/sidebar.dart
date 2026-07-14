@@ -434,6 +434,16 @@ class Sidebar extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
+                          icon: Icons.request_quote_outlined,
+                          title: 'Bills & Payables',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/accounts/bills',
+                          onTap: () => context.go('/accounts/bills'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
                           icon: Icons.receipt_long_outlined,
                           title: 'Invoice',
                           isCollapsed: false,

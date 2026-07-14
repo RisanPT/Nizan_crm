@@ -6,6 +6,9 @@ import '../core/models/staff_kit.dart';
 import '../core/models/vendor.dart';
 import '../providers/dio_provider.dart';
 
+/// Sentinel so callers can distinguish "leave unchanged" from "set to null".
+const Object _unset = Object();
+
 final inventoryServiceProvider = Provider<InventoryService>((ref) {
   return InventoryService(ref.watch(dioProvider));
 });
@@ -220,9 +223,15 @@ class InventoryService {
     String invoiceNo = '',
     String billImage = '',
     DateTime? date,
+    DateTime? dueDate,
     required List<PurchaseItem> items,
     bool paid = false,
     String notes = '',
+    bool gstEnabled = false,
+    String gstin = '',
+    double gstRate = 0,
+    double gstAmount = 0,
+    bool interState = false,
   }) async {
     try {
       final res = await _dio.post('/inventory/purchases', data: {
@@ -231,13 +240,78 @@ class InventoryService {
         'invoiceNo': invoiceNo,
         if (billImage.isNotEmpty) 'billImage': billImage,
         'date': (date ?? DateTime.now()).toIso8601String(),
+        if (dueDate != null) 'dueDate': dueDate.toIso8601String(),
         'items': items.map((e) => e.toJson()).toList(),
         'paid': paid,
         'notes': notes,
+        'gstEnabled': gstEnabled,
+        if (gstin.isNotEmpty) 'gstin': gstin,
+        'gstRate': gstRate,
+        'gstAmount': gstAmount,
+        'interState': interState,
       });
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to record purchase'));
+    }
+  }
+
+  /// Record a payment (full or partial) against a vendor bill.
+  Future<Purchase> recordPurchasePayment(
+    String id, {
+    required double amount,
+    DateTime? date,
+    String mode = 'cash',
+    String note = '',
+  }) async {
+    try {
+      final res = await _dio.post('/inventory/purchases/$id/payments', data: {
+        'amount': amount,
+        'date': (date ?? DateTime.now()).toIso8601String(),
+        'mode': mode,
+        'note': note,
+      });
+      return Purchase.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to record payment'));
+    }
+  }
+
+  /// Edit a bill's billing / GST metadata (no stock changes).
+  Future<Purchase> updatePurchaseBilling(
+    String id, {
+    String? invoiceNo,
+    String? billImage,
+    String? notes,
+    DateTime? date,
+    Object? dueDate = _unset, // pass null to clear, DateTime to set
+    bool? gstEnabled,
+    String? gstin,
+    double? gstRate,
+    double? gstAmount,
+    bool? interState,
+    String? vendorId,
+    String? supplier,
+  }) async {
+    try {
+      final res = await _dio.put('/inventory/purchases/$id', data: {
+        'invoiceNo': ?invoiceNo,
+        'billImage': ?billImage,
+        'notes': ?notes,
+        'date': ?date?.toIso8601String(),
+        if (!identical(dueDate, _unset))
+          'dueDate': (dueDate as DateTime?)?.toIso8601String(),
+        'gstEnabled': ?gstEnabled,
+        'gstin': ?gstin,
+        'gstRate': ?gstRate,
+        'gstAmount': ?gstAmount,
+        'interState': ?interState,
+        'vendorId': ?vendorId,
+        'supplier': ?supplier,
+      });
+      return Purchase.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to update bill'));
     }
   }
 

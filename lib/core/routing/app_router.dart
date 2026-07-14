@@ -35,6 +35,7 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
+import '../../presentation/screens/accounts/accounts_bills_screen.dart';
 import '../../presentation/screens/inventory/inventory_dashboard_screen.dart';
 import '../../presentation/screens/inventory/inventory_stock_screen.dart';
 import '../../presentation/screens/inventory/inventory_kits_screen.dart';
@@ -84,6 +85,7 @@ bool isRouteAllowed(String path, AppRole role, {bool inventoryAccess = false}) {
   if (path.startsWith('/services')) return role.canSeeServices;
   if (path.startsWith('/staff')) return role.canSeeStaff;
   if (path.startsWith('/sales')) return role.canSeeSales;
+  if (path.startsWith('/accounts/bills')) return role.canSeePayables;
   if (path.startsWith('/finance')) return role.canSeeFinance;
   if (path.startsWith('/fleet')) return role.canSeeFleet;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
@@ -214,6 +216,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Artist Collections';
           } else if (state.uri.path == '/accounts/invoices') {
             title = 'Invoices';
+          } else if (state.uri.path == '/accounts/bills') {
+            title = 'Bills & Payables';
           } else if (state.uri.path == '/finance') {
             title = 'Artist Finance';
           } else if (state.uri.path == '/works') {
@@ -344,6 +348,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/dashboard',
             builder: (context, state) => const AccountsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/bills',
+            builder: (context, state) => const AccountsBillsScreen(),
           ),
           // ── Inventory ────────────────────────────────────────────────
           GoRoute(
