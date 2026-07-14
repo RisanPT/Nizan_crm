@@ -12,6 +12,7 @@ import '../../core/models/service_region.dart';
 import '../../core/models/district.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/blocked_date_service.dart';
 import '../../services/employee_service.dart';
@@ -2685,6 +2686,7 @@ class _WorkDetailsDialog extends ConsumerStatefulWidget {
 class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   late final List<_WorkForm> forms;
   bool get single => forms.length == 1;
+  bool _pdfBusy = false;
 
   static const _statuses = [
     'pending', 'confirmed', 'completed', 'cancelled', 'postponed'
@@ -2695,6 +2697,33 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     super.initState();
     forms = widget.entries.map(_WorkForm.new).toList();
     if (forms.isNotEmpty) forms.first.expanded = true;
+  }
+
+  // Download the artist's full work sheet for the day as a PDF (reuses the
+  // existing artist print variant). Optional [only] limits it to one work.
+  Future<void> _downloadPdf({BookingDisplayEntry? only}) async {
+    final entries = only != null ? [only] : widget.entries;
+    if (entries.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final bookingsById = <String, Booking>{};
+    for (final e in entries) {
+      bookingsById[e.booking.id] = e.booking;
+    }
+    setState(() => _pdfBusy = true);
+    try {
+      await printBookingDetails(
+        entries.first.booking,
+        variant: BookingPrintVariant.artist,
+        relatedArtistBookings: bookingsById.values.toList(),
+        relatedArtistEntries: entries,
+        selectedArtistEntry: entries.first,
+        artistName: widget.title,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('PDF error: $e')));
+    } finally {
+      if (mounted) setState(() => _pdfBusy = false);
+    }
   }
 
   @override
@@ -2778,20 +2807,47 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(headerTitle,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800)),
-                        4.h,
-                        Text(headerSub,
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 12.5)),
-                      ],
+                    child: InkWell(
+                      // Tap the artist name to download their full work sheet.
+                      onTap: _pdfBusy ? null : () => _downloadPdf(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(headerTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800)),
+                              ),
+                              6.w,
+                              const Icon(Icons.picture_as_pdf,
+                                  size: 15, color: Colors.white70),
+                            ],
+                          ),
+                          4.h,
+                          Text(headerSub,
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12.5)),
+                        ],
+                      ),
                     ),
+                  ),
+                  IconButton(
+                    tooltip: 'Download PDF',
+                    icon: _pdfBusy
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.download_rounded,
+                            color: Colors.white),
+                    onPressed: _pdfBusy ? null : () => _downloadPdf(),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, color: Colors.white),
