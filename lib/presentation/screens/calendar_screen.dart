@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
 import '../../core/models/employee.dart';
@@ -78,6 +79,37 @@ class CalendarScreen extends HookConsumerWidget {
               assignment.roleType.toLowerCase() == 'lead'),
       orElse: () => null,
     );
+  }
+
+  // Colour by booking status. Completed shows GREEN (per requirement); the rest
+  // stay distinct so a glance tells you the state.
+  static Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return const Color(0xFF2E7D32); // green
+      case 'cancelled':
+        return const Color(0xFFD32F2F); // red
+      case 'postponed':
+        return const Color(0xFFE65100); // orange
+      case 'confirmed':
+        return const Color(0xFF1565C0); // blue
+      default:
+        return const Color(0xFF546E7A); // slate (pending / other)
+    }
+  }
+
+  // Stable identity for the assigned artist of a work, so we can count how many
+  // works one artist has in a day. Null when no artist is assigned.
+  static String? _artistKeyForEntry(BookingDisplayEntry entry) {
+    final assignment = _primaryArtistAssignment(entry) ??
+        entry.assignedStaff.cast<BookingAssignment?>().firstWhere(
+              (a) => a != null && a.artistName.trim().isNotEmpty,
+              orElse: () => null,
+            );
+    if (assignment == null) return null;
+    return assignment.employeeId.trim().isNotEmpty
+        ? 'id:${assignment.employeeId.trim()}'
+        : 'name:${assignment.artistName.trim().toLowerCase()}';
   }
 
   static List<BookingDisplayEntry> _entriesForDay(
@@ -165,6 +197,322 @@ class CalendarScreen extends HookConsumerWidget {
       });
 
     return groups;
+  }
+
+  // ── Day view = 3 columns: previous · selected · next ──────────────────────
+
+  Widget _threeDayView(
+    BuildContext context,
+    WidgetRef ref,
+    CrmTheme crm,
+    List<Booking> bookings,
+    DateTime selectedDay,
+    void Function(DateTime) onSelectDay,
+  ) {
+    final sel = DateTime(selectedDay.year, selectedDay.month, selectedDay.day);
+    final days = [
+      sel.subtract(const Duration(days: 1)),
+      sel,
+      sel.add(const Duration(days: 1)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final d in days)
+              Expanded(
+                child: _dayWorksColumn(
+                  context,
+                  ref,
+                  crm,
+                  bookings,
+                  d,
+                  selected: d == sel,
+                  onSelectDay: onSelectDay,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dayWorksColumn(
+    BuildContext context,
+    WidgetRef ref,
+    CrmTheme crm,
+    List<Booking> bookings,
+    DateTime day, {
+    required bool selected,
+    required void Function(DateTime) onSelectDay,
+  }) {
+    const wd = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const mo = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final entries = _entriesForDay(bookings, day);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: selected ? crm.primary : crm.border,
+            width: selected ? 2 : 1),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                    color: crm.primary.withValues(alpha: 0.18),
+                    blurRadius: 18,
+                    offset: const Offset(0, 8))
+              ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          GestureDetector(
+            onTap: selected ? null : () => onSelectDay(day),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                gradient: selected
+                    ? LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          crm.primary,
+                          Color.lerp(crm.primary, Colors.black, 0.28)!,
+                        ])
+                    : null,
+                color: selected ? null : crm.background,
+              ),
+              child: Column(
+                children: [
+                  Text(wd[day.weekday - 1],
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color:
+                              selected ? Colors.white70 : crm.textSecondary)),
+                  const SizedBox(height: 3),
+                  Text('${day.day} ${mo[day.month - 1]}',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: selected ? Colors.white : crm.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${entries.length} work${entries.length == 1 ? '' : 's'}',
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          color:
+                              selected ? Colors.white70 : crm.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+          if (entries.isEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+              child: Center(
+                  child: Text('No works',
+                      style: TextStyle(
+                          color: crm.textSecondary, fontSize: 12))),
+            )
+          else
+            Builder(builder: (context) {
+              // Collapse an artist's multiple works into ONE chip; unassigned
+              // works stay individual. Groups keep their first-work time order.
+              final groups = _groupEntriesForChips(entries);
+              return Padding(
+                padding: const EdgeInsets.all(8),
+                child: Column(
+                  children: [
+                    for (final g in groups)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: _workChip(context, ref, crm, g),
+                      ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // Group a day's entries into chips: assigned-artist works merge into one
+  // chip; unassigned works each get their own. Input is already time-sorted.
+  static List<_DayChipGroup> _groupEntriesForChips(
+      List<BookingDisplayEntry> entries) {
+    final groups = <_DayChipGroup>[];
+    final byArtist = <String, _DayChipGroup>{};
+    for (final e in entries) {
+      final key = _artistKeyForEntry(e);
+      if (key == null) {
+        groups.add(_DayChipGroup(label: _artistLabelForEntry(e), entries: [e]));
+      } else {
+        final existing = byArtist[key];
+        if (existing == null) {
+          final g =
+              _DayChipGroup(label: _artistLabelForEntry(e), entries: [e]);
+          byArtist[key] = g;
+          groups.add(g);
+        } else {
+          existing.entries.add(e);
+        }
+      }
+    }
+    return groups;
+  }
+
+  // Representative colour for a chip: the shared status if all works agree,
+  // else slate (mixed). Completed shows green via _statusColor.
+  static Color _groupColor(List<BookingDisplayEntry> entries) {
+    final statuses =
+        entries.map((e) => e.booking.status.toLowerCase()).toSet();
+    if (statuses.length == 1) return _statusColor(statuses.first);
+    return const Color(0xFF546E7A);
+  }
+
+  // One chip per artist (or per unassigned work). When the artist has several
+  // works they merge into this single chip with a count; tap lists them in
+  // order. A single work taps straight into its details.
+  Widget _workChip(
+      BuildContext context, WidgetRef ref, CrmTheme crm, _DayChipGroup group) {
+    final entries = group.entries;
+    final first = entries.first;
+    final booking = first.booking;
+    final label = group.label;
+    final count = entries.length;
+    final multi = count > 1;
+    final bg = _groupColor(entries);
+
+    String subFor(BookingDisplayEntry e) {
+      final slot = e.eventSlot.trim();
+      return [
+        if (slot.isNotEmpty) slot,
+        if (e.service.trim().isNotEmpty) e.service.trim(),
+      ].join(' · ');
+    }
+
+    // Subtitle: single → slot·service; multiple → "N works" + distinct services.
+    final String sub;
+    if (multi) {
+      final services = entries
+          .map((e) => e.service.trim())
+          .where((s) => s.isNotEmpty)
+          .toSet()
+          .join(', ');
+      sub = services.isEmpty ? '$count works' : '$count works · $services';
+    } else {
+      sub = subFor(first);
+    }
+
+    void handleTap() =>
+        _openWorkDialog(context, ref, crm, label, entries);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: handleTap,
+        onLongPress: multi
+            ? handleTap
+            : () => context.push(
+                '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(first.id)}'),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration:
+              BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12.5)),
+                  ),
+                  if (multi) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            width: 0.8),
+                      ),
+                      child: Text('×$count',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                              height: 1.1)),
+                    ),
+                  ],
+                ],
+              ),
+              if (sub.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white70, fontSize: 10)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _fmtTime(DateTime d) {
+    final h = d.hour == 0 ? 12 : (d.hour > 12 ? d.hour - 12 : d.hour);
+    final m = d.minute.toString().padLeft(2, '0');
+    return '$h:$m ${d.hour >= 12 ? 'PM' : 'AM'}';
+  }
+
+  static String _fmtFullDate(DateTime d) {
+    const wd = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+      'Sunday'
+    ];
+    const mo = [
+      'January', 'February', 'March', 'April', 'May', 'June', 'July',
+      'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${wd[d.weekday - 1]}, ${mo[d.month - 1]} ${d.day}, ${d.year}';
+  }
+
+  // One popup for a chip: shows every work of that artist (or the single work)
+  // in order, each expandable and editable — no chained dialogs.
+  void _openWorkDialog(BuildContext context, WidgetRef ref, CrmTheme crm,
+      String title, List<BookingDisplayEntry> entries) {
+    final ordered = [...entries]
+      ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+    showDialog<void>(
+      context: context,
+      builder: (_) =>
+          _WorkDetailsDialog(crm: crm, title: title, entries: ordered),
+    );
   }
 
   Widget _buildCompactPaymentInfo({
@@ -306,6 +654,20 @@ class CalendarScreen extends HookConsumerWidget {
       monthFocus.value = DateTime(now.year, now.month, 1);
     }
 
+    // Move the Day view to a specific date (used by month-cell taps and the
+    // day-by-day arrows). Aligns the underlying week and selects the day.
+    void goToDay(DateTime day) {
+      final d = DateTime(day.year, day.month, day.day);
+      weekStart.value = d.subtract(Duration(days: d.weekday - 1));
+      selectedDayIndex.value = d.weekday - 1;
+    }
+
+    // Open the Day-view "inner page" for a clicked date (from the Month view).
+    void openDayView(DateTime day) {
+      goToDay(day);
+      viewMode.value = 'Day';
+    }
+
     void goToPreviousWeek() {
       if (viewMode.value == 'Month') {
         monthFocus.value = DateTime(
@@ -313,6 +675,9 @@ class CalendarScreen extends HookConsumerWidget {
           monthFocus.value.month - 1,
           1,
         );
+      } else if (viewMode.value == 'Day') {
+        goToDay(weekDays[selectedDayIndex.value]
+            .subtract(const Duration(days: 1)));
       } else {
         weekStart.value = weekStart.value.subtract(const Duration(days: 7));
         selectedDayIndex.value = 0;
@@ -326,6 +691,9 @@ class CalendarScreen extends HookConsumerWidget {
           monthFocus.value.month + 1,
           1,
         );
+      } else if (viewMode.value == 'Day') {
+        goToDay(
+            weekDays[selectedDayIndex.value].add(const Duration(days: 1)));
       } else {
         weekStart.value = weekStart.value.add(const Duration(days: 7));
         selectedDayIndex.value = 0;
@@ -509,481 +877,6 @@ class CalendarScreen extends HookConsumerWidget {
       );
     }
 
-    Widget buildDayDialogMetric({
-      required String label,
-      required String value,
-    }) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-              ),
-            ),
-            6.h,
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-
-    Future<void> openDayBookingsDialog(
-      DateTime day,
-      List<BookingDisplayEntry> entries,
-    ) async {
-      if (entries.isEmpty) return;
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          // Collect unique artists present today (built once, outside StatefulBuilder)
-          final artistsInDay = <String, String>{};
-          final districtsInDay = <String>{};
-          for (final entry in entries) {
-            final primary = _primaryArtistAssignment(entry);
-            if (primary != null && primary.artistName.trim().isNotEmpty) {
-              final key = primary.employeeId.isNotEmpty
-                  ? primary.employeeId
-                  : primary.artistName.toLowerCase();
-              artistsInDay[key] = primary.artistName.trim();
-            }
-            if (entry.booking.district.trim().isNotEmpty) {
-              districtsInDay.add(entry.booking.district.trim());
-            }
-          }
-
-          final sortedDistricts = districtsInDay.toList()..sort();
-
-          return StatefulBuilder(
-            builder: (ctx, setFilter) {
-              String filterArtist = 'all';
-              String filterTime = 'all';
-              String filterLocation = 'all';
-
-              return StatefulBuilder(
-                builder: (innerCtx, innerSet) {
-                  // Apply filters
-                  final filtered = entries.where((entry) {
-                    if (filterArtist != 'all') {
-                      final primary = _primaryArtistAssignment(entry);
-                      if (primary == null) return false;
-                      final key = primary.employeeId.isNotEmpty
-                          ? primary.employeeId
-                          : primary.artistName.toLowerCase();
-                      if (key != filterArtist) return false;
-                    }
-                    if (filterLocation != 'all') {
-                      if (entry.booking.district.trim() != filterLocation) {
-                        return false;
-                      }
-                    }
-                    if (filterTime != 'all') {
-                      final hour = entry.serviceStart.hour;
-                      if (filterTime == 'morning' && !(hour >= 5 && hour < 12)) return false;
-                      if (filterTime == 'afternoon' && !(hour >= 12 && hour < 17)) return false;
-                      if (filterTime == 'evening' && !(hour >= 17)) return false;
-                    }
-                    return true;
-                  }).toList();
-
-                  final totalAdvance = filtered.fold<double>(
-                    0,
-                    (sum, e) => sum + e.advanceAmount,
-                  );
-
-                  return Dialog(
-                    insetPadding: const EdgeInsets.all(20),
-                    backgroundColor: Colors.transparent,
-                    elevation: 0,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 660, maxHeight: 840),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: crmColors.surface,
-                          borderRadius: BorderRadius.circular(32),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.16),
-                              blurRadius: 32,
-                              offset: const Offset(0, 20),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            // ── Header ──────────────────────────────────────
-                            Container(
-                              padding: const EdgeInsets.fromLTRB(28, 24, 22, 22),
-                              decoration: BoxDecoration(
-                                color: crmColors.primary,
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(32),
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${monthTitle(day)} • ${day.day}',
-                                              style: theme.textTheme.headlineSmall?.copyWith(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                            6.h,
-                                            Text(
-                                              '${entries.length} booking${entries.length == 1 ? '' : 's'} • ${filtered.length} shown',
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Container(
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.12),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: IconButton(
-                                          onPressed: () => Navigator.of(dialogContext).pop(),
-                                          icon: const Icon(Icons.close, color: Colors.white),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  18.h,
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: buildDayDialogMetric(
-                                          label: 'Shown',
-                                          value: '${filtered.length}',
-                                        ),
-                                      ),
-                                      12.w,
-                                      Expanded(
-                                        child: buildDayDialogMetric(
-                                          label: 'Advance',
-                                          value: '₹${totalAdvance.toStringAsFixed(0)}',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // ── Filter Bar ──────────────────────────────────
-                            Container(
-                              padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                              decoration: BoxDecoration(
-                                color: crmColors.background,
-                                border: Border(
-                                  bottom: BorderSide(color: crmColors.border),
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (artistsInDay.length > 1) ...[
-                                    Text(
-                                      'FILTER BY ARTIST',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: crmColors.textSecondary,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                    6.h,
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                        children: [
-                                          _filterChip(
-                                            label: 'All Artists',
-                                            selected: filterArtist == 'all',
-                                            color: crmColors.primary,
-                                            onTap: () => innerSet(() => filterArtist = 'all'),
-                                          ),
-                                          ...artistsInDay.entries.map(
-                                            (e) => _filterChip(
-                                              label: e.value,
-                                              selected: filterArtist == e.key,
-                                              color: Colors.indigo,
-                                              onTap: () => innerSet(() => filterArtist = e.key),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    10.h,
-                                  ],
-                                  Text(
-                                    'FILTER BY TIME',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                      color: crmColors.textSecondary,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                  6.h,
-                                  SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      children: [
-                                        _filterChip(
-                                          label: 'All Day',
-                                          icon: Icons.schedule_outlined,
-                                          selected: filterTime == 'all',
-                                          color: crmColors.primary,
-                                          onTap: () => innerSet(() => filterTime = 'all'),
-                                        ),
-                                        _filterChip(
-                                          label: 'Morning (5–12)',
-                                          icon: Icons.wb_sunny_outlined,
-                                          selected: filterTime == 'morning',
-                                          color: Colors.orange,
-                                          onTap: () => innerSet(() => filterTime = 'morning'),
-                                        ),
-                                        _filterChip(
-                                          label: 'Afternoon (12–5)',
-                                          icon: Icons.wb_cloudy_outlined,
-                                          selected: filterTime == 'afternoon',
-                                          color: Colors.amber.shade700,
-                                          onTap: () => innerSet(() => filterTime = 'afternoon'),
-                                        ),
-                                        _filterChip(
-                                          label: 'Evening (5+)',
-                                          icon: Icons.nights_stay_outlined,
-                                          selected: filterTime == 'evening',
-                                          color: Colors.deepPurple,
-                                          onTap: () => innerSet(() => filterTime = 'evening'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (sortedDistricts.length > 1) ...[
-                                    10.h,
-                                    Text(
-                                      'FILTER BY LOCATION',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: crmColors.textSecondary,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
-                                    6.h,
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                        children: [
-                                          _filterChip(
-                                            label: 'All Districts',
-                                            selected: filterLocation == 'all',
-                                            color: crmColors.primary,
-                                            onTap: () => innerSet(() => filterLocation = 'all'),
-                                          ),
-                                          ...sortedDistricts.map(
-                                            (d) => _filterChip(
-                                              label: d,
-                                              selected: filterLocation == d,
-                                              color: Colors.teal,
-                                              onTap: () => innerSet(() => filterLocation = d),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-
-                            // ── Booking List ────────────────────────────────
-                            Expanded(
-                              child: filtered.isEmpty
-                                  ? Center(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.search_off,
-                                            size: 48,
-                                            color: crmColors.border,
-                                          ),
-                                          12.h,
-                                          Text(
-                                            'No bookings match the filter',
-                                            style: TextStyle(color: crmColors.textSecondary),
-                                          ),
-                                        ],
-                                      ),
-                                    )
-                                  : Padding(
-                                      padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                                      child: ListView.separated(
-                                        itemCount: filtered.length,
-                                        separatorBuilder: (_, _) => 12.h,
-                                        itemBuilder: (ctx, index) {
-                                          final entry = filtered[index];
-                                          final booking = entry.booking;
-                                          final artistName = _artistLabelForEntry(entry);
-                                          return Material(
-                                            color: Colors.transparent,
-                                            child: InkWell(
-                                              onTap: () {
-                                                Navigator.of(dialogContext).pop();
-                                                context.push(
-                                                  '/booking/manage/${booking.id}?entry=${Uri.encodeComponent(entry.id)}',
-                                                );
-                                              },
-                                              borderRadius: BorderRadius.circular(24),
-                                              child: Container(
-                                                padding: const EdgeInsets.all(18),
-                                                decoration: BoxDecoration(
-                                                  color: crmColors.background,
-                                                  borderRadius: BorderRadius.circular(24),
-                                                  border: Border.all(color: crmColors.border),
-                                                ),
-                                                child: Row(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Container(
-                                                      width: 4,
-                                                      height: 48,
-                                                      decoration: BoxDecoration(
-                                                        color: _colorForService(entry.service),
-                                                        borderRadius: BorderRadius.circular(2),
-                                                      ),
-                                                    ),
-                                                    16.w,
-                                                    Expanded(
-                                                      child: Column(
-                                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                                        children: [
-                                                          Text(
-                                                            entry.summaryLabel,
-                                                            style: const TextStyle(
-                                                              fontWeight: FontWeight.bold,
-                                                              fontSize: 16,
-                                                            ),
-                                                          ),
-                                                          4.h,
-                                                          Text(
-                                                            '${_fmt(entry.serviceStart)} – ${_fmt(entry.serviceEnd)}',
-                                                            style: TextStyle(
-                                                              color: crmColors.textSecondary,
-                                                              fontSize: 13,
-                                                            ),
-                                                          ),
-                                                          8.h,
-                                                          Text(
-                                                            artistName,
-                                                            style: TextStyle(
-                                                              color: crmColors.primary,
-                                                              fontWeight: FontWeight.w600,
-                                                              fontSize: 13,
-                                                            ),
-                                                          ),
-                                                          if (booking.district.trim().isNotEmpty) ...[
-                                                            4.h,
-                                                            Row(
-                                                              children: [
-                                                                Icon(
-                                                                  Icons.location_on_outlined,
-                                                                  size: 14,
-                                                                  color: crmColors.textSecondary,
-                                                                ),
-                                                                4.w,
-                                                                Text(
-                                                                  booking.district.trim(),
-                                                                  style: TextStyle(
-                                                                    color: crmColors.textSecondary,
-                                                                    fontSize: 12,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ],
-                                                          12.h,
-                                                          Row(
-                                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                            children: [
-                                                              _buildCompactPaymentInfo(
-                                                                label: 'Total',
-                                                                value: '₹${booking.totalPrice.toStringAsFixed(0)}',
-                                                                color: crmColors.textPrimary,
-                                                              ),
-                                                              _buildCompactPaymentInfo(
-                                                                label: 'Advance',
-                                                                value: '₹${booking.advanceAmount.toStringAsFixed(0)}',
-                                                                color: crmColors.success,
-                                                              ),
-                                                              _buildCompactPaymentInfo(
-                                                                label: 'Balance',
-                                                                value: '₹${(booking.totalPrice - booking.advanceAmount - booking.discountAmount).toStringAsFixed(0)}',
-                                                                color: (booking.totalPrice - booking.advanceAmount - booking.discountAmount) > 0
-                                                                    ? crmColors.destructive
-                                                                    : crmColors.success,
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    Icon(Icons.chevron_right, color: crmColors.textSecondary),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          );
-        },
-      );
-    }
 
     Future<void> openMonthPicker() async {
       final pickedMonth = await showDialog<DateTime>(
@@ -1107,7 +1000,16 @@ class CalendarScreen extends HookConsumerWidget {
       }
     }
 
-    return Scaffold(
+    return PopScope(
+      // In the Day "inner page", back returns to the Month view instead of
+      // leaving the calendar screen.
+      canPop: viewMode.value != 'Day',
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && viewMode.value == 'Day') {
+          viewMode.value = 'Month';
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: (isMobile && !isArtist)
           ? FloatingActionButton(
@@ -1361,30 +1263,41 @@ class CalendarScreen extends HookConsumerWidget {
                               filteredCalendarBookings,
                               monthFocus.value,
                               now,
-                              onOpenDay: openDayBookingsDialog,
+                              onOpenDay: (day, _) async => openDayView(day),
                             )
                           : viewMode.value == 'Day'
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                if (isMobile)
-                                  _buildWeeklyStrip(
-                                    context,
-                                    crmColors,
-                                    weekDays,
-                                    selectedDayIndex.value,
-                                    selectedDayIndex,
-                                    filteredCalendarBookings,
-                                  ),
-                                _dayView(
+                          ? (isMobile
+                              ? Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildWeeklyStrip(
+                                      context,
+                                      crmColors,
+                                      weekDays,
+                                      selectedDayIndex.value,
+                                      selectedDayIndex,
+                                      filteredCalendarBookings,
+                                    ),
+                                    _dayWorksColumn(
+                                      context,
+                                      ref,
+                                      crmColors,
+                                      filteredCalendarBookings,
+                                      selectedDay,
+                                      selected: true,
+                                      onSelectDay: goToDay,
+                                    ),
+                                  ],
+                                )
+                              : _threeDayView(
                                   context,
+                                  ref,
                                   crmColors,
                                   filteredCalendarBookings,
                                   selectedDay,
-                                  now,
-                                ),
-                              ],
-                            )
+                                  goToDay,
+                                ))
                           : !isMobile
                           ? _weekView(
                               context,
@@ -1427,6 +1340,7 @@ class CalendarScreen extends HookConsumerWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -2192,153 +2106,6 @@ class CalendarScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _dayView(
-    BuildContext context,
-    CrmTheme crmColors,
-    List<Booking> bookings,
-    DateTime day,
-    DateTime now,
-  ) {
-    const timelineHours = [
-      '1 AM',
-      '2 AM',
-      '3 AM',
-      '4 AM',
-      '5 AM',
-      '6 AM',
-      '7 AM',
-      '8 AM',
-      '9 AM',
-    ];
-    const topLaneHeight = 96.0;
-    const hourRowHeight = 64.0;
-
-    final dayBookings = _entriesForDay(bookings, day);
-    final artistGroups = _groupBookingsByArtist(dayBookings);
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: crmColors.surface,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: crmColors.border),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const SizedBox(width: 84),
-                Expanded(
-                  child: _buildTopDayHeader(context, day: day, now: now),
-                ),
-              ],
-            ),
-            const Divider(height: 1),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 84,
-                  child: Column(
-                    children: [
-                      Container(
-                        height: topLaneHeight,
-                        alignment: Alignment.topCenter,
-                        padding: const EdgeInsets.only(top: 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            right: BorderSide(color: crmColors.border),
-                          ),
-                        ),
-                        child: Text(
-                          'GMT+04',
-                          style: TextStyle(
-                            color: crmColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      ...timelineHours.map(
-                        (label) => Container(
-                          height: hourRowHeight,
-                          alignment: Alignment.topRight,
-                          padding: const EdgeInsets.only(top: 8, right: 12),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              right: BorderSide(color: crmColors.border),
-                              bottom: BorderSide(
-                                color: crmColors.border.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ),
-                          child: Text(
-                            label,
-                            style: TextStyle(
-                              color: crmColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Container(
-                        height: topLaneHeight,
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(color: crmColors.border),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ...artistGroups.map(
-                              (group) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildReferencePill(context, group),
-                              ),
-                            ),
-                            if (artistGroups.isEmpty)
-                              Text(
-                                'No bookings for this day',
-                                style: TextStyle(
-                                  color: crmColors.textSecondary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      ...timelineHours.map(
-                        (_) => Container(
-                          height: hourRowHeight,
-                          decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(
-                                color: crmColors.border.withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildMonthBookingPill(BuildContext context, _ArtistDayGroup group) {
     return _buildReferencePill(context, group, compact: true);
   }
@@ -2476,48 +2243,6 @@ class CalendarScreen extends HookConsumerWidget {
     return '$h:$m $ampm';
   }
 
-  static Widget _filterChip({
-    required String label,
-    required bool selected,
-    required Color color,
-    required VoidCallback onTap,
-    IconData? icon,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? color : Colors.grey.withValues(alpha: 0.3),
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 13, color: selected ? color : Colors.grey),
-              5.w,
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? color : Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   static List<DateTime> _buildMonthCells(DateTime month) {
     final monthStart = DateTime(month.year, month.month, 1);
     final gridStart = monthStart.subtract(
@@ -2543,4 +2268,495 @@ class _ArtistDayGroup {
   });
 
   int get count => bookings.length;
+}
+
+// One chip in a day column: an assigned artist (possibly several works merged)
+// or a single unassigned work. Works are kept in time order.
+class _DayChipGroup {
+  _DayChipGroup({required this.label, required this.entries});
+  final String label;
+  final List<BookingDisplayEntry> entries;
+}
+
+// One detail line inside the work popup.
+Widget _workDetailRow(CrmTheme crm, IconData icon, String label, String value) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 17, color: crm.primary),
+        10.w,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label.toUpperCase(),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      color: crm.textSecondary)),
+              2.h,
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 13.5, color: crm.textPrimary, height: 1.3)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// Per-work editable state held by the popup (controllers + view/edit flags).
+class _WorkForm {
+  _WorkForm(this.entry)
+      : status = entry.booking.status,
+        customer = TextEditingController(text: entry.booking.customerName),
+        phone = TextEditingController(text: entry.booking.phone),
+        phone2 = TextEditingController(text: entry.booking.secondaryContact),
+        outfit = TextEditingController(text: entry.booking.outfitDetails),
+        room = TextEditingController(text: entry.booking.requiredRoomDetail),
+        travelMode = TextEditingController(text: entry.booking.travelMode),
+        travelTime = TextEditingController(text: entry.booking.travelTime),
+        pocName = TextEditingController(text: entry.booking.pocName),
+        pocPhone = TextEditingController(text: entry.booking.pocPhone),
+        capture =
+            TextEditingController(text: entry.booking.captureStaffDetails),
+        remarks = TextEditingController(text: entry.booking.internalRemarks);
+
+  final BookingDisplayEntry entry;
+  String status;
+  bool editing = false;
+  bool saving = false;
+  bool expanded = false;
+
+  final TextEditingController customer;
+  final TextEditingController phone;
+  final TextEditingController phone2;
+  final TextEditingController outfit;
+  final TextEditingController room;
+  final TextEditingController travelMode;
+  final TextEditingController travelTime;
+  final TextEditingController pocName;
+  final TextEditingController pocPhone;
+  final TextEditingController capture;
+  final TextEditingController remarks;
+
+  void dispose() {
+    for (final c in [
+      customer, phone, phone2, outfit, room, travelMode, travelTime,
+      pocName, pocPhone, capture, remarks
+    ]) {
+      c.dispose();
+    }
+  }
+}
+
+// The single popup that shows all of an artist's works (or one work) in order,
+// each expandable + editable. Saving persists via updateBooking.
+class _WorkDetailsDialog extends ConsumerStatefulWidget {
+  const _WorkDetailsDialog({
+    required this.crm,
+    required this.title,
+    required this.entries,
+  });
+
+  final CrmTheme crm;
+  final String title;
+  final List<BookingDisplayEntry> entries;
+
+  @override
+  ConsumerState<_WorkDetailsDialog> createState() =>
+      _WorkDetailsDialogState();
+}
+
+class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
+  late final List<_WorkForm> forms;
+  bool get single => forms.length == 1;
+
+  static const _statuses = [
+    'pending', 'confirmed', 'completed', 'cancelled', 'postponed'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    forms = widget.entries.map(_WorkForm.new).toList();
+    if (forms.isNotEmpty) forms.first.expanded = true;
+  }
+
+  @override
+  void dispose() {
+    for (final f in forms) {
+      f.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save(_WorkForm f) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => f.saving = true);
+    try {
+      await ref.read(bookingProvider.notifier).updateBooking(
+            f.entry.booking.copyWith(
+              status: f.status,
+              customerName: f.customer.text.trim(),
+              phone: f.phone.text.trim(),
+              secondaryContact: f.phone2.text.trim(),
+              outfitDetails: f.outfit.text.trim(),
+              requiredRoomDetail: f.room.text.trim(),
+              travelMode: f.travelMode.text.trim(),
+              travelTime: f.travelTime.text.trim(),
+              pocName: f.pocName.text.trim(),
+              pocPhone: f.pocPhone.text.trim(),
+              captureStaffDetails: f.capture.text.trim(),
+              internalRemarks: f.remarks.text.trim(),
+            ),
+          );
+      ref.invalidate(bookingProvider);
+      if (!mounted) return;
+      setState(() {
+        f.saving = false;
+        f.editing = false;
+      });
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Booking updated')));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => f.saving = false);
+      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = widget.crm;
+    final head = single
+        ? CalendarScreen._statusColor(forms.first.entry.booking.status)
+        : crm.primary;
+    final headerTitle = single ? forms.first.entry.summaryLabel : widget.title;
+    final headerSub = single
+        ? CalendarScreen._fmtFullDate(forms.first.entry.serviceStart)
+        : '${forms.length} works · ${CalendarScreen._fmtFullDate(forms.first.entry.serviceStart)}';
+
+    return Dialog(
+      insetPadding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 660),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 16),
+              decoration: BoxDecoration(
+                color: head,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(12)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(headerTitle,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800)),
+                        4.h,
+                        Text(headerSub,
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 12.5)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: single
+                  ? SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                      child: _formBody(forms.first),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: forms.length,
+                      separatorBuilder: (_, _) => 10.h,
+                      itemBuilder: (context, i) => _workCard(i, forms[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Collapsed/expanded card for one work in the multi-work list.
+  Widget _workCard(int index, _WorkForm f) {
+    final crm = widget.crm;
+    final e = f.entry;
+    final c = CalendarScreen._statusColor(e.booking.status);
+    final slot = e.eventSlot.trim();
+    final sub = [
+      '${CalendarScreen._fmtTime(e.serviceStart)} – ${CalendarScreen._fmtTime(e.serviceEnd)}',
+      if (slot.isNotEmpty) slot,
+      if (e.service.trim().isNotEmpty) e.service.trim(),
+    ].join('  ·  ');
+
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => f.expanded = !f.expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: c.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: c, width: 1.3),
+                    ),
+                    child: Text('${index + 1}',
+                        style: TextStyle(
+                            color: c,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5)),
+                  ),
+                  10.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e.summaryLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13.5,
+                                color: crm.textPrimary)),
+                        2.h,
+                        Text(sub,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11, color: crm.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  6.w,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: c.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                        e.booking.status.isEmpty
+                            ? 'pending'
+                            : e.booking.status,
+                        style: TextStyle(
+                            color: c,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700)),
+                  ),
+                  Icon(f.expanded ? Icons.expand_less : Icons.expand_more,
+                      color: crm.textSecondary),
+                ],
+              ),
+            ),
+          ),
+          if (f.expanded)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 14, 12),
+              child: _formBody(f),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // The view/edit content + action buttons for one work.
+  Widget _formBody(_WorkForm f) {
+    final crm = widget.crm;
+    final b = f.entry.booking;
+    String dot(String a, String c) =>
+        [a, c].where((e) => e.trim().isNotEmpty).join(' · ');
+
+    if (f.editing) {
+      Widget editField(String label, TextEditingController c,
+              {int maxLines = 1}) =>
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: c,
+              maxLines: maxLines,
+              decoration: InputDecoration(
+                  labelText: label,
+                  isDense: true,
+                  border: const OutlineInputBorder()),
+            ),
+          );
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            initialValue: _statuses.contains(f.status.toLowerCase())
+                ? f.status.toLowerCase()
+                : 'pending',
+            decoration: const InputDecoration(
+                labelText: 'Status',
+                isDense: true,
+                border: OutlineInputBorder()),
+            items: [
+              for (final s in _statuses)
+                DropdownMenuItem(
+                    value: s,
+                    child: Text(s[0].toUpperCase() + s.substring(1)))
+            ],
+            onChanged: (v) => setState(() => f.status = v ?? f.status),
+          ),
+          12.h,
+          editField('Customer', f.customer),
+          Row(children: [
+            Expanded(child: editField('Phone', f.phone)),
+            10.w,
+            Expanded(child: editField('Secondary phone', f.phone2)),
+          ]),
+          editField('Outfit', f.outfit),
+          editField('Required room', f.room),
+          Row(children: [
+            Expanded(child: editField('Travel mode', f.travelMode)),
+            10.w,
+            Expanded(child: editField('Travel time', f.travelTime)),
+          ]),
+          Row(children: [
+            Expanded(child: editField('POC name', f.pocName)),
+            10.w,
+            Expanded(child: editField('POC phone', f.pocPhone)),
+          ]),
+          editField('Capture', f.capture),
+          editField('Remarks', f.remarks, maxLines: 3),
+          Row(children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: f.saving
+                    ? null
+                    : () => setState(() => f.editing = false),
+                child: const Text('Cancel'),
+              ),
+            ),
+            10.w,
+            Expanded(
+              child: FilledButton(
+                onPressed: f.saving ? null : () => _save(f),
+                child: f.saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Text('Save'),
+              ),
+            ),
+          ]),
+        ],
+      );
+    }
+
+    final artists = b.assignedStaff
+        .where((a) => a.artistName.trim().isNotEmpty)
+        .map((a) => a.artistName.trim())
+        .toSet()
+        .join(', ');
+    final addons = b.addons
+        .map((a) => a.service.trim())
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+    final rows = <(IconData, String, String)>[
+      (Icons.person_outline, 'Customer', f.customer.text),
+      (Icons.call_outlined, 'Phone', dot(f.phone.text, f.phone2.text)),
+      (Icons.brush_outlined, 'Artists / needs', artists),
+      (Icons.workspace_premium_outlined, 'Package', b.service),
+      (Icons.add_circle_outline, 'Add-ons', addons),
+      (Icons.schedule, 'Time',
+          '${CalendarScreen._fmtTime(b.serviceStart)} – ${CalendarScreen._fmtTime(b.serviceEnd)}'),
+      (Icons.event_seat_outlined, 'Slot', b.eventSlot),
+      (Icons.checkroom_outlined, 'Outfit', f.outfit.text),
+      (Icons.meeting_room_outlined, 'Required room', f.room.text),
+      (Icons.directions_car_outlined, 'Travel',
+          dot(f.travelMode.text, f.travelTime.text)),
+      (Icons.support_agent_outlined, 'POC',
+          dot(f.pocName.text, f.pocPhone.text)),
+      (Icons.local_taxi_outlined, 'Driver', b.driverName),
+      (Icons.videocam_outlined, 'Capture', f.capture.text),
+      (Icons.place_outlined, 'Location',
+          b.address.trim().isNotEmpty ? b.address : b.district),
+      (Icons.notes_outlined, 'Remarks', f.remarks.text),
+    ].where((r) => r.$3.trim().isNotEmpty).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final r in rows) _workDetailRow(crm, r.$1, r.$2, r.$3),
+        6.h,
+        Row(children: [
+          if (b.mapUrl.trim().isNotEmpty) ...[
+            IconButton(
+              tooltip: 'Map',
+              onPressed: () async {
+                final uri = Uri.tryParse(b.mapUrl.trim());
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              icon: const Icon(Icons.map_outlined),
+            ),
+          ],
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() => f.editing = true),
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              label: const Text('Edit'),
+            ),
+          ),
+          10.w,
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                context.push(
+                    '/booking/manage/${b.id}?entry=${Uri.encodeComponent(f.entry.id)}');
+              },
+              icon: const Icon(Icons.open_in_new, size: 18),
+              label: const Text('Open booking'),
+            ),
+          ),
+        ]),
+      ],
+    );
+  }
 }
