@@ -81,20 +81,20 @@ class CalendarScreen extends HookConsumerWidget {
     );
   }
 
-  // Colour by booking status. Completed shows GREEN (per requirement); the rest
-  // stay distinct so a glance tells you the state.
+  // Colour by booking status. Softer, lower-contrast tones (still readable with
+  // white text). Completed shows GREEN (per requirement); the rest stay distinct.
   static Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
-        return const Color(0xFF2E7D32); // green
+        return const Color(0xFF5AA06E); // soft green
       case 'cancelled':
-        return const Color(0xFFD32F2F); // red
+        return const Color(0xFFD07A7A); // soft red
       case 'postponed':
-        return const Color(0xFFE65100); // orange
+        return const Color(0xFFDDA05F); // soft amber
       case 'confirmed':
-        return const Color(0xFF1565C0); // blue
+        return const Color(0xFF6699CC); // soft blue
       default:
-        return const Color(0xFF546E7A); // slate (pending / other)
+        return const Color(0xFF7C8E9A); // soft slate (pending / other)
     }
   }
 
@@ -380,7 +380,7 @@ class CalendarScreen extends HookConsumerWidget {
     final statuses =
         entries.map((e) => e.booking.status.toLowerCase()).toSet();
     if (statuses.length == 1) return _statusColor(statuses.first);
-    return const Color(0xFF546E7A);
+    return const Color(0xFF7C8E9A); // soft slate (mixed)
   }
 
   // One chip per artist (or per unassigned work). When the artist has several
