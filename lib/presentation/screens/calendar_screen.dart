@@ -6,11 +6,19 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
 import '../../core/models/employee.dart';
+import '../../core/models/zone.dart';
+import '../../core/models/geographic_state.dart';
+import '../../core/models/service_region.dart';
+import '../../core/models/district.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/blocked_date_service.dart';
 import '../../services/employee_service.dart';
+import '../../services/zone_service.dart';
+import '../../services/state_service.dart';
+import '../../services/region_service.dart';
+import '../../services/district_service.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/providers/auth_provider.dart';
 
@@ -587,6 +595,26 @@ class CalendarScreen extends HookConsumerWidget {
     final viewMode = useState<String>('Month');
     final selectedArtistFilter = useState<String>(isArtist ? (artistEmployeeId ?? 'all') : 'all');
 
+    // Geographic filters (zone → state → region → district).
+    final zoneFilter = useState<String>('all');
+    final stateFilter = useState<String>('all');
+    final regionFilter = useState<String>('all');
+    final districtFilter = useState<String>('all');
+    final zones = ref.watch(zonesProvider).value ?? const [];
+    final states = ref.watch(statesProvider).value ?? const [];
+    final regions = ref.watch(regionsProvider).value ?? const [];
+    final districts = ref.watch(districtsProvider).value ?? const [];
+    // Resolve a booking's region/state/zone up the hierarchy.
+    final districtToRegion = {for (final d in districts) d.id: d.regionId};
+    final regionToState = {for (final r in regions) r.id: r.stateId};
+    final stateToZone = {for (final s in states) s.id: s.zoneId};
+    final activeGeoCount = [
+      zoneFilter.value,
+      stateFilter.value,
+      regionFilter.value,
+      districtFilter.value,
+    ].where((v) => v != 'all').length;
+
     final weekDays = List.generate(
       7,
       (i) => weekStart.value.add(Duration(days: i)),
@@ -701,6 +729,30 @@ class CalendarScreen extends HookConsumerWidget {
     }
 
     final filteredCalendarBookings = calendarBookings.where((booking) {
+      // Geographic filters. Resolve the booking's state/zone from its region.
+      if (activeGeoCount > 0) {
+        final bDistrictId = booking.districtId;
+        // Prefer the booking's own regionId; fall back to its district's region.
+        final bRegionId = booking.regionId.isNotEmpty
+            ? booking.regionId
+            : (districtToRegion[bDistrictId] ?? '');
+        final bStateId = regionToState[bRegionId] ?? '';
+        final bZoneId = stateToZone[bStateId] ?? '';
+        if (zoneFilter.value != 'all' && bZoneId != zoneFilter.value) {
+          return false;
+        }
+        if (stateFilter.value != 'all' && bStateId != stateFilter.value) {
+          return false;
+        }
+        if (regionFilter.value != 'all' && bRegionId != regionFilter.value) {
+          return false;
+        }
+        if (districtFilter.value != 'all' &&
+            bDistrictId != districtFilter.value) {
+          return false;
+        }
+      }
+
       final filter = selectedArtistFilter.value;
       if (filter == 'all') return true;
       if (filter == 'unassigned') {
@@ -715,6 +767,19 @@ class CalendarScreen extends HookConsumerWidget {
             assignment.employeeId == filter,
       );
     }).toList();
+
+    void openGeoFilters() => _openGeoFilters(
+          context,
+          crmColors,
+          zones: zones,
+          states: states,
+          regions: regions,
+          districts: districts,
+          zoneFilter: zoneFilter,
+          stateFilter: stateFilter,
+          regionFilter: regionFilter,
+          districtFilter: districtFilter,
+        );
 
     Future<void> manageBlockedDates() async {
       final reasonCtrl = TextEditingController();
@@ -1157,6 +1222,16 @@ class CalendarScreen extends HookConsumerWidget {
                                       isArtist,
                                     ),
                                   ),
+                                  if (!isArtist) ...[
+                                    8.w,
+                                    _geoFilterButton(
+                                      context,
+                                      crmColors,
+                                      activeCount: activeGeoCount,
+                                      compact: true,
+                                      onTap: openGeoFilters,
+                                    ),
+                                  ],
                                   12.w,
                                   SegmentedButton<String>(
                                     segments: const [
@@ -1229,6 +1304,16 @@ class CalendarScreen extends HookConsumerWidget {
                                     selectedArtistFilter,
                                     isArtist,
                                   ),
+                                  if (!isArtist) ...[
+                                    12.w,
+                                    _geoFilterButton(
+                                      context,
+                                      crmColors,
+                                      activeCount: activeGeoCount,
+                                      compact: false,
+                                      onTap: openGeoFilters,
+                                    ),
+                                  ],
                                   16.w,
                                   SegmentedButton<String>(
                                     segments: const [
@@ -1945,6 +2030,212 @@ class CalendarScreen extends HookConsumerWidget {
       if (artist.id == value) return artist.name;
     }
     return 'All Staff';
+  }
+
+  // Location-filter trigger button (icon + count badge). Opens the geo sheet.
+  Widget _geoFilterButton(
+    BuildContext context,
+    CrmTheme crm, {
+    required int activeCount,
+    required bool compact,
+    required VoidCallback onTap,
+  }) {
+    final active = activeCount > 0;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: EdgeInsets.symmetric(
+              horizontal: compact ? 12 : 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? crm.primary.withValues(alpha: 0.10) : crm.surface,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+                color: active
+                    ? crm.primary.withValues(alpha: 0.5)
+                    : crm.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.public,
+                  size: 18, color: active ? crm.primary : crm.textPrimary),
+              if (!compact) ...[
+                8.w,
+                Text('Location',
+                    style: TextStyle(
+                        color: active ? crm.primary : crm.textPrimary,
+                        fontWeight: FontWeight.w500)),
+              ],
+              if (active) ...[
+                6.w,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                      color: crm.primary,
+                      borderRadius: BorderRadius.circular(10)),
+                  child: Text('$activeCount',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Cascading Zone → State → Region → District filter sheet. Selections write
+  // straight to the notifiers so the calendar updates live.
+  void _openGeoFilters(
+    BuildContext context,
+    CrmTheme crm, {
+    required List<ZoneModel> zones,
+    required List<GeographicState> states,
+    required List<ServiceRegion> regions,
+    required List<District> districts,
+    required ValueNotifier<String> zoneFilter,
+    required ValueNotifier<String> stateFilter,
+    required ValueNotifier<String> regionFilter,
+    required ValueNotifier<String> districtFilter,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: crm.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheet) {
+            // Child options depend on the selected parent (cascading).
+            final visibleStates = zoneFilter.value == 'all'
+                ? states
+                : states.where((s) => s.zoneId == zoneFilter.value).toList();
+            final visibleRegions = stateFilter.value != 'all'
+                ? regions
+                    .where((r) => r.stateId == stateFilter.value)
+                    .toList()
+                : (zoneFilter.value == 'all'
+                    ? regions
+                    : regions
+                        .where((r) =>
+                            visibleStates.any((s) => s.id == r.stateId))
+                        .toList());
+            final visibleDistricts = regionFilter.value != 'all'
+                ? districts
+                    .where((d) => d.regionId == regionFilter.value)
+                    .toList()
+                : ((stateFilter.value == 'all' && zoneFilter.value == 'all')
+                    ? districts
+                    : districts
+                        .where((d) =>
+                            visibleRegions.any((r) => r.id == d.regionId))
+                        .toList());
+
+            Widget dd(String label, String value, List<(String, String)> opts,
+                ValueChanged<String> onChanged) {
+              final ids = {'all', ...opts.map((o) => o.$1)};
+              final v = ids.contains(value) ? value : 'all';
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: DropdownButtonFormField<String>(
+                  initialValue: v,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                      labelText: label,
+                      isDense: true,
+                      border: const OutlineInputBorder()),
+                  items: [
+                    DropdownMenuItem(value: 'all', child: Text('All ${label}s')),
+                    for (final o in opts)
+                      DropdownMenuItem(value: o.$1, child: Text(o.$2)),
+                  ],
+                  onChanged: (val) => onChanged(val ?? 'all'),
+                ),
+              );
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 16,
+                  bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.public, color: crm.primary),
+                      8.w,
+                      Text('Filter by location',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: crm.textPrimary)),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          zoneFilter.value = 'all';
+                          stateFilter.value = 'all';
+                          regionFilter.value = 'all';
+                          districtFilter.value = 'all';
+                          setSheet(() {});
+                        },
+                        child: const Text('Clear all'),
+                      ),
+                    ],
+                  ),
+                  12.h,
+                  dd('Zone', zoneFilter.value,
+                      [for (final z in zones) (z.id, z.name)], (v) {
+                    zoneFilter.value = v;
+                    stateFilter.value = 'all';
+                    regionFilter.value = 'all';
+                    districtFilter.value = 'all';
+                    setSheet(() {});
+                  }),
+                  dd('State', stateFilter.value,
+                      [for (final s in visibleStates) (s.id, s.name)], (v) {
+                    stateFilter.value = v;
+                    regionFilter.value = 'all';
+                    districtFilter.value = 'all';
+                    setSheet(() {});
+                  }),
+                  dd('Region', regionFilter.value,
+                      [for (final r in visibleRegions) (r.id, r.name)], (v) {
+                    regionFilter.value = v;
+                    districtFilter.value = 'all';
+                    setSheet(() {});
+                  }),
+                  dd('District', districtFilter.value,
+                      [for (final d in visibleDistricts) (d.id, d.name)], (v) {
+                    districtFilter.value = v;
+                    setSheet(() {});
+                  }),
+                  4.h,
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetCtx),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _weekView(
