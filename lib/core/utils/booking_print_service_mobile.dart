@@ -57,9 +57,6 @@ Future<void> printBookingDetails(
             double.parse((incl * 2.5 / 105.0).toStringAsFixed(2));
         String inr(double v) => 'INR ${v.toStringAsFixed(2)}';
 
-        final paymentMode = booking.paymentMode.trim().isNotEmpty
-            ? booking.paymentMode.trim()
-            : 'N/A';
         final hsnCode = booking.hsnCode.trim().isNotEmpty
             ? booking.hsnCode.trim()
             : '998361';

@@ -466,10 +466,10 @@ String _buildSingleBookingHtml(
 
 String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant) {
   // ── GST helpers ────────────────────────────────────────────────────────────
-  double _gstBase(double incl) => double.parse((incl * 100.0 / 105.0).toStringAsFixed(2));
-  double _gstCgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
-  double _gstSgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
-  String _inr(double v) => '₹${v.toStringAsFixed(2)}';
+  double gstBase(double incl) => double.parse((incl * 100.0 / 105.0).toStringAsFixed(2));
+  double gstCgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
+  double gstSgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
+  String inr(double v) => '₹${v.toStringAsFixed(2)}';
 
   // ── Booking info ────────────────────────────────────────────────────────────
   final addonTotal      = _addonTotal(booking);
@@ -480,9 +480,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   final invoiceDateStr =
       '${invoiceDate.day.toString().padLeft(2, '0')}/${invoiceDate.month.toString().padLeft(2, '0')}/${invoiceDate.year}';
 
-  final paymentMode = booking.paymentMode.trim().isNotEmpty
-      ? _escape(booking.paymentMode.trim())
-      : 'N/A';
+
   final hsnCode = booking.hsnCode.trim().isNotEmpty ? booking.hsnCode.trim() : '998361';
 
   final invoiceStatus = (booking.status.toLowerCase() == 'confirmed' ||
@@ -541,43 +539,43 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // ── Services table rows ─────────────────────────────────────────────────────
   final serviceRows = StringBuffer();
   // Main package row
-  final pkgBase = _gstBase(packageAmount);
-  final pkgCgst = _gstCgst(packageAmount);
-  final pkgSgst = _gstSgst(packageAmount);
+  final pkgBase = gstBase(packageAmount);
+  final pkgCgst = gstCgst(packageAmount);
+  final pkgSgst = gstSgst(packageAmount);
   serviceRows.write('''
 <tr>
   <td>${_escape(booking.service)}${variant == BookingPrintVariant.clientAdvanceReceipt ? " (Advance Payment)" : ""}</td>
   <td class="center">${_escape(hsnCode)}</td>
-  <td class="right">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : (variant == BookingPrintVariant.clientConfirmation ? _inr(packageAmount) : _inr(pkgBase))}</td>
-  ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : "<td class=\"right\">${_inr(pkgCgst)}</td><td class=\"right\">${_inr(pkgSgst)}</td>"}
-  <td class="right fw600">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : _inr(packageAmount)}</td>
+  <td class="right">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : (variant == BookingPrintVariant.clientConfirmation ? inr(packageAmount) : inr(pkgBase))}</td>
+  ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : "<td class=\"right\">${inr(pkgCgst)}</td><td class=\"right\">${inr(pkgSgst)}</td>"}
+  <td class="right fw600">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : inr(packageAmount)}</td>
 </tr>''');
   // Add-on rows
   if (variant != BookingPrintVariant.clientAdvanceReceipt) {
     for (final addon in booking.addons) {
       final addonIncl  = addon.amount * addon.persons;
-      final addonBase  = _gstBase(addonIncl);
-      final addonCgst  = _gstCgst(addonIncl);
-      final addonSgst  = _gstSgst(addonIncl);
+      final addonBase  = gstBase(addonIncl);
+      final addonCgst  = gstCgst(addonIncl);
+      final addonSgst  = gstSgst(addonIncl);
       serviceRows.write('''
 <tr>
   <td>${_escape(addon.service)}${addon.persons > 1 ? ' × ${addon.persons}' : ''}</td>
   <td class="center">${_escape(hsnCode)}</td>
-  <td class="right">${variant == BookingPrintVariant.clientConfirmation ? _inr(addonIncl) : _inr(addonBase)}</td>
-  ${variant == BookingPrintVariant.clientConfirmation ? "" : "<td class=\"right\">${_inr(addonCgst)}</td><td class=\"right\">${_inr(addonSgst)}</td>"}
-  <td class="right fw600">${_inr(addonIncl)}</td>
+  <td class="right">${variant == BookingPrintVariant.clientConfirmation ? inr(addonIncl) : inr(addonBase)}</td>
+  ${variant == BookingPrintVariant.clientConfirmation ? "" : "<td class=\"right\">${inr(addonCgst)}</td><td class=\"right\">${inr(addonSgst)}</td>"}
+  <td class="right fw600">${inr(addonIncl)}</td>
 </tr>''');
     }
   }
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
-  final totalCgst = _gstCgst(booking.totalPrice);
-  final totalSgst = _gstSgst(booking.totalPrice);
+  final totalCgst = gstCgst(booking.totalPrice);
+  final totalSgst = gstSgst(booking.totalPrice);
   final totalGst  = double.parse((totalCgst + totalSgst).toStringAsFixed(2));
 
   // ── Discount line ────────────────────────────────────────────────────────────
   final discountLine = booking.discountAmount > 0
-      ? '''<tr class="sum-row"><td colspan="2" class="right sum-label">Discount</td><td class="right sum-val">– ${_inr(booking.discountAmount)}</td></tr>'''
+      ? '''<tr class="sum-row"><td colspan="2" class="right sum-label">Discount</td><td class="right sum-val">– ${inr(booking.discountAmount)}</td></tr>'''
       : '';
 
   // ── Artist card section ──────────────────────────────────────────────────────
@@ -675,28 +673,28 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
     <table class="summary-table">
       <tr class="sum-row">
         <td colspan="2" class="right sum-label">${variant == BookingPrintVariant.clientAdvanceReceipt ? "Total Received" : (variant == BookingPrintVariant.clientConfirmation ? "Subtotal" : "Subtotal (Incl. GST)")}</td>
-        <td class="right sum-val">${variant == BookingPrintVariant.clientAdvanceReceipt ? _inr(booking.advanceAmount) : _inr(booking.totalPrice)}</td>
+        <td class="right sum-val">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : inr(booking.totalPrice)}</td>
       </tr>
       ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : '''<tr class="sum-row gst-breakdown-row">
         <td class="right sum-label sub-indent" colspan="2">CGST @ 2.5%</td>
-        <td class="right sum-val sub-val">${_inr(totalCgst)}</td>
+        <td class="right sum-val sub-val">${inr(totalCgst)}</td>
       </tr>
       <tr class="sum-row gst-breakdown-row">
         <td class="right sum-label sub-indent" colspan="2">SGST @ 2.5%</td>
-        <td class="right sum-val sub-val">${_inr(totalSgst)}</td>
+        <td class="right sum-val sub-val">${inr(totalSgst)}</td>
       </tr>
       <tr class="sum-row">
         <td colspan="2" class="right sum-label">Total GST</td>
-        <td class="right sum-val">${_inr(totalGst)}</td>
+        <td class="right sum-val">${inr(totalGst)}</td>
       </tr>'''}
       ${variant == BookingPrintVariant.clientAdvanceReceipt ? "" : discountLine}
       ${variant == BookingPrintVariant.clientAdvanceReceipt ? "" : '''<tr class="sum-row">
         <td colspan="2" class="right sum-label">Advance Paid</td>
-        <td class="right sum-val">${_inr(booking.advanceAmount)}</td>
+        <td class="right sum-val">${inr(booking.advanceAmount)}</td>
       </tr>'''}
       ${(variant == BookingPrintVariant.clientAdvanceReceipt || remainingBalance <= 0) ? "" : '''<tr class="balance-due-row">
         <td colspan="2" class="right balance-label">BALANCE DUE</td>
-        <td class="right balance-val">${_inr(remainingBalance)}</td>
+        <td class="right balance-val">${inr(remainingBalance)}</td>
       </tr>'''}
     </table>
   </div>
@@ -725,41 +723,6 @@ String _formatDate(DateTime value) {
   return '$day/$month/${value.year}';
 }
 
-String _formatMonthYear(DateTime value) {
-  const months = [
-    'JAN',
-    'FEB',
-    'MAR',
-    'APR',
-    'MAY',
-    'JUN',
-    'JUL',
-    'AUG',
-    'SEP',
-    'OCT',
-    'NOV',
-    'DEC',
-  ];
-  return '${months[value.month - 1]} ${value.year}';
-}
-
-String _formatLongDate(DateTime value) {
-  const months = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
-  return '${months[value.month - 1]} ${value.day}, ${value.year}';
-}
 
 String _formatTime(DateTime value) {
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;

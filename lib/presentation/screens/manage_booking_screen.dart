@@ -294,14 +294,10 @@ class ManageBookingScreen extends HookConsumerWidget {
           // For bookingItems, item.totalPrice is BASE only; for regular bookings
           // booking.totalPrice is the grand total. Compute the correct subtotal
           // to display so it always reflects base + addons.
-          final initAddonTotal = booking.addons.fold(
+          booking.addons.fold(
             0.0,
             (sum, addon) => sum + (addon.amount * addon.persons),
           );
-          final initBasePrice = selectedBookingItemIndex >= 0
-              ? (selectedDisplayEntry?.totalPrice ?? 0.0)
-              : ((selectedDisplayEntry?.totalPrice ?? booking.totalPrice) - initAddonTotal)
-                  .clamp(0.0, double.infinity);
           advanceCtrl.text =
               (selectedDisplayEntry?.advanceAmount ?? booking.advanceAmount)
                   .toStringAsFixed(0);

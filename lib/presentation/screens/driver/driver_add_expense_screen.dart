@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../../core/theme/crm_theme.dart';
 import '../../../services/fleet_service.dart';
 import '../../../services/fuel_expense_service.dart';
 
@@ -15,7 +14,6 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
     final amountCtrl = useTextEditingController();
     final descriptionCtrl = useTextEditingController();
     final isSaving = useState(false);
-    final crmColors = context.crmColors;
 
     Future<void> submitExpense() async {
       final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;

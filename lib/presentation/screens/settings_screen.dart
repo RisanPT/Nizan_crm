@@ -62,7 +62,7 @@ class SettingsScreen extends HookConsumerWidget {
             builder: (context, setState) {
               // employees already fetched at build level — safe to use here
               final employees = asyncEmployees.value ?? [];
-              final artists = employees
+              employees
                   .where((e) => e.artistRole != 'driver')
                   .toList();
                   

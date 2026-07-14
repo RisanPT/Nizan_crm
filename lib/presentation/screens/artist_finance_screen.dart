@@ -64,28 +64,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
   String _currency(double v) => '₹ ${v.toStringAsFixed(0)}';
 
-  Color _getCategoryColor(String cat) {
-    switch (cat) {
-      case 'food':
-        return const Color(0xFFB3261E);
-      case 'travel':
-        return const Color(0xFF6750A4);
-      case 'stay':
-        return const Color(0xFF039BE5);
-      case 'materials':
-        return const Color(0xFF2E7D32);
-      case 'fuel':
-        return const Color(0xFF00796B);
-      default:
-        return const Color(0xFFF57C00);
-    }
-  }
 
-  Color _statusColor(String s, CrmTheme c) {
-    if (s == 'verified') return c.success;
-    if (s == 'rejected') return c.destructive;
-    return c.warning;
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -156,7 +135,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       0.0,
       (sum, item) => sum + item.amount,
     );
-    final totalExpenses = filteredExpenses.fold(
+    filteredExpenses.fold(
       0.0,
       (sum, item) => sum + item.amount,
     );

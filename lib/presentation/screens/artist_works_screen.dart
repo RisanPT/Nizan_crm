@@ -2363,7 +2363,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
       ref.invalidate(artistAssignedWorksProvider);
       ref.invalidate(bookingProvider);
 
-      if (mounted) {
+      if (context.mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2377,7 +2377,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
         );
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -2571,12 +2571,9 @@ class _PayCard extends StatelessWidget {
 class _EmptyState extends StatelessWidget {
   final String title;
   final String message;
-  final IconData icon;
-
   const _EmptyState({
     this.title = 'All Clear! 🎉',
     this.message = 'You have no assigned works right now.\nEnjoy your free time!',
-    this.icon = Icons.celebration_rounded,
   });
 
   @override
@@ -2596,7 +2593,7 @@ class _EmptyState extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                icon,
+                Icons.celebration_rounded,
                 size: 48,
                 color: crm.primary.withValues(alpha: 0.5),
               ),

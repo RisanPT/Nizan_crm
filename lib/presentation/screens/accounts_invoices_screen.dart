@@ -389,16 +389,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: crm.primary.withOpacity(0.04),
+                    color: crm.primary.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: crm.primary.withOpacity(0.12)),
+                    border: Border.all(color: crm.primary.withValues(alpha: 0.12)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: crm.primary.withOpacity(0.1),
+                          color: crm.primary.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.calendar_month, color: crm.primary, size: 24),
@@ -449,16 +449,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.teal.shade50.withOpacity(0.3),
+                    color: Colors.teal.shade50.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.teal.shade200.withOpacity(0.5)),
+                    border: Border.all(color: Colors.teal.shade200.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.teal.shade100.withOpacity(0.5),
+                          color: Colors.teal.shade100.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.bookmark_outline, color: Colors.teal.shade700, size: 24),
@@ -517,11 +517,10 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     }
     return ListView.separated(
       itemCount: invoices.length,
-      separatorBuilder: (_, __) => Divider(height: 1, color: crm.border),
+      separatorBuilder: (_, _) => Divider(height: 1, color: crm.border),
       itemBuilder: (context, index) {
         final b = invoices[index];
         final isSelected = _selectedInvoice?.id == b.id;
-        final bal = b.balanceDue;
 
         final isAdvanceRow = _selectedMonth != null &&
             b.createdAt != null &&
@@ -537,7 +536,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
 
         return ListTile(
           selected: isSelected,
-          selectedTileColor: crm.primary.withOpacity(0.05),
+          selectedTileColor: crm.primary.withValues(alpha: 0.05),
           contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
           onTap: () => setState(() => _selectedInvoice = b),
           title: Row(
@@ -690,7 +689,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                       spreadRadius: 2,
                     )

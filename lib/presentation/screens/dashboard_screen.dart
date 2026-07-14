@@ -1125,7 +1125,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         .where((b) => b.status.toLowerCase() == 'completed')
         .fold<double>(0, (sum, b) => sum + b.totalPrice);
     if (prevRevenue == 0) {
-      final totalSales = filteredBookings
+      filteredBookings
           .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
           .fold<double>(0, (sum, b) => sum + b.totalPrice);
       prevRevenue = prevMonthBookings
