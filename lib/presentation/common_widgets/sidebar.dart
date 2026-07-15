@@ -64,6 +64,7 @@ class Sidebar extends ConsumerWidget {
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
+    final isMarketingRoute = currentPath.startsWith('/marketing');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
     final isCollapsed = isTablet && !isMobile;
@@ -551,6 +552,47 @@ class Sidebar extends ConsumerWidget {
                           isCollapsed: false,
                           isSelected: currentPath == '/inventory/purchases',
                           onTap: () => context.go('/inventory/purchases'),
+                        ),
+                      ),
+                    ],
+                  ],
+                  if (role.canManageMarketing) ...[
+                    _SidebarItem(
+                      icon: Icons.campaign_outlined,
+                      title: 'Marketing',
+                      isCollapsed: isCollapsed,
+                      isSelected: isMarketingRoute,
+                      onTap: () => context.go('/marketing/dashboard'),
+                    ),
+                    if (!isCollapsed) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.donut_small_outlined,
+                          title: 'Dashboard',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/marketing/dashboard',
+                          onTap: () => context.go('/marketing/dashboard'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.dataset_outlined,
+                          title: 'Competitors',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/marketing/competitors',
+                          onTap: () => context.go('/marketing/competitors'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.leaderboard_outlined,
+                          title: 'Weekly Score',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/marketing/scores',
+                          onTap: () => context.go('/marketing/scores'),
                         ),
                       ),
                     ],

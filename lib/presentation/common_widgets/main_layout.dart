@@ -79,6 +79,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location == '/accounts/artist-collections') return 2;
       // Invoice / Budget / Profile live in the Menu sheet.
       return 3;
+    } else if (role == AppRole.marketingAdmin) {
+      if (location == '/marketing/dashboard') return 0;
+      if (location.startsWith('/marketing/competitors')) return 1;
+      if (location.startsWith('/marketing/scores')) return 2;
+      return 0;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -143,6 +148,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 1: context.go('/finance'); break;
         case 2: context.go('/accounts/artist-collections'); break;
         case 3: showAccountsMenuSheet(context, ref); break; // opens the menu
+      }
+    } else if (role == AppRole.marketingAdmin) {
+      switch (index) {
+        case 0: context.go('/marketing/dashboard'); break;
+        case 1: context.go('/marketing/competitors'); break;
+        case 2: context.go('/marketing/scores'); break;
       }
     } else {
       switch (index) {
@@ -322,6 +333,24 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                                 icon: Icon(Icons.menu),
                                 selectedIcon: Icon(Icons.menu_open),
                                 label: 'Menu',
+                              ),
+                            ]
+                          : role == AppRole.marketingAdmin
+                          ? const [
+                              NavigationDestination(
+                                icon: Icon(Icons.donut_small_outlined),
+                                selectedIcon: Icon(Icons.donut_small),
+                                label: 'Overview',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.dataset_outlined),
+                                selectedIcon: Icon(Icons.dataset),
+                                label: 'Competitors',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.leaderboard_outlined),
+                                selectedIcon: Icon(Icons.leaderboard),
+                                label: 'Score',
                               ),
                             ]
                           : const [

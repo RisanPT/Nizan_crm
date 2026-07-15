@@ -24,6 +24,9 @@ import '../../presentation/screens/accounts_invoices_screen.dart';
 
 import '../../presentation/screens/login_screen.dart';
 import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
+import '../../features/marketing/presentation/screens/competitors_screen.dart';
+import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
@@ -96,6 +99,7 @@ bool isRouteAllowed(String path, AppRole role, {bool inventoryAccess = false}) {
         (role == AppRole.artist && inventoryAccess);
   }
   if (path.startsWith('/inventory')) return role.canManageInventory;
+  if (path.startsWith('/marketing')) return role.canManageMarketing;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || role.isFullAccess;
   if (path.startsWith('/settings')) return role.canSeeSettings;
   return true; // unknown routes — let the 404 handle it
@@ -218,6 +222,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Invoices';
           } else if (state.uri.path == '/accounts/bills') {
             title = 'Bills & Payables';
+          } else if (state.uri.path == '/marketing/dashboard') {
+            title = 'Marketing Intelligence';
+          } else if (state.uri.path == '/marketing/competitors') {
+            title = 'Competitors';
+          } else if (state.uri.path == '/marketing/scores') {
+            title = 'Weekly Growth Score';
           } else if (state.uri.path == '/finance') {
             title = 'Artist Finance';
           } else if (state.uri.path == '/works') {
@@ -352,6 +362,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/bills',
             builder: (context, state) => const AccountsBillsScreen(),
+          ),
+          // ── Marketing (Competitor Intelligence) ──────────────────────
+          GoRoute(
+            path: '/marketing/dashboard',
+            builder: (context, state) => const MarketingDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/competitors',
+            builder: (context, state) => const CompetitorsScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/scores',
+            builder: (context, state) => const GrowthScoresScreen(),
           ),
           // ── Inventory ────────────────────────────────────────────────
           GoRoute(

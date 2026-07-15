@@ -196,6 +196,14 @@ class SettingsScreen extends HookConsumerWidget {
                                 color: Colors.pink,
                               ),
                             ),
+                            DropdownMenuItem(
+                              value: 'marketing_admin',
+                              child: _RoleItem(
+                                label: 'Marketing Admin',
+                                sub: 'Competitor intelligence & content',
+                                color: Colors.indigo,
+                              ),
+                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {

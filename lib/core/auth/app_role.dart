@@ -9,6 +9,7 @@ enum AppRole {
   fleetManager,
   driver,
   inventoryManager,
+  marketingAdmin,
   unknown;
 
   static AppRole fromString(String? raw) {
@@ -33,6 +34,9 @@ enum AppRole {
       case 'inventory_manager':
       case 'inventorymanager':
         return AppRole.inventoryManager;
+      case 'marketing_admin':
+      case 'marketingadmin':
+        return AppRole.marketingAdmin;
       default:
         return AppRole.unknown;
     }
@@ -84,6 +88,9 @@ enum AppRole {
   /// inventoryAccess flag (checked against the session, not the role alone).
   bool get canManageInventory => isFullAccess || this == inventoryManager;
 
+  /// Marketing / Competitor Intelligence module (digital marketing admin).
+  bool get canManageMarketing => isFullAccess || this == marketingAdmin;
+
   /// Settings (user management etc.)
   bool get canSeeSettings => isFullAccess;
 
@@ -116,6 +123,8 @@ enum AppRole {
         return '/fleet/assignments';
       case AppRole.inventoryManager:
         return '/inventory';
+      case AppRole.marketingAdmin:
+        return '/marketing/dashboard';
       case AppRole.driver:
         return '/driver/jobs'; // Adjust if driver dashboard path is different
       case AppRole.manager:
