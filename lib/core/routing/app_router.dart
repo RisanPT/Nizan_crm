@@ -23,7 +23,7 @@ import '../../presentation/screens/accounts_invoices_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
-import '../../presentation/screens/sales_bookings_screen.dart';
+import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
