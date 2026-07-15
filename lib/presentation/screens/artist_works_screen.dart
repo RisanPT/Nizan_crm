@@ -1662,44 +1662,134 @@ class _ExpandedDetails extends ConsumerWidget {
                 14.h,
               ],
 
-              // Outfit details
-              if (booking.outfitDetails.isNotEmpty) ...[
-                _DetailLabel('Outfit Details'),
+              // Outfit looks (multi-look support)
+              if (booking.outfitLooks.isNotEmpty || booking.outfitDetails.isNotEmpty) ...[
+                _DetailLabel('Outfit'),
                 6.h,
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF5F3FF),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.checkroom_rounded,
-                        size: 16,
-                        color: Color(0xFF8B5CF6),
-                      ),
-                      8.w,
-                      Expanded(
-                        child: Text(
-                          booking.outfitDetails,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF4C1D95),
-                            height: 1.4,
+                ...() {
+                  // Use structured looks if available, otherwise fall back to legacy
+                  final looks = booking.outfitLooks.isNotEmpty
+                      ? booking.outfitLooks
+                      : [OutfitLook(outfitDetails: booking.outfitDetails)];
+                  return looks.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final look = entry.value;
+                    final title = look.lookLabel.isNotEmpty
+                        ? look.lookLabel
+                        : (looks.length > 1 ? 'Look ${i + 1}' : 'Outfit');
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: i < looks.length - 1 ? 8 : 0),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F3FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
                           ),
                         ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Look header
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(10),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.checkroom_rounded,
+                                    size: 13,
+                                    color: Color(0xFF8B5CF6),
+                                  ),
+                                  6.w,
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF5B21B6),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Look body
+                            if (look.outfitDetails.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                                child: Text(
+                                  look.outfitDetails,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF4C1D95),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            // Map URL button
+                            if (look.mapUrl.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                                child: GestureDetector(
+                                  onTap: () => _openMapUrl(look.mapUrl, context),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.location_on_rounded,
+                                          size: 13,
+                                          color: Color(0xFF059669),
+                                        ),
+                                        6.w,
+                                        const Text(
+                                          'Open Location in Maps',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF059669),
+                                          ),
+                                        ),
+                                        6.w,
+                                        const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 11,
+                                          color: Color(0xFF059669),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
-                ),
+                    );
+                  }).toList();
+                }(),
                 14.h,
               ],
+
 
               if (booking.staffInstructions.isNotEmpty) ...[
                 _DetailLabel('Instructions'),

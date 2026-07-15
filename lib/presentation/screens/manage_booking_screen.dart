@@ -242,7 +242,8 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
     final roomCtrl = useTextEditingController();
     final secondaryPhoneCtrl = useTextEditingController();
-    final outfitCtrl = useTextEditingController();
+    // Multi-look outfit state: each look has a label, outfit text, and map URL
+    final outfitLooks = useState<List<OutfitLook>>(_migrateOutfitLooks(booking));
     final captureStaffCtrl = useTextEditingController();
     final temporaryStaffCtrl = useTextEditingController(
       text: booking?.temporaryStaffDetails ?? '',
@@ -347,7 +348,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           );
           roomCtrl.text = booking.requiredRoomDetail;
           secondaryPhoneCtrl.text = booking.secondaryContact;
-          outfitCtrl.text = booking.outfitDetails;
+          outfitLooks.value = _migrateOutfitLooks(booking);
           captureStaffCtrl.text = booking.captureStaffDetails;
           temporaryStaffCtrl.text = booking.temporaryStaffDetails;
           staffNeedsCtrl.text = booking.staffInstructions;
@@ -376,7 +377,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.eventSlot,
         booking?.requiredRoomDetail,
         booking?.secondaryContact,
-        booking?.outfitDetails,
+        booking?.outfitLooks.length,
         booking?.captureStaffDetails,
         booking?.temporaryStaffDetails,
         booking?.staffInstructions,
@@ -874,7 +875,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         eventSlot: eventSlots.value.join(' | '),
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
-        outfitDetails: outfitCtrl.text.trim(),
+        outfitLooks: outfitLooks.value,
         captureStaffDetails: captureStaffCtrl.text.trim(),
         temporaryStaffDetails: temporaryStaffCtrl.text.trim(),
         staffInstructions: staffNeedsCtrl.text.trim(),
@@ -1378,10 +1379,10 @@ class ManageBookingScreen extends HookConsumerWidget {
                             flex: isMobile ? 0 : 1,
                             child: Column(
                               children: [
-                                _buildField(
-                                  context,
-                                  'OUTFIT DETAILS',
-                                  outfitCtrl,
+                                _OutfitLooksEditor(
+                                  looks: outfitLooks.value,
+                                  onChanged: (updated) =>
+                                      outfitLooks.value = updated,
                                 ),
                                 16.h,
                                 _buildField(
@@ -4020,6 +4021,426 @@ class _AddonFieldState extends State<_AddonField> {
           decoration: ManageBookingScreen._inputDeco('', crmColors),
         ),
       ],
+    );
+  }
+}
+
+// ── Migration helper ──────────────────────────────────────────────────────────
+/// Converts a booking's existing outfit data into a [List<OutfitLook>].
+/// If the booking already has structured looks, uses those directly.
+/// Otherwise, migrates the legacy `outfitDetails` string into a single look.
+List<OutfitLook> _migrateOutfitLooks(Booking? booking) {
+  if (booking == null) return [const OutfitLook()];
+  if (booking.outfitLooks.isNotEmpty) {
+    return List<OutfitLook>.from(booking.outfitLooks);
+  }
+  if (booking.outfitDetails.isNotEmpty) {
+    return [OutfitLook(outfitDetails: booking.outfitDetails)];
+  }
+  return [const OutfitLook()];
+}
+
+// ── Outfit Looks Editor ───────────────────────────────────────────────────────
+/// A self-contained widget that manages a list of [OutfitLook] entries.
+/// Each look shows a label, outfit description textarea, and a Google Maps URL
+/// field with a paste-from-clipboard button and a launch button.
+/// An "＋ Add Look" button appends a new empty look.
+class _OutfitLooksEditor extends StatefulWidget {
+  final List<OutfitLook> looks;
+  final ValueChanged<List<OutfitLook>> onChanged;
+
+  const _OutfitLooksEditor({
+    required this.looks,
+    required this.onChanged,
+  });
+
+  @override
+  State<_OutfitLooksEditor> createState() => _OutfitLooksEditorState();
+}
+
+class _OutfitLooksEditorState extends State<_OutfitLooksEditor> {
+  // Persistent controllers per look, keyed by index. Rebuilt when looks change.
+  final List<TextEditingController> _labelCtrls = [];
+  final List<TextEditingController> _detailsCtrls = [];
+  final List<TextEditingController> _mapUrlCtrls = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _syncControllers(widget.looks);
+  }
+
+  @override
+  void didUpdateWidget(_OutfitLooksEditor old) {
+    super.didUpdateWidget(old);
+    if (old.looks.length != widget.looks.length) {
+      _syncControllers(widget.looks);
+    }
+  }
+
+  void _syncControllers(List<OutfitLook> looks) {
+    // Dispose extras
+    while (_labelCtrls.length > looks.length) {
+      _labelCtrls.removeLast().dispose();
+      _detailsCtrls.removeLast().dispose();
+      _mapUrlCtrls.removeLast().dispose();
+    }
+    // Add missing
+    for (int i = _labelCtrls.length; i < looks.length; i++) {
+      _labelCtrls.add(TextEditingController(text: looks[i].lookLabel));
+      _detailsCtrls.add(TextEditingController(text: looks[i].outfitDetails));
+      _mapUrlCtrls.add(TextEditingController(text: looks[i].mapUrl));
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final c in _labelCtrls) { c.dispose(); }
+    for (final c in _detailsCtrls) { c.dispose(); }
+    for (final c in _mapUrlCtrls) { c.dispose(); }
+    super.dispose();
+  }
+
+  List<OutfitLook> _buildLooks() {
+    final updated = <OutfitLook>[];
+    for (int i = 0; i < _labelCtrls.length; i++) {
+      updated.add(OutfitLook(
+        lookLabel: _labelCtrls[i].text.trim(),
+        outfitDetails: _detailsCtrls[i].text.trim(),
+        mapUrl: _mapUrlCtrls[i].text.trim(),
+      ));
+    }
+    return updated;
+  }
+
+  void _notify() => widget.onChanged(_buildLooks());
+
+  void _addLook() {
+    _labelCtrls.add(TextEditingController());
+    _detailsCtrls.add(TextEditingController());
+    _mapUrlCtrls.add(TextEditingController());
+    setState(() {});
+    _notify();
+  }
+
+  void _removeLook(int index) {
+    _labelCtrls[index].dispose();
+    _detailsCtrls[index].dispose();
+    _mapUrlCtrls[index].dispose();
+    _labelCtrls.removeAt(index);
+    _detailsCtrls.removeAt(index);
+    _mapUrlCtrls.removeAt(index);
+    setState(() {});
+    _notify();
+  }
+
+  Future<void> _pasteMapUrl(int index) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isNotEmpty) {
+      _mapUrlCtrls[index].text = text;
+      _notify();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Clipboard is empty.')),
+      );
+    }
+  }
+
+  Future<void> _openMapUrl(int index) async {
+    final url = _mapUrlCtrls[index].text.trim();
+    final uri = Uri.tryParse(url);
+    if (uri == null || url.isEmpty) return;
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open map link.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    final looks = _labelCtrls.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Section header
+        Text(
+          'OUTFIT LOOKS',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        8.h,
+
+        // Look cards
+        for (int i = 0; i < looks; i++) ...[
+          _LookCard(
+            index: i,
+            totalLooks: looks,
+            labelCtrl: _labelCtrls[i],
+            detailsCtrl: _detailsCtrls[i],
+            mapUrlCtrl: _mapUrlCtrls[i],
+            crmColors: crmColors,
+            onChanged: _notify,
+            onRemove: looks > 1 ? () => _removeLook(i) : null,
+            onPasteMap: () => _pasteMapUrl(i),
+            onOpenMap: _mapUrlCtrls[i].text.isNotEmpty
+                ? () => _openMapUrl(i)
+                : null,
+          ),
+          if (i < looks - 1) 10.h,
+        ],
+
+        12.h,
+
+        // Add Look button
+        OutlinedButton.icon(
+          onPressed: _addLook,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text(
+            '+ Add Look',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF8B5CF6),
+            side: const BorderSide(color: Color(0xFF8B5CF6)),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A single look card shown inside [_OutfitLooksEditor].
+class _LookCard extends StatelessWidget {
+  final int index;
+  final int totalLooks;
+  final TextEditingController labelCtrl;
+  final TextEditingController detailsCtrl;
+  final TextEditingController mapUrlCtrl;
+  final CrmTheme crmColors;
+  final VoidCallback onChanged;
+  final VoidCallback? onRemove;
+  final VoidCallback onPasteMap;
+  final VoidCallback? onOpenMap;
+
+  const _LookCard({
+    required this.index,
+    required this.totalLooks,
+    required this.labelCtrl,
+    required this.detailsCtrl,
+    required this.mapUrlCtrl,
+    required this.crmColors,
+    required this.onChanged,
+    required this.onRemove,
+    required this.onPasteMap,
+    required this.onOpenMap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final lookNumber = index + 1;
+    return Container(
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row: "Look N" label + editable name + remove button
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    'Look $lookNumber',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                8.w,
+                Expanded(
+                  child: TextField(
+                    controller: labelCtrl,
+                    onChanged: (_) => onChanged(),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: crmColors.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Bridal Look, Reception...',
+                      hintStyle: TextStyle(
+                        fontSize: 12,
+                        color: crmColors.textSecondary,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+                if (onRemove != null)
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    color: Colors.red.shade400,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: onRemove,
+                    tooltip: 'Remove this look',
+                  ),
+              ],
+            ),
+          ),
+
+          // Body: outfit details + map URL
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Outfit details text area
+                Text(
+                  'OUTFIT DETAILS',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: crmColors.textSecondary,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                4.h,
+                TextFormField(
+                  controller: detailsCtrl,
+                  onChanged: (_) => onChanged(),
+                  maxLines: 3,
+                  minLines: 2,
+                  style: TextStyle(fontSize: 12, color: crmColors.textPrimary),
+                  decoration: ManageBookingScreen._inputDeco(
+                    'Describe the outfit for this look...',
+                    crmColors,
+                  ),
+                ),
+
+                12.h,
+
+                // Location map URL row
+                Text(
+                  'LOCATION (GOOGLE MAPS LINK)',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: crmColors.textSecondary,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                4.h,
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: mapUrlCtrl,
+                        onChanged: (_) => onChanged(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF2563EB),
+                        ),
+                        decoration: ManageBookingScreen._inputDeco(
+                          'Paste Google Maps link for this look\'s location',
+                          crmColors,
+                        ).copyWith(
+                          prefixIcon: const Icon(
+                            Icons.location_on_outlined,
+                            size: 16,
+                            color: Color(0xFF8B5CF6),
+                          ),
+                        ),
+                      ),
+                    ),
+                    8.w,
+                    // Paste button
+                    Tooltip(
+                      message: 'Paste from clipboard',
+                      child: InkWell(
+                        onTap: onPasteMap,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.content_paste_rounded,
+                            size: 16,
+                            color: Color(0xFF8B5CF6),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Open link button (only if URL is set)
+                    if (onOpenMap != null) ...[
+                      6.w,
+                      Tooltip(
+                        message: 'Open in Maps',
+                        child: InkWell(
+                          onTap: onOpenMap,
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.open_in_new_rounded,
+                              size: 16,
+                              color: Color(0xFF10B981),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

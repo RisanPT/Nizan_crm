@@ -133,6 +133,46 @@ class BookingAddon {
   }
 }
 
+// ── Outfit Look ──────────────────────────────────────────────────────────────
+/// Represents one outfit look for a booking.
+/// A booking may have 1-N looks, each at a potentially different location
+/// represented by a Google Maps URL.
+class OutfitLook {
+  final String lookLabel;     // e.g. "Bridal Look 1", "Reception"
+  final String outfitDetails; // Free-text description of the outfit
+  final String mapUrl;        // Google Maps URL for this look's location
+
+  const OutfitLook({
+    this.lookLabel = '',
+    this.outfitDetails = '',
+    this.mapUrl = '',
+  });
+
+  factory OutfitLook.fromJson(Map<String, dynamic> json) => OutfitLook(
+        lookLabel: json['lookLabel'] as String? ?? '',
+        outfitDetails: json['outfitDetails'] as String? ?? '',
+        mapUrl: json['mapUrl'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'lookLabel': lookLabel,
+        'outfitDetails': outfitDetails,
+        'mapUrl': mapUrl,
+      };
+
+  OutfitLook copyWith({
+    String? lookLabel,
+    String? outfitDetails,
+    String? mapUrl,
+  }) {
+    return OutfitLook(
+      lookLabel: lookLabel ?? this.lookLabel,
+      outfitDetails: outfitDetails ?? this.outfitDetails,
+      mapUrl: mapUrl ?? this.mapUrl,
+    );
+  }
+}
+
 class BookingItem {
   final String packageId;
   final String service;
@@ -379,6 +419,8 @@ class Booking {
   // GST invoice fields
   final String paymentMode; // e.g. 'UPI', 'Cash', 'Card'
   final String hsnCode; // HSN/SAC code, default 998361 for beauty services
+  // Multiple outfit looks (replaces / supersedes outfitDetails)
+  final List<OutfitLook> outfitLooks;
 
   const Booking({
     required this.id,
@@ -432,6 +474,7 @@ class Booking {
     this.collectedAmount = 0,
     this.paymentMode = '',
     this.hsnCode = '998361',
+    this.outfitLooks = const [],
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -697,6 +740,7 @@ class Booking {
       pocPhone: json['pocPhone'] as String? ?? '',
       paymentMode: json['paymentMode'] as String? ?? '',
       hsnCode: json['hsnCode'] as String? ?? '998361',
+      outfitLooks: _parseOutfitLooks(json),
     );
   }
 
@@ -726,7 +770,6 @@ class Booking {
       'eventSlot': eventSlot,
       'requiredRoomDetail': requiredRoomDetail,
       'secondaryContact': secondaryContact,
-      'outfitDetails': outfitDetails,
       'captureStaffDetails': captureStaffDetails,
       'temporaryStaffDetails': temporaryStaffDetails,
       'staffInstructions': staffInstructions,
@@ -751,6 +794,11 @@ class Booking {
       'pocPhone': pocPhone,
       'paymentMode': paymentMode,
       'hsnCode': hsnCode,
+      'outfitLooks': outfitLooks.map((l) => l.toJson()).toList(),
+      // Keep legacy field in sync so old PDF/print code still works
+      'outfitDetails': outfitLooks.isEmpty
+          ? outfitDetails
+          : outfitLooks.map((l) => l.outfitDetails).where((s) => s.isNotEmpty).join(' | '),
     };
   }
 
@@ -806,6 +854,7 @@ class Booking {
     double? collectedAmount,
     String? paymentMode,
     String? hsnCode,
+    List<OutfitLook>? outfitLooks,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -861,8 +910,27 @@ class Booking {
       collectedAmount: collectedAmount ?? this.collectedAmount,
       paymentMode: paymentMode ?? this.paymentMode,
       hsnCode: hsnCode ?? this.hsnCode,
+      outfitLooks: outfitLooks ?? this.outfitLooks,
     );
   }
+}
+
+/// Parses `outfitLooks` from JSON, falling back to migrating the legacy
+/// `outfitDetails` plain-text string into a single look entry.
+List<OutfitLook> _parseOutfitLooks(Map<String, dynamic> json) {
+  final raw = json['outfitLooks'];
+  if (raw is List && raw.isNotEmpty) {
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(OutfitLook.fromJson)
+        .toList();
+  }
+  // Legacy migration: turn old outfitDetails string into one look
+  final legacy = json['outfitDetails'] as String? ?? '';
+  if (legacy.isNotEmpty) {
+    return [OutfitLook(outfitDetails: legacy)];
+  }
+  return const [];
 }
 
 String _numericBookingId(String value) {
