@@ -9,7 +9,7 @@ abstract class FleetJob with _$FleetJob {
     @JsonKey(name: '_id') required String id,
     required String bookingNumber,
     String? driverId,
-    dynamic vehicleId, // Could be String or a Map depending on populate
+    dynamic vehicleId,
     @Default([]) List<String> preTripPhotos,
     @Default('unassigned') String tripStatus,
     required String customerName,

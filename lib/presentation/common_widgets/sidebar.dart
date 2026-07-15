@@ -248,6 +248,22 @@ class Sidebar extends ConsumerWidget {
                     ),
                   if (role.canSeeBookings)
                     _SidebarItem(
+                      icon: Icons.event_available_outlined,
+                      title: 'Trials',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
+                      onTap: () => context.go('/trials'),
+                    ),
+                  if (role.canSeeBookings)
+                    _SidebarItem(
+                      icon: Icons.auto_awesome_mosaic_outlined,
+                      title: 'Trial Packages',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/trial-packages'),
+                      onTap: () => context.go('/trial-packages'),
+                    ),
+                  if (role.canSeeBookings)
+                    _SidebarItem(
                       icon: Icons.receipt_long_outlined,
                       title: 'Booking',
                       isCollapsed: isCollapsed,

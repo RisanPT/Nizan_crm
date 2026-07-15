@@ -35,6 +35,7 @@ import '../../presentation/screens/fuel_expenses_screen.dart';
 import '../../presentation/screens/artist_finance_screen.dart';
 import '../../presentation/screens/leave_request_screen.dart';
 import '../../presentation/screens/profile_screen.dart';
+import '../../presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
@@ -59,6 +60,9 @@ import '../../presentation/screens/driver/driver_add_expense_screen.dart';
 import '../../presentation/screens/fleet/fleet_accidents_screen.dart';
 import '../../presentation/screens/fleet/fleet_completed_works_screen.dart';
 import '../../presentation/screens/fleet/fleet_service_reminders_screen.dart';
+import '../../presentation/screens/trials_screen.dart';
+import '../../presentation/screens/trials_calendar_screen.dart';
+import '../../presentation/screens/manage_trial_screen.dart';
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -100,6 +104,7 @@ bool isRouteAllowed(String path, AppRole role, {bool inventoryAccess = false}) {
   }
   if (path.startsWith('/inventory')) return role.canManageInventory;
   if (path.startsWith('/marketing')) return role.canManageMarketing;
+  if (path.startsWith('/trials')) return role.canSeeBookings;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || role.isFullAccess;
   if (path.startsWith('/settings')) return role.canSeeSettings;
   return true; // unknown routes — let the 404 handle it
@@ -238,6 +243,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'My Profile';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
+          } else if (state.uri.path == '/trials') {
+            title = 'Trials Calendar';
+          } else if (state.uri.path == '/trials/list') {
+            title = 'Studio Trials';
+          } else if (state.uri.path.startsWith('/trials/')) {
+            title = 'Manage Trial';
+          } else if (state.uri.path == '/trial-packages') {
+            title = 'Trial Packages';
           }
 
           return MainLayout(title: title, child: child);
@@ -424,6 +437,25 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/invoices',
             builder: (context, state) => const AccountsInvoicesScreen(),
+          ),
+          GoRoute(
+            path: '/trials',
+            builder: (context, state) => const TrialsCalendarScreen(),
+          ),
+          GoRoute(
+            path: '/trials/list',
+            builder: (context, state) => const TrialsScreen(),
+          ),
+          GoRoute(
+            path: '/trials/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? 'new';
+              return ManageTrialScreen(trialId: id);
+            },
+          ),
+          GoRoute(
+            path: '/trial-packages',
+            builder: (context, state) => const TrialPackagesScreen(),
           ),
           GoRoute(
             path: '/booking/add',
