@@ -8,7 +8,9 @@ import '../../../core/models/artist_collection.dart';
 import '../../../core/models/artist_expense.dart';
 import '../../../core/models/booking.dart';
 import '../../../core/models/purchase.dart';
+import '../../../core/models/trial.dart';
 import '../../../core/providers/booking_provider.dart';
+import '../../../core/providers/trial_provider.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../core/utils/responsive_builder.dart';
 import '../../../services/collection_service.dart';
@@ -212,6 +214,8 @@ class _AccountsDashboardScreenState
     // Inventory purchases are supplementary — never block the dashboard on them.
     final purchases =
         ref.watch(purchasesProvider).value ?? const <Purchase>[];
+    // Trial revenue is supplementary income — never block the dashboard on it.
+    final trials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
 
     final loading = asyncCollections.isLoading ||
         asyncExpenses.isLoading ||
@@ -235,6 +239,7 @@ class _AccountsDashboardScreenState
         asyncExpenses.value ?? const <ArtistExpense>[],
         asyncBookings.value ?? const <Booking>[],
         purchases,
+        trials,
       );
     }
 
@@ -292,6 +297,7 @@ class _AccountsDashboardScreenState
     List<ArtistExpense> allExpenses,
     List<Booking> allBookings,
     List<Purchase> allPurchases,
+    List<Trial> allTrials,
   ) {
     final prevMonth = DateTime(_month.year, _month.month - 1);
     final lastDay = DateTime(_month.year, _month.month + 1, 0).day;
@@ -310,23 +316,32 @@ class _AccountsDashboardScreenState
           if (b.advanceAmount <= 0) return false;
           return _inMonth(b.createdAt ?? b.bookingDate, m);
         }).toList();
+    List<Trial> trialsIn(DateTime m) => allTrials
+        .where((t) =>
+            t.status.toLowerCase() != 'cancelled' && _inMonth(t.trialDate, m))
+        .toList();
 
     final collections = collIn(_month);
     final expenses = expIn(_month);
     final advances = advIn(_month);
     final purchases = purchIn(_month);
+    final trials = trialsIn(_month);
 
     double sumC(List<ArtistCollection> l) => l.fold(0, (s, c) => s + c.amount);
     double sumE(List<ArtistExpense> l) => l.fold(0, (s, e) => s + e.amount);
     double sumA(List<Booking> l) => l.fold(0, (s, b) => s + b.advanceAmount);
     // Include GST so spend/dues match the Bills & Payables view.
     double sumP(List<Purchase> l) => l.fold(0, (s, p) => s + p.grandTotal);
+    double trialAmount(Trial t) =>
+        t.trialItems.fold<double>(0, (a, i) => a + i.price);
+    double sumT(List<Trial> l) => l.fold(0, (s, t) => s + trialAmount(t));
 
     // Inventory purchases count as expenses (linked from the Inventory module).
     final invSpend = sumP(purchases);
     final invDues = purchases.fold<double>(0, (s, p) => s + p.balance);
 
-    final totalIn = sumC(collections) + sumA(advances);
+    final trialRevenue = sumT(trials);
+    final totalIn = sumC(collections) + sumA(advances) + trialRevenue;
     final totalExpenses = sumE(expenses) + invSpend;
     final net = totalIn - totalExpenses;
     final pending = collections.where((c) => c.status == 'pending').length +
@@ -334,7 +349,9 @@ class _AccountsDashboardScreenState
     final collectionTotal = sumC(collections);
     final advanceTotal = sumA(advances);
 
-    final prevIn = sumC(collIn(prevMonth)) + sumA(advIn(prevMonth));
+    final prevIn = sumC(collIn(prevMonth)) +
+        sumA(advIn(prevMonth)) +
+        sumT(trialsIn(prevMonth));
     final prevExp = sumE(expIn(prevMonth)) + sumP(purchIn(prevMonth));
 
     // Daily series for sparklines.
@@ -348,6 +365,10 @@ class _AccountsDashboardScreenState
     for (final b in advances) {
       dailyIn[(b.createdAt ?? b.bookingDate).day - 1] += b.advanceAmount;
     }
+    for (final t in trials) {
+      final d = t.trialDate.day;
+      if (d >= 1 && d <= lastDay) dailyIn[d - 1] += trialAmount(t);
+    }
     for (final e in expenses) {
       dailyExp[e.date.day - 1] += e.amount;
       if (e.status == 'pending') dailyPending[e.date.day - 1] += 1;
@@ -360,7 +381,8 @@ class _AccountsDashboardScreenState
 
     final kpis = [
       _KpiData(
-        label: 'Collected + Advance',
+        label: 'Total Income',
+        subLabel: 'Coll + Adv + Trials',
         value: _compact(totalIn),
         icon: Icons.account_balance_wallet_rounded,
         color: crm.primary,
@@ -429,6 +451,8 @@ class _AccountsDashboardScreenState
     final collWeekly = weeklySum(collections.map((c) => (c.date.day, c.amount)));
     final advWeekly = weeklySum(
         advances.map((b) => ((b.createdAt ?? b.bookingDate).day, b.advanceAmount)));
+    final trialWeekly =
+        weeklySum(trials.map((t) => (t.trialDate.day, trialAmount(t))));
     final expWeekly = weeklySum([
       ...expenses.map((e) => (e.date.day, e.amount)),
       ...purchases.map((p) => (p.date.day, p.total)),
@@ -439,6 +463,7 @@ class _AccountsDashboardScreenState
       if (collectionTotal > 0)
         _Slice('Collection', collectionTotal, crm.primary),
       if (advanceTotal > 0) _Slice('Advance', advanceTotal, crm.accent),
+      if (trialRevenue > 0) _Slice('Trials', trialRevenue, crm.success),
     ];
 
     // ── Tab 2: Expenses by category ────────────────────────────────────────
@@ -464,6 +489,7 @@ class _AccountsDashboardScreenState
             footer: [
               ('Collection Amount', _rupees(collectionTotal)),
               ('Advance Amount', _rupees(advanceTotal)),
+              ('Trial Revenue', _rupees(trialRevenue)),
             ],
           )
         : _DonutPanel(
@@ -487,6 +513,7 @@ class _AccountsDashboardScreenState
             series: [
               _Series('Collection', crm.primary, collWeekly),
               _Series('Advance', crm.accent, advWeekly),
+              _Series('Trials', crm.success, trialWeekly),
             ],
           )
         : _BarPanel(

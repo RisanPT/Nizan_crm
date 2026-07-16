@@ -135,11 +135,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
           d.day == now.day;
     }));
     
-    final currentFYStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
-    final currentFYEnd = now.month >= 4 ? DateTime(now.year + 1, 3, 31, 23, 59, 59) : DateTime(now.year, 3, 31, 23, 59, 59);
+    // Financial year comes from the selected dropdown (e.g. "2026-27" =>
+    // 1 Apr 2026 to 31 Mar 2027), NOT from today's date.
+    final fyStartYear =
+        int.tryParse(selectedFY.value.split('-').first) ?? now.year;
+    final fyStart = DateTime(fyStartYear, 4, 1);
+    final fyEnd = DateTime(fyStartYear + 1, 3, 31, 23, 59, 59);
     final fyBookings = geoFilteredAllBookings.where((b) {
       final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
-      return !d.isBefore(currentFYStart) && !d.isAfter(currentFYEnd);
+      return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
     });
 
 
@@ -857,7 +861,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       _StatCardWithIcon(
                         title: 'Advance Collected',
                         value: '₹${_money(advanceCollectedFY)}',
-                        subtitle: 'Current financial year',
+                        subtitle: 'FY ${selectedFY.value}',
                         icon: Icons.payments_outlined,
                         color: Colors.teal,
                         width: itemWidth,
