@@ -587,6 +587,252 @@ String _money(double value) {
   return value.toStringAsFixed(0);
 }
 
+// Left 70% panel: Today vs Yesterday sales with a trend chip.
+class _TodayYesterdayPanel extends StatelessWidget {
+  final double todaySales;
+  final double yesterdaySales;
+  final int todayWorks;
+  final int yesterdayWorks;
+  final double? trend; // % change today vs yesterday
+
+  const _TodayYesterdayPanel({
+    required this.todaySales,
+    required this.yesterdaySales,
+    required this.todayWorks,
+    required this.yesterdayWorks,
+    required this.trend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    Widget dayBlock(String label, double amount, int works, Color accent) =>
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Container(width: 8, height: 8,
+                    decoration:
+                        BoxDecoration(color: accent, shape: BoxShape.circle)),
+                6.w,
+                Text(label.toUpperCase(),
+                    style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 0.4,
+                        fontWeight: FontWeight.w700,
+                        color: crm.textSecondary)),
+              ]),
+              8.h,
+              Text('₹${_money(amount)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+              4.h,
+              Text('$works work${works == 1 ? '' : 's'}',
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+            ],
+          ),
+        );
+
+    final up = (trend ?? 0) >= 0;
+    final trendColor = up ? const Color(0xFF2E7D32) : const Color(0xFFD32F2F);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.today_outlined, size: 18, color: crm.primary),
+              8.w,
+              Text("Today's Sales",
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+              const Spacer(),
+              if (trend != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: trendColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
+                        size: 13, color: trendColor),
+                    2.w,
+                    Text('${trend!.abs().toStringAsFixed(0)}% vs yest.',
+                        style: TextStyle(
+                            color: trendColor,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800)),
+                  ]),
+                ),
+            ],
+          ),
+          18.h,
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                dayBlock('Today', todaySales, todayWorks, crm.primary),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: VerticalDivider(width: 1, color: crm.border),
+                ),
+                dayBlock('Yesterday', yesterdaySales, yesterdayWorks,
+                    crm.textSecondary),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Right 30% panel: Total revenue + Q1–Q4 works mini-bars for the selected FY.
+// Tap opens the full quarterly performance inner page.
+class _RevenueQuarterPanel extends StatelessWidget {
+  final double totalRevenue;
+  final List<int> quarterWorks; // length 4
+  final String fyLabel;
+  final VoidCallback? onTap;
+
+  const _RevenueQuarterPanel({
+    required this.totalRevenue,
+    required this.quarterWorks,
+    required this.fyLabel,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final maxQ = quarterWorks.fold<int>(1, (m, v) => v > m ? v : m);
+    const labels = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: crm.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: crm.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('TOTAL REVENUE',
+                  style: TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 0.4,
+                      fontWeight: FontWeight.w700,
+                      color: crm.textSecondary)),
+              6.h,
+              Text('₹${_money(totalRevenue)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: crm.primary)),
+              2.h,
+              Text('FY $fyLabel',
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+              16.h,
+              Divider(height: 1, color: crm.border),
+              14.h,
+              Row(
+                children: [
+                  Text('WORKS BY QUARTER',
+                      style: TextStyle(
+                          fontSize: 11,
+                          letterSpacing: 0.4,
+                          fontWeight: FontWeight.w700,
+                          color: crm.textSecondary)),
+                  const Spacer(),
+                  if (onTap != null)
+                    Icon(Icons.chevron_right, size: 18, color: crm.primary),
+                ],
+              ),
+              12.h,
+              // Flex bars — the bar fills a fraction of the flexible area so it
+              // can never overflow, regardless of the counts.
+              SizedBox(
+                height: 92,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < 4; i++)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Column(
+                            children: [
+                              Text('${quarterWorks[i]}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: crm.textPrimary)),
+                              4.h,
+                              Expanded(
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.bottomCenter,
+                                  heightFactor: quarterWorks[i] == 0
+                                      ? 0.05
+                                      : (quarterWorks[i] / maxQ)
+                                          .clamp(0.08, 1.0)
+                                          .toDouble(),
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: crm.primary.withValues(
+                                          alpha:
+                                              quarterWorks[i] == 0 ? 0.15 : 0.85),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              4.h,
+                              Text(labels[i],
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: crm.textSecondary)),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 String _formatDate(DateTime value) {
   const months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

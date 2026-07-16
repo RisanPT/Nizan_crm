@@ -237,7 +237,7 @@ String _buildSingleBookingHtml(
   BookingDisplayEntry? selectedArtistEntry,
   String artistName,
 ) {
-  final isClientCopy = variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt;
+  final isClientCopy = variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt || variant == BookingPrintVariant.trialInvoice;
   final isArtistCopy = variant == BookingPrintVariant.artist;
   
   if (isClientCopy) {
@@ -603,7 +603,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       </div>
       <div>
         <div class="inv-company">TEAM N MAKEOVERS</div>
-        <div class="inv-doc-type">${variant == BookingPrintVariant.clientAdvanceReceipt ? "ADVANCE RECEIPT" : (variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE")}</div>
+        <div class="inv-doc-type">${variant == BookingPrintVariant.trialInvoice ? "TRIAL &middot; GST INVOICE" : (variant == BookingPrintVariant.clientAdvanceReceipt ? "ADVANCE RECEIPT" : (variant == BookingPrintVariant.clientConfirmation ? "BOOKING CONFIRMATION" : "GST INVOICE"))}</div>
       </div>
     </div>
     <div class="inv-meta-grid">

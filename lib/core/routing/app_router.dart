@@ -24,6 +24,7 @@ import '../../presentation/screens/accounts_invoices_screen.dart';
 
 import '../../presentation/screens/login_screen.dart';
 import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
+import '../../features/sales/presentation/screens/sales_quarterly_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
@@ -179,6 +180,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Slot Management';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
+          } else if (state.uri.path == '/sales/quarterly') {
+            title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/leads') {
             title = 'Leads Management';
           } else if (state.uri.path.startsWith('/sales/leads/')) {
@@ -328,6 +331,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales',
             builder: (context, state) => const SalesBookingsScreen(),
+          ),
+          GoRoute(
+            path: '/sales/quarterly',
+            builder: (context, state) => SalesQuarterlyScreen(
+              financialYear:
+                  state.uri.queryParameters['fy'] ?? '2026-27',
+              dateBasis:
+                  state.uri.queryParameters['basis'] ?? 'event_date',
+            ),
           ),
           GoRoute(
             path: '/sales/leads',

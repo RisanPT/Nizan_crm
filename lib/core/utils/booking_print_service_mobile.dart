@@ -117,7 +117,7 @@ Future<void> printBookingDetails(
               ),
               pw.SizedBox(height: 4),
               pw.Text(
-                variant == BookingPrintVariant.clientAdvanceReceipt ? 'ADVANCE RECEIPT' : variant == BookingPrintVariant.clientConfirmation ? 'BOOKING CONFIRMATION' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
+                variant == BookingPrintVariant.trialInvoice ? 'TRIAL - TAX INVOICE' : variant == BookingPrintVariant.clientAdvanceReceipt ? 'ADVANCE RECEIPT' : variant == BookingPrintVariant.clientConfirmation ? 'BOOKING CONFIRMATION' : variant == BookingPrintVariant.clientInvoice ? 'TAX INVOICE & CONFIRMATION' : 'Artist Copy - Assignment Sheet',
                 style: pw.TextStyle(fontSize: 10, color: secondaryColor),
               ),
             ],
@@ -154,7 +154,7 @@ Future<void> printBookingDetails(
           pw.SizedBox(height: 20),
 
           // Variant-specific Details
-          if (variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ...[
+          if (variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt || variant == BookingPrintVariant.trialInvoice) ...[
             // Invoice subtitle
             pw.Text(
               variant == BookingPrintVariant.clientAdvanceReceipt
@@ -600,7 +600,7 @@ Future<void> printBookingDetails(
   final bytes = await pdf.save();
   final tempDir = await getTemporaryDirectory();
   final cleanName = booking.customerName.replaceAll(RegExp(r'[^\w\s\-]'), '').trim().replaceAll(RegExp(r'\s+'), '_');
-  final fileName = '${(variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "Client" : "Artist"}_Booking_${booking.displayBookingNumber}_$cleanName.pdf';
+  final fileName = '${(variant == BookingPrintVariant.clientInvoice || variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt || variant == BookingPrintVariant.trialInvoice) ? "Client" : "Artist"}_Booking_${booking.displayBookingNumber}_$cleanName.pdf';
   final file = File('${tempDir.path}/$fileName');
   await file.writeAsBytes(bytes);
 

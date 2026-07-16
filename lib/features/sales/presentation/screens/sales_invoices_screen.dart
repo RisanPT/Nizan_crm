@@ -150,6 +150,48 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final totalSalesValue = geoFilteredAllBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.totalPrice : sum);
     final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.advanceAmount : sum);
 
+    // ── Today vs Yesterday · Total revenue · Q1–Q4 works (selected FY) ──────
+    DateTime dateOf(Booking b) =>
+        useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+    bool isActiveBooking(Booking b) {
+      final s = b.status.toLowerCase();
+      return s != 'cancelled' && s != 'postponed' && s != 'rejected';
+    }
+    bool onSameDay(DateTime a, DateTime b) =>
+        a.year == b.year && a.month == b.month && a.day == b.day;
+
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    double revenueOn(DateTime day) => geoFilteredAllBookings
+        .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day))
+        .fold<double>(0, (s, b) => s + b.totalPrice);
+    int worksOn(DateTime day) => countPackages(geoFilteredAllBookings
+        .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day)));
+
+    final todaySales = revenueOn(today);
+    final yesterdaySales = revenueOn(yesterday);
+    final todayWorks = worksOn(today);
+    final yesterdayWorks = worksOn(yesterday);
+    final salesTrend = yesterdaySales <= 0
+        ? null
+        : (todaySales - yesterdaySales) / yesterdaySales * 100;
+
+    final totalRevenueFY =
+        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice);
+
+    // Indian FY quarters: Q1 Apr–Jun, Q2 Jul–Sep, Q3 Oct–Dec, Q4 Jan–Mar.
+    int quarterIndex(int month) {
+      if (month >= 4 && month <= 6) return 0;
+      if (month >= 7 && month <= 9) return 1;
+      if (month >= 10 && month <= 12) return 2;
+      return 3;
+    }
+    final quarterWorks = List<int>.filled(4, 0);
+    for (final b in fyBookings.where(isActiveBooking)) {
+      quarterWorks[quarterIndex(dateOf(b).month)] +=
+          b.bookingItems.isEmpty ? 1 : b.bookingItems.length;
+    }
+
 
 
     final currentMonthKey = '${now.year}-${now.month}';
@@ -576,6 +618,57 @@ class SalesBookingsScreen extends HookConsumerWidget {
                   );
                 },
               ),
+              24.h,
+              // ── Today vs Yesterday (70%) · Total revenue + Q1–Q4 (30%) ──
+              if (isMobile)
+                Column(
+                  children: [
+                    _TodayYesterdayPanel(
+                      todaySales: todaySales,
+                      yesterdaySales: yesterdaySales,
+                      todayWorks: todayWorks,
+                      yesterdayWorks: yesterdayWorks,
+                      trend: salesTrend,
+                    ),
+                    16.h,
+                    _RevenueQuarterPanel(
+                      totalRevenue: totalRevenueFY,
+                      quarterWorks: quarterWorks,
+                      fyLabel: selectedFY.value,
+                      onTap: () => context.push(
+                          '/sales/quarterly?fy=${selectedFY.value}&basis=${dateBasis.value}'),
+                    ),
+                  ],
+                )
+              else
+                IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 7,
+                        child: _TodayYesterdayPanel(
+                          todaySales: todaySales,
+                          yesterdaySales: yesterdaySales,
+                          todayWorks: todayWorks,
+                          yesterdayWorks: yesterdayWorks,
+                          trend: salesTrend,
+                        ),
+                      ),
+                      16.w,
+                      Expanded(
+                        flex: 3,
+                        child: _RevenueQuarterPanel(
+                          totalRevenue: totalRevenueFY,
+                          quarterWorks: quarterWorks,
+                          fyLabel: selectedFY.value,
+                          onTap: () => context.push(
+                              '/sales/quarterly?fy=${selectedFY.value}&basis=${dateBasis.value}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               24.h,
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/booking.dart';
+import '../../core/models/trial.dart';
 import '../../core/providers/booking_provider.dart';
+import '../../core/providers/trial_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/gst_calculator.dart';
@@ -21,10 +23,48 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   String _searchQuery = '';
   DateTime? _selectedMonth;
   String _paymentStatusFilter = 'All';
+  String _source = 'all'; // all | bookings | trials
   int _currentPage = 1;
   static const int _itemsPerPage = 15;
 
   String _currency(double v) => '₹${v.toStringAsFixed(2)}';
+
+  // Adapt a Trial into a synthetic Booking so the entire invoices screen and
+  // the GST invoice PDF can reuse it unchanged. The first trial look becomes the
+  // main service line; the rest become add-on rows on the invoice.
+  Booking _bookingFromTrial(Trial t) {
+    String label(TrialItem i) => i.lookLabel.trim().isNotEmpty
+        ? i.lookLabel.trim()
+        : (i.packageName.trim().isNotEmpty ? i.packageName.trim() : 'Trial look');
+    final items = t.trialItems;
+    final total = items.fold<double>(0, (s, i) => s + i.price);
+    final service = items.isEmpty ? 'Makeup Trial' : label(items.first);
+    final addons = items.length <= 1
+        ? const <BookingAddon>[]
+        : items
+            .sublist(1)
+            .map((i) => BookingAddon(service: label(i), amount: i.price, persons: 1))
+            .toList();
+    final status = t.status.toLowerCase() == 'completed' ? 'completed' : 'confirmed';
+    return Booking(
+      id: t.id,
+      bookingNumber:
+          t.trialNumber.isNotEmpty ? t.trialNumber : 'TRIAL-${t.id}',
+      customerName: t.clientName,
+      phone: t.phone,
+      email: t.email,
+      service: service,
+      status: status,
+      bookingDate: t.trialDate,
+      serviceStart: t.trialDate,
+      serviceEnd: t.trialDate,
+      totalPrice: total,
+      advanceAmount: 0,
+      addons: addons,
+      createdAt: t.createdAt,
+      internalRemarks: t.notes,
+    );
+  }
 
   String _formatMonthYear(DateTime date) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -48,12 +88,27 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     final theme = Theme.of(context);
     final crm = context.crmColors;
     final asyncBookings = ref.watch(bookingProvider);
+    // Trials (scheduled/completed) become synthetic invoices.
+    final trials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
+    final trialInvoices = trials
+        .where((t) {
+          final s = t.status.toLowerCase();
+          return s == 'scheduled' || s == 'completed';
+        })
+        .map(_bookingFromTrial)
+        .toList();
+    final trialIds = trialInvoices.map((b) => b.id).toSet();
 
     return Scaffold(
       backgroundColor: crm.background,
       body: asyncBookings.when(
         data: (allBookings) {
-          final filteredInvoices = allBookings.where((b) {
+          final sourceList = _source == 'trials'
+              ? trialInvoices
+              : _source == 'bookings'
+                  ? allBookings
+                  : [...allBookings, ...trialInvoices];
+          final filteredInvoices = sourceList.where((b) {
             final status = b.status.toLowerCase();
             if (status != 'confirmed' && status != 'completed') return false;
 
@@ -184,6 +239,50 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                           ),
                         ),
                         16.w,
+                        // Source toggle: All / Bookings / Trials
+                        Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: crm.border),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (final s in const [
+                                ('all', 'All'),
+                                ('bookings', 'Bookings'),
+                                ('trials', 'Trials'),
+                              ])
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(6),
+                                  onTap: () => setState(() {
+                                    _source = s.$1;
+                                    _currentPage = 1;
+                                    _selectedInvoice = null;
+                                  }),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: _source == s.$1
+                                          ? crm.primary
+                                          : Colors.transparent,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(s.$2,
+                                        style: TextStyle(
+                                            color: _source == s.$1
+                                                ? Colors.white
+                                                : crm.textSecondary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        16.w,
                         // Status Filter
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -261,7 +360,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                         color: crm.surface,
                         child: Column(
                           children: [
-                            Expanded(child: _buildInvoiceList(paginatedInvoices, theme, crm)),
+                            Expanded(child: _buildInvoiceList(paginatedInvoices, theme, crm, trialIds)),
                             if (totalPages > 1)
                               _buildPagination(totalPages, theme, crm),
                           ],
@@ -275,7 +374,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                         flex: 6,
                         child: Container(
                           color: crm.background,
-                          child: _buildInvoiceDetail(_selectedInvoice!, theme, crm),
+                          child: _buildInvoiceDetail(_selectedInvoice!, theme, crm,
+                              trialIds.contains(_selectedInvoice!.id)),
                         ),
                       ),
                   ],
@@ -511,7 +611,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     );
   }
 
-  Widget _buildInvoiceList(List<Booking> invoices, ThemeData theme, CrmTheme crm) {
+  Widget _buildInvoiceList(List<Booking> invoices, ThemeData theme, CrmTheme crm,
+      Set<String> trialIds) {
     if (invoices.isEmpty) {
       return const Center(child: Text('No invoices found.'));
     }
@@ -521,6 +622,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       itemBuilder: (context, index) {
         final b = invoices[index];
         final isSelected = _selectedInvoice?.id == b.id;
+        final isTrial = trialIds.contains(b.id);
 
         final isAdvanceRow = _selectedMonth != null &&
             b.createdAt != null &&
@@ -547,7 +649,34 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(b.displayBookingNumber, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: crm.primary)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(b.displayBookingNumber,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: crm.primary)),
+                        ),
+                        if (isTrial) ...[
+                          6.w,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8B5CF6)
+                                  .withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('TRIAL',
+                                style: TextStyle(
+                                    color: Color(0xFF8B5CF6),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ],
+                    ),
                     4.h,
                     Text('${b.bookingDate.day}/${b.bookingDate.month}/${b.bookingDate.year}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary)),
                   ],
@@ -621,7 +750,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     );
   }
 
-  Widget _buildInvoiceDetail(Booking b, ThemeData theme, CrmTheme crm) {
+  Widget _buildInvoiceDetail(
+      Booking b, ThemeData theme, CrmTheme crm, bool isTrial) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -632,32 +762,57 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                b.displayBookingNumber,
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Text(
+                    b.displayBookingNumber,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  if (isTrial) ...[
+                    8.w,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF8B5CF6).withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('TRIAL',
+                          style: TextStyle(
+                              color: Color(0xFF8B5CF6),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800)),
+                    ),
+                  ],
+                ],
               ),
               Row(
                 children: [
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await printBookingDetails(
-                        b,
-                        variant: BookingPrintVariant.clientAdvanceReceipt,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.teal.shade700,
-                      foregroundColor: Colors.white,
+                  if (!isTrial) ...[
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        await printBookingDetails(
+                          b,
+                          variant: BookingPrintVariant.clientAdvanceReceipt,
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.teal.shade700,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.receipt_long, size: 16),
+                      label: const Text('Print Advance Receipt'),
                     ),
-                    icon: const Icon(Icons.receipt_long, size: 16),
-                    label: const Text('Print Advance Receipt'),
-                  ),
-                  12.w,
+                    12.w,
+                  ],
                   ElevatedButton.icon(
                     onPressed: () async {
                       await printBookingDetails(
                         b,
-                        variant: BookingPrintVariant.clientInvoice,
+                        variant: isTrial
+                            ? BookingPrintVariant.trialInvoice
+                            : BookingPrintVariant.clientInvoice,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -665,7 +820,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       foregroundColor: Colors.white,
                     ),
                     icon: const Icon(Icons.print, size: 16),
-                    label: const Text('Print Full GST Invoice'),
+                    label: Text(
+                        isTrial ? 'Print Trial Invoice' : 'Print Full GST Invoice'),
                   ),
                   12.w,
                   IconButton(
