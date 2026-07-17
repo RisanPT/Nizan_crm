@@ -26,6 +26,7 @@ class CompetitorSnapshot {
   final bool newPartnership;
   final int score;
   final String notes;
+  final Map<String, String> signalEvidence;
 
   const CompetitorSnapshot({
     this.id = '',
@@ -51,6 +52,7 @@ class CompetitorSnapshot {
     this.newPartnership = false,
     this.score = 0,
     this.notes = '',
+    this.signalEvidence = const {},
   });
 
   /// Score breakdown for display: label → points contributed.
@@ -93,6 +95,10 @@ class CompetitorSnapshot {
       newPartnership: b(json['newPartnership']),
       score: i(json['score']),
       notes: json['notes'] as String? ?? '',
+      signalEvidence: (json['signalEvidence'] is Map)
+          ? (json['signalEvidence'] as Map).map(
+              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+          : const {},
     );
   }
 }
@@ -174,6 +180,7 @@ class CompetitorRanking {
   final int score;
   final int? previousScore;
   final int? movement; // score - previousScore
+  final List<ScoreSignal> signals;
 
   const CompetitorRanking({
     required this.rank,
@@ -185,6 +192,7 @@ class CompetitorRanking {
     this.score = 0,
     this.previousScore,
     this.movement,
+    this.signals = const [],
   });
 
   factory CompetitorRanking.fromJson(Map<String, dynamic> json) =>
@@ -198,19 +206,116 @@ class CompetitorRanking {
         score: (json['score'] as num?)?.toInt() ?? 0,
         previousScore: (json['previousScore'] as num?)?.toInt(),
         movement: (json['movement'] as num?)?.toInt(),
+        signals: ((json['signals'] as List?) ?? const [])
+            .map((e) => ScoreSignal.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
+}
+
+/// One triggered Growth-Score signal with its evidence (FR-2.2).
+class ScoreSignal {
+  final String key;
+  final String label;
+  final int points;
+  final String evidence;
+  const ScoreSignal(
+      {required this.key,
+      required this.label,
+      required this.points,
+      this.evidence = ''});
+
+  factory ScoreSignal.fromJson(Map<String, dynamic> j) => ScoreSignal(
+        key: j['key'] as String? ?? '',
+        label: j['label'] as String? ?? '',
+        points: (j['points'] as num?)?.toInt() ?? 0,
+        evidence: j['evidence'] as String? ?? '',
+      );
+}
+
+/// A row in a sub-leaderboard (Top Reels / Websites / Collaborations).
+class LeaderboardEntry {
+  final int rank;
+  final String competitorId;
+  final String name;
+  final String city;
+  final double metric;
+  final int score;
+  const LeaderboardEntry({
+    required this.rank,
+    required this.competitorId,
+    required this.name,
+    this.city = '',
+    this.metric = 0,
+    this.score = 0,
+  });
+
+  factory LeaderboardEntry.fromJson(Map<String, dynamic> j) => LeaderboardEntry(
+        rank: (j['rank'] as num?)?.toInt() ?? 0,
+        competitorId: j['competitorId']?.toString() ?? '',
+        name: j['name'] as String? ?? '',
+        city: j['city'] as String? ?? '',
+        metric: (j['metric'] as num?)?.toDouble() ?? 0,
+        score: (j['score'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Versioned Growth-Score weights (FR-2.3).
+class ScoringConfig {
+  final int version;
+  final Map<String, int> weights;
+  final Map<String, String> labels;
+  final Map<String, int> defaults;
+  const ScoringConfig({
+    this.version = 1,
+    this.weights = const {},
+    this.labels = const {},
+    this.defaults = const {},
+  });
+
+  factory ScoringConfig.fromJson(Map<String, dynamic> j) {
+    Map<String, int> ints(dynamic m) => (m is Map)
+        ? m.map((k, v) => MapEntry(k.toString(), (v as num?)?.toInt() ?? 0))
+        : {};
+    Map<String, String> strs(dynamic m) => (m is Map)
+        ? m.map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+        : {};
+    return ScoringConfig(
+      version: (j['version'] as num?)?.toInt() ?? 1,
+      weights: ints(j['weights']),
+      labels: strs(j['labels']),
+      defaults: ints(j['defaults']),
+    );
+  }
 }
 
 class RankingBoard {
   final DateTime weekOf;
   final List<CompetitorRanking> rankings;
-  const RankingBoard({required this.weekOf, required this.rankings});
+  final List<LeaderboardEntry> reels;
+  final List<LeaderboardEntry> websites;
+  final List<LeaderboardEntry> collaborations;
+  const RankingBoard({
+    required this.weekOf,
+    required this.rankings,
+    this.reels = const [],
+    this.websites = const [],
+    this.collaborations = const [],
+  });
 
-  factory RankingBoard.fromJson(Map<String, dynamic> json) => RankingBoard(
-        weekOf:
-            DateTime.tryParse(json['weekOf'] as String? ?? '') ?? DateTime.now(),
-        rankings: ((json['rankings'] as List?) ?? const [])
-            .map((e) => CompetitorRanking.fromJson(e as Map<String, dynamic>))
-            .toList(),
-      );
+  factory RankingBoard.fromJson(Map<String, dynamic> json) {
+    List<LeaderboardEntry> board(String key) =>
+        (((json['leaderboards'] as Map?) ?? const {})[key] as List? ?? const [])
+            .map((e) => LeaderboardEntry.fromJson(e as Map<String, dynamic>))
+            .toList();
+    return RankingBoard(
+      weekOf:
+          DateTime.tryParse(json['weekOf'] as String? ?? '') ?? DateTime.now(),
+      rankings: ((json['rankings'] as List?) ?? const [])
+          .map((e) => CompetitorRanking.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      reels: board('reels'),
+      websites: board('websites'),
+      collaborations: board('collaborations'),
+    );
+  }
 }

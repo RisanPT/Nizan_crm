@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/models/booking.dart';
+import '../../../../core/models/trial.dart';
 import '../../../../core/providers/booking_provider.dart';
+import '../../../../core/providers/trial_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/dashboard_report_service.dart';
 import '../../../../core/utils/responsive_builder.dart';
@@ -88,6 +90,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
     );
     final asyncAllBookings = ref.watch(bookingProvider);
     final allBookings = asyncAllBookings.value ?? const <Booking>[];
+    final allTrials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
 
     final now = DateTime.now();
     final useEventDateVal = dateBasis.value == 'event_date';
@@ -162,11 +165,35 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    double revenueOn(DateTime day) => geoFilteredAllBookings
-        .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day))
-        .fold<double>(0, (s, b) => s + b.totalPrice);
-    int worksOn(DateTime day) => countPackages(geoFilteredAllBookings
-        .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day)));
+
+    // Trials are studio-wide (no region), so include them only when no location
+    // filter is active. Each non-cancelled trial adds its item-price sum as
+    // revenue and counts as one work.
+    final includeTrials = selectedZoneId.value.isEmpty &&
+        selectedStateId.value.isEmpty &&
+        selectedRegionId.value.isEmpty &&
+        selectedDistrictId.value.isEmpty;
+    final salesTrials = includeTrials
+        ? allTrials
+            .where((t) => t.status.toLowerCase() != 'cancelled')
+            .toList()
+        : const <Trial>[];
+    double trialAmount(Trial t) =>
+        t.trialItems.fold<double>(0, (s, i) => s + i.price);
+    bool trialInFY(Trial t) =>
+        !t.trialDate.isBefore(fyStart) && !t.trialDate.isAfter(fyEnd);
+
+    double revenueOn(DateTime day) =>
+        geoFilteredAllBookings
+            .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day))
+            .fold<double>(0, (s, b) => s + b.totalPrice) +
+        salesTrials
+            .where((t) => onSameDay(t.trialDate, day))
+            .fold<double>(0, (s, t) => s + trialAmount(t));
+    int worksOn(DateTime day) =>
+        countPackages(geoFilteredAllBookings
+            .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day))) +
+        salesTrials.where((t) => onSameDay(t.trialDate, day)).length;
 
     final todaySales = revenueOn(today);
     final yesterdaySales = revenueOn(yesterday);
@@ -177,7 +204,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
         : (todaySales - yesterdaySales) / yesterdaySales * 100;
 
     final totalRevenueFY =
-        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice);
+        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice) +
+        salesTrials
+            .where(trialInFY)
+            .fold<double>(0, (s, t) => s + trialAmount(t));
 
     // Indian FY quarters: Q1 Apr–Jun, Q2 Jul–Sep, Q3 Oct–Dec, Q4 Jan–Mar.
     int quarterIndex(int month) {
@@ -190,6 +220,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
     for (final b in fyBookings.where(isActiveBooking)) {
       quarterWorks[quarterIndex(dateOf(b).month)] +=
           b.bookingItems.isEmpty ? 1 : b.bookingItems.length;
+    }
+    for (final t in salesTrials.where(trialInFY)) {
+      quarterWorks[quarterIndex(t.trialDate.month)] += 1;
     }
 
 

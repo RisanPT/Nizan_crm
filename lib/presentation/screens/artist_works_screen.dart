@@ -9,6 +9,8 @@ import '../../core/providers/booking_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/models/booking.dart';
+import '../../core/models/trial.dart';
+import '../../core/providers/trial_provider.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../services/inventory_service.dart';
 import '../../services/addon_service_service.dart';
@@ -380,7 +382,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final employeeId = session?.employeeId ?? '';
 
-    final tabController = useTabController(initialLength: 2);
+    final tabController = useTabController(initialLength: 3);
 
     final selectedMonth = useState<DateTime>(DateTime(DateTime.now().year, DateTime.now().month, 1));
     final upcomingPage = useState<int>(1);
@@ -412,6 +414,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
 
     final asyncUpcoming = ref.watch(paginatedBookingsProvider(upcomingParams));
     final asyncCompleted = ref.watch(paginatedBookingsProvider(completedParams));
+    final asyncTrials = ref.watch(artistTrialsProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -428,8 +431,9 @@ class ArtistWorksScreen extends HookConsumerWidget {
           unselectedLabelColor: context.crmColors.textSecondary,
           indicatorColor: context.crmColors.primary,
           tabs: const [
-            Tab(text: 'UPCOMING WORKS'),
-            Tab(text: 'COMPLETED WORKS'),
+            Tab(text: 'UPCOMING'),
+            Tab(text: 'COMPLETED'),
+            Tab(text: 'TRIALS'),
           ],
         ),
       ),
@@ -492,8 +496,129 @@ class ArtistWorksScreen extends HookConsumerWidget {
                 );
               },
             ),
+            // ── Trials assigned to this artist ──
+            asyncTrials.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => _ErrorView(
+                error: error.toString(),
+                onRetry: () => ref.invalidate(artistTrialsProvider),
+              ),
+              data: (trials) {
+                final monthTrials = trials
+                    .where((t) =>
+                        t.trialDate.year == selectedMonth.value.year &&
+                        t.trialDate.month == selectedMonth.value.month)
+                    .toList()
+                  ..sort((a, b) => a.trialDate.compareTo(b.trialDate));
+                if (monthTrials.isEmpty) {
+                  return const _EmptyState(
+                    title: 'No Trials',
+                    message: 'No trials assigned to you this month.',
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  itemCount: monthTrials.length,
+                  separatorBuilder: (_, _) => 12.h,
+                  itemBuilder: (_, i) => _ArtistTrialCard(trial: monthTrials[i]),
+                );
+              },
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A trial card in the artist's TRIALS tab.
+class _ArtistTrialCard extends StatelessWidget {
+  final Trial trial;
+  const _ArtistTrialCard({required this.trial});
+
+  Color _statusColor() {
+    switch (trial.status.toLowerCase()) {
+      case 'completed':
+        return const Color(0xFF2E7D32);
+      case 'cancelled':
+        return const Color(0xFFD32F2F);
+      case 'postponed':
+        return const Color(0xFFE65100);
+      default:
+        return const Color(0xFF6699CC);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final c = _statusColor();
+    final looks = trial.trialItems
+        .map((i) => i.lookLabel.trim().isNotEmpty
+            ? i.lookLabel.trim()
+            : i.packageName.trim())
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+    final time = [trial.startTime, trial.endTime]
+        .where((s) => s.trim().isNotEmpty)
+        .join(' – ');
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: crm.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(width: 4, color: c),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(trial.clientName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                color: crm.textPrimary)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: c.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(trial.status,
+                            style: TextStyle(
+                                color: c,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  6.h,
+                  Text(
+                    [
+                      '${trial.trialDate.day}/${trial.trialDate.month}/${trial.trialDate.year}',
+                      if (time.isNotEmpty) time,
+                      if (looks.isNotEmpty) looks,
+                    ].join('  ·  '),
+                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

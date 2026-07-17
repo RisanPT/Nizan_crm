@@ -11,6 +11,8 @@ class FuelExpense {
   final String paymentMode;
   final String station;
   final String notes;
+  final String billImage;
+  final String status; // pending | approved | rejected
   final Vehicle? vehicle;
   final Employee? driver;
 
@@ -24,6 +26,8 @@ class FuelExpense {
     required this.paymentMode,
     required this.station,
     required this.notes,
+    this.billImage = '',
+    this.status = 'pending',
     this.vehicle,
     this.driver,
   });
@@ -43,6 +47,8 @@ class FuelExpense {
       paymentMode: json['paymentMode'] as String? ?? 'cash',
       station: json['station'] as String? ?? '',
       notes: json['notes'] as String? ?? '',
+      billImage: json['billImage'] as String? ?? '',
+      status: json['status'] as String? ?? 'pending',
       vehicle: vehicleJson is Map<String, dynamic>
           ? Vehicle.fromJson(vehicleJson)
           : null,

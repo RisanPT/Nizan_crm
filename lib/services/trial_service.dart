@@ -25,12 +25,13 @@ class TrialService {
   }
 
   // GET /api/trials  — optionally filter by month=YYYY-MM
-  Future<List<Trial>> getTrials({String? month}) async {
+  Future<List<Trial>> getTrials({String? month, String? artist}) async {
     try {
       final response = await _dio.get(
         '/trials',
         queryParameters: {
           if (month != null && month.isNotEmpty) 'month': month,
+          if (artist != null && artist.isNotEmpty) 'artist': artist,
         },
       );
       final data = response.data as List;

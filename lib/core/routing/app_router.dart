@@ -40,6 +40,7 @@ import '../../presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
+import '../../presentation/screens/accounts/accounts_fleet_expenses_screen.dart';
 import '../../presentation/screens/accounts/accounts_bills_screen.dart';
 import '../../presentation/screens/inventory/inventory_dashboard_screen.dart';
 import '../../presentation/screens/inventory/inventory_stock_screen.dart';
@@ -230,6 +231,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Invoices';
           } else if (state.uri.path == '/accounts/bills') {
             title = 'Bills & Payables';
+          } else if (state.uri.path == '/accounts/fleet-expenses') {
+            title = 'Fleet Expenses';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
           } else if (state.uri.path == '/marketing/competitors') {
@@ -387,6 +390,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/bills',
             builder: (context, state) => const AccountsBillsScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/fleet-expenses',
+            builder: (context, state) =>
+                const AccountsFleetExpensesScreen(),
           ),
           // ── Marketing (Competitor Intelligence) ──────────────────────
           GoRoute(

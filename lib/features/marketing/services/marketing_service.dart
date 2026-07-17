@@ -17,6 +17,11 @@ final rankingsProvider =
   return ref.watch(marketingServiceProvider).getRankings(weekOf: weekOf);
 });
 
+/// Active Growth-Score weights (FR-2.3).
+final scoringConfigProvider = FutureProvider<ScoringConfig>((ref) async {
+  return ref.watch(marketingServiceProvider).getScoringConfig();
+});
+
 class MarketingService {
   MarketingService(this._dio);
   final Dio _dio;
@@ -96,6 +101,42 @@ class MarketingService {
       return RankingBoard.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to load rankings'));
+    }
+  }
+
+  Future<ScoringConfig> getScoringConfig() async {
+    try {
+      final res = await _dio.get('/marketing/scoring-config');
+      return ScoringConfig.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to load scoring config'));
+    }
+  }
+
+  /// Save new weights — creates a new version, applies from the next entry on.
+  Future<void> updateScoringConfig(Map<String, int> weights,
+      {String note = ''}) async {
+    try {
+      await _dio.put('/marketing/scoring-config',
+          data: {'weights': weights, 'note': note});
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to save weights'));
+    }
+  }
+
+  /// 12-week Growth-Score trend for a competitor (FR-2.6).
+  Future<List<(DateTime, int)>> getScoreTrend(String competitorId) async {
+    try {
+      final res = await _dio.get('/marketing/competitors/$competitorId/trend');
+      final data = (res.data['trend'] as List?) ?? const [];
+      return data
+          .map((e) => (
+                DateTime.tryParse(e['weekOf'] as String? ?? '') ?? DateTime.now(),
+                (e['score'] as num?)?.toInt() ?? 0,
+              ))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to load trend'));
     }
   }
 

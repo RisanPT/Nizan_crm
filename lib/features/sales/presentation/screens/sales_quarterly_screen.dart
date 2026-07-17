@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/models/booking.dart';
+import '../../../../core/models/trial.dart';
 import '../../../../core/providers/booking_provider.dart';
+import '../../../../core/providers/trial_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import '../../../../presentation/screens/inventory/inventory_widgets.dart';
@@ -54,6 +56,7 @@ class SalesQuarterlyScreen extends ConsumerWidget {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(bookingProvider);
+    final allTrials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
 
     final fyStartYear =
         int.tryParse(financialYear.split('-').first) ?? DateTime.now().year;
@@ -104,6 +107,24 @@ class SalesQuarterlyScreen extends ConsumerWidget {
             if (status == 'completed') qCompleted[qi] += _works(b);
             monthWorks[m] = (monthWorks[m] ?? 0) + _works(b);
             monthRevenue[m] = (monthRevenue[m] ?? 0) + b.totalPrice;
+          }
+
+          // Fold in trials (studio-wide): each non-cancelled trial in the FY
+          // counts as one work and adds its item-price sum as revenue.
+          for (final t in allTrials) {
+            if (t.status.toLowerCase() == 'cancelled') continue;
+            if (t.trialDate.isBefore(fyStart) || t.trialDate.isAfter(fyEnd)) {
+              continue;
+            }
+            final m = t.trialDate.month;
+            final qi = quarterIndexForMonth(m);
+            final amount =
+                t.trialItems.fold<double>(0, (s, i) => s + i.price);
+            qWorks[qi] += 1;
+            qRevenue[qi] += amount;
+            if (t.status.toLowerCase() == 'completed') qCompleted[qi] += 1;
+            monthWorks[m] = (monthWorks[m] ?? 0) + 1;
+            monthRevenue[m] = (monthRevenue[m] ?? 0) + amount;
           }
 
           final totalWorks = qWorks.fold<int>(0, (s, v) => s + v);

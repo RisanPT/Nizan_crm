@@ -447,6 +447,18 @@ class Sidebar extends ConsumerWidget {
                                 context.go('/accounts/artist-collections'),
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32),
+                          child: _SidebarItem(
+                            icon: Icons.local_shipping_outlined,
+                            title: 'Fleet Expenses',
+                            isCollapsed: false,
+                            isSelected:
+                                currentPath == '/accounts/fleet-expenses',
+                            onTap: () =>
+                                context.go('/accounts/fleet-expenses'),
+                          ),
+                        ),
                       ],
                       Padding(
                         padding: const EdgeInsets.only(left: 14),

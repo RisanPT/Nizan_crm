@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/trial.dart';
+import '../../core/models/booking.dart' show BookingAssignment;
+import '../../core/models/employee.dart';
 import '../../core/providers/trial_provider.dart';
 import '../../core/models/trial_package.dart';
 import '../../core/providers/trial_package_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../services/employee_service.dart';
 import '../../services/trial_service.dart';
 
 // ── Outcome config ─────────────────────────────────────────────────────────
@@ -66,6 +69,11 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
   final List<TextEditingController> _itemPriceCtrls = [];
   final List<String> _outcomes = [];
 
+  // Assigned artists (exact booking-style flow).
+  List<BookingAssignment> _assigned = [];
+  String _assignType = 'lead'; // lead | assistant
+  String? _assignArtistId;
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +93,11 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
     _endTime = t.endTime;
     _notesCtrl.text = t.notes;
     _status = t.status;
+    _assigned = List.of(t.assignedStaff);
+    _assignType =
+        _assigned.any((a) => a.roleType.toLowerCase() == 'lead')
+            ? 'assistant'
+            : 'lead';
 
     // Clear existing item controllers
     for (final c in _packageNameCtrls) { c.dispose(); }
@@ -179,6 +192,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
         status: _status,
         notes: _notesCtrl.text.trim(),
         trialItems: _buildTrialItems(),
+        assignedStaff: _assigned,
       );
 
       if (_isNew) {
@@ -349,6 +363,8 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
                 _buildAppointmentSection(crmColors),
                 24.h,
                 _buildPackagesSection(crmColors, trialPackages),
+                24.h,
+                _buildAssignSection(crmColors),
                 24.h,
                 _buildStatusSection(crmColors),
                 24.h,
@@ -764,6 +780,307 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
         ],
       ),
     );
+  }
+
+  // ── Artist Assignment Flow (exact booking style) ───────────────────────
+  Widget _buildAssignSection(CrmTheme crm) {
+    final isNarrow = MediaQuery.of(context).size.width < 900;
+    final artists = (ref.watch(employeesProvider).value ?? const <Employee>[])
+        .where((e) =>
+            e.status.toLowerCase() == 'active' &&
+            (e.artistRole.toLowerCase() == 'artist' ||
+                e.artistRole.toLowerCase() == 'assistant'))
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    final assignedIds = _assigned.map((a) => a.employeeId).toSet();
+    final hasLead = _assigned.any((a) => a.roleType.toLowerCase() == 'lead');
+
+    // Filter selectable staff by the chosen type + exclude already-assigned.
+    final selectable = artists.where((e) {
+      final role = e.artistRole.toLowerCase();
+      final okForType = _assignType == 'lead' ? role == 'artist' : true;
+      return okForType && !assignedIds.contains(e.id);
+    }).toList();
+
+    return _sectionCard(
+      crm,
+      title: 'ARTIST ASSIGNMENT FLOW',
+      icon: Icons.people_alt_outlined,
+      child: Flex(
+        direction: isNarrow ? Axis.vertical : Axis.horizontal,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: isNarrow ? 0 : 1, child: _assignedTeamPane(crm)),
+          if (isNarrow) 20.h else 24.w,
+          Expanded(
+              flex: isNarrow ? 0 : 1,
+              child: _assignFormPane(crm, selectable, hasLead)),
+        ],
+      ),
+    );
+  }
+
+  Widget _assignedTeamPane(CrmTheme crm) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('CURRENT ASSIGNED TEAM',
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: crm.textSecondary,
+                letterSpacing: 1.2)),
+        16.h,
+        if (_assigned.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              border: Border.all(color: crm.border),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text('NO ARTISTS ASSIGNED YET',
+                  style: TextStyle(
+                      color: crm.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
+            ),
+          )
+        else
+          ..._assigned.map((a) => _assignmentBlock(crm, a)),
+      ],
+    );
+  }
+
+  Widget _assignmentBlock(CrmTheme crm, BookingAssignment a) {
+    final isLead = a.roleType.toLowerCase() == 'lead';
+    final accent = isLead ? Colors.amber : Colors.indigo;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border(left: BorderSide(color: accent, width: 4)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(a.artistName,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  8.w,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(isLead ? 'LEAD' : 'ASSISTANT',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: accent,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ]),
+                4.h,
+                Text(a.phone.isNotEmpty ? a.phone : 'Artist',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.bold)),
+              ],
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                _assigned.removeWhere((x) => x.employeeId == a.employeeId);
+                if (isLead) _assignType = 'lead';
+              }),
+              child: const Text('REMOVE',
+                  style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _assignFormPane(CrmTheme crm, List<Employee> selectable, bool hasLead) {
+    final isLead = _assignType == 'lead';
+    final accent = isLead ? Colors.amber : Colors.indigo;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(width: 4, height: 16, color: Colors.indigo),
+            8.w,
+            Text('ASSIGN TEAM MEMBER',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: crm.textSecondary,
+                    letterSpacing: 1.2)),
+          ]),
+          16.h,
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(isLead ? 'ASSIGN LEAD ARTIST' : 'ADD ASSISTANT',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: accent,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2)),
+                    Row(children: [
+                      _typeChip('LEAD', 'lead', Colors.amber, enabled: !hasLead),
+                      8.w,
+                      _typeChip('ASST', 'assistant', Colors.indigo,
+                          enabled: hasLead),
+                    ]),
+                  ],
+                ),
+                12.h,
+                if (selectable.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: crm.surface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: crm.border),
+                    ),
+                    child: Text(
+                        isLead
+                            ? 'No active artists available as lead.'
+                            : 'No staff available to add.',
+                        style: TextStyle(
+                            color: crm.textSecondary, fontSize: 12)),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    key: ValueKey(
+                        'assign-$_assignType-${selectable.map((e) => e.id).join(',')}'),
+                    initialValue: null,
+                    isExpanded: true,
+                    items: selectable
+                        .map((e) => DropdownMenuItem(
+                            value: e.id, child: Text(e.name)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _assignArtistId = v),
+                    decoration: InputDecoration(
+                        hintText: isLead
+                            ? 'Select lead artist…'
+                            : 'Select assistant…',
+                        isDense: true,
+                        border: const OutlineInputBorder()),
+                  ),
+                12.h,
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _assignArtistId == null
+                        ? null
+                        : () => _addAssignment(selectable),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text(isLead ? 'Assign lead' : 'Add assistant'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          16.h,
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: crm.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: crm.border),
+            ),
+            child: Text(
+                'Note: a trial must have one Lead Artist before Assistants can be added.',
+                style: TextStyle(
+                    fontSize: 10,
+                    color: crm.textSecondary,
+                    fontStyle: FontStyle.italic)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _typeChip(String label, String value, Color color,
+      {bool enabled = true}) {
+    final selected = _assignType == value;
+    return GestureDetector(
+      onTap: enabled
+          ? () => setState(() {
+                _assignType = value;
+                _assignArtistId = null;
+              })
+          : null,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.4,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: selected ? color : color.withValues(alpha: 0.3)),
+          ),
+          child: Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: color)),
+        ),
+      ),
+    );
+  }
+
+  void _addAssignment(List<Employee> selectable) {
+    final e = selectable.cast<Employee?>().firstWhere(
+        (x) => x?.id == _assignArtistId,
+        orElse: () => null);
+    if (e == null) return;
+    setState(() {
+      _assigned.add(BookingAssignment(
+        employeeId: e.id,
+        artistName: e.name,
+        phone: e.phone,
+        role: _assignType == 'lead' ? 'Lead Artist' : 'Assistant',
+        type: 'artist',
+        roleType: _assignType,
+      ));
+      _assignArtistId = null;
+      // After adding the lead, default the next add to assistant.
+      if (_assignType == 'lead') _assignType = 'assistant';
+    });
   }
 
   // ── Section 4: Status ──────────────────────────────────────────────────

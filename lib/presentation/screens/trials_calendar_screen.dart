@@ -832,6 +832,13 @@ class TrialsCalendarScreen extends HookConsumerWidget {
                           row(Icons.call_outlined, 'Phone', t.phone),
                           row(Icons.mail_outline, 'Email', t.email),
                           row(Icons.schedule, 'Time', _timeLabel(t)),
+                          row(
+                              Icons.people_alt_outlined,
+                              'Artists',
+                              t.assignedStaff
+                                  .map((a) => a.artistName.trim())
+                                  .where((n) => n.isNotEmpty)
+                                  .join(', ')),
                           row(Icons.brush_outlined, 'Looks', looks),
                           row(Icons.notes_outlined, 'Notes', t.notes),
                           14.h,

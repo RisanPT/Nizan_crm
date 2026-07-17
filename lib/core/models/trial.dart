@@ -2,6 +2,8 @@
 // A Trial is a studio appointment where a bride tries one or more looks/packages.
 // Trial packages are completely independent of the services Package catalog.
 
+import 'booking.dart' show BookingAssignment;
+
 // ── TrialItem ────────────────────────────────────────────────────────────────
 class TrialItem {
   final String packageName; // free-text e.g. "Bridal Classic"
@@ -63,6 +65,7 @@ class Trial {
   final String status; // scheduled | completed | postponed | cancelled
   final String notes;
   final List<TrialItem> trialItems;
+  final List<BookingAssignment> assignedStaff;
   final String bookingId;
   final DateTime? createdAt;
 
@@ -78,6 +81,7 @@ class Trial {
     this.status = 'scheduled',
     this.notes = '',
     this.trialItems = const [],
+    this.assignedStaff = const [],
     this.bookingId = '',
     this.createdAt,
   });
@@ -121,7 +125,13 @@ class Trial {
       trialItems: ((json['trialItems'] as List?) ?? [])
           .map((e) => TrialItem.fromJson(e as Map<String, dynamic>))
           .toList(),
-      bookingId: (json['bookingId'] as String?) ?? '',
+      assignedStaff: ((json['assignedStaff'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(BookingAssignment.fromJson)
+          .toList(),
+      bookingId: (json['bookingId'] is Map)
+          ? ((json['bookingId']['_id'] ?? '').toString())
+          : ((json['bookingId'] as String?) ?? ''),
       createdAt: parsedCreated,
     );
   }
@@ -141,6 +151,7 @@ class Trial {
       'status': status,
       'notes': notes,
       'trialItems': trialItems.map((i) => i.toJson()).toList(),
+      'assignedStaff': assignedStaff.map((a) => a.toJson()).toList(),
       if (bookingId.isNotEmpty) 'bookingId': bookingId,
     };
   }
@@ -158,6 +169,7 @@ class Trial {
     String? status,
     String? notes,
     List<TrialItem>? trialItems,
+    List<BookingAssignment>? assignedStaff,
     String? bookingId,
     DateTime? createdAt,
   }) =>
@@ -173,6 +185,7 @@ class Trial {
         status: status ?? this.status,
         notes: notes ?? this.notes,
         trialItems: trialItems ?? this.trialItems,
+        assignedStaff: assignedStaff ?? this.assignedStaff,
         bookingId: bookingId ?? this.bookingId,
         createdAt: createdAt ?? this.createdAt,
       );

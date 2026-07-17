@@ -71,6 +71,7 @@ class FuelExpenseService {
     required String paymentMode,
     required String station,
     required String notes,
+    String billImage = '',
   }) async {
     try {
       final payload = {
@@ -84,6 +85,7 @@ class FuelExpenseService {
         'paymentMode': paymentMode,
         'station': station,
         'notes': notes,
+        'billImage': billImage,
       };
 
       final response = id != null && id.isNotEmpty
@@ -98,6 +100,20 @@ class FuelExpenseService {
         errorMessage = data['message'].toString();
       }
       throw Exception(errorMessage);
+    }
+  }
+
+  /// Fleet-manager review action (approve / reject / pending).
+  Future<FuelExpense> setStatus(String id, String status) async {
+    try {
+      final response =
+          await _dio.put('/fuel-expenses/$id', data: {'status': status});
+      return FuelExpense.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw Exception((data is Map && data['message'] != null)
+          ? data['message'].toString()
+          : 'Failed to update status: ${e.message}');
     }
   }
 

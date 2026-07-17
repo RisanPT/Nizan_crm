@@ -33,9 +33,10 @@ const _metricFields = <(String, String)>[
   ('collaborations', 'Collaborations'),
 ];
 
-// Scoring flags: (key, label, points).
+// Scoring flags: (key, label, default points per SRS §4.2). These are the
+// default-weight previews; the backend applies the active versioned config.
 const _flagFields = <(String, String, int)>[
-  ('newCampaign', 'New campaign', 6),
+  ('newCampaign', 'New campaign', 5),
   ('viralContent', 'Viral content', 5),
   ('qualityCreative', 'Quality creative', 5),
   ('followerGrowth', 'Follower growth', 3),
@@ -453,6 +454,10 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
     final flags = {
       for (final f in _flagFields) f.$1: _flagValue(snap, f.$1),
     };
+    final evidenceCtrls = {
+      for (final f in _flagFields)
+        f.$1: TextEditingController(text: snap?.signalEvidence[f.$1] ?? ''),
+    };
     final themesCtrl = TextEditingController(text: snap?.contentThemes ?? '');
     var weekOf = _thisMonday;
     var saving = false;
@@ -477,6 +482,10 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
             for (final f in _metricFields)
               f.$1: double.tryParse(metricCtrls[f.$1]!.text.trim()) ?? 0,
             for (final f in _flagFields) f.$1: flags[f.$1],
+            'signalEvidence': {
+              for (final f in _flagFields)
+                f.$1: evidenceCtrls[f.$1]!.text.trim(),
+            },
           };
           try {
             await ref.read(marketingServiceProvider).upsertSnapshot(c.id, data);
@@ -559,17 +568,38 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                           fontWeight: FontWeight.w800,
                           color: crm.primary)),
                   6.h,
-                  ...(_flagFields.map((f) => CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        dense: true,
-                        value: flags[f.$1],
-                        title: Text(f.$2),
-                        secondary: Text('+${f.$3}',
-                            style: TextStyle(
-                                color: crm.textSecondary,
-                                fontWeight: FontWeight.w700)),
-                        onChanged: (v) =>
-                            setLocal(() => flags[f.$1] = v ?? false),
+                  ...(_flagFields.map((f) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            value: flags[f.$1],
+                            title: Text(f.$2),
+                            secondary: Text('+${f.$3}',
+                                style: TextStyle(
+                                    color: crm.textSecondary,
+                                    fontWeight: FontWeight.w700)),
+                            onChanged: (v) =>
+                                setLocal(() => flags[f.$1] = v ?? false),
+                          ),
+                          // Evidence required per triggered signal (FR-2.2).
+                          if (flags[f.$1] == true)
+                            Padding(
+                              padding:
+                                  const EdgeInsets.only(left: 8, bottom: 8),
+                              child: TextField(
+                                controller: evidenceCtrls[f.$1],
+                                style: const TextStyle(fontSize: 13),
+                                decoration: InputDecoration(
+                                    labelText: 'Evidence (URL / note)',
+                                    isDense: true,
+                                    border: const OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.link,
+                                        size: 16, color: crm.textSecondary)),
+                              ),
+                            ),
+                        ],
                       ))),
                 ],
               ),
@@ -594,6 +624,9 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
       }),
     );
     for (final c in metricCtrls.values) {
+      c.dispose();
+    }
+    for (final c in evidenceCtrls.values) {
       c.dispose();
     }
     themesCtrl.dispose();
