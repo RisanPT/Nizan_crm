@@ -205,28 +205,19 @@ class AddBookingScreen extends HookConsumerWidget {
       if (isSingleMode) {
         final pid = selectedPackageId.value;
         if (pid != null && pid.isNotEmpty) {
-          final dates = selectedDates.value;
           // One row per date so each day is its own calendar slot, all running
-          // the same package (that's what "single" means).
-          bookingCart.value = dates.isEmpty
-              ? [
-                  _BookingCartEntry(
-                    id: 'single-$pid',
-                    packageId: pid,
-                    eventSlot: eventSlotCtrl.text.trim(),
-                    quantity: 1,
-                  ),
-                ]
-              : [
-                  for (final d in dates)
-                    _BookingCartEntry(
-                      id: 'single-$pid-${_dateKey(d)}',
-                      packageId: pid,
-                      eventSlot: eventSlotCtrl.text.trim(),
-                      quantity: 1,
-                      date: d,
-                    ),
-                ];
+          // the same package (that's what "single" means). With no dates there
+          // are no packages yet — a package must always belong to a date.
+          bookingCart.value = [
+            for (final d in selectedDates.value)
+              _BookingCartEntry(
+                id: 'single-$pid-${_dateKey(d)}',
+                packageId: pid,
+                eventSlot: eventSlotCtrl.text.trim(),
+                quantity: 1,
+                date: d,
+              ),
+          ];
           recalculate();
         }
       }
@@ -252,21 +243,31 @@ class AddBookingScreen extends HookConsumerWidget {
           return;
         }
 
+        if (selectedDates.value.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Add a booking date first, then choose its package.'),
+            ),
+          );
+          return;
+        }
+
         final normalizedSlot = eventSlotCtrl.text.trim();
+        final stamp = DateTime.now().microsecondsSinceEpoch;
         bookingCart.value = [
           // Single mode keeps exactly one package, so replace instead of add.
           if (!isSingleMode) ...bookingCart.value,
-          _BookingCartEntry(
-            id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
-            packageId: '',
-            packageName: customName,
-            customAmount: customAmount,
-            eventSlot: normalizedSlot,
-            quantity: 1,
-            date: selectedDates.value.isNotEmpty
-                ? selectedDates.value.first
-                : null,
-          ),
+          // A custom package covers every selected date, one row each.
+          for (final d in selectedDates.value)
+            _BookingCartEntry(
+              id: 'custom-$stamp-${_dateKey(d)}',
+              packageId: '',
+              packageName: customName,
+              customAmount: customAmount,
+              eventSlot: normalizedSlot,
+              quantity: 1,
+              date: d,
+            ),
         ];
         eventSlotCtrl.clear();
         customPackageNameCtrl.clear();
@@ -916,39 +917,49 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ],
                                     ),
                                   ),
-                                  16.w,
-                                  // Package
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      key: packageDropdownKey,
-                                      initialValue: validPackageId,
-                                      items: [
-                                        const DropdownMenuItem(
-                                          value: '',
-                                          child: Text('Custom Package'),
-                                        ),
-                                        ...packages.map(
+                                  // Multiple mode picks the package on each date
+                                  // row instead, so only the date selection is
+                                  // needed here.
+                                  if (isSingleMode) ...[
+                                    16.w,
+                                    // Package
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        key: packageDropdownKey,
+                                        initialValue: validPackageId,
+                                        items: [
+                                          const DropdownMenuItem(
+                                            value: '',
+                                            child: Text('Custom Package'),
+                                          ),
+                                          ...packages.map(
                                             (p) => DropdownMenuItem(
                                               value: p.id,
                                               child: Text(
-                                                '${p.name} (₹${p.price.toStringAsFixed(0)})',
+                                                // Price actually charged for the
+                                                // selected district, so this
+                                                // matches the per-date rows.
+                                                '${p.name} (₹${p.effectivePriceForDistrict(selectedDistrictId.value).toStringAsFixed(0)})',
                                               ),
                                             ),
                                           ),
-                                      ],
-                                      onChanged: packages.isEmpty
-                                          ? null
-                                          : (val) {
-                                              selectedPackageId.value = val;
-                                              recalculate();
-                                            },
-                                      decoration: _inputDeco('Package', crmColors),
-                                      validator: (v) => v == null ? 'Required' : null,
+                                        ],
+                                        onChanged: packages.isEmpty
+                                            ? null
+                                            : (val) {
+                                                selectedPackageId.value = val;
+                                                recalculate();
+                                              },
+                                        decoration:
+                                            _inputDeco('Package', crmColors),
+                                        validator: (v) =>
+                                            v == null ? 'Required' : null,
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
-                              if (selectedPackageId.value == '') ...[
+                              if (isSingleMode && selectedPackageId.value == '') ...[
                                 16.h,
                                 Row(
                                   children: [
@@ -989,11 +1000,11 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ),
                                     ),
                                   ),
-                                  // In single mode a real package auto-syncs, so
-                                  // the button only appears for a custom package;
-                                  // in multiple mode it always adds to the cart.
-                                  if (!isSingleMode ||
-                                      selectedPackageId.value == '') ...[
+                                  // Package rows are driven by the dates you
+                                  // pick, so no manual "add to cart" step is
+                                  // needed. The button is only for entering a
+                                  // custom (non-catalogue) package.
+                                  if (isSingleMode && selectedPackageId.value == '') ...[
                                     16.w,
                                     SizedBox(
                                       height: 56,
@@ -1001,16 +1012,133 @@ class AddBookingScreen extends HookConsumerWidget {
                                         onPressed: isSubmitting.value
                                             ? null
                                             : addPackageToCart,
-                                        icon:
-                                            const Icon(Icons.add_shopping_cart),
-                                        label: Text(isSingleMode
-                                            ? 'Set Package'
-                                            : 'Add Package'),
+                                        icon: const Icon(Icons.add),
+                                        label: const Text('Add Custom Package'),
                                       ),
                                     ),
                                   ],
                                 ],
                               ),
+                              // ── Booking dates (these drive the package rows) ──
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    onTap: isSubmitting.value ? null : pickDate,
+                                    borderRadius: BorderRadius.circular(8),
+                                      child: InputDecorator(
+                                        decoration: _inputDeco(
+                                          'Booking Dates',
+                                        crmColors,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.calendar_today,
+                                            size: 16,
+                                            color: crmColors.textSecondary,
+                                          ),
+                                          8.w,
+                                          Expanded(
+                                            child: Text(
+                                              selectedDates.value.isNotEmpty
+                                                  ? '${selectedDates.value.length} date${selectedDates.value.length == 1 ? '' : 's'} selected'
+                                                  : 'Add booking date…',
+                                              style: TextStyle(
+                                                color: selectedDates.value.isNotEmpty
+                                                    ? crmColors.textPrimary
+                                                    : crmColors.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.add_circle_outline,
+                                            size: 18,
+                                            color: crmColors.primary,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  4.h,
+                                  Text(
+                                    'Tip: each date you add gets its own package row below — pick a different package per day if the client needs one. Every day becomes its own calendar slot under this one booking.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: crmColors.textSecondary,
+                                    ),
+                                  ),
+                                  if (selectedDates.value.isNotEmpty) ...[
+                                    12.h,
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: selectedDates.value
+                                          .map(
+                                            (date) => Chip(
+                                              label: Text(
+                                                date.toString().split(' ')[0],
+                                              ),
+                                              onDeleted: () {
+                                                selectedDates.value = selectedDates.value
+                                                    .where(
+                                                      (item) =>
+                                                          item.year != date.year ||
+                                                          item.month != date.month ||
+                                                          item.day != date.day,
+                                                    )
+                                                    .toList();
+                                                // Drop the package rows that
+                                                // belonged to this date.
+                                                bookingCart.value = bookingCart
+                                                    .value
+                                                    .where((e) =>
+                                                        e.date == null ||
+                                                        _dateKey(e.date!) !=
+                                                            _dateKey(date))
+                                                    .toList();
+                                                recalculate();
+                                              },
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              // Nothing to price until a date exists — packages
+                              // are always attached to a date.
+                              if (bookingCart.value.isEmpty) ...[
+                                16.h,
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: crmColors.surface,
+                                    border: Border.all(color: crmColors.border),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.event_outlined,
+                                          size: 18,
+                                          color: crmColors.textSecondary),
+                                      10.w,
+                                      Expanded(
+                                        child: Text(
+                                          selectedDates.value.isEmpty
+                                              ? 'Add a booking date above — each date you add appears here with its own package to choose.'
+                                              : 'Choose a package for each date above.',
+                                          style: TextStyle(
+                                            fontSize: 12.5,
+                                            color: crmColors.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               if (bookingCart.value.isNotEmpty) ...[
                                 16.h,
                                 Container(
@@ -1260,91 +1388,10 @@ class AddBookingScreen extends HookConsumerWidget {
                                 ),
                               ],
                               16.h,
-                              // ── Date + Time row ───────────────────────────────
+                              // ── Time row ─────────────────────────────────────
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  InkWell(
-                                    onTap: isSubmitting.value ? null : pickDate,
-                                    borderRadius: BorderRadius.circular(8),
-                                      child: InputDecorator(
-                                        decoration: _inputDeco(
-                                          'Booking Dates',
-                                        crmColors,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.calendar_today,
-                                            size: 16,
-                                            color: crmColors.textSecondary,
-                                          ),
-                                          8.w,
-                                          Expanded(
-                                            child: Text(
-                                              selectedDates.value.isNotEmpty
-                                                  ? '${selectedDates.value.length} date${selectedDates.value.length == 1 ? '' : 's'} selected'
-                                                  : 'Add booking date…',
-                                              style: TextStyle(
-                                                color: selectedDates.value.isNotEmpty
-                                                    ? crmColors.textPrimary
-                                                    : crmColors.textSecondary,
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            Icons.add_circle_outline,
-                                            size: 18,
-                                            color: crmColors.primary,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  4.h,
-                                  Text(
-                                    'Tip: each date you add gets its own package row above — pick a different package per day if the client needs one. Every day becomes its own calendar slot under this one booking.',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: crmColors.textSecondary,
-                                    ),
-                                  ),
-                                  if (selectedDates.value.isNotEmpty) ...[
-                                    12.h,
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: selectedDates.value
-                                          .map(
-                                            (date) => Chip(
-                                              label: Text(
-                                                date.toString().split(' ')[0],
-                                              ),
-                                              onDeleted: () {
-                                                selectedDates.value = selectedDates.value
-                                                    .where(
-                                                      (item) =>
-                                                          item.year != date.year ||
-                                                          item.month != date.month ||
-                                                          item.day != date.day,
-                                                    )
-                                                    .toList();
-                                                // Drop the package rows that
-                                                // belonged to this date.
-                                                bookingCart.value = bookingCart
-                                                    .value
-                                                    .where((e) =>
-                                                        e.date == null ||
-                                                        _dateKey(e.date!) !=
-                                                            _dateKey(date))
-                                                    .toList();
-                                                recalculate();
-                                              },
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ],
                                   16.h,
                                   Row(
                                     children: [
