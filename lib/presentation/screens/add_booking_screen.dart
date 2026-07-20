@@ -46,6 +46,14 @@ class AddBookingScreen extends HookConsumerWidget {
     final customPackageNameCtrl = useTextEditingController();
     final customPackageAmountCtrl = useTextEditingController();
     final bookingCart = useState<List<_BookingCartEntry>>([]);
+    // 'single' → one package (may span multiple days); 'multiple' → several
+    // packages/days, all saved as ONE invoice with a calendar entry each.
+    final initialMode =
+        GoRouterState.of(context).uri.queryParameters['mode'] == 'single'
+            ? 'single'
+            : 'multiple';
+    final bookingMode = useState<String>(initialMode);
+    final isSingleMode = bookingMode.value == 'single';
     final startTime = useState<TimeOfDay>(const TimeOfDay(hour: 9, minute: 0));
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
     final totalPrice = useState<double>(0);
@@ -72,10 +80,16 @@ class AddBookingScreen extends HookConsumerWidget {
     }
 
     List<BookingItem> buildBookingItems() {
-      final dates = [...selectedDates.value]..sort((a, b) => a.compareTo(b));
+      final allDates = [...selectedDates.value]..sort((a, b) => a.compareTo(b));
 
+      // Each cart entry runs on its OWN date, so every date becomes its own
+      // booking item (and therefore its own calendar slot) while the whole set
+      // stays a single booking / single invoice.
       return bookingCart.value
           .expand((entry) {
+            final entryDates = entry.date != null
+                ? <DateTime>[entry.date!]
+                : allDates;
             if (entry.packageId.isEmpty) {
               return List.generate(
                 entry.quantity,
@@ -83,7 +97,7 @@ class AddBookingScreen extends HookConsumerWidget {
                   packageId: '',
                   service: entry.packageName,
                   eventSlot: entry.eventSlot,
-                  selectedDates: dates,
+                  selectedDates: entryDates,
                   totalPrice: entry.customAmount,
                   advanceAmount: entry.advanceAmount,
                 ),
@@ -100,7 +114,7 @@ class AddBookingScreen extends HookConsumerWidget {
                 packageId: package.id,
                 service: package.name,
                 eventSlot: entry.eventSlot,
-                selectedDates: dates,
+                selectedDates: entryDates,
                 totalPrice: basePrice,
                 advanceAmount: package.advanceAmount,
               ),
@@ -119,21 +133,25 @@ class AddBookingScreen extends HookConsumerWidget {
         advanceAmount.value = 0;
         return;
       }
+      // Mirrors the backend exactly: every date carries its own package, so the
+      // base is the sum of each date's package price. The flat extra-date fee
+      // now only applies to a package that genuinely spans more than one day.
       basePackageAmount.value = bookingItems.fold<double>(
         0,
         (sum, item) => sum + item.totalPrice,
       );
-      extraDateCharge.value =
-          (selectedDates.value.length > 1 ? selectedDates.value.length - 1 : 0) *
-          kExtraDateChargePerPackage *
-          (totalPackageCount > 0 ? totalPackageCount : 1);
+      // ₹3000 is charged for EVERY booking day (not only extra days), so one
+      // date of Platinum = 21500 + 3000 = 24500 and two dates = 49000.
+      extraDateCharge.value = bookingItems.fold<double>(
+        0,
+        (sum, item) => sum + (_itemDayCount(item) * kExtraDateChargePerPackage),
+      );
       totalPrice.value = basePackageAmount.value + extraDateCharge.value;
-      advanceAmount.value =
-          bookingItems.fold<double>(
-            0,
-            (sum, item) => sum + item.advanceAmount,
-          ) *
-          (selectedDates.value.isEmpty ? 1 : selectedDates.value.length);
+      // ₹3000 advance per package, counted once per day it runs.
+      advanceAmount.value = bookingItems.fold<double>(
+        0,
+        (sum, item) => sum + (item.advanceAmount * _itemDayCount(item)),
+      );
     }
 
     final validPackageId =
@@ -180,6 +198,41 @@ class AddBookingScreen extends HookConsumerWidget {
       selectedDates.value,
     ]);
 
+    // Single mode: mirror the selected real package into a single cart entry so
+    // the total computes live and no "Add package" click is required. Custom
+    // packages in single mode still use the "Set Package" button.
+    useEffect(() {
+      if (isSingleMode) {
+        final pid = selectedPackageId.value;
+        if (pid != null && pid.isNotEmpty) {
+          final dates = selectedDates.value;
+          // One row per date so each day is its own calendar slot, all running
+          // the same package (that's what "single" means).
+          bookingCart.value = dates.isEmpty
+              ? [
+                  _BookingCartEntry(
+                    id: 'single-$pid',
+                    packageId: pid,
+                    eventSlot: eventSlotCtrl.text.trim(),
+                    quantity: 1,
+                  ),
+                ]
+              : [
+                  for (final d in dates)
+                    _BookingCartEntry(
+                      id: 'single-$pid-${_dateKey(d)}',
+                      packageId: pid,
+                      eventSlot: eventSlotCtrl.text.trim(),
+                      quantity: 1,
+                      date: d,
+                    ),
+                ];
+          recalculate();
+        }
+      }
+      return null;
+    }, [bookingMode.value, selectedPackageId.value, selectedDates.value]);
+
     void addPackageToCart() {
       final isCustomPackage = selectedPackageId.value == '';
       if (isCustomPackage) {
@@ -201,7 +254,8 @@ class AddBookingScreen extends HookConsumerWidget {
 
         final normalizedSlot = eventSlotCtrl.text.trim();
         bookingCart.value = [
-          ...bookingCart.value,
+          // Single mode keeps exactly one package, so replace instead of add.
+          if (!isSingleMode) ...bookingCart.value,
           _BookingCartEntry(
             id: 'custom-${DateTime.now().microsecondsSinceEpoch}',
             packageId: '',
@@ -209,6 +263,9 @@ class AddBookingScreen extends HookConsumerWidget {
             customAmount: customAmount,
             eventSlot: normalizedSlot,
             quantity: 1,
+            date: selectedDates.value.isNotEmpty
+                ? selectedDates.value.first
+                : null,
           ),
         ];
         eventSlotCtrl.clear();
@@ -228,12 +285,16 @@ class AddBookingScreen extends HookConsumerWidget {
 
       final normalizedSlot = eventSlotCtrl.text.trim();
       bookingCart.value = [
-        ...bookingCart.value,
+        // Single mode keeps exactly one package, so replace instead of add.
+        if (!isSingleMode) ...bookingCart.value,
         _BookingCartEntry(
           id: '${selectedPackage.id}-${DateTime.now().microsecondsSinceEpoch}',
           packageId: selectedPackage.id,
           eventSlot: normalizedSlot,
           quantity: 1,
+          date: selectedDates.value.isNotEmpty
+              ? selectedDates.value.first
+              : null,
         ),
       ];
       eventSlotCtrl.clear();
@@ -267,6 +328,22 @@ class AddBookingScreen extends HookConsumerWidget {
         if (!exists) {
           selectedDates.value = [...selectedDates.value, normalizedDate]
             ..sort((a, b) => a.compareTo(b));
+          // Multiple mode: every new date gets its own package row, pre-filled
+          // with the currently selected package. The user can then change that
+          // day's package independently. (Single mode is handled by useEffect.)
+          final pid = selectedPackageId.value;
+          if (!isSingleMode && pid != null && pid.isNotEmpty) {
+            bookingCart.value = [
+              ...bookingCart.value,
+              _BookingCartEntry(
+                id: 'date-${_dateKey(normalizedDate)}-$pid-${DateTime.now().microsecondsSinceEpoch}',
+                packageId: pid,
+                eventSlot: eventSlotCtrl.text.trim(),
+                quantity: 1,
+                date: normalizedDate,
+              ),
+            ];
+          }
           recalculate();
         }
       }
@@ -329,6 +406,36 @@ class AddBookingScreen extends HookConsumerWidget {
         return;
       }
 
+      // Single mode: refresh the slot on each per-date row so a slot typed
+      // after the package/dates were chosen is captured. This must PRESERVE
+      // every row's date — rebuilding one dateless row would collapse a
+      // multi-day booking into a single item and undercharge it.
+      if (isSingleMode && bookingCart.value.isNotEmpty) {
+        final slot = eventSlotCtrl.text.trim();
+        bookingCart.value = [
+          for (final entry in bookingCart.value) entry.copyWith(eventSlot: slot),
+        ];
+      }
+
+      // Guard against a selected date having no package (e.g. a custom package
+      // was only added to the first date) — otherwise that day is silently
+      // booked with nothing.
+      final orphanDates = selectedDates.value
+          .where((d) => !bookingCart.value.any(
+                (e) => e.date == null || _dateKey(e.date!) == _dateKey(d),
+              ))
+          .toList();
+      if (orphanDates.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Add a package for ${_formatDayLabel(orphanDates.first)}.',
+            ),
+          ),
+        );
+        return;
+      }
+
       final sortedDates = [...selectedDates.value]..sort((a, b) => a.compareTo(b));
       final d = sortedDates.first;
       final lastDate = sortedDates.last;
@@ -359,40 +466,47 @@ class AddBookingScreen extends HookConsumerWidget {
       final actualName =
           autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
 
+      // Booking-level summaries derived from every package (mirrors backend).
+      final aggregatedService = <String>{
+        for (final it in bookingItems)
+          if (it.service.trim().isNotEmpty) it.service.trim(),
+      }.join(' + ');
+      final aggregatedSlot = <String>{
+        for (final it in bookingItems)
+          if (it.eventSlot.trim().isNotEmpty) it.eventSlot.trim(),
+      }.join(' | ');
+
       isSubmitting.value = true;
       try {
-        for (int i = 0; i < bookingItems.length; i++) {
-          final item = bookingItems[i];
-          final booking = Booking(
-            id: '${DateTime.now().millisecondsSinceEpoch}_$i',
-            packageId: item.packageId,
-            regionId: selectedDistrictModel?.regionId ?? '',
-            districtId: selectedDistrictModel?.id ?? '',
-            customerName: actualName,
-            phone: phoneCtrl.text.trim(),
-            address: addressCtrl.text.trim(),
-            pincode: pincodeCtrl.text.trim(),
-            email: emailCtrl.text.trim(),
-            legacyBooking: allowMissingEmail.value,
-            service: item.service,
-            eventSlot: item.eventSlot.trim(),
-            region: selectedDistrictModel?.regionName ?? '',
-            district: selectedDistrictModel?.name ?? '',
-            bookingDate: d,
-            selectedDates: sortedDates,
-            serviceStart: sStart,
-            serviceEnd: sEnd,
-            totalPrice: item.totalPrice,
-            advanceAmount: item.advanceAmount,
-            bookingItems: const [],
-          );
-          await ref.read(bookingProvider.notifier).addBooking(booking);
-          
-          // Add a small delay so backend doesn't assign the same booking number
-          if (i < bookingItems.length - 1) {
-            await Future.delayed(const Duration(milliseconds: 500));
-          }
-        }
+        // ONE booking carries every package/day as bookingItems → a single
+        // invoice. Booking.displayEntries then expands it into one calendar
+        // entry per package × date, each showing that item's own amount.
+        final booking = Booking(
+          id: '${DateTime.now().millisecondsSinceEpoch}',
+          packageId: bookingItems.first.packageId,
+          regionId: selectedDistrictModel?.regionId ?? '',
+          districtId: selectedDistrictModel?.id ?? '',
+          customerName: actualName,
+          phone: phoneCtrl.text.trim(),
+          address: addressCtrl.text.trim(),
+          pincode: pincodeCtrl.text.trim(),
+          email: emailCtrl.text.trim(),
+          legacyBooking: allowMissingEmail.value,
+          service: aggregatedService.isEmpty
+              ? bookingItems.first.service
+              : aggregatedService,
+          eventSlot: aggregatedSlot,
+          region: selectedDistrictModel?.regionName ?? '',
+          district: selectedDistrictModel?.name ?? '',
+          bookingDate: d,
+          selectedDates: sortedDates,
+          serviceStart: sStart,
+          serviceEnd: sEnd,
+          totalPrice: totalPrice.value,
+          advanceAmount: advanceAmount.value,
+          bookingItems: bookingItems,
+        );
+        await ref.read(bookingProvider.notifier).addBooking(booking);
 
         if (!context.mounted) return;
 
@@ -402,7 +516,11 @@ class AddBookingScreen extends HookConsumerWidget {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${bookingItems.length} Booking(s) created and added to calendar.'),
+            content: Text(
+              bookingItems.length > 1
+                  ? 'Booking created with ${bookingItems.length} packages — one invoice.'
+                  : 'Booking created and added to calendar.',
+            ),
             backgroundColor: const Color(0xFF10B981),
           ),
         );
@@ -474,6 +592,62 @@ class AddBookingScreen extends HookConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // ── Booking mode (Single vs Multiple) ────────────
+                              SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'single',
+                                    icon: Icon(Icons.event_available_outlined),
+                                    label: Text('Single'),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'multiple',
+                                    icon:
+                                        Icon(Icons.dashboard_customize_outlined),
+                                    label: Text('Multiple'),
+                                  ),
+                                ],
+                                selected: {bookingMode.value},
+                                onSelectionChanged: (s) {
+                                  bookingMode.value = s.first;
+                                  recalculate();
+                                },
+                              ),
+                              10.h,
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: crmColors.primary.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: crmColors.primary
+                                          .withValues(alpha: 0.25)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                        isSingleMode
+                                            ? Icons.event_available_outlined
+                                            : Icons.dashboard_customize_outlined,
+                                        size: 18,
+                                        color: crmColors.primary),
+                                    10.w,
+                                    Expanded(
+                                      child: Text(
+                                        isSingleMode
+                                            ? 'Single booking — one package for this client. Pick more than one date for a multi-day event; it stays one invoice.'
+                                            : 'Multiple booking — add several packages and/or days. All are saved as ONE invoice, and each package/day shows as its own calendar entry.',
+                                        style: TextStyle(
+                                            fontSize: 12.5,
+                                            height: 1.3,
+                                            color: crmColors.textPrimary),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              24.h,
                               // ── Customer Details ──────────────────────────────
                               Text(
                                 'Customer Details',
@@ -815,17 +989,26 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ),
                                     ),
                                   ),
-                                  16.w,
-                                  SizedBox(
-                                    height: 56,
-                                    child: ElevatedButton.icon(
-                                      onPressed: isSubmitting.value
-                                          ? null
-                                          : addPackageToCart,
-                                      icon: const Icon(Icons.add_shopping_cart),
-                                      label: const Text('Add Package'),
+                                  // In single mode a real package auto-syncs, so
+                                  // the button only appears for a custom package;
+                                  // in multiple mode it always adds to the cart.
+                                  if (!isSingleMode ||
+                                      selectedPackageId.value == '') ...[
+                                    16.w,
+                                    SizedBox(
+                                      height: 56,
+                                      child: ElevatedButton.icon(
+                                        onPressed: isSubmitting.value
+                                            ? null
+                                            : addPackageToCart,
+                                        icon:
+                                            const Icon(Icons.add_shopping_cart),
+                                        label: Text(isSingleMode
+                                            ? 'Set Package'
+                                            : 'Add Package'),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
                               ),
                               if (bookingCart.value.isNotEmpty) ...[
@@ -842,9 +1025,21 @@ class AddBookingScreen extends HookConsumerWidget {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'PACKAGE CART ($totalPackageCount)',
+                                        isSingleMode
+                                            ? 'PACKAGE IN THIS BOOKING'
+                                            : 'PACKAGES IN THIS BOOKING ($totalPackageCount)',
                                         style: theme.textTheme.titleSmall?.copyWith(
                                           fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      2.h,
+                                      Text(
+                                        isSingleMode
+                                            ? 'One row per date, all running the same package. Saved as ONE booking (one invoice), with a calendar slot per date.'
+                                            : 'Each date has its own package — change any day below. All saved as ONE booking (one invoice), with a calendar slot per date.',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: crmColors.textSecondary,
                                         ),
                                       ),
                                       12.h,
@@ -863,17 +1058,96 @@ class AddBookingScreen extends HookConsumerWidget {
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
                                                   children: [
-                                                    Text(
-                                                      entry.value.packageId.isEmpty
-                                                          ? entry.value.packageName
-                                                          : (findPackageById(
-                                                                  entry.value.packageId,
-                                                                )?.name ??
-                                                                'Package'),
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.w700,
+                                                    if (entry.value.date !=
+                                                        null) ...[
+                                                      Text(
+                                                        _formatDayLabel(
+                                                            entry.value.date!),
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w800,
+                                                          letterSpacing: 0.6,
+                                                          color: crmColors
+                                                              .primary,
+                                                        ),
                                                       ),
-                                                    ),
+                                                      4.h,
+                                                    ],
+                                                    if (entry.value.packageId
+                                                        .isEmpty)
+                                                      Text(
+                                                        entry.value.packageName,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      )
+                                                    else
+                                                      // Choose THIS day's package.
+                                                      // Disabled in single mode,
+                                                      // where every day shares
+                                                      // the one chosen package.
+                                                      SizedBox(
+                                                        width: 280,
+                                                        child:
+                                                            DropdownButtonFormField<
+                                                                String>(
+                                                          initialValue: entry
+                                                              .value.packageId,
+                                                          isExpanded: true,
+                                                          isDense: true,
+                                                          decoration:
+                                                              const InputDecoration(
+                                                            isDense: true,
+                                                            border:
+                                                                OutlineInputBorder(),
+                                                            contentPadding:
+                                                                EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 10,
+                                                              vertical: 8,
+                                                            ),
+                                                          ),
+                                                          items: [
+                                                            for (final p
+                                                                in packages)
+                                                              DropdownMenuItem(
+                                                                value: p.id,
+                                                                child: Text(
+                                                                  '${p.name} (₹${p.effectivePriceForDistrict(selectedDistrictId.value).toStringAsFixed(0)})',
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                              ),
+                                                          ],
+                                                          onChanged: isSingleMode
+                                                              ? null
+                                                              : (val) {
+                                                                  if (val ==
+                                                                      null) {
+                                                                    return;
+                                                                  }
+                                                                  final list = [
+                                                                    ...bookingCart
+                                                                        .value
+                                                                  ];
+                                                                  list[entry
+                                                                          .key] =
+                                                                      list[entry
+                                                                              .key]
+                                                                          .copyWith(
+                                                                    packageId:
+                                                                        val,
+                                                                  );
+                                                                  bookingCart
+                                                                          .value =
+                                                                      list;
+                                                                  recalculate();
+                                                                },
+                                                        ),
+                                                      ),
                                                     if (entry.value.eventSlot
                                                         .trim()
                                                         .isNotEmpty) ...[
@@ -1027,6 +1301,14 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ),
                                     ),
                                   ),
+                                  4.h,
+                                  Text(
+                                    'Tip: each date you add gets its own package row above — pick a different package per day if the client needs one. Every day becomes its own calendar slot under this one booking.',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: crmColors.textSecondary,
+                                    ),
+                                  ),
                                   if (selectedDates.value.isNotEmpty) ...[
                                     12.h,
                                     Wrap(
@@ -1046,6 +1328,15 @@ class AddBookingScreen extends HookConsumerWidget {
                                                           item.month != date.month ||
                                                           item.day != date.day,
                                                     )
+                                                    .toList();
+                                                // Drop the package rows that
+                                                // belonged to this date.
+                                                bookingCart.value = bookingCart
+                                                    .value
+                                                    .where((e) =>
+                                                        e.date == null ||
+                                                        _dateKey(e.date!) !=
+                                                            _dateKey(date))
                                                     .toList();
                                                 recalculate();
                                               },
@@ -1130,7 +1421,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                   16.w,
                                   Expanded(
                                     child: _summaryBox(
-                                      label: 'EXTRA DATE CHARGE',
+                                      label: 'DATE CHARGE (₹3000/DAY)',
                                       value:
                                           '₹ ${extraDateCharge.value.toStringAsFixed(0)}',
                                       border: crmColors.border,
@@ -1339,6 +1630,11 @@ class _BookingCartEntry {
   final String eventSlot;
   final int quantity;
 
+  /// The single date this package runs on. Every selected booking date gets
+  /// its own entry, so a client can take a different package per day while
+  /// everything still bills as ONE invoice.
+  final DateTime? date;
+
   const _BookingCartEntry({
     required this.id,
     required this.packageId,
@@ -1347,6 +1643,7 @@ class _BookingCartEntry {
     this.advanceAmount = 0,
     this.eventSlot = '',
     this.quantity = 1,
+    this.date,
   });
 
   _BookingCartEntry copyWith({
@@ -1357,6 +1654,7 @@ class _BookingCartEntry {
     double? advanceAmount,
     String? eventSlot,
     int? quantity,
+    DateTime? date,
   }) {
     return _BookingCartEntry(
       id: id ?? this.id,
@@ -1366,6 +1664,21 @@ class _BookingCartEntry {
       advanceAmount: advanceAmount ?? this.advanceAmount,
       eventSlot: eventSlot ?? this.eventSlot,
       quantity: quantity ?? this.quantity,
+      date: date ?? this.date,
     );
   }
 }
+
+String _formatDayLabel(DateTime d) {
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
+int _itemDayCount(BookingItem item) =>
+    item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
+
+String _dateKey(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
+import '../common_widgets/add_booking_mode_sheet.dart';
 import '../../core/models/booking.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/zone.dart';
@@ -1079,7 +1080,7 @@ class CalendarScreen extends HookConsumerWidget {
       backgroundColor: Colors.transparent,
       floatingActionButton: (isMobile && !isArtist)
           ? FloatingActionButton(
-              onPressed: () => context.push('/booking/add'),
+              onPressed: () => showAddBookingModeChooser(context),
               backgroundColor: crmColors.primary,
               foregroundColor: Colors.white,
               child: const Icon(Icons.add),
@@ -1121,7 +1122,7 @@ class CalendarScreen extends HookConsumerWidget {
                   ),
                   16.w,
                   ElevatedButton.icon(
-                    onPressed: () => context.push('/booking/add'),
+                    onPressed: () => showAddBookingModeChooser(context),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('New Booking'),
                     style: ElevatedButton.styleFrom(
@@ -1457,7 +1458,7 @@ class CalendarScreen extends HookConsumerWidget {
               if (!isArtist) ...[
                 12.h,
                 ElevatedButton.icon(
-                  onPressed: () => context.push('/booking/add'),
+                  onPressed: () => showAddBookingModeChooser(context),
                   icon: const Icon(Icons.add, size: 16),
                   label: const Text('New Booking'),
                   style: ElevatedButton.styleFrom(
@@ -1491,7 +1492,13 @@ class CalendarScreen extends HookConsumerWidget {
         final borderColor = isAssigned
             ? serviceColor
             : Color.lerp(serviceColor, Colors.white, 0.55)!;
-        final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
+        // Show THIS entry's amounts (per package/day), not the whole booking's,
+        // so every day of a multi-day / multi-package booking reads correctly.
+        // Discount is spread evenly across the booking's entries.
+        final entryCount = b.displayEntries.isEmpty ? 1 : b.displayEntries.length;
+        final entryTotal = entry.totalPrice;
+        final entryAdvance = entry.advanceAmount;
+        final balance = entryTotal - entryAdvance - (b.discountAmount / entryCount);
 
         return GestureDetector(
           onTap: () => context.push(
@@ -1594,12 +1601,12 @@ class CalendarScreen extends HookConsumerWidget {
                   children: [
                     _buildCompactPaymentInfo(
                       label: 'Total',
-                      value: '₹${b.totalPrice.toStringAsFixed(0)}',
+                      value: '₹${entryTotal.toStringAsFixed(0)}',
                       color: crmColors.textPrimary,
                     ),
                     _buildCompactPaymentInfo(
                       label: 'Advance',
-                      value: '₹${b.advanceAmount.toStringAsFixed(0)}',
+                      value: '₹${entryAdvance.toStringAsFixed(0)}',
                       color: crmColors.success,
                     ),
                     _buildCompactPaymentInfo(

@@ -538,18 +538,89 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
 
   // ── Services table rows ─────────────────────────────────────────────────────
   final serviceRows = StringBuffer();
-  // Main package row
-  final pkgBase = gstBase(packageAmount);
-  final pkgCgst = gstCgst(packageAmount);
-  final pkgSgst = gstSgst(packageAmount);
-  serviceRows.write('''
+
+  // Per-day charge added on top of each package's base price (mirrors the
+  // booking controller), so each date's line reads base + day charge.
+  const dayCharge = 3000.0;
+
+  String datesLabel(List<DateTime> dates) {
+    if (dates.isEmpty) return '';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final sorted = [...dates]..sort((a, b) => a.compareTo(b));
+    return sorted
+        .map((d) => '${d.day} ${months[d.month - 1]} ${d.year}')
+        .join(', ');
+  }
+
+  // Scheduled time for the booking (same time-of-day applies to every date).
+  final scheduleTime =
+      '${_formatTime(booking.serviceStart)} – ${_formatTime(booking.serviceEnd)}';
+
+  // Writes one SERVICES line. [subLine] carries the date / assigned time /
+  // slot for that day. [incl] is the GST-inclusive amount.
+  void writeServiceRow(String name, String subLine, double incl) {
+    final rowBase = gstBase(incl);
+    final rowCgst = gstCgst(incl);
+    final rowSgst = gstSgst(incl);
+    final sub = subLine.trim().isEmpty
+        ? ''
+        : '<div style="font-size:10px;color:#6b7280;margin-top:3px;">${_escape(subLine.trim())}</div>';
+    serviceRows.write('''
 <tr>
-  <td>${_escape(booking.service)}${variant == BookingPrintVariant.clientAdvanceReceipt ? " (Advance Payment)" : ""}</td>
+  <td>${_escape(name)}$sub</td>
   <td class="center">${_escape(hsnCode)}</td>
-  <td class="right">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : (variant == BookingPrintVariant.clientConfirmation ? inr(packageAmount) : inr(pkgBase))}</td>
-  ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : "<td class=\"right\">${inr(pkgCgst)}</td><td class=\"right\">${inr(pkgSgst)}</td>"}
-  <td class="right fw600">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : inr(packageAmount)}</td>
+  <td class="right">${variant == BookingPrintVariant.clientConfirmation ? inr(incl) : inr(rowBase)}</td>
+  ${variant == BookingPrintVariant.clientConfirmation ? "" : "<td class=\"right\">${inr(rowCgst)}</td><td class=\"right\">${inr(rowSgst)}</td>"}
+  <td class="right fw600">${inr(incl)}</td>
 </tr>''');
+  }
+
+  if (variant == BookingPrintVariant.clientAdvanceReceipt) {
+    // Advance receipt stays a single line for the amount actually received.
+    serviceRows.write('''
+<tr>
+  <td>${_escape(booking.service)} (Advance Payment)</td>
+  <td class="center">${_escape(hsnCode)}</td>
+  <td class="right">${inr(booking.advanceAmount)}</td>
+  <td class="right fw600">${inr(booking.advanceAmount)}</td>
+</tr>''');
+  } else if (booking.bookingItems.isNotEmpty) {
+    // One line per package/date, so a multi-day or multi-package booking shows
+    // every day it covers instead of collapsing into a single total. These sum
+    // exactly to the package amount used in the totals block below.
+    for (final item in booking.bookingItems) {
+      final days =
+          item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
+      final incl = item.totalPrice + (dayCharge * days);
+      final label = item.service.trim().isEmpty ? 'Package' : item.service.trim();
+      final dates = datesLabel(item.selectedDates);
+      final slot = item.eventSlot.trim();
+      writeServiceRow(
+        label,
+        [
+          if (dates.isNotEmpty) dates,
+          scheduleTime,
+          if (slot.isNotEmpty) slot,
+        ].join('  ·  '),
+        incl,
+      );
+    }
+  } else {
+    writeServiceRow(
+      booking.service,
+      [
+        datesLabel(booking.selectedDates.isNotEmpty
+            ? booking.selectedDates
+            : [booking.bookingDate]),
+        scheduleTime,
+        if (booking.eventSlot.trim().isNotEmpty) booking.eventSlot.trim(),
+      ].join('  ·  '),
+      packageAmount,
+    );
+  }
   // Add-on rows
   if (variant != BookingPrintVariant.clientAdvanceReceipt) {
     for (final addon in booking.addons) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../common_widgets/add_booking_mode_sheet.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/providers/booking_provider.dart';
@@ -368,7 +369,7 @@ class ClientProfileScreen extends HookConsumerWidget {
                 ),
                 16.w,
                 ElevatedButton.icon(
-                  onPressed: () => context.go('/booking/add'),
+                  onPressed: () => showAddBookingModeChooser(context),
                   style: ElevatedButton.styleFrom(
                       backgroundColor: crmColors.primary,
                       foregroundColor: Colors.white),
@@ -404,7 +405,7 @@ class ClientProfileScreen extends HookConsumerWidget {
                 12.w,
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => context.go('/booking/add'),
+                    onPressed: () => showAddBookingModeChooser(context),
                     style: ElevatedButton.styleFrom(
                         backgroundColor: crmColors.primary,
                         foregroundColor: Colors.white),

@@ -788,10 +788,6 @@ class ManageBookingScreen extends HookConsumerWidget {
             0.0,
             (sum, addon) => sum + (addon.amount * addon.persons),
           );
-      final rawDiscountValue = double.tryParse(discountCtrl.text.trim()) ?? 0;
-      final appliedDiscount = discountType.value == 'percent'
-          ? subtotal * (rawDiscountValue.clamp(0.0, 100.0) / 100)
-          : rawDiscountValue.clamp(0.0, subtotal);
       final currentItemDates =
           selectedDisplayEntry?.allSelectedDates.isNotEmpty == true
           ? selectedDisplayEntry!.allSelectedDates
@@ -837,17 +833,95 @@ class ManageBookingScreen extends HookConsumerWidget {
           ? _summarizeBookingItemAssignments(updatedBookingItems)
           : assignments.value;
 
+      // ── Multi-item aggregation (mirrors backend bookingController) ────────
+      // A booking can hold several packages / days but is ONE invoice. The
+      // booking-level totals, service, slots and dates must be derived from
+      // ALL items — never from just the item currently being edited —
+      // otherwise saving one package corrupts the price/dates of the whole
+      // booking. For a single-item booking we keep the existing behaviour.
+      const double extraDateChargePerPackage = 3000;
+      // Roll totals up from the items whenever the booking is item-based —
+      // even a single package spanning several days needs the extra-date
+      // charge and per-day advance aggregated. Only packageId keeps a distinct
+      // "multiple packages" special-case (see copyWith below).
+      final bool useItemAggregates = updatedBookingItems.isNotEmpty;
+      final bool isMultiItem = updatedBookingItems.length > 1;
+
+      final double addonsTotal = normalizedAddons.fold(
+        0.0,
+        (sum, addon) => sum + (addon.amount * addon.persons),
+      );
+
+      // Distinct, chronologically-sorted union of every item's dates.
+      final List<DateTime> mergedItemDates;
+      if (useItemAggregates) {
+        final seen = <String>{};
+        final merged = <DateTime>[];
+        for (final item in updatedBookingItems) {
+          for (final d in item.selectedDates) {
+            if (seen.add('${d.year}-${d.month}-${d.day}')) {
+              merged.add(DateTime(d.year, d.month, d.day));
+            }
+          }
+        }
+        merged.sort((a, b) => a.compareTo(b));
+        mergedItemDates = merged;
+      } else {
+        mergedItemDates = normalizedBookingDates;
+      }
+
+      // Day charge: ₹3000 for every day each package runs (mirrors backend).
+      final double aggregateDayCharge = updatedBookingItems.fold(
+        0.0,
+        (sum, item) =>
+            sum + (_bookingItemDays(item) * extraDateChargePerPackage),
+      );
+      final double aggregateTotalPrice =
+          updatedBookingItems.fold(0.0, (sum, item) => sum + item.totalPrice) +
+          addonsTotal +
+          aggregateDayCharge;
+
+      // Advance: each package's advance, once per day it runs (mirrors backend).
+      final double aggregateAdvance = updatedBookingItems.fold(
+        0.0,
+        (sum, item) => sum + (item.advanceAmount * _bookingItemDays(item)),
+      );
+
+      final String aggregateService = <String>{
+        for (final item in updatedBookingItems)
+          if (item.service.trim().isNotEmpty) item.service.trim(),
+      }.join(' + ');
+
+      final String aggregateEventSlot = <String>{
+        for (final item in updatedBookingItems)
+          if (item.eventSlot.trim().isNotEmpty) item.eventSlot.trim(),
+      }.join(' | ');
+
+      // Discount applies against whichever total actually bills.
+      final double discountBase =
+          useItemAggregates ? aggregateTotalPrice : subtotal;
+      final rawDiscountValue = double.tryParse(discountCtrl.text.trim()) ?? 0;
+      final appliedDiscount = discountType.value == 'percent'
+          ? discountBase * (rawDiscountValue.clamp(0.0, 100.0) / 100)
+          : rawDiscountValue.clamp(0.0, discountBase);
+
       final selectedDistrictModel = findDistrictById(selectedDistrictId.value);
       final currentBookingSnapshot = booking.copyWith(
         customerName: nameCtrl.text.trim(),
-        packageId: selectedPackageId.value.trim(),
+        // For a multi-item booking, keep the booking-level packageId intact —
+        // don't overwrite it with the single item currently being edited.
+        packageId: isMultiItem
+            ? booking.packageId
+            : selectedPackageId.value.trim(),
         phone: phoneCtrl.text.trim(),
         address: addressCtrl.text.trim(),
         pincode: pincodeCtrl.text.trim(),
         email: emailCtrl.text.trim(),
-        service: packageCtrl.text.trim().isEmpty
-            ? booking.service
-            : packageCtrl.text.trim(),
+        service: isMultiItem
+            ? (aggregateService.isEmpty ? booking.service : aggregateService)
+            : (packageCtrl.text.trim().isEmpty
+                  ? booking.service
+                  : packageCtrl.text.trim()),
         regionId: selectedDistrictModel?.regionId ?? selectedRegionId.value,
         districtId: selectedDistrictId.value,
         driverId:
@@ -872,7 +946,11 @@ class ManageBookingScreen extends HookConsumerWidget {
             ? 0.0
             : (double.tryParse(travelDistanceCtrl.text.trim().replaceAll(RegExp(r'[^0-9.]'), '')) ??
                 booking.travelDistanceKm),
-        eventSlot: eventSlots.value.join(' | '),
+        eventSlot: isMultiItem
+            ? (aggregateEventSlot.isEmpty
+                  ? booking.eventSlot
+                  : aggregateEventSlot)
+            : eventSlots.value.join(' | '),
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
         outfitLooks: outfitLooks.value,
@@ -884,20 +962,27 @@ class ManageBookingScreen extends HookConsumerWidget {
         createdAt:
             _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,
         bookingDate: parsedBookingDate,
-        selectedDates: normalizedBookingDates,
+        selectedDates:
+            useItemAggregates ? mergedItemDates : normalizedBookingDates,
         serviceStart: _mergeDateAndTime(
-          parsedBookingDate,
+          useItemAggregates && mergedItemDates.isNotEmpty
+              ? mergedItemDates.first
+              : parsedBookingDate,
           startTimeCtrl.text.trim(),
           booking.serviceStart,
         ),
         serviceEnd: _mergeDateAndTime(
-          lastBookingDate,
+          useItemAggregates && mergedItemDates.isNotEmpty
+              ? mergedItemDates.last
+              : lastBookingDate,
           endTimeCtrl.text.trim(),
           booking.serviceEnd,
         ),
-        totalPrice: subtotal,
-        advanceAmount:
-            double.tryParse(advanceCtrl.text.trim()) ?? booking.advanceAmount,
+        totalPrice: useItemAggregates ? aggregateTotalPrice : subtotal,
+        advanceAmount: useItemAggregates
+            ? aggregateAdvance
+            : (double.tryParse(advanceCtrl.text.trim()) ??
+                  booking.advanceAmount),
         discountAmount: appliedDiscount,
         discountType: discountType.value,
         discountValue: rawDiscountValue,
@@ -1032,7 +1117,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 );
                               }
                             } finally {
-                              isDeleting.value = false;
+                              // The success path navigates away, which disposes
+                              // this widget and its hooks — only reset the flag
+                              // if we're still on screen.
+                              if (context.mounted) {
+                                isDeleting.value = false;
+                              }
                             }
                           },
                     icon: isDeleting.value
@@ -1078,6 +1168,12 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ── Packages/slots in this booking (item-based bookings) ──
+                if (booking.bookingItems.isNotEmpty) ...[
+                  _buildBookingItemsOverview(
+                      context, ref, crmColors, booking, selectedBookingItemIndex),
+                  24.h,
+                ],
                 // ── Core details ──────────────────────────────────────────
                 _SectionCard(
                   title: 'Core Booking Management',
@@ -2217,6 +2313,146 @@ class ManageBookingScreen extends HookConsumerWidget {
   }
 
   // ── Artist Assignment section ──────────────────────────────────────────
+  // Overview of every package/day/slot that belongs to this ONE booking.
+  // Tap an entry to switch which one you're editing (they share one invoice).
+  Widget _buildBookingItemsOverview(
+    BuildContext context,
+    WidgetRef ref,
+    CrmTheme crm,
+    Booking booking,
+    int currentItemIndex,
+  ) {
+    const mo = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    final items = booking.bookingItems;
+
+    String datesLabel(BookingItem item) {
+      final ds = [...item.selectedDates]..sort((a, b) => a.compareTo(b));
+      if (ds.isEmpty) return '';
+      return ds.map((d) => '${d.day} ${mo[d.month - 1]}').join(', ');
+    }
+
+    return _SectionCard(
+      title: 'Packages & Slots in this Booking',
+      subtitle:
+          '${items.length} package${items.length == 1 ? '' : 's'} · billed as one invoice',
+      titleColor: Colors.indigo,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final entry in items.asMap().entries)
+            Builder(builder: (context) {
+              final index = entry.key;
+              final item = entry.value;
+              final isCurrent = index == currentItemIndex;
+              final slot = item.eventSlot.trim();
+              final dates = datesLabel(item);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isCurrent
+                        ? crm.primary.withValues(alpha: 0.08)
+                        : crm.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: isCurrent ? crm.primary : crm.border,
+                        width: isCurrent ? 1.5 : 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                item.service.trim().isEmpty
+                                    ? 'Package ${index + 1}'
+                                    : item.service.trim(),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)),
+                            2.h,
+                            Text(
+                                [
+                                  if (dates.isNotEmpty) dates,
+                                  if (slot.isNotEmpty) slot,
+                                ].join(' · '),
+                                style: TextStyle(
+                                    fontSize: 12, color: crm.textSecondary)),
+                          ],
+                        ),
+                      ),
+                      8.w,
+                      Text('₹${item.totalPrice.toStringAsFixed(0)}',
+                          style:
+                              const TextStyle(fontWeight: FontWeight.w800)),
+                      6.w,
+                      if (isCurrent)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: crm.primary,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text('EDITING',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800)),
+                        )
+                      else
+                        IconButton(
+                          tooltip: 'Edit this package',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.edit_outlined,
+                              size: 18, color: crm.textSecondary),
+                          onPressed: () => context.go(
+                              '/booking/manage/${booking.id}?entry=${Uri.encodeComponent('${booking.id}::$index::0')}'),
+                        ),
+                      if (items.length > 1)
+                        IconButton(
+                          tooltip: 'Remove this package',
+                          visualDensity: VisualDensity.compact,
+                          icon: Icon(Icons.delete_outline,
+                              size: 18, color: crm.destructive),
+                          onPressed: () => _removeBookingItem(
+                              context, ref, booking, index, currentItemIndex),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          6.h,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () => _addBookingItem(context, ref, booking),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add package'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: crm.primary,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          8.h,
+          Text(
+            'Each row is a package of this booking. Edit, remove, or add a '
+            'package — they all share a single invoice.',
+            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildArtistAssignment(
     BuildContext context,
     CrmTheme crmColors,
@@ -3825,6 +4061,302 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     return mergedAssignments;
+  }
+
+  /// Number of days a package runs. ₹3000 is charged for each of them, and the
+  /// package's advance is due once per day — mirrors the backend.
+  static int _bookingItemDays(BookingItem item) =>
+      item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
+
+  /// Rebuilds the booking-level aggregates (total, advance, service, slots,
+  /// dates, staff) from [items] so removing or editing one package never
+  /// corrupts the whole booking. Mirrors the backend bookingController
+  /// aggregation so local and server state stay identical.
+  static Booking _withRecomputedAggregates(
+    Booking booking,
+    List<BookingItem> items,
+  ) {
+    const double extraDateChargePerPackage = 3000;
+
+    // Distinct, chronologically-sorted union of every item's dates.
+    final seen = <String>{};
+    final merged = <DateTime>[];
+    for (final item in items) {
+      for (final d in item.selectedDates) {
+        if (seen.add('${d.year}-${d.month}-${d.day}')) {
+          merged.add(DateTime(d.year, d.month, d.day));
+        }
+      }
+    }
+    merged.sort((a, b) => a.compareTo(b));
+
+    final addonsTotal = booking.addons.fold<double>(
+      0.0,
+      (sum, a) => sum + (a.amount * a.persons),
+    );
+    final dayCharge = items.fold<double>(
+      0.0,
+      (s, i) => s + (_bookingItemDays(i) * extraDateChargePerPackage),
+    );
+    final total =
+        items.fold<double>(0.0, (s, i) => s + i.totalPrice) +
+        addonsTotal +
+        dayCharge;
+    final advance = items.fold<double>(
+      0.0,
+      (s, i) => s + (i.advanceAmount * _bookingItemDays(i)),
+    );
+
+    final service = <String>{
+      for (final i in items)
+        if (i.service.trim().isNotEmpty) i.service.trim(),
+    }.join(' + ');
+    final slot = <String>{
+      for (final i in items)
+        if (i.eventSlot.trim().isNotEmpty) i.eventSlot.trim(),
+    }.join(' | ');
+
+    final discount = booking.discountType == 'percent'
+        ? total * (booking.discountValue.clamp(0.0, 100.0) / 100)
+        : booking.discountValue.clamp(0.0, total);
+
+    return booking.copyWith(
+      bookingItems: items,
+      totalPrice: total,
+      advanceAmount: advance,
+      discountAmount: discount,
+      service: service.isEmpty ? booking.service : service,
+      eventSlot: slot.isEmpty ? booking.eventSlot : slot,
+      selectedDates: merged.isEmpty ? booking.selectedDates : merged,
+      serviceStart: merged.isEmpty ? booking.serviceStart : merged.first,
+      serviceEnd: merged.isEmpty ? booking.serviceEnd : merged.last,
+      assignedStaff: _summarizeBookingItemAssignments(items),
+    );
+  }
+
+  /// Removes one package (booking item) from a multi-item booking and
+  /// persists the recalculated booking. The remaining packages stay as a
+  /// single invoice.
+  Future<void> _removeBookingItem(
+    BuildContext context,
+    WidgetRef ref,
+    Booking booking,
+    int index,
+    int currentItemIndex,
+  ) async {
+    if (index < 0 || index >= booking.bookingItems.length) return;
+    final item = booking.bookingItems[index];
+    final name = item.service.trim().isEmpty
+        ? 'Package ${index + 1}'
+        : item.service.trim();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove package?'),
+        content: Text(
+          'Remove "$name" from this booking? The remaining packages stay as '
+          'one invoice and the total is recalculated.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    final newItems = [...booking.bookingItems]..removeAt(index);
+    final updated = _withRecomputedAggregates(booking, newItems);
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(bookingProvider.notifier).updateBooking(updated);
+    } catch (error) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to remove package: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Package removed.')));
+
+    // Indices shift after removal, so any `?entry=` in the URL may now point
+    // at the wrong package. Reset to the booking's default (first) entry.
+    context.go('/booking/manage/${booking.id}');
+  }
+
+  /// Adds a new package (booking item) to an existing booking. The new
+  /// package joins the same invoice and appears as its own calendar slot.
+  Future<void> _addBookingItem(
+    BuildContext context,
+    WidgetRef ref,
+    Booking booking,
+  ) async {
+    final packages =
+        ref.read(packagesProvider).value ?? const <ServicePackage>[];
+    final messenger = ScaffoldMessenger.of(context);
+    if (packages.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No service packages available.')),
+      );
+      return;
+    }
+
+    final slotCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final advanceCtrl = TextEditingController();
+    String? pkgId;
+    DateTime date = booking.selectedDates.isNotEmpty
+        ? booking.selectedDates.first
+        : booking.bookingDate;
+
+    final result = await showDialog<BookingItem>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            return AlertDialog(
+              title: const Text('Add package to booking'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: pkgId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Package'),
+                      items: [
+                        for (final p in packages)
+                          DropdownMenuItem(
+                            value: p.id,
+                            child: Text(p.name,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (v) => setState(() {
+                        pkgId = v;
+                        final p = packages.firstWhere((e) => e.id == v);
+                        priceCtrl.text = p
+                            .effectivePriceForDistrict(booking.districtId)
+                            .toStringAsFixed(0);
+                        advanceCtrl.text =
+                            p.advanceAmount.toStringAsFixed(0);
+                      }),
+                    ),
+                    12.h,
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: date,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2100),
+                        );
+                        if (picked != null) setState(() => date = picked);
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Date'),
+                        child: Text('${date.day}/${date.month}/${date.year}'),
+                      ),
+                    ),
+                    12.h,
+                    TextField(
+                      controller: slotCtrl,
+                      decoration: const InputDecoration(
+                          labelText: 'Slot (optional, e.g. Morning)'),
+                    ),
+                    12.h,
+                    TextField(
+                      controller: priceCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Price (₹)'),
+                    ),
+                    12.h,
+                    TextField(
+                      controller: advanceCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration:
+                          const InputDecoration(labelText: 'Advance (₹)'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (pkgId == null) return;
+                    final p = packages.firstWhere((e) => e.id == pkgId);
+                    final price = double.tryParse(priceCtrl.text.trim()) ??
+                        p.effectivePriceForDistrict(booking.districtId);
+                    final adv = double.tryParse(advanceCtrl.text.trim()) ??
+                        p.advanceAmount;
+                    Navigator.of(ctx).pop(
+                      BookingItem(
+                        packageId: p.id,
+                        service: p.name,
+                        eventSlot: slotCtrl.text.trim(),
+                        selectedDates: [
+                          DateTime(date.year, date.month, date.day),
+                        ],
+                        totalPrice: price,
+                        advanceAmount: adv,
+                        assignedStaff: const [],
+                      ),
+                    );
+                  },
+                  child: const Text('Add'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    slotCtrl.dispose();
+    priceCtrl.dispose();
+    advanceCtrl.dispose();
+    if (result == null || !context.mounted) return;
+
+    final newItems = [...booking.bookingItems, result];
+    final updated = _withRecomputedAggregates(booking, newItems);
+    try {
+      await ref.read(bookingProvider.notifier).updateBooking(updated);
+    } catch (error) {
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to add package: $error'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Package added.')));
+    context.go('/booking/manage/${booking.id}');
   }
 
   static double? _distanceBetweenBookings(Booking from, Booking to) {

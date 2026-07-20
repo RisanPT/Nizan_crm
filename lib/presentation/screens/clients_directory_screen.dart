@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
+import '../common_widgets/add_booking_mode_sheet.dart';
 import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
@@ -222,7 +223,7 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
                                   ),
                                   16.h,
                                   ElevatedButton.icon(
-                                    onPressed: () => context.go('/booking/add'),
+                                    onPressed: () => showAddBookingModeChooser(context),
                                     icon: const Icon(Icons.add),
                                     label: const Text('Create First Booking'),
                                     style: ElevatedButton.styleFrom(
