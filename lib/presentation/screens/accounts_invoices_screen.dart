@@ -9,6 +9,7 @@ import '../../core/providers/trial_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/gst_calculator.dart';
+import '../../core/utils/responsive_builder.dart';
 
 class AccountsInvoicesScreen extends ConsumerStatefulWidget {
   const AccountsInvoicesScreen({super.key});
@@ -28,6 +29,41 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   static const int _itemsPerPage = 15;
 
   String _currency(double v) => '₹${v.toStringAsFixed(2)}';
+
+  static const _monthAbbr = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  String _formatDate(DateTime d) =>
+      '${d.day} ${_monthAbbr[d.month - 1]} ${d.year}';
+
+  /// Small status pill used in the receivables hero.
+  Widget _pill(String label, Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          4.w,
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   // Adapt a Trial into a synthetic Booking so the entire invoices screen and
   // the GST invoice PDF can reuse it unchanged. The first trial look becomes the
@@ -142,6 +178,14 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                final isPaid = b.isFullyPaid;
                if (_paymentStatusFilter == 'Paid' && !isPaid) return false;
                if (_paymentStatusFilter == 'Due' && isPaid) return false;
+               if (_paymentStatusFilter == 'Overdue') {
+                 final now = DateTime.now();
+                 final todayStart = DateTime(now.year, now.month, now.day);
+                 // Overdue = still owing after every work has been completed.
+                 if (isPaid || !b.paymentDueDate.isBefore(todayStart)) {
+                   return false;
+                 }
+               }
             }
 
             return true;
@@ -294,7 +338,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                             child: DropdownButton<String>(
                               value: _paymentStatusFilter,
                               isDense: true,
-                              items: ['All', 'Paid', 'Due'].map((s) {
+                              items: ['All', 'Paid', 'Due', 'Overdue'].map((s) {
                                 return DropdownMenuItem(value: s, child: Text(s));
                               }).toList(),
                               onChanged: (val) {
@@ -394,8 +438,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     double outstanding = 0;
     double dueToday = 0;
     double dueWithin30 = 0;
+    double dueLater = 0;
     double overdue = 0;
     double advanceCollected = 0;
+    int overdueCount = 0;
+    int awaitingWorksCount = 0;
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -405,16 +452,24 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       final bal = b.balanceDue;
       if (bal > 0) {
         outstanding += bal;
-        final dDate = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
+        // Age against the date the client actually settles — the LAST work
+        // date. A booking part-done this month with works still to come next
+        // month is not overdue; it is due on that future date.
+        final dDate = b.paymentDueDate;
         final diff = dDate.difference(today).inDays;
-        
+
         if (diff < 0) {
           overdue += bal;
+          overdueCount++;
         } else if (diff == 0) {
           dueToday += bal;
         } else if (diff <= 30) {
           dueWithin30 += bal;
+        } else {
+          dueLater += bal;
         }
+        // Multi-work bookings that still have works to come.
+        if (b.isMultiWork && diff >= 0) awaitingWorksCount++;
       }
     }
 
@@ -448,39 +503,237 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       }
     }
 
-    Widget statCard(String title, String value, Color color) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary)),
-          4.h,
-          Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color)),
-        ],
+    final isMobile = ResponsiveBuilder.isMobile(context);
+    final overdueColor = Colors.red.shade700;
+    final todayColor = Colors.orange.shade700;
+    final soonColor = crm.primary;
+    final laterColor = crm.textSecondary;
+
+    // Ageing buckets, rendered as a proportional bar + legend.
+    final buckets = <(String, double, Color)>[
+      ('Overdue', overdue, overdueColor),
+      ('Due today', dueToday, todayColor),
+      ('Due in 30 days', dueWithin30, soonColor),
+      ('Due later', dueLater, laterColor),
+    ];
+    final bucketTotal = buckets.fold<double>(0, (s, b) => s + b.$2);
+
+    Widget ageingLegend((String, double, Color) b) {
+      final pct = bucketTotal <= 0 ? 0.0 : (b.$2 / bucketTotal) * 100;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: b.$3.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: b.$3.withValues(alpha: 0.18)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration:
+                      BoxDecoration(color: b.$3, shape: BoxShape.circle),
+                ),
+                6.w,
+                Text(
+                  b.$1,
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: crm.textSecondary),
+                ),
+              ],
+            ),
+            4.h,
+            Text(
+              _currency(b.$2),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: b.$2 > 0 ? b.$3 : crm.textSecondary,
+              ),
+            ),
+            if (bucketTotal > 0)
+              Text(
+                '${pct.toStringAsFixed(0)}% of outstanding',
+                style: TextStyle(fontSize: 10, color: crm.textSecondary),
+              ),
+          ],
+        ),
       );
     }
 
     return Container(
       color: crm.surface,
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 16 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('PAYMENT SUMMARY', style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: crm.textSecondary)),
           16.h,
-          Row(
+          // ── Hero: outstanding vs collected ──────────────────────────────
+          Flex(
+            direction: isMobile ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.orange.shade100, shape: BoxShape.circle),
-                child: Icon(Icons.arrow_downward, color: Colors.orange.shade800),
+              Expanded(
+                flex: isMobile ? 0 : 3,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        crm.primary.withValues(alpha: 0.10),
+                        crm.primary.withValues(alpha: 0.02),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border:
+                        Border.all(color: crm.primary.withValues(alpha: 0.15)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: crm.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.account_balance_wallet_outlined,
+                                color: crm.primary, size: 18),
+                          ),
+                          10.w,
+                          Text(
+                            'Total Outstanding Receivables',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: crm.textSecondary),
+                          ),
+                        ],
+                      ),
+                      10.h,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _currency(outstanding),
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                      ),
+                      8.h,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          if (overdueCount > 0)
+                            _pill('$overdueCount overdue',
+                                overdueColor, Icons.priority_high),
+                          if (awaitingWorksCount > 0)
+                            _pill('$awaitingWorksCount awaiting works',
+                                soonColor, Icons.event_repeat_outlined),
+                          if (outstanding <= 0)
+                            _pill('All settled', Colors.green.shade700,
+                                Icons.check_circle_outline),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              16.w,
-              Expanded(child: statCard('Total Outstanding Receivables', _currency(outstanding), crm.textPrimary)),
-              Expanded(child: statCard('Advance Collected', _currency(advanceCollected), Colors.green.shade700)),
-              Expanded(child: statCard('Due Today', _currency(dueToday), Colors.orange.shade700)),
-              Expanded(child: statCard('Due Within 30 Days', _currency(dueWithin30), crm.textPrimary)),
-              Expanded(child: statCard('Overdue Invoice', _currency(overdue), Colors.red.shade700)),
+              isMobile ? 12.h : 16.w,
+              Expanded(
+                flex: isMobile ? 0 : 2,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.18)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.savings_outlined,
+                                color: Colors.green.shade700, size: 18),
+                          ),
+                          10.w,
+                          Expanded(
+                            child: Text(
+                              'Advance Collected',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: crm.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                      10.h,
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _currency(advanceCollected),
+                          style: theme.textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.w900,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
+          ),
+          16.h,
+          // ── Ageing bar ──────────────────────────────────────────────────
+          if (bucketTotal > 0) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                height: 10,
+                child: Row(
+                  children: [
+                    for (final b in buckets)
+                      if (b.$2 > 0)
+                        Expanded(
+                          flex: ((b.$2 / bucketTotal) * 1000).round().clamp(1, 1000),
+                          child: Container(color: b.$3),
+                        ),
+                  ],
+                ),
+              ),
+            ),
+            12.h,
+          ],
+          GridView.count(
+            crossAxisCount: isMobile ? 2 : 4,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: isMobile ? 2.1 : 2.9,
+            children: [for (final b in buckets) ageingLegend(b)],
           ),
           const Divider(height: 32),
           Row(
@@ -631,12 +884,29 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
             ((b.bookingDate.year > _selectedMonth!.year) ||
              (b.bookingDate.year == _selectedMonth!.year && b.bookingDate.month > _selectedMonth!.month));
 
-        final status = isAdvanceRow ? 'PAID' : (b.isFullyPaid ? 'PAID' : 'DUE');
-        final statusColor = (isAdvanceRow || b.isFullyPaid) ? Colors.green : Colors.orange;
+        final settled = isAdvanceRow || b.isFullyPaid;
+        final today = DateTime.now();
+        final isOverdue = !settled &&
+            b.paymentDueDate
+                .isBefore(DateTime(today.year, today.month, today.day));
+        final status = settled ? 'PAID' : (isOverdue ? 'OVERDUE' : 'DUE');
+        final statusColor = settled
+            ? Colors.green.shade700
+            : (isOverdue ? Colors.red.shade700 : Colors.orange.shade700);
         final amountToDisplay = isAdvanceRow ? b.advanceAmount : b.totalPrice;
         final customerNameSuffix = isAdvanceRow ? ' (ADVANCE)' : '';
 
-        return ListTile(
+        return Container(
+          decoration: BoxDecoration(
+            // Accent bar makes the selected invoice obvious next to the preview.
+            border: Border(
+              left: BorderSide(
+                color: isSelected ? crm.primary : Colors.transparent,
+                width: 3,
+              ),
+            ),
+          ),
+          child: ListTile(
           selected: isSelected,
           selectedTileColor: crm.primary.withValues(alpha: 0.05),
           contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -678,7 +948,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       ],
                     ),
                     4.h,
-                    Text('${b.bookingDate.day}/${b.bookingDate.month}/${b.bookingDate.year}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary)),
+                    Text(
+                      // Multi-work bookings settle on the final work date, so
+                      // show that rather than just the first booking date.
+                      b.isMultiWork
+                          ? '${b.workDates.length} works · due ${_formatDate(b.paymentDueDate)}'
+                          : _formatDate(b.bookingDate),
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: crm.textSecondary),
+                    ),
                   ],
                 ),
               ),
@@ -688,9 +967,27 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               ),
               Expanded(
                 flex: 2,
-                child: Text(
-                  status,
-                  style: theme.textTheme.labelSmall?.copyWith(color: statusColor, fontWeight: FontWeight.bold),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                          color: statusColor.withValues(alpha: 0.30)),
+                    ),
+                    child: Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ),
                 ),
               ),
               Expanded(
@@ -698,15 +995,34 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(_currency(amountToDisplay), style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                    Text(_currency(amountToDisplay),
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     if (!isAdvanceRow) ...[
                       2.h,
-                      Text('Adv: ${_currency(b.advanceAmount)}', style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary, fontSize: 11)),
+                      // Balance is what Accounts chases, so lead with it.
+                      Text(
+                        b.balanceDue > 0
+                            ? 'Bal: ${_currency(b.balanceDue)}'
+                            : 'Adv: ${_currency(b.advanceAmount)}',
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: b.balanceDue > 0
+                              ? statusColor
+                              : crm.textSecondary,
+                          fontSize: 11,
+                          fontWeight: b.balanceDue > 0
+                              ? FontWeight.w700
+                              : FontWeight.normal,
+                        ),
+                      ),
                     ],
                   ],
                 ),
               ),
             ],
+          ),
           ),
         );
       },
@@ -1101,7 +1417,24 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   ),
                 ),
               ),
-              
+
+              // Multi-work bookings are settled only after the final work, so
+              // spell out when the balance actually falls due.
+              if (!isAdvanceRow && bal > 0 && b.isMultiWork) ...[
+                8.h,
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Payable on completion of all ${b.workDates.length} works · due ${_formatDate(b.paymentDueDate)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+
               32.h,
               // FOOTER
               const Divider(height: 1, color: Color(0xFFD9DDE3)),

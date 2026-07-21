@@ -559,12 +559,20 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   final scheduleTime =
       '${_formatTime(booking.serviceStart)} – ${_formatTime(booking.serviceEnd)}';
 
+  // GST is accumulated FROM the printed lines so the tax columns always add up
+  // to the totals below. Computing the totals independently from the grand
+  // total drifts by a paisa or two once an invoice has several works.
+  double lineCgstTotal = 0;
+  double lineSgstTotal = 0;
+
   // Writes one SERVICES line. [subLine] carries the date / assigned time /
   // slot for that day. [incl] is the GST-inclusive amount.
   void writeServiceRow(String name, String subLine, double incl) {
     final rowBase = gstBase(incl);
     final rowCgst = gstCgst(incl);
     final rowSgst = gstSgst(incl);
+    lineCgstTotal += rowCgst;
+    lineSgstTotal += rowSgst;
     final sub = subLine.trim().isEmpty
         ? ''
         : '<div style="font-size:10px;color:#6b7280;margin-top:3px;">${_escape(subLine.trim())}</div>';

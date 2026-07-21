@@ -500,14 +500,57 @@ class Booking {
   String get initials =>
       customerName.isNotEmpty ? customerName[0].toUpperCase() : '?';
 
-  /// The true outstanding balance for this booking.
-  /// Formula: totalPrice − discountAmount − advanceAmount − collectedAmount.
-  /// If the service start date is before today, the amount is considered
-  /// collected (past works are automatically marked as having 0 balance due).
-  double get balanceDue {
+  /// Every date this booking is worked on, across all packages, sorted.
+  List<DateTime> get workDates {
+    final seen = <String>{};
+    final all = <DateTime>[];
+    void add(DateTime d) {
+      final key = '${d.year}-${d.month}-${d.day}';
+      if (seen.add(key)) all.add(DateTime(d.year, d.month, d.day));
+    }
+
+    for (final item in bookingItems) {
+      for (final d in item.selectedDates) {
+        add(d);
+      }
+    }
+    if (all.isEmpty) {
+      for (final d in selectedDates) {
+        add(d);
+      }
+    }
+    if (all.isEmpty) add(bookingDate);
+    all.sort((a, b) => a.compareTo(b));
+    return all;
+  }
+
+  /// True when this booking covers more than one working day.
+  bool get isMultiWork => workDates.length > 1;
+
+  /// The date the client is expected to settle. Payment is only collected once
+  /// EVERY work is finished, so this is the LAST work date — which may fall in
+  /// a future month even though earlier works are already done.
+  DateTime get paymentDueDate {
+    final dates = workDates;
+    final last = dates.isNotEmpty ? dates.last : bookingDate;
+    return DateTime(last.year, last.month, last.day);
+  }
+
+  /// True while some work is still outstanding, i.e. the final work date has
+  /// not passed yet. The balance stays receivable until then.
+  bool get hasPendingWork {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
-    if (serviceStart.isBefore(todayStart)) {
+    return !paymentDueDate.isBefore(todayStart);
+  }
+
+  /// The true outstanding balance for this booking.
+  /// Formula: totalPrice − discountAmount − advanceAmount − collectedAmount.
+  /// The balance is only treated as collected once ALL works are complete —
+  /// keyed off the LAST work date, not the first, so a booking that is part
+  /// done this month and part due next month stays outstanding.
+  double get balanceDue {
+    if (!hasPendingWork) {
       return 0.0;
     }
     return (totalPrice - discountAmount - advanceAmount - collectedAmount)
