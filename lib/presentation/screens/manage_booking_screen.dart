@@ -139,6 +139,14 @@ class ManageBookingScreen extends HookConsumerWidget {
     );
     // POC = Point of Contact shown on client PDF
     final selectedPocId = useState<String>(booking?.pocId ?? '');
+    
+    final selectedPrintItemIndices = useState<Set<int>>({});
+    useEffect(() {
+      if (booking != null) {
+        selectedPrintItemIndices.value = List.generate(booking.bookingItems.length, (i) => i).toSet();
+      }
+      return null;
+    }, [booking?.bookingItems.length]);
 
     // Controllers pre-filled from real booking data
     final assignArtistId = useState<String?>(null);
@@ -732,8 +740,26 @@ class ManageBookingScreen extends HookConsumerWidget {
       if (action == 'whatsapp') {
         await WhatsAppService.sendInvoiceMessage(updatedBooking);
       } else if (action == 'client') {
+        final filteredItems = updatedBooking.bookingItems
+            .asMap()
+            .entries
+            .where((e) => selectedPrintItemIndices.value.contains(e.key))
+            .map((e) => e.value)
+            .toList();
+            
+        final printTotalPrice = filteredItems.fold<double>(
+            0.0, (sum, item) => sum + item.totalPrice + (_bookingItemDays(item) * 3000));
+        final printAdvanceAmount = filteredItems.fold<double>(
+            0.0, (sum, item) => sum + (item.advanceAmount * _bookingItemDays(item)));
+            
+        final printBooking = updatedBooking.copyWith(
+          bookingItems: filteredItems.isNotEmpty ? filteredItems : updatedBooking.bookingItems,
+          totalPrice: filteredItems.isNotEmpty ? printTotalPrice : updatedBooking.totalPrice,
+          advanceAmount: filteredItems.isNotEmpty ? printAdvanceAmount : updatedBooking.advanceAmount,
+        );
+
         await printBookingDetails(
-          updatedBooking,
+          printBooking,
           variant: BookingPrintVariant.clientConfirmation,
         );
       } else if (action == 'artist') {
@@ -1171,7 +1197,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                 // ── Packages/slots in this booking (item-based bookings) ──
                 if (booking.bookingItems.isNotEmpty) ...[
                   _buildBookingItemsOverview(
-                      context, ref, crmColors, booking, selectedBookingItemIndex),
+                      context, ref, crmColors, booking, selectedBookingItemIndex, selectedPrintItemIndices),
                   24.h,
                 ],
                 // ── Core details ──────────────────────────────────────────
@@ -2321,6 +2347,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     CrmTheme crm,
     Booking booking,
     int currentItemIndex,
+    ValueNotifier<Set<int>> selectedPrintItemIndices,
   ) {
     const mo = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -2349,6 +2376,8 @@ class ManageBookingScreen extends HookConsumerWidget {
               final isCurrent = index == currentItemIndex;
               final slot = item.eventSlot.trim();
               final dates = datesLabel(item);
+              final isSelectedForPrint = selectedPrintItemIndices.value.contains(index);
+
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Container(
@@ -2364,6 +2393,19 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ),
                   child: Row(
                     children: [
+                      Checkbox(
+                        value: isSelectedForPrint,
+                        activeColor: crm.primary,
+                        onChanged: (bool? checked) {
+                          final newSelection = Set<int>.from(selectedPrintItemIndices.value);
+                          if (checked == true) {
+                            newSelection.add(index);
+                          } else {
+                            newSelection.remove(index);
+                          }
+                          selectedPrintItemIndices.value = newSelection;
+                        },
+                      ),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2415,6 +2457,23 @@ class ManageBookingScreen extends HookConsumerWidget {
                           onPressed: () => context.go(
                               '/booking/manage/${booking.id}?entry=${Uri.encodeComponent('${booking.id}::$index::0')}'),
                         ),
+                      IconButton(
+                        tooltip: 'Print single PDF',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.picture_as_pdf_outlined,
+                            size: 18, color: Colors.blueGrey),
+                        onPressed: () async {
+                          final singleItemBooking = booking.copyWith(
+                            bookingItems: [item],
+                            totalPrice: item.totalPrice + (_bookingItemDays(item) * 3000),
+                            advanceAmount: item.advanceAmount * _bookingItemDays(item),
+                          );
+                          await printBookingDetails(
+                            singleItemBooking,
+                            variant: BookingPrintVariant.clientConfirmation,
+                          );
+                        },
+                      ),
                       if (items.length > 1)
                         IconButton(
                           tooltip: 'Remove this package',

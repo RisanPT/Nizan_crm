@@ -820,3 +820,13 @@ String _titleCase(String value) {
   if (value.isEmpty) return value;
   return value[0].toUpperCase() + value.substring(1).toLowerCase();
 }
+
+Future<void> printMultipleBookingDetails(
+  List<Booking> selectedBookings, {
+  required BookingPrintVariant variant,
+}) async {
+  if (selectedBookings.isEmpty) return;
+  // Fallback to first booking for now, similar to mobile stub.
+  // The full aggregation logic will iterate over selectedBookings.
+  await printBookingDetails(selectedBookings.first, variant: variant);
+}

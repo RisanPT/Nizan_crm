@@ -23,3 +23,13 @@ Future<void> printBookingDetails(
     artistName: artistName,
   );
 }
+
+Future<void> printMultipleBookingDetails(
+  List<Booking> selectedBookings, {
+  required BookingPrintVariant variant,
+}) {
+  return impl.printMultipleBookingDetails(
+    selectedBookings,
+    variant: variant,
+  );
+}

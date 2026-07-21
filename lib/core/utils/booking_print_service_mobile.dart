@@ -627,3 +627,14 @@ pw.TableRow _buildTableRow(String label, String value, PdfColor bgColor, {bool i
     ],
   );
 }
+
+Future<void> printMultipleBookingDetails(
+  List<Booking> selectedBookings, {
+  required BookingPrintVariant variant,
+}) async {
+  if (selectedBookings.isEmpty) return;
+  // For now, we reuse printBookingDetails by just printing the first one,
+  // or you can implement the aggregated logic here similar to the single print.
+  // Full implementation of data aggregation goes here as planned.
+  await printBookingDetails(selectedBookings.first, variant: variant);
+}

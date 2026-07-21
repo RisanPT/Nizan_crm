@@ -9,3 +9,8 @@ Future<void> printBookingDetails(
   BookingDisplayEntry? selectedArtistEntry,
   String artistName = '',
 }) async {}
+
+Future<void> printMultipleBookingDetails(
+  List<Booking> selectedBookings, {
+  required BookingPrintVariant variant,
+}) async {}
