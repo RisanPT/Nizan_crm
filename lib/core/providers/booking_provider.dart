@@ -289,18 +289,26 @@ class BookingNotifier extends _$BookingNotifier {
   Future<void> removeBooking(String id) async {
     final service = ref.read(bookingServiceProvider);
 
-    // Optimistic update
+    // Optimistic update — remove from the non-paginated cache immediately.
     final previousState = state;
     state = AsyncData((state.value ?? []).where((b) => b.id != id).toList());
 
     try {
       await service.deleteBooking(id);
       if (ref.mounted) {
+        // Bump the refresh trigger so paginatedBookingsProvider re-fetches.
         ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+        // Invalidate all family instances of paginatedBookingsProvider so every
+        // list screen (dashboard, calendar, etc.) sees the deletion immediately.
+        ref.invalidate(paginatedBookingsProvider);
+        // Invalidate the single-booking cache for the deleted id so navigating
+        // back to its detail page does not show stale data.
+        ref.invalidate(singleBookingProvider(id));
       }
     } catch (err, stack) {
       if (ref.mounted) {
-        state = previousState; // Rollback
+        // Rollback optimistic update on failure.
+        state = previousState;
         state = AsyncError(err, stack);
       }
     }

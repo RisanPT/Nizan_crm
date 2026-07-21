@@ -14,6 +14,7 @@ import '../../../../core/utils/responsive_builder.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../services/package_service.dart';
 import '../../../../presentation/widgets/export_sales_report_dialog.dart';
+import '../../../../core/utils/booking_print_service.dart';
 import '../../../../services/zone_service.dart';
 import '../../../../services/state_service.dart';
 import '../../../../services/region_service.dart';
@@ -505,8 +506,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
     Future<void> deleteBookings(
       List<String> bookingIds,
-      int currentPageCount,
-    ) async {
+      int currentPageCount, {
+      bool clearAllSelections = false,
+    }) async {
       if (bookingIds.isEmpty) return;
 
       final confirmed = await showDialog<bool>(
@@ -527,6 +529,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Delete'),
             ),
           ],
@@ -542,14 +548,28 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
       ref.invalidate(paginatedBookingsProvider);
 
-      selectedIds.value = {
-        for (final existingId in selectedIds.value)
-          if (!bookingIds.contains(existingId)) existingId,
-      };
+      // When deleting from a row icon (single booking), clear all selections
+      // so the "Delete Selected" bulk button disappears and avoids confusion.
+      if (clearAllSelections) {
+        selectedIds.value = <String>{};
+      } else {
+        selectedIds.value = {
+          for (final existingId in selectedIds.value)
+            if (!bookingIds.contains(existingId)) existingId,
+        };
+      }
 
       if (bookingIds.length >= currentPageCount && pageState.value > 1) {
         pageState.value -= 1;
       }
+    }
+
+    Future<void> printCombinedClientPdf(List<Booking> selectedBookings) async {
+      if (selectedBookings.isEmpty) return;
+      await printMultipleBookingDetails(
+        selectedBookings,
+        variant: BookingPrintVariant.clientInvoice,
+      );
     }
 
     return asyncPaginatedBookings.when(
@@ -943,6 +963,25 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ),
                   ],
                   const Spacer(),
+                  if (selectedIds.value.length >= 2) ...[
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        final selectedBookings = bookings
+                            .where((b) => selectedIds.value.contains(b.id))
+                            .toList();
+                        printCombinedClientPdf(selectedBookings);
+                      },
+                      icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: Text(
+                        'Combined PDF (${selectedIds.value.length})',
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.indigo,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    8.w,
+                  ],
                   if (selectedIds.value.isNotEmpty)
                     ElevatedButton.icon(
                       onPressed: () => deleteBookings(
@@ -1071,9 +1110,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                     }
                                     selectedIds.value = next;
                                   },
-                                  onDelete: () => deleteBookings([
-                                    booking.id,
-                                  ], bookings.length),
+                                  onDelete: () => deleteBookings(
+                                    [booking.id],
+                                    bookings.length,
+                                    clearAllSelections: true,
+                                  ),
                                 ),
                               )
                               .toList(),
@@ -1123,8 +1164,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   }
                                   selectedIds.value = next;
                                 },
-                                onDelete: () =>
-                                    deleteBookings([booking.id], bookings.length),
+                                onDelete: () => deleteBookings(
+                                  [booking.id],
+                                  bookings.length,
+                                  clearAllSelections: true,
+                                ),
                               ),
                             ),
                           ],

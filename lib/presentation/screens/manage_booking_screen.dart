@@ -1133,6 +1133,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                               }
                             } catch (error) {
                               if (context.mounted) {
+                                isDeleting.value = false;
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -1141,13 +1142,6 @@ class ManageBookingScreen extends HookConsumerWidget {
                                     backgroundColor: Colors.red,
                                   ),
                                 );
-                              }
-                            } finally {
-                              // The success path navigates away, which disposes
-                              // this widget and its hooks — only reset the flag
-                              // if we're still on screen.
-                              if (context.mounted) {
-                                isDeleting.value = false;
                               }
                             }
                           },
@@ -4254,6 +4248,11 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
     if (!context.mounted) return;
     messenger.showSnackBar(const SnackBar(content: Text('Package removed.')));
+
+    // Invalidate singleBookingProvider so that when we navigate back to the
+    // booking detail the page fetches fresh data and doesn't show the removed
+    // package from the stale local cache.
+    ref.invalidate(singleBookingProvider(booking.id));
 
     // Indices shift after removal, so any `?entry=` in the URL may now point
     // at the wrong package. Reset to the booking's default (first) entry.

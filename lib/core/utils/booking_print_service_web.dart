@@ -826,7 +826,75 @@ Future<void> printMultipleBookingDetails(
   required BookingPrintVariant variant,
 }) async {
   if (selectedBookings.isEmpty) return;
-  // Fallback to first booking for now, similar to mobile stub.
-  // The full aggregation logic will iterate over selectedBookings.
-  await printBookingDetails(selectedBookings.first, variant: variant);
+  if (selectedBookings.length == 1) {
+    await printBookingDetails(selectedBookings.first, variant: variant);
+    return;
+  }
+
+  // Build a virtual combined Booking from all selectedBookings.
+  // Use the first booking as the base for client info (name, phone, address, etc.)
+  // then merge all bookingItems (or synthesize one per booking if no items).
+  const double dayCharge = 3000.0;
+
+  final base = selectedBookings.first;
+
+  // Merge all BookingItems from all selected bookings.
+  // For bookings without items, synthesise a single BookingItem from root fields.
+  final mergedItems = <BookingItem>[];
+  for (final b in selectedBookings) {
+    if (b.bookingItems.isNotEmpty) {
+      mergedItems.addAll(b.bookingItems);
+    } else {
+      // Synthesise from root-level fields
+      final days = b.selectedDates.isNotEmpty ? b.selectedDates.length : 1;
+      final basePrice = b.totalPrice - (dayCharge * days);
+      mergedItems.add(BookingItem(
+        packageId: b.packageId,
+        service: b.service,
+        eventSlot: b.eventSlot,
+        selectedDates: b.selectedDates.isNotEmpty
+            ? b.selectedDates
+            : [b.bookingDate],
+        totalPrice: basePrice > 0 ? basePrice : b.totalPrice,
+        advanceAmount: b.advanceAmount,
+        assignedStaff: b.assignedStaff,
+      ));
+    }
+  }
+
+  // Compute combined totals (mirrors the aggregate logic in manage_booking_screen).
+  final double combinedTotalPrice = mergedItems.fold(0.0, (sum, item) {
+    final days = item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
+    return sum + item.totalPrice + (dayCharge * days);
+  });
+  final double combinedAdvance = mergedItems.fold(
+      0.0,
+      (sum, item) =>
+          sum + (item.advanceAmount * (item.selectedDates.isEmpty ? 1 : item.selectedDates.length)));
+
+  final mergedAddons = selectedBookings.expand((b) => b.addons).toList();
+
+  // Compute earliest booking date as the invoice date.
+  final allDates = selectedBookings.map((b) => b.bookingDate).toList()
+    ..sort((a, z) => a.compareTo(z));
+  final invoiceDate = allDates.first;
+
+  // Build a merged service label.
+  final mergedService = <String>{
+    for (final item in mergedItems)
+      if (item.service.trim().isNotEmpty) item.service.trim(),
+  }.join(' + ');
+
+  // Create the virtual booking used only for PDF rendering.
+  final virtualBooking = base.copyWith(
+    bookingItems: mergedItems,
+    addons: mergedAddons,
+    totalPrice: combinedTotalPrice,
+    advanceAmount: combinedAdvance,
+    service: mergedService.isNotEmpty ? mergedService : base.service,
+    bookingDate: invoiceDate,
+    selectedDates: mergedItems.expand((i) => i.selectedDates).toList(),
+  );
+
+  await printBookingDetails(virtualBooking, variant: variant);
 }
