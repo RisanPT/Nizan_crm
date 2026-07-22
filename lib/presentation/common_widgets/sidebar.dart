@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
+import '../../core/auth/access_control.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
@@ -87,6 +88,8 @@ class Sidebar extends ConsumerWidget {
     final role = session != null
         ? AppRole.fromString(session.role)
         : AppRole.artist;
+    // Feature visibility comes from the role's editable permission set.
+    final access = Access.of(session);
 
     return Container(
       width: width,
@@ -217,12 +220,12 @@ class Sidebar extends ConsumerWidget {
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────
-                  if (role.canSeeDashboard || role.canSeeClients ||
-                      role.canSeeCalendar || role.canSeeBookings) ...[
+                  if (access.canSeeDashboard || access.canSeeClients ||
+                      access.canSeeCalendar || access.canSeeBookings) ...[
                     _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
                     8.h,
                   ],
-                  if (role.canSeeDashboard)
+                  if (access.canSeeDashboard)
                     _SidebarItem(
                       icon: Icons.dashboard_outlined,
                       title: 'Dashboard',
@@ -230,7 +233,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/',
                       onTap: () => context.go('/'),
                     ),
-                  if (role.canSeeClients)
+                  if (access.canSeeClients)
                     _SidebarItem(
                       icon: Icons.people_outline,
                       title: 'Clients',
@@ -238,7 +241,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/client'),
                       onTap: () => context.go('/clients'),
                     ),
-                  if (role.canSeeCalendar)
+                  if (access.canSeeCalendar)
                     _SidebarItem(
                       icon: Icons.calendar_month,
                       title: 'Calendar',
@@ -246,7 +249,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/calendar',
                       onTap: () => context.go('/calendar'),
                     ),
-                  if (role.canSeeBookings)
+                  if (access.canSeeBookings)
                     _SidebarItem(
                       icon: Icons.event_available_outlined,
                       title: 'Trials',
@@ -254,7 +257,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
                       onTap: () => context.go('/trials'),
                     ),
-                  if (role.canSeeBookings)
+                  if (access.canSeeBookings)
                     _SidebarItem(
                       icon: Icons.auto_awesome_mosaic_outlined,
                       title: 'Trial Packages',
@@ -262,7 +265,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/trial-packages'),
                       onTap: () => context.go('/trial-packages'),
                     ),
-                  if (role.canSeeBookings)
+                  if (access.canSeeBookings)
                     _SidebarItem(
                       icon: Icons.receipt_long_outlined,
                       title: 'Booking',
@@ -272,13 +275,13 @@ class Sidebar extends ConsumerWidget {
                     ),
 
                   // ── ERP SECTION ──────────────────────────────────────────────
-                  if (role.canSeeServices || role.canSeeStaff ||
-                      role.canSeeSales || role.canSeeFinance || role.canSeeFleet) ...[
+                  if (access.canSeeServices || access.canSeeStaff ||
+                      access.canSeeSales || access.canSeeFinance || access.canSeeFleet) ...[
                     32.h,
                     _buildSectionTitle('ERP', isCollapsed: isCollapsed, theme: theme),
                     8.h,
                   ],
-                  if (role.canSeeServices) ...[
+                  if (access.canSeeServices) ...[
                     _SidebarItem(
                       icon: Icons.design_services_outlined,
                       title: 'Services',
@@ -294,7 +297,7 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/services/regions'),
                     ),
                   ],
-                  if (role.canSeeStaff) ...[
+                  if (access.canSeeStaff) ...[
                     _SidebarItem(
                       icon: Icons.groups_outlined,
                       title: 'HR',
@@ -335,7 +338,7 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (role.canSeeSales) ...[
+                  if (access.canSeeSales) ...[
                     _SidebarItem(
                       icon: Icons.bar_chart_outlined,
                       title: 'Sales',
@@ -354,6 +357,16 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveSalesExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.dashboard_outlined,
+                          title: 'Sales Dashboard',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/sales/dashboard',
+                          onTap: () => context.go('/sales/dashboard'),
+                        ),
+                      ),
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
@@ -376,7 +389,7 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (role.canSeeFinance) ...[
+                  if (access.canSeeFinance) ...[
                     _SidebarItem(
                       icon: Icons.account_balance,
                       title: 'Accounts',
@@ -492,7 +505,7 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (role.canManageInventory) ...[
+                  if (access.canManageInventory) ...[
                     _SidebarItem(
                       icon: Icons.inventory_2_outlined,
                       title: 'Inventory',
@@ -584,7 +597,7 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (role.canManageMarketing) ...[
+                  if (access.canManageMarketing) ...[
                     _SidebarItem(
                       icon: Icons.campaign_outlined,
                       title: 'Marketing',
@@ -625,7 +638,7 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (role.canSeeFleet) ...[
+                  if (access.canSeeFleet) ...[
                     _SidebarItem(
                       icon: Icons.local_shipping_outlined,
                       title: 'Fleet',
@@ -718,7 +731,7 @@ class Sidebar extends ConsumerWidget {
                   ],
 
                   // ── BUSINESS SECTION ─────────────────────────────────────────
-                  if (role.canSeeSettings || role.isFullAccess) ...[
+                  if (access.canSeeSettings || access.isFullAccess) ...[
                     32.h,
                     _buildSectionTitle('BUSINESS', isCollapsed: isCollapsed, theme: theme),
                     8.h,
@@ -732,14 +745,23 @@ class Sidebar extends ConsumerWidget {
                       title: 'Reports & Analytics',
                       isCollapsed: isCollapsed,
                     ),
-                    if (role.canSeeSettings)
+                    if (access.canSeeSettings) ...[
                       _SidebarItem(
                         icon: Icons.settings_outlined,
                         title: 'Settings',
                         isCollapsed: isCollapsed,
-                        isSelected: currentPath.startsWith('/settings'),
+                        isSelected: currentPath == '/settings',
                         onTap: () => context.go('/settings'),
                       ),
+                      _SidebarItem(
+                        icon: Icons.admin_panel_settings_outlined,
+                        title: 'Roles & Permissions',
+                        isCollapsed: isCollapsed,
+                        isSelected:
+                            currentPath.startsWith('/settings/roles'),
+                        onTap: () => context.go('/settings/roles'),
+                      ),
+                    ],
                   ],
                 ],
               ],

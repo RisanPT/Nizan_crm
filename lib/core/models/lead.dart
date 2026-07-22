@@ -12,6 +12,13 @@ class Lead {
   final DateTime? followUpDate; // date+time for follow-up reminder
   final String? assignedTo;      // ID of the assigned salesman user
   final String status;
+  /// Set when a booking exists for this lead's phone number.
+  final String? bookingId;
+  /// Geography copied from the booking once the lead converts.
+  final String address;
+  final String pincode;
+  final String district;
+  final String region;
   final String reason;
   final String remarks;
   final DateTime createdAt;
@@ -31,6 +38,11 @@ class Lead {
     this.followUpDate,
     this.assignedTo,
     required this.status,
+    this.bookingId,
+    this.address = '',
+    this.pincode = '',
+    this.district = '',
+    this.region = '',
     required this.reason,
     required this.remarks,
     required this.createdAt,
@@ -66,6 +78,13 @@ class Lead {
           ? json['assignedTo']['_id'] as String?
           : json['assignedTo'] as String?,
       status: json['status'] as String? ?? 'New',
+      bookingId: json['bookingId'] is Map
+          ? json['bookingId']['_id'] as String?
+          : json['bookingId'] as String?,
+      address: json['address'] as String? ?? '',
+      pincode: json['pincode'] as String? ?? '',
+      district: json['district'] as String? ?? '',
+      region: json['region'] as String? ?? '',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
       createdAt: createdAt,

@@ -466,7 +466,8 @@ String _buildSingleBookingHtml(
 
 String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant) {
   // ── GST helpers ────────────────────────────────────────────────────────────
-  double gstBase(double incl) => double.parse((incl * 100.0 / 105.0).toStringAsFixed(2));
+  // Base is derived per line as (incl − CGST − SGST) so every row adds up
+  // exactly; see writeServiceRow below.
   double gstCgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
   double gstSgst(double incl) => double.parse((incl * 2.5  / 105.0).toStringAsFixed(2));
   String inr(double v) => '₹${v.toStringAsFixed(2)}';
@@ -568,9 +569,12 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // Writes one SERVICES line. [subLine] carries the date / assigned time /
   // slot for that day. [incl] is the GST-inclusive amount.
   void writeServiceRow(String name, String subLine, double incl) {
-    final rowBase = gstBase(incl);
     final rowCgst = gstCgst(incl);
     final rowSgst = gstSgst(incl);
+    // Derive the base from the rounded taxes so base + CGST + SGST always
+    // equals the printed line amount exactly (no stray paisa on the invoice).
+    final rowBase =
+        double.parse((incl - rowCgst - rowSgst).toStringAsFixed(2));
     lineCgstTotal += rowCgst;
     lineSgstTotal += rowSgst;
     final sub = subLine.trim().isEmpty
@@ -633,9 +637,12 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   if (variant != BookingPrintVariant.clientAdvanceReceipt) {
     for (final addon in booking.addons) {
       final addonIncl  = addon.amount * addon.persons;
-      final addonBase  = gstBase(addonIncl);
       final addonCgst  = gstCgst(addonIncl);
       final addonSgst  = gstSgst(addonIncl);
+      final addonBase  =
+          double.parse((addonIncl - addonCgst - addonSgst).toStringAsFixed(2));
+      lineCgstTotal += addonCgst;
+      lineSgstTotal += addonSgst;
       serviceRows.write('''
 <tr>
   <td>${_escape(addon.service)}${addon.persons > 1 ? ' × ${addon.persons}' : ''}</td>
@@ -648,8 +655,15 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   }
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
-  final totalCgst = gstCgst(booking.totalPrice);
-  final totalSgst = gstSgst(booking.totalPrice);
+  // Taken from the printed lines so the SERVICES tax columns reconcile exactly
+  // with the summary. Falls back to the grand total when no line carried GST
+  // (e.g. the advance receipt, which prints no tax columns).
+  final totalCgst = lineCgstTotal > 0
+      ? double.parse(lineCgstTotal.toStringAsFixed(2))
+      : gstCgst(booking.totalPrice);
+  final totalSgst = lineSgstTotal > 0
+      ? double.parse(lineSgstTotal.toStringAsFixed(2))
+      : gstSgst(booking.totalPrice);
   final totalGst  = double.parse((totalCgst + totalSgst).toStringAsFixed(2));
 
   // ── Discount line ────────────────────────────────────────────────────────────

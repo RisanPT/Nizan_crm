@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../auth/app_role.dart';
+import '../auth/access_control.dart';
 import '../../presentation/common_widgets/main_layout.dart';
 import '../../presentation/screens/dashboard_screen.dart';
 import '../../presentation/screens/clients_directory_screen.dart';
@@ -29,6 +30,8 @@ import '../../features/marketing/presentation/screens/marketing_dashboard_screen
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
+import '../../presentation/screens/settings/roles_permissions_screen.dart';
+import '../../features/sales/presentation/screens/sales_dashboard_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
 import '../../presentation/screens/fleet_assignments_screen.dart';
@@ -83,32 +86,33 @@ DateTime? _parseCalendarFocusDate(String? raw) {
   );
 }
 
-bool isRouteAllowed(String path, AppRole role, {bool inventoryAccess = false}) {
-  if (path == '/' || path == '/auth/loading') return role.canSeeDashboard;
-  if (path.startsWith('/client')) return role.canSeeClients;
-  if (path.startsWith('/calendar')) return role.canSeeCalendar;
+bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) {
+  final role = access.role;
+  if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
+  if (path.startsWith('/client')) return access.canSeeClients;
+  if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
-    return role.canSeeBookings || role == AppRole.fleetManager;
+    return access.canSeeBookings || role == AppRole.fleetManager;
   }
-  if (path.startsWith('/booking')) return role.canSeeBookings;
-  if (path.startsWith('/services')) return role.canSeeServices;
-  if (path.startsWith('/staff')) return role.canSeeStaff;
-  if (path.startsWith('/sales')) return role.canSeeSales;
-  if (path.startsWith('/accounts/bills')) return role.canSeePayables;
-  if (path.startsWith('/finance')) return role.canSeeFinance;
-  if (path.startsWith('/fleet')) return role.canSeeFleet;
+  if (path.startsWith('/booking')) return access.canSeeBookings;
+  if (path.startsWith('/services')) return access.canSeeServices;
+  if (path.startsWith('/staff')) return access.canSeeStaff;
+  if (path.startsWith('/sales')) return access.canSeeSales;
+  if (path.startsWith('/accounts/bills')) return access.canSeePayables;
+  if (path.startsWith('/finance')) return access.canSeeFinance;
+  if (path.startsWith('/fleet')) return access.canSeeFleet;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
   // need the inventory-manager (or full-access) role.
   // Artists with inventory access reach their own inventory + their own kit.
   if (path == '/inventory/my' || path == '/inventory/kits') {
-    return role.canManageInventory ||
+    return access.canManageInventory ||
         (role == AppRole.artist && inventoryAccess);
   }
-  if (path.startsWith('/inventory')) return role.canManageInventory;
-  if (path.startsWith('/marketing')) return role.canManageMarketing;
-  if (path.startsWith('/trials')) return role.canSeeBookings;
-  if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || role.isFullAccess;
-  if (path.startsWith('/settings')) return role.canSeeSettings;
+  if (path.startsWith('/inventory')) return access.canManageInventory;
+  if (path.startsWith('/marketing')) return access.canManageMarketing;
+  if (path.startsWith('/trials')) return access.canSeeBookings;
+  if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
+  if (path.startsWith('/settings')) return access.canSeeSettings;
   return true; // unknown routes — let the 404 handle it
 }
 
@@ -139,10 +143,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       }
 
       // Role-based route guards
-      final role = AppRole.fromString(auth.session?.role);
-      if (!isRouteAllowed(path, role,
+      final access = Access.of(auth.session);
+      if (!isRouteAllowed(path, access,
           inventoryAccess: auth.session?.inventoryAccess ?? false)) {
-        return role.homeRoute;
+        return access.homeRoute;
       }
 
       return null;
@@ -181,6 +185,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Slot Management';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
+          } else if (state.uri.path == '/sales/dashboard') {
+            title = 'Sales Dashboard';
           } else if (state.uri.path == '/sales/quarterly') {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/leads') {
@@ -497,8 +503,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ArtistFinanceScreen(),
           ),
           GoRoute(
+            path: '/sales/dashboard',
+            builder: (context, state) => const SalesDashboardScreen(),
+          ),
+          GoRoute(
             path: '/settings',
             builder: (context, state) => const SettingsScreen(),
+          ),
+          GoRoute(
+            path: '/settings/roles',
+            builder: (context, state) => const RolesPermissionsScreen(),
           ),
           GoRoute(
             path: '/driver/jobs',

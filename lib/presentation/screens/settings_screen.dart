@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../services/role_service.dart';
 import '../../core/models/crm_user.dart';
 import '../../core/models/list_page_params.dart';
 import '../../core/providers/auth_provider.dart';
@@ -117,93 +118,37 @@ class SettingsScreen extends HookConsumerWidget {
                         16.h,
 
                         // ── Role ────────────────────────────────────────────
-                        DropdownButtonFormField<String>(
-                          initialValue: role,
-                          decoration: const InputDecoration(
+                        // Roles are configured in Settings → Roles &
+                        // Permissions, so this list is driven by the Role
+                        // collection rather than a hard-coded set.
+                        Consumer(
+                          builder: (context, ref, _) {
+                            final rolesAsync = ref.watch(rolesProvider);
+                            final roles = rolesAsync.value ?? const [];
+                            final values =
+                                roles.map((r) => r.key).toSet();
+                            return DropdownButtonFormField<String>(
+                          initialValue: values.contains(role) ? role : null,
+                          isExpanded: true,
+                          decoration: InputDecoration(
                             labelText: 'Role *',
-                            prefixIcon: Icon(Icons.badge_outlined),
+                            prefixIcon: const Icon(Icons.badge_outlined),
+                            helperText: rolesAsync.isLoading
+                                ? 'Loading roles…'
+                                : '${roles.length} roles available',
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'admin',
-                              child: _RoleItem(
-                                label: 'Admin',
-                                sub: 'Full access to everything',
-                                color: Colors.deepPurple,
+                          items: [
+                            for (final r in roles)
+                              DropdownMenuItem(
+                                value: r.key,
+                                child: _RoleItem(
+                                  label: r.label,
+                                  sub: r.permissions.isEmpty
+                                      ? 'No features assigned yet'
+                                      : '${r.permissions.length} features',
+                                  color: _roleColor(r.key),
+                                ),
                               ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'manager',
-                              child: _RoleItem(
-                                label: 'Manager',
-                                sub: 'Full access (default)',
-                                color: Colors.indigo,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'crm',
-                              child: _RoleItem(
-                                label: 'CRM Team',
-                                sub: 'Clients, Calendar, Booking',
-                                color: Colors.blue,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'sales',
-                              child: _RoleItem(
-                                label: 'Sales',
-                                sub: 'Sales & Invoices only',
-                                color: Colors.teal,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'artist',
-                              child: _RoleItem(
-                                label: 'Artist',
-                                sub: 'Log own collections & expenses',
-                                color: Colors.orange,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'accounts',
-                              child: _RoleItem(
-                                label: 'Accounts',
-                                sub: 'Verify artist finance entries',
-                                color: Colors.green,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'fleet_manager',
-                              child: _RoleItem(
-                                label: 'Fleet Manager',
-                                sub: 'Calendar & Fleet Management',
-                                color: Colors.blueGrey,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'driver',
-                              child: _RoleItem(
-                                label: 'Driver',
-                                sub: 'Driver Dashboard & Inspections',
-                                color: Colors.brown,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'inventory_manager',
-                              child: _RoleItem(
-                                label: 'Inventory Manager',
-                                sub: 'Studio inventory & staff kits',
-                                color: Colors.pink,
-                              ),
-                            ),
-                            DropdownMenuItem(
-                              value: 'marketing_admin',
-                              child: _RoleItem(
-                                label: 'Marketing Admin',
-                                sub: 'Competitor intelligence & content',
-                                color: Colors.indigo,
-                              ),
-                            ),
                           ],
                           onChanged: (value) {
                             if (value != null) {
@@ -211,6 +156,8 @@ class SettingsScreen extends HookConsumerWidget {
                                 role = value;
                               });
                             }
+                          },
+                            );
                           },
                         ),
 
@@ -1024,4 +971,28 @@ class _RoleBadge extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// Stable dot colour per role — known keys keep their familiar colour and
+/// custom roles get a deterministic one derived from the key.
+Color _roleColor(String key) {
+  const known = {
+    'admin': Colors.deepPurple,
+    'manager': Colors.indigo,
+    'crm': Colors.blue,
+    'sales': Colors.teal,
+    'artist': Colors.orange,
+    'accounts': Colors.green,
+    'fleet_manager': Colors.blueGrey,
+    'driver': Colors.brown,
+    'inventory_manager': Colors.pink,
+    'marketing_admin': Colors.indigo,
+  };
+  if (known.containsKey(key)) return known[key]!;
+  const palette = [
+    Colors.cyan, Colors.amber, Colors.purple,
+    Colors.redAccent, Colors.lightGreen, Colors.deepOrange,
+  ];
+  return palette[key.hashCode.abs() % palette.length];
 }
