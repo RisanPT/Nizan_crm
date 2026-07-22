@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/lead_priority.dart';
 import '../../core/utils/phone_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -291,7 +292,16 @@ class SalesLeadsScreen extends HookConsumerWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _LeadStatsRow(stats: paginated.stats ?? {}), // Stats for all matching leads
+                    // Stats for all matching leads; each card doubles as a
+                    // one-tap status filter.
+                    _LeadStatsRow(
+                      stats: paginated.stats ?? {},
+                      activeStatus: selectedStatus.value,
+                      onSelect: (v) {
+                        selectedStatus.value = v;
+                        currentPage.value = 1;
+                      },
+                    ),
                     24.h,
                     // Filter Bar
                     Container(
@@ -732,6 +742,71 @@ class _AddLeadCard extends HookConsumerWidget {
   }
 }
 
+/// Lays form fields into an aligned grid on desktop. Each field declares a
+/// column span; a field that would overflow the current row starts a new one,
+/// and the last row is padded so widths stay consistent.
+class _FormGrid extends StatelessWidget {
+  final List<(Widget, int)> fields;
+
+  static const double gap = 16;
+
+  const _FormGrid({required this.fields});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        // Four columns on a wide window, two on a narrow one, so fields never
+        // squeeze below a usable width.
+        final columns = c.maxWidth >= 1000 ? 4 : 2;
+        return _buildGrid(columns);
+      },
+    );
+  }
+
+  Widget _buildGrid(int columns) {
+    final rows = <List<(Widget, int)>>[];
+    var current = <(Widget, int)>[];
+    var used = 0;
+
+    for (final f in fields) {
+      final span = f.$2.clamp(1, columns);
+      if (used + span > columns) {
+        rows.add(current);
+        current = [];
+        used = 0;
+      }
+      current.add((f.$1, span));
+      used += span;
+    }
+    if (current.isNotEmpty) rows.add(current);
+
+    return Column(
+      children: [
+        for (final row in rows)
+          Padding(
+            padding: EdgeInsets.only(bottom: row == rows.last ? 0 : gap),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var i = 0; i < row.length; i++) ...[
+                  Expanded(flex: row[i].$2, child: row[i].$1),
+                  if (i != row.length - 1) SizedBox(width: gap),
+                ],
+                // Pad the final row so a half-full row keeps column widths.
+                if (row.fold<int>(0, (a, b) => a + b.$2) < columns) ...[
+                  SizedBox(width: gap),
+                  Spacer(
+                      flex: columns - row.fold<int>(0, (a, b) => a + b.$2)),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────
 //  Shared Lead Form (used in Add card and Edit dialog)
 // ─────────────────────────────────────────────────────────
@@ -761,6 +836,7 @@ class _LeadForm extends HookConsumerWidget {
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
     final status        = useState(initialLead?.status ?? 'New');
+    final priority      = useState(initialLead?.priority ?? 'Warm');
     final assignedTo    = useState<String?>(initialLead?.assignedTo);
     final asyncUsers    = ref.watch(crmUsersProvider);
     final session       = ref.watch(authSessionProvider);
@@ -833,6 +909,7 @@ class _LeadForm extends HookConsumerWidget {
         final payload = {
           'name': nameCtrl.text,
           'phone': normalizePhone(phoneCtrl.text),
+          'priority': priority.value,
           'source': selectedSource.value == 'Other'
               ? customSourceCtrl.text.trim()
               : selectedSource.value,
@@ -931,13 +1008,15 @@ class _LeadForm extends HookConsumerWidget {
     // ── UI ────────────────────────────────────────────────
     Widget buildField(Widget child) => child;
 
-    // Full-width on mobile, fixed-width on desktop
-    Widget responsiveField(Widget field, {double desktopWidth = 220}) {
-      if (isMobile) return field;
-      return SizedBox(width: desktopWidth, child: field);
+    // Fields declare how many grid columns they occupy on desktop; on mobile
+    // everything stacks full width. Using spans (rather than fixed pixel
+    // widths in a Wrap) keeps every row aligned at any window size.
+    (Widget, int) responsiveField(Widget field, {double desktopWidth = 220}) {
+      final span = desktopWidth >= 340 ? 2 : 1;
+      return (field, span);
     }
 
-    final fields = [
+    final List<(Widget, int)> fields = [
       // Name
       responsiveField(
         TextFormField(
@@ -1216,6 +1295,24 @@ class _LeadForm extends HookConsumerWidget {
           desktopWidth: 220,
         ),
 
+      // Lead priority — how likely this lead is to close.
+      responsiveField(
+        InputDecorator(
+          decoration: const InputDecoration(
+            labelText: 'Priority',
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: LeadPrioritySelector(
+              value: priority.value,
+              onChanged: (v) => priority.value = v,
+            ),
+          ),
+        ),
+        desktopWidth: 340,
+      ),
       // Remarks
       responsiveField(
         TextFormField(
@@ -1373,18 +1470,15 @@ class _LeadForm extends HookConsumerWidget {
             // Stack fields vertically on mobile
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: fields.map((f) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: f,
-              )).toList(),
+              children: fields
+                  .map((f) => Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: f.$1,
+                      ))
+                  .toList(),
             )
           else
-            // Wrap horizontally on desktop/tablet
-            Wrap(
-              spacing: 16,
-              runSpacing: 16,
-              children: fields,
-            ),
+            _FormGrid(fields: fields),
 
           if (!isMobile) 24.h else 8.h,
 
@@ -1699,7 +1793,14 @@ class _LeadCardState extends State<_LeadCard> {
                           ),
                         ],
                       ),
-                      _StatusBadge(status: lead.status),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          LeadPriorityChip(lead.priority, dense: true),
+                          const SizedBox(width: 6),
+                          _StatusBadge(status: lead.status),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -2374,8 +2475,16 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
 // ─────────────────────────────────────────────────────────
 class _LeadStatsRow extends StatelessWidget {
   final Map<String, int> stats;
+  /// Currently applied status filter, so the matching card reads as selected.
+  final String activeStatus;
+  /// Tapping a card filters the list to that status ('All' clears it).
+  final ValueChanged<String>? onSelect;
 
-  const _LeadStatsRow({required this.stats});
+  const _LeadStatsRow({
+    required this.stats,
+    this.activeStatus = 'All',
+    this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2387,13 +2496,17 @@ class _LeadStatsRow extends StatelessWidget {
     final closedCount = stats['Closed'] ?? 0;
     final missedCount = stats['Missed'] ?? 0;
 
-    Widget buildStatCard(String title, int count, IconData icon, Color color) {
-      return Container(
+    Widget buildStatCard(String title, int count, IconData icon, Color color,
+        {String? filterValue}) {
+      final selected = filterValue != null && filterValue == activeStatus;
+      final card = Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: crm.surface,
+          color: selected ? color.withValues(alpha: 0.07) : crm.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: crm.border),
+          border: Border.all(
+              color: selected ? color : crm.border,
+              width: selected ? 1.6 : 1),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.02),
@@ -2430,8 +2543,18 @@ class _LeadStatsRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (selected)
+              Icon(Icons.close, size: 15, color: color),
           ],
         ),
+      );
+
+      if (filterValue == null || onSelect == null) return card;
+      return InkWell(
+        borderRadius: BorderRadius.circular(12),
+        // Tapping the active card clears the filter.
+        onTap: () => onSelect!(selected ? 'All' : filterValue),
+        child: card,
       );
     }
 
@@ -2440,17 +2563,28 @@ class _LeadStatsRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: buildStatCard('New Leads', newCount, Icons.star_border, Colors.blue)),
+              Expanded(
+                  child: buildStatCard('New Leads', newCount,
+                      Icons.star_border, Colors.blue,
+                      filterValue: 'New')),
               const SizedBox(width: 10),
-              Expanded(child: buildStatCard('Follow-up', followUpCount, Icons.sync, Colors.orange)),
+              Expanded(
+                  child: buildStatCard('Follow-up', followUpCount, Icons.sync,
+                      Colors.orange,
+                      filterValue: 'Follow-up')),
             ],
           ),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: buildStatCard('Closed', closedCount, Icons.check_circle_outline, Colors.green)),
+              Expanded(
+                  child: buildStatCard('Closed', closedCount,
+                      Icons.check_circle_outline, Colors.green,
+                      filterValue: 'Converted')),
               const SizedBox(width: 10),
-              Expanded(child: buildStatCard('Missed', missedCount, Icons.warning_amber_rounded, Colors.red)),
+              Expanded(
+                  child: buildStatCard('Missed', missedCount,
+                      Icons.warning_amber_rounded, Colors.red)),
             ],
           ),
         ],
@@ -2463,10 +2597,25 @@ class _LeadStatsRow extends StatelessWidget {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            SizedBox(width: itemWidth, child: buildStatCard('New Leads', newCount, Icons.star_border, Colors.blue)),
-            SizedBox(width: itemWidth, child: buildStatCard('Follow-up', followUpCount, Icons.sync, Colors.orange)),
-            SizedBox(width: itemWidth, child: buildStatCard('Closed Leads', closedCount, Icons.check_circle_outline, Colors.green)),
-            SizedBox(width: itemWidth, child: buildStatCard('Missed Leads', missedCount, Icons.warning_amber_rounded, Colors.red)),
+            SizedBox(
+                width: itemWidth,
+                child: buildStatCard('New Leads', newCount,
+                    Icons.star_border, Colors.blue,
+                    filterValue: 'New')),
+            SizedBox(
+                width: itemWidth,
+                child: buildStatCard(
+                    'Follow-up', followUpCount, Icons.sync, Colors.orange,
+                    filterValue: 'Follow-up')),
+            SizedBox(
+                width: itemWidth,
+                child: buildStatCard('Closed Leads', closedCount,
+                    Icons.check_circle_outline, Colors.green,
+                    filterValue: 'Converted')),
+            SizedBox(
+                width: itemWidth,
+                child: buildStatCard('Missed Leads', missedCount,
+                    Icons.warning_amber_rounded, Colors.red)),
           ],
         );
       },

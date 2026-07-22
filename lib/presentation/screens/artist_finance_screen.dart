@@ -693,12 +693,19 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
-    Future<void> addExpenseDialog() async {
-      final amountCtrl = TextEditingController();
-      final notesCtrl = TextEditingController();
-      var selEmployee = isScopedToOwn ? myEmployeeId : '';
-      var selCategory = 'food';
-      var selDate = DateTime.now();
+    /// Logs a new expense, or edits [existing] when one is supplied. An
+    /// artist may only edit their own entry while it is still pending — the
+    /// backend enforces the same rule.
+    Future<void> addExpenseDialog({ArtistExpense? existing}) async {
+      final isEditing = existing != null;
+      final amountCtrl = TextEditingController(
+          text: isEditing ? existing.amount.toStringAsFixed(0) : '');
+      final notesCtrl = TextEditingController(text: existing?.notes ?? '');
+      var selEmployee = isEditing
+          ? (existing.employee?.id ?? myEmployeeId)
+          : (isScopedToOwn ? myEmployeeId : '');
+      var selCategory = existing?.category ?? 'food';
+      var selDate = existing?.date ?? DateTime.now();
       XFile? attachmentFile;
       bool isUploading = false;
       final formKey = GlobalKey<FormState>();
@@ -760,7 +767,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               ),
                               16.w,
                               Text(
-                                'Log Artist Expense',
+                                isEditing
+                                    ? 'Edit Expense'
+                                    : 'Log Artist Expense',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.w900,
                                 ),
@@ -1012,18 +1021,33 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               .uploadImage(attachmentFile!);
                                         }
 
-                                        await ref
-                                            .read(expenseServiceProvider)
-                                            .createExpense(
-                                              employeeId: selEmployee.isNotEmpty
-                                                  ? selEmployee
-                                                  : myEmployeeId,
-                                              category: selCategory,
-                                              amount: amt,
-                                              date: selDate,
-                                              notes: notesCtrl.text.trim(),
-                                              receiptImage: uploadedUrl ?? '',
-                                            );
+                                        if (isEditing) {
+                                          await ref
+                                              .read(expenseServiceProvider)
+                                              .updateExpense(
+                                                id: existing.id,
+                                                category: selCategory,
+                                                amount: amt,
+                                                date: selDate,
+                                                notes: notesCtrl.text.trim(),
+                                                // Keep the old receipt unless
+                                                // a new one was attached.
+                                                receiptImage: uploadedUrl,
+                                              );
+                                        } else {
+                                          await ref
+                                              .read(expenseServiceProvider)
+                                              .createExpense(
+                                                employeeId: selEmployee.isNotEmpty
+                                                    ? selEmployee
+                                                    : myEmployeeId,
+                                                category: selCategory,
+                                                amount: amt,
+                                                date: selDate,
+                                                notes: notesCtrl.text.trim(),
+                                                receiptImage: uploadedUrl ?? '',
+                                              );
+                                        }
                                         ref.invalidate(expensesProvider);
                                         ref.invalidate(artistExpensesProvider);
                                         if (ctx.mounted) Navigator.pop(ctx);
@@ -1040,8 +1064,10 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         }
                                       }
                                     },
-                                    child: const Text(
-                                      'LOG EXPENSE',
+                                    child: Text(
+                                      isEditing
+                                          ? 'SAVE CHANGES'
+                                          : 'LOG EXPENSE',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w900,
                                         letterSpacing: 1,
@@ -1424,6 +1450,29 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               backgroundColor: crm.destructive.withValues(alpha: 0.05),
                               side: BorderSide(color: crm.destructive.withValues(alpha: 0.3)),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.all(8),
+                              minimumSize: const Size(36, 36),
+                            ),
+                          ),
+                        );
+                        actionsList.add(8.w);
+                      }
+                      // An artist can correct their own entry until Accounts
+                      // verifies or rejects it; after that it is locked.
+                      if (isScopedToOwn && e.status == 'pending') {
+                        actionsList.add(
+                          IconButton(
+                            tooltip: 'Edit this expense',
+                            icon: const Icon(Icons.edit_outlined, size: 14),
+                            onPressed: () => addExpenseDialog(existing: e),
+                            style: IconButton.styleFrom(
+                              foregroundColor: crm.primary,
+                              backgroundColor:
+                                  crm.primary.withValues(alpha: 0.05),
+                              side: BorderSide(
+                                  color: crm.primary.withValues(alpha: 0.3)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
                               padding: const EdgeInsets.all(8),
                               minimumSize: const Size(36, 36),
                             ),

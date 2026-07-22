@@ -12,6 +12,8 @@ class LeadFilter {
   final String source;
   final String salesperson;
   final String month;
+  /// 'All', 'Hot', 'Warm' or 'Cold'.
+  final String priority;
 
   LeadFilter({
     this.page = 1,
@@ -21,6 +23,7 @@ class LeadFilter {
     this.source = 'All',
     this.salesperson = 'All',
     this.month = 'All',
+    this.priority = 'All',
   });
 
   @override
@@ -34,7 +37,8 @@ class LeadFilter {
           status == other.status &&
           source == other.source &&
           salesperson == other.salesperson &&
-          month == other.month;
+          month == other.month &&
+          priority == other.priority;
 
   @override
   int get hashCode =>
@@ -44,7 +48,8 @@ class LeadFilter {
       status.hashCode ^
       source.hashCode ^
       salesperson.hashCode ^
-      month.hashCode;
+      month.hashCode ^
+      priority.hashCode;
 }
 
 final leadServiceProvider = Provider<LeadService>((ref) {
@@ -75,6 +80,7 @@ class LeadService {
           'limit': filter.limit,
           if (filter.search.isNotEmpty) 'search': filter.search,
           if (filter.status != 'All') 'status': filter.status,
+          if (filter.priority != 'All') 'priority': filter.priority,
           if (filter.source != 'All') 'source': filter.source,
           if (filter.salesperson != 'All') 'salesperson': filter.salesperson,
           if (filter.month != 'All') 'month': filter.month,

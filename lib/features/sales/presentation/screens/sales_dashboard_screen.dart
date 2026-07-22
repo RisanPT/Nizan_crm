@@ -10,6 +10,7 @@ import '../../../../core/models/crm_user.dart';
 import '../../../../core/models/lead.dart';
 import '../../../../core/providers/booking_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
+import '../../../../core/utils/lead_priority.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import '../../../../services/lead_service.dart';
 import '../../../../services/user_service.dart';
@@ -147,17 +148,16 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
         _responsiveRow(isWide, isMobile, [
           (3, _leadsByRegion(crm, data)),
           (3, _leadTypeDonut(crm, data)),
+          (3, _priorityCard(crm, data)),
           (3, _leadStatus(crm, data)),
-          (3, _topPerformers(crm, data)),
         ]),
         16.h,
-        _reportTable(crm, data),
-        16.h,
-        // Row 3 — recent leads + achievement
         _responsiveRow(isWide, isMobile, [
-          (7, _recentLeads(crm, data, isMobile)),
-          (4, _achievement(crm, data)),
+          (4, _topPerformers(crm, data)),
+          (8, _achievement(crm, data)),
         ]),
+        16.h,
+        _reportTableAnchor(crm, data, isMobile),
       ],
     );
   }
@@ -924,6 +924,85 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
   Widget _leadsByRegion(CrmTheme crm, _DashboardData d) =>
       _barListCard(crm, 'Leads by District', d.byRegion, d.totalLeads);
 
+  /// Hot / Warm / Cold split, with a call-out for hot leads still open.
+  Widget _priorityCard(CrmTheme crm, _DashboardData d) {
+    return _card(
+      crm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle(crm, 'Lead Priority'),
+          12.h,
+          if (d.hotOpen > 0) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: LeadPriority.hot.color.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: LeadPriority.hot.color.withValues(alpha: 0.25)),
+              ),
+              child: Row(
+                children: [
+                  Icon(LeadPriority.hot.icon,
+                      size: 16, color: LeadPriority.hot.color),
+                  8.w,
+                  Expanded(
+                    child: Text(
+                      '${d.hotOpen} hot lead${d.hotOpen == 1 ? '' : 's'} still open',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: LeadPriority.hot.color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            12.h,
+          ],
+          for (final p in d.byPriority)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(p.label,
+                            style: TextStyle(
+                                fontSize: 12, color: crm.textPrimary)),
+                      ),
+                      Text('${p.count}',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                      5.w,
+                      Text('(${p.pct.toStringAsFixed(0)}%)',
+                          style: TextStyle(
+                              fontSize: 11, color: crm.textSecondary)),
+                    ],
+                  ),
+                  6.h,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: d.totalLeads == 0 ? 0 : p.count / d.totalLeads,
+                      minHeight: 7,
+                      backgroundColor:
+                          crm.textSecondary.withValues(alpha: 0.10),
+                      valueColor: AlwaysStoppedAnimation(p.color),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _leadStatus(CrmTheme crm, _DashboardData d) =>
       _barListCard(crm, 'Lead Status', d.byStatus, d.totalLeads);
 
@@ -1129,6 +1208,17 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
               ),
         ],
       ),
+    );
+  }
+
+  /// Recent leads sit next to the period report at the foot of the page.
+  Widget _reportTableAnchor(CrmTheme crm, _DashboardData d, bool isMobile) {
+    return Column(
+      children: [
+        _reportTable(crm, d),
+        16.h,
+        _recentLeads(crm, d, isMobile),
+      ],
     );
   }
 
@@ -1614,6 +1704,9 @@ class _DashboardData {
   final List<_Slice> bySource;
   final List<_Slice> byRegion;
   final List<_Slice> byStatus;
+  final List<_Slice> byPriority;
+  /// Open (not converted/lost) leads marked Hot — the ones needing action now.
+  final int hotOpen;
   final List<_Slice> byPincode;
   final List<_Performer> performers;
   final List<_RecentLead> recent;
@@ -1642,6 +1735,8 @@ class _DashboardData {
     required this.bySource,
     required this.byRegion,
     required this.byStatus,
+    required this.byPriority,
+    required this.hotOpen,
     required this.byPincode,
     required this.performers,
     required this.recent,
@@ -1846,6 +1941,30 @@ class _DashboardData {
               l.district.trim().isNotEmpty ? l.district : l.location),
           total),
       byStatus: _group(windowLeads.map((l) => l.status), total, limit: 6),
+      byPriority: [
+        for (final p in LeadPriority.all)
+          _Slice(
+            p.label,
+            windowLeads
+                .where((l) => LeadPriority.of(l.priority).value == p.value)
+                .length,
+            total == 0
+                ? 0
+                : (windowLeads
+                            .where((l) =>
+                                LeadPriority.of(l.priority).value == p.value)
+                            .length /
+                        total) *
+                    100,
+            p.color,
+          ),
+      ],
+      hotOpen: windowLeads.where((l) {
+        final st = l.status.toLowerCase();
+        return LeadPriority.of(l.priority).value == 'Hot' &&
+            st != 'converted' &&
+            st != 'lost';
+      }).length,
       byPincode: _group(
           windowLeads.map((l) =>
               l.pincode.trim().isEmpty ? 'Not captured' : l.pincode.trim()),

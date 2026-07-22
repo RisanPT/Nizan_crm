@@ -80,6 +80,37 @@ class ExpenseService {
     }
   }
 
+  /// Edits an existing expense. The backend rejects this for an artist once
+  /// Accounts has verified or rejected the entry.
+  Future<ArtistExpense> updateExpense({
+    required String id,
+    String? bookingId,
+    String? category,
+    double? amount,
+    DateTime? date,
+    String? notes,
+    String? receiptImage,
+  }) async {
+    try {
+      final response = await _dio.put('/expenses/$id', data: {
+        'bookingId': ?bookingId,
+        'category': ?category,
+        'amount': ?amount,
+        'date': ?date?.toIso8601String(),
+        'notes': ?notes,
+        'receiptImage': ?receiptImage,
+      });
+      return ArtistExpense.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw Exception(
+        (data is Map && data['message'] != null)
+            ? data['message'].toString()
+            : 'Failed to update expense: ${e.message}',
+      );
+    }
+  }
+
   Future<ArtistExpense> verifyExpense({
     required String id,
     required String status, // 'verified' | 'rejected'
