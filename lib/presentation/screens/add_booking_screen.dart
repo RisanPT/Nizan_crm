@@ -141,17 +141,15 @@ class AddBookingScreen extends HookConsumerWidget {
         0,
         (sum, item) => sum + item.totalPrice,
       );
-      // ₹3000 is charged for EVERY booking day (not only extra days), so one
-      // date of Platinum = 21500 + 3000 = 24500 and two dates = 49000.
-      extraDateCharge.value = bookingItems.fold<double>(
-        0,
-        (sum, item) => sum + (_itemDayCount(item) * kExtraDateChargePerPackage),
-      );
+      // ₹3000 is charged PER PACKAGE — package count × 3000. Two packages on
+      // the same day cost the same as two packages on different days.
+      extraDateCharge.value =
+          bookingItems.length * kExtraDateChargePerPackage;
       totalPrice.value = basePackageAmount.value + extraDateCharge.value;
-      // ₹3000 advance per package, counted once per day it runs.
+      // Advance is likewise per package, once each.
       advanceAmount.value = bookingItems.fold<double>(
         0,
-        (sum, item) => sum + (item.advanceAmount * _itemDayCount(item)),
+        (sum, item) => sum + item.advanceAmount,
       );
     }
 
@@ -1188,7 +1186,22 @@ class AddBookingScreen extends HookConsumerWidget {
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     if (entry.value.date !=
-                                                        null) ...[
+                                                            null &&
+                                                        (entry.key == 0 ||
+                                                            bookingCart
+                                                                    .value[entry
+                                                                        .key -
+                                                                    1]
+                                                                    .date ==
+                                                                null ||
+                                                            _dateKey(bookingCart
+                                                                    .value[entry
+                                                                        .key -
+                                                                    1]
+                                                                    .date!) !=
+                                                                _dateKey(entry
+                                                                    .value
+                                                                    .date!))) ...[
                                                       Text(
                                                         _formatDayLabel(
                                                             entry.value.date!),
@@ -1384,6 +1397,65 @@ class AddBookingScreen extends HookConsumerWidget {
                                           ),
                                         ),
                                       ),
+                                      if (!isSingleMode &&
+                                          selectedDates.value.isNotEmpty) ...[
+                                        14.h,
+                                        Divider(height: 1, color: crmColors.border),
+                                        10.h,
+                                        Text(
+                                          'Same day, more than one package? Add it here \u2014 each package becomes its own calendar slot and carries its own day charge.',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: crmColors.textSecondary,
+                                          ),
+                                        ),
+                                        8.h,
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            for (final d in selectedDates.value)
+                                              OutlinedButton.icon(
+                                                onPressed: isSubmitting.value
+                                                    ? null
+                                                    : () {
+                                                        final pid = selectedPackageId.value ?? '';
+                                                        if (pid.isEmpty) return;
+                                                        // Insert beside the other
+                                                        // rows for this date so the
+                                                        // day stays grouped.
+                                                        final list = [...bookingCart.value];
+                                                        var insertAt = list.length;
+                                                        for (var i = list.length - 1; i >= 0; i--) {
+                                                          if (list[i].date != null &&
+                                                              _dateKey(list[i].date!) == _dateKey(d)) {
+                                                            insertAt = i + 1;
+                                                            break;
+                                                          }
+                                                        }
+                                                        list.insert(
+                                                          insertAt,
+                                                          _BookingCartEntry(
+                                                            id: 'extra-${_dateKey(d)}-${DateTime.now().microsecondsSinceEpoch}',
+                                                            packageId: pid,
+                                                            eventSlot: eventSlotCtrl.text.trim(),
+                                                            quantity: 1,
+                                                            date: d,
+                                                          ),
+                                                        );
+                                                        bookingCart.value = list;
+                                                        recalculate();
+                                                      },
+                                                icon: const Icon(Icons.add, size: 16),
+                                                label: Text('Add to ${_formatDayLabel(d)}'),
+                                                style: OutlinedButton.styleFrom(
+                                                  visualDensity: VisualDensity.compact,
+                                                  foregroundColor: crmColors.primary,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
                                 ),
@@ -1469,7 +1541,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                   16.w,
                                   Expanded(
                                     child: _summaryBox(
-                                      label: 'DATE CHARGE (₹3000/DAY)',
+                                      label: 'PACKAGE CHARGE (₹3000 EACH)',
                                       value:
                                           '₹ ${extraDateCharge.value.toStringAsFixed(0)}',
                                       border: crmColors.border,
@@ -1724,9 +1796,6 @@ String _formatDayLabel(DateTime d) {
   ];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
 }
-
-int _itemDayCount(BookingItem item) =>
-    item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
 
 String _dateKey(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

@@ -305,12 +305,15 @@ class BookingNotifier extends _$BookingNotifier {
         // back to its detail page does not show stale data.
         ref.invalidate(singleBookingProvider(id));
       }
-    } catch (err, stack) {
+    } catch (err) {
       if (ref.mounted) {
-        // Rollback optimistic update on failure.
+        // Roll the optimistic removal back. Deliberately NOT AsyncError: one
+        // failed delete must not blank out the bookings list on every screen.
         state = previousState;
-        state = AsyncError(err, stack);
       }
+      // Rethrow so the caller can tell the user it failed — swallowing this
+      // made the UI report "deleted successfully" while the booking remained.
+      rethrow;
     }
   }
 

@@ -749,9 +749,9 @@ class ManageBookingScreen extends HookConsumerWidget {
             .toList();
             
         final printTotalPrice = filteredItems.fold<double>(
-            0.0, (sum, item) => sum + item.totalPrice + (_bookingItemDays(item) * 3000));
+            0.0, (sum, item) => sum + item.totalPrice + 3000);
         final printAdvanceAmount = filteredItems.fold<double>(
-            0.0, (sum, item) => sum + (item.advanceAmount * _bookingItemDays(item)));
+            0.0, (sum, item) => sum + item.advanceAmount);
             
         final printBooking = updatedBooking.copyWith(
           bookingItems: filteredItems.isNotEmpty ? filteredItems : updatedBooking.bookingItems,
@@ -897,21 +897,18 @@ class ManageBookingScreen extends HookConsumerWidget {
         mergedItemDates = normalizedBookingDates;
       }
 
-      // Day charge: ₹3000 for every day each package runs (mirrors backend).
-      final double aggregateDayCharge = updatedBookingItems.fold(
-        0.0,
-        (sum, item) =>
-            sum + (_bookingItemDays(item) * extraDateChargePerPackage),
-      );
+      // ₹3000 per PACKAGE (package count × 3000), mirroring the backend.
+      final double aggregateDayCharge =
+          updatedBookingItems.length * extraDateChargePerPackage;
       final double aggregateTotalPrice =
           updatedBookingItems.fold(0.0, (sum, item) => sum + item.totalPrice) +
           addonsTotal +
           aggregateDayCharge;
 
-      // Advance: each package's advance, once per day it runs (mirrors backend).
+      // Advance: each package's advance, once per package.
       final double aggregateAdvance = updatedBookingItems.fold(
         0.0,
-        (sum, item) => sum + (item.advanceAmount * _bookingItemDays(item)),
+        (sum, item) => sum + item.advanceAmount,
       );
 
       final String aggregateService = <String>{
@@ -2460,8 +2457,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                         onPressed: () async {
                           final singleItemBooking = booking.copyWith(
                             bookingItems: [item],
-                            totalPrice: item.totalPrice + (_bookingItemDays(item) * 3000),
-                            advanceAmount: item.advanceAmount * _bookingItemDays(item),
+                            totalPrice: item.totalPrice + 3000,
+                            advanceAmount: item.advanceAmount,
                           );
                           await printBookingDetails(
                             singleItemBooking,
@@ -4117,11 +4114,6 @@ class ManageBookingScreen extends HookConsumerWidget {
     return mergedAssignments;
   }
 
-  /// Number of days a package runs. ₹3000 is charged for each of them, and the
-  /// package's advance is due once per day — mirrors the backend.
-  static int _bookingItemDays(BookingItem item) =>
-      item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
-
   /// Rebuilds the booking-level aggregates (total, advance, service, slots,
   /// dates, staff) from [items] so removing or editing one package never
   /// corrupts the whole booking. Mirrors the backend bookingController
@@ -4148,18 +4140,12 @@ class ManageBookingScreen extends HookConsumerWidget {
       0.0,
       (sum, a) => sum + (a.amount * a.persons),
     );
-    final dayCharge = items.fold<double>(
-      0.0,
-      (s, i) => s + (_bookingItemDays(i) * extraDateChargePerPackage),
-    );
+    final dayCharge = items.length * extraDateChargePerPackage;
     final total =
         items.fold<double>(0.0, (s, i) => s + i.totalPrice) +
         addonsTotal +
         dayCharge;
-    final advance = items.fold<double>(
-      0.0,
-      (s, i) => s + (i.advanceAmount * _bookingItemDays(i)),
-    );
+    final advance = items.fold<double>(0.0, (s, i) => s + i.advanceAmount);
 
     final service = <String>{
       for (final i in items)

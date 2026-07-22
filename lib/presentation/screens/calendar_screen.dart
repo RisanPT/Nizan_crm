@@ -2358,23 +2358,40 @@ class CalendarScreen extends HookConsumerWidget {
                                 bottom: BorderSide(color: crmColors.border),
                               ),
                             ),
-                            child: Column(
-                              children: [
-                                ...artistGroups
-                                    .take(3)
-                                    .map(
-                                      (group) => Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 6,
-                                        ),
-                                        child: _buildReferencePill(
-                                          context,
-                                          group,
-                                          compact: true,
+                            // Only two pills fit in topLaneHeight; a third
+                            // overflowed by 25px. Show the rest as a count,
+                            // and clip as a belt-and-braces guard.
+                            child: ClipRect(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ...artistGroups
+                                      .take(2)
+                                      .map(
+                                        (group) => Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 6,
+                                          ),
+                                          child: _buildReferencePill(
+                                            context,
+                                            group,
+                                            compact: true,
+                                          ),
                                         ),
                                       ),
+                                  if (artistGroups.length > 2)
+                                    Text(
+                                      '+${artistGroups.length - 2} more',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: crmColors.textSecondary,
+                                      ),
                                     ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                           ...timelineHours.map(

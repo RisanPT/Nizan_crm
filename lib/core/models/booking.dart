@@ -139,35 +139,45 @@ class BookingAddon {
 /// represented by a Google Maps URL.
 class OutfitLook {
   final String lookLabel;     // e.g. "Bridal Look 1", "Reception"
-  final String outfitDetails; // Free-text description of the outfit
+  final String outfitDetails;
+  /// Bride / client reference looks uploaded by CRM, shown to the artist.
+  final List<String> referenceImages; // Free-text description of the outfit
   final String mapUrl;        // Google Maps URL for this look's location
 
   const OutfitLook({
     this.lookLabel = '',
     this.outfitDetails = '',
+    this.referenceImages = const [],
     this.mapUrl = '',
   });
 
   factory OutfitLook.fromJson(Map<String, dynamic> json) => OutfitLook(
         lookLabel: json['lookLabel'] as String? ?? '',
         outfitDetails: json['outfitDetails'] as String? ?? '',
+      referenceImages: ((json['referenceImages'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList(),
         mapUrl: json['mapUrl'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
         'lookLabel': lookLabel,
         'outfitDetails': outfitDetails,
+      'referenceImages': referenceImages,
         'mapUrl': mapUrl,
       };
 
   OutfitLook copyWith({
     String? lookLabel,
     String? outfitDetails,
+    List<String>? referenceImages,
     String? mapUrl,
   }) {
     return OutfitLook(
       lookLabel: lookLabel ?? this.lookLabel,
       outfitDetails: outfitDetails ?? this.outfitDetails,
+      referenceImages: referenceImages ?? this.referenceImages,
       mapUrl: mapUrl ?? this.mapUrl,
     );
   }

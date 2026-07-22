@@ -604,9 +604,8 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
     // every day it covers instead of collapsing into a single total. These sum
     // exactly to the package amount used in the totals block below.
     for (final item in booking.bookingItems) {
-      final days =
-          item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
-      final incl = item.totalPrice + (dayCharge * days);
+      // ₹3000 is charged per package, not per day.
+      final incl = item.totalPrice + dayCharge;
       final label = item.service.trim().isEmpty ? 'Package' : item.service.trim();
       final dates = datesLabel(item.selectedDates);
       final slot = item.eventSlot.trim();
@@ -868,8 +867,8 @@ Future<void> printMultipleBookingDetails(
       mergedItems.addAll(b.bookingItems);
     } else {
       // Synthesise from root-level fields
-      final days = b.selectedDates.isNotEmpty ? b.selectedDates.length : 1;
-      final basePrice = b.totalPrice - (dayCharge * days);
+      // One synthesised package, so back out a single package charge.
+      final basePrice = b.totalPrice - dayCharge;
       mergedItems.add(BookingItem(
         packageId: b.packageId,
         service: b.service,
@@ -885,14 +884,12 @@ Future<void> printMultipleBookingDetails(
   }
 
   // Compute combined totals (mirrors the aggregate logic in manage_booking_screen).
-  final double combinedTotalPrice = mergedItems.fold(0.0, (sum, item) {
-    final days = item.selectedDates.isEmpty ? 1 : item.selectedDates.length;
-    return sum + item.totalPrice + (dayCharge * days);
-  });
-  final double combinedAdvance = mergedItems.fold(
-      0.0,
-      (sum, item) =>
-          sum + (item.advanceAmount * (item.selectedDates.isEmpty ? 1 : item.selectedDates.length)));
+  // ₹3000 is charged per package, so total = Σ base + (package count × 3000).
+  final double combinedTotalPrice = mergedItems.fold<double>(
+          0.0, (sum, item) => sum + item.totalPrice) +
+      (mergedItems.length * dayCharge);
+  final double combinedAdvance =
+      mergedItems.fold(0.0, (sum, item) => sum + item.advanceAmount);
 
   final mergedAddons = selectedBookings.expand((b) => b.addons).toList();
 
