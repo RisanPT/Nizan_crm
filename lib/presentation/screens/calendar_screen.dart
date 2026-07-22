@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import '../common_widgets/add_booking_mode_sheet.dart';
+import '../common_widgets/reference_images.dart';
 import '../../core/models/booking.dart';
 import '../../core/models/employee.dart';
 import '../../core/models/zone.dart';
@@ -3147,6 +3148,14 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final r in rows) _workDetailRow(crm, r.$1, r.$2, r.$3),
+        // Reference looks uploaded by CRM — read-only for the artist.
+        if (b.referenceImages.isNotEmpty) ...[
+          10.h,
+          ReferenceImagesPanel(
+            images: b.referenceImages,
+            title: 'Reference Looks',
+          ),
+        ],
         6.h,
         Row(children: [
           if (b.mapUrl.trim().isNotEmpty) ...[

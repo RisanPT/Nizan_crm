@@ -139,45 +139,35 @@ class BookingAddon {
 /// represented by a Google Maps URL.
 class OutfitLook {
   final String lookLabel;     // e.g. "Bridal Look 1", "Reception"
-  final String outfitDetails;
-  /// Bride / client reference looks uploaded by CRM, shown to the artist.
-  final List<String> referenceImages; // Free-text description of the outfit
+  final String outfitDetails; // Free-text description of the outfit
   final String mapUrl;        // Google Maps URL for this look's location
 
   const OutfitLook({
     this.lookLabel = '',
     this.outfitDetails = '',
-    this.referenceImages = const [],
     this.mapUrl = '',
   });
 
   factory OutfitLook.fromJson(Map<String, dynamic> json) => OutfitLook(
         lookLabel: json['lookLabel'] as String? ?? '',
         outfitDetails: json['outfitDetails'] as String? ?? '',
-      referenceImages: ((json['referenceImages'] as List?) ?? const [])
-          .map((e) => e.toString())
-          .where((e) => e.trim().isNotEmpty)
-          .toList(),
         mapUrl: json['mapUrl'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
         'lookLabel': lookLabel,
         'outfitDetails': outfitDetails,
-      'referenceImages': referenceImages,
         'mapUrl': mapUrl,
       };
 
   OutfitLook copyWith({
     String? lookLabel,
     String? outfitDetails,
-    List<String>? referenceImages,
     String? mapUrl,
   }) {
     return OutfitLook(
       lookLabel: lookLabel ?? this.lookLabel,
       outfitDetails: outfitDetails ?? this.outfitDetails,
-      referenceImages: referenceImages ?? this.referenceImages,
       mapUrl: mapUrl ?? this.mapUrl,
     );
   }
@@ -399,6 +389,8 @@ class Booking {
   final String requiredRoomDetail;
   final String secondaryContact;
   final String outfitDetails;
+  /// Bride / client reference looks uploaded by CRM, shown to the artist.
+  final List<String> referenceImages;
   final String captureStaffDetails;
   final String temporaryStaffDetails;
   final String staffInstructions;
@@ -459,6 +451,7 @@ class Booking {
     this.requiredRoomDetail = '',
     this.secondaryContact = '',
     this.outfitDetails = '',
+    this.referenceImages = const [],
     this.captureStaffDetails = '',
     this.temporaryStaffDetails = '',
     this.staffInstructions = '',
@@ -754,6 +747,10 @@ class Booking {
       requiredRoomDetail: json['requiredRoomDetail'] as String? ?? '',
       secondaryContact: json['secondaryContact'] as String? ?? '',
       outfitDetails: json['outfitDetails'] as String? ?? '',
+      referenceImages: ((json['referenceImages'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList(),
       captureStaffDetails: json['captureStaffDetails'] as String? ?? '',
       temporaryStaffDetails: json['temporaryStaffDetails'] as String? ?? '',
       staffInstructions: json['staffInstructions'] as String? ?? '',
@@ -852,6 +849,7 @@ class Booking {
       'outfitDetails': outfitLooks.isEmpty
           ? outfitDetails
           : outfitLooks.map((l) => l.outfitDetails).where((s) => s.isNotEmpty).join(' | '),
+      'referenceImages': referenceImages,
     };
   }
 
@@ -882,6 +880,7 @@ class Booking {
     String? requiredRoomDetail,
     String? secondaryContact,
     String? outfitDetails,
+    List<String>? referenceImages,
     String? captureStaffDetails,
     String? temporaryStaffDetails,
     String? staffInstructions,
@@ -936,6 +935,7 @@ class Booking {
       requiredRoomDetail: requiredRoomDetail ?? this.requiredRoomDetail,
       secondaryContact: secondaryContact ?? this.secondaryContact,
       outfitDetails: outfitDetails ?? this.outfitDetails,
+      referenceImages: referenceImages ?? this.referenceImages,
       captureStaffDetails: captureStaffDetails ?? this.captureStaffDetails,
       temporaryStaffDetails:
           temporaryStaffDetails ?? this.temporaryStaffDetails,

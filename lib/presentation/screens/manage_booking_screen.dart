@@ -12,6 +12,7 @@ import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/utils/phone_utils.dart';
+import '../common_widgets/reference_images.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/addon_service.dart';
 import '../../core/models/employee.dart';
@@ -253,6 +254,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     final secondaryPhoneCtrl = useTextEditingController();
     // Multi-look outfit state: each look has a label, outfit text, and map URL
     final outfitLooks = useState<List<OutfitLook>>(_migrateOutfitLooks(booking));
+    // Bride / client reference looks uploaded by CRM for the artists.
+    final referenceImages =
+        useState<List<String>>(booking?.referenceImages ?? const []);
     final captureStaffCtrl = useTextEditingController();
     final temporaryStaffCtrl = useTextEditingController(
       text: booking?.temporaryStaffDetails ?? '',
@@ -978,6 +982,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
         outfitLooks: outfitLooks.value,
+        referenceImages: referenceImages.value,
         captureStaffDetails: captureStaffCtrl.text.trim(),
         temporaryStaffDetails: temporaryStaffCtrl.text.trim(),
         staffInstructions: staffNeedsCtrl.text.trim(),
@@ -1187,6 +1192,19 @@ class ManageBookingScreen extends HookConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // ── Packages/slots in this booking (item-based bookings) ──
+                _SectionCard(
+                  title: 'Bride / Client Reference Looks',
+                  subtitle: 'Shared with the assigned artists',
+                  titleColor: Colors.pinkAccent,
+                  child: ReferenceImagesPanel(
+                    images: referenceImages.value,
+                    onChanged: (next) => referenceImages.value = next,
+                    emptyHint:
+                        'Upload the looks the client wants recreated — artists '
+                        'will see them on their job screen.',
+                  ),
+                ),
+                24.h,
                 if (booking.bookingItems.isNotEmpty) ...[
                   _buildBookingItemsOverview(
                       context, ref, crmColors, booking, selectedBookingItemIndex, selectedPrintItemIndices),

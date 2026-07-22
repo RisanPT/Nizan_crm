@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../common_widgets/reference_images.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -1783,6 +1784,16 @@ class _ExpandedDetails extends ConsumerWidget {
                       '${booking.travelDistanceKm > 0 ? ' • ${booking.travelDistanceKm.toStringAsFixed(1)} km' : ''}',
                   color: Colors.black,
                   fontSize: 13,
+                ),
+                14.h,
+              ],
+
+              // Bride / client reference looks uploaded by CRM. Read-only
+              // here — the artist views them, CRM manages them.
+              if (booking.referenceImages.isNotEmpty) ...[
+                ReferenceImagesPanel(
+                  images: booking.referenceImages,
+                  title: 'Reference Looks',
                 ),
                 14.h,
               ],
