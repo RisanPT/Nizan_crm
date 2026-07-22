@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/phone_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -831,7 +832,7 @@ class _LeadForm extends HookConsumerWidget {
         final dio = ref.read(dioProvider);
         final payload = {
           'name': nameCtrl.text,
-          'phone': phoneCtrl.text,
+          'phone': normalizePhone(phoneCtrl.text),
           'source': selectedSource.value == 'Other'
               ? customSourceCtrl.text.trim()
               : selectedSource.value,

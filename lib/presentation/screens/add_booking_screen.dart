@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/utils/phone_utils.dart';
 import '../../core/models/booking.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../models/customer.dart';
@@ -488,7 +489,7 @@ class AddBookingScreen extends HookConsumerWidget {
           regionId: selectedDistrictModel?.regionId ?? '',
           districtId: selectedDistrictModel?.id ?? '',
           customerName: actualName,
-          phone: phoneCtrl.text.trim(),
+          phone: normalizePhone(phoneCtrl.text),
           address: addressCtrl.text.trim(),
           pincode: pincodeCtrl.text.trim(),
           email: emailCtrl.text.trim(),

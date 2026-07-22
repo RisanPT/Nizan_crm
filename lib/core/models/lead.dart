@@ -12,6 +12,9 @@ class Lead {
   final DateTime? followUpDate; // date+time for follow-up reminder
   final String? assignedTo;      // ID of the assigned salesman user
   final String status;
+  /// How likely the lead is to close: Hot / Warm / Cold. Tracked separately
+  /// from [status] so a lead can be e.g. "Follow-up" and "Hot" at once.
+  final String priority;
   /// Set when a booking exists for this lead's phone number.
   final String? bookingId;
   /// Geography copied from the booking once the lead converts.
@@ -38,6 +41,7 @@ class Lead {
     this.followUpDate,
     this.assignedTo,
     required this.status,
+    this.priority = 'Warm',
     this.bookingId,
     this.address = '',
     this.pincode = '',
@@ -78,6 +82,7 @@ class Lead {
           ? json['assignedTo']['_id'] as String?
           : json['assignedTo'] as String?,
       status: json['status'] as String? ?? 'New',
+      priority: json['priority'] as String? ?? 'Warm',
       bookingId: json['bookingId'] is Map
           ? json['bookingId']['_id'] as String?
           : json['bookingId'] as String?,
@@ -109,6 +114,7 @@ class Lead {
       if (followUpDate != null) 'followUpDate': followUpDate?.toIso8601String(),
       if (assignedTo != null) 'assignedTo': assignedTo,
       'status': status,
+      'priority': priority,
       'reason': reason,
       'remarks': remarks,
       'createdAt': createdAt.toIso8601String(),
@@ -130,6 +136,7 @@ class Lead {
     DateTime? followUpDate,
     String? assignedTo,
     String? status,
+    String? priority,
     String? reason,
     String? remarks,
     DateTime? createdAt,
@@ -149,6 +156,7 @@ class Lead {
       followUpDate: followUpDate ?? this.followUpDate,
       assignedTo: assignedTo ?? this.assignedTo,
       status: status ?? this.status,
+      priority: priority ?? this.priority,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,
       createdAt: createdAt ?? this.createdAt,

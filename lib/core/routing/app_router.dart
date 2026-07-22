@@ -32,6 +32,7 @@ import '../../features/marketing/presentation/screens/growth_scores_screen.dart'
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
 import '../../features/sales/presentation/screens/sales_dashboard_screen.dart';
+import '../../features/sales/presentation/screens/sales_period_detail_screen.dart';
 import '../../presentation/screens/fleet_vehicles_screen.dart';
 import '../../presentation/screens/fleet_drivers_screen.dart';
 import '../../presentation/screens/fleet_assignments_screen.dart';
@@ -187,6 +188,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Sales & Invoices';
           } else if (state.uri.path == '/sales/dashboard') {
             title = 'Sales Dashboard';
+          } else if (state.uri.path == '/sales/dashboard/today') {
+            title = "Today's Sales";
+          } else if (state.uri.path == '/sales/dashboard/week') {
+            title = 'This Week';
+          } else if (state.uri.path == '/sales/dashboard/day') {
+            title = 'Day Report';
           } else if (state.uri.path == '/sales/quarterly') {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/leads') {
@@ -505,6 +512,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales/dashboard',
             builder: (context, state) => const SalesDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/sales/dashboard/today',
+            builder: (context, state) =>
+                const SalesPeriodDetailScreen(mode: 'today'),
+          ),
+          GoRoute(
+            path: '/sales/dashboard/week',
+            builder: (context, state) =>
+                const SalesPeriodDetailScreen(mode: 'week'),
+          ),
+          GoRoute(
+            path: '/sales/dashboard/day',
+            builder: (context, state) => SalesPeriodDetailScreen(
+              mode: 'day',
+              date: DateTime.tryParse(
+                  state.uri.queryParameters['date'] ?? ''),
+            ),
           ),
           GoRoute(
             path: '/settings',

@@ -33,8 +33,28 @@ class SalesDashboardScreen extends ConsumerStatefulWidget {
 }
 
 class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
-  /// Length of the trailing window shown across the dashboard.
-  int _days = 7;
+  /// Indian financial year start (2026 => FY 2026-27, Apr 2026 – Mar 2027).
+  // ignore: prefer_final_fields — mutated by the FY picker.
+  int _fyStartYear = _currentFyStartYear();
+  /// Calendar month being reported on; null shows the whole financial year.
+  // ignore: prefer_final_fields — mutated by the month picker.
+  int? _month = DateTime.now().month;
+
+  static int _currentFyStartYear() {
+    final n = DateTime.now();
+    return n.month >= 4 ? n.year : n.year - 1;
+  }
+
+  /// Months in Indian FY order, April first.
+  static const _fyMonths = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3];
+  static const _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+
+  /// Calendar year a month belongs to inside the selected FY.
+  int _yearForMonth(int month) =>
+      month >= 4 ? _fyStartYear : _fyStartYear + 1;
 
   static final _inr =
       NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -102,7 +122,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
       leads: leads,
       bookings: bookings,
       people: people,
-      days: _days,
+      fyStartYear: _fyStartYear,
+      month: _month,
     );
 
     return ListView(
@@ -110,6 +131,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
           isMobile ? 14 : 24, 16, isMobile ? 14 : 24, 32),
       children: [
         _header(crm, isMobile, data),
+        16.h,
+        _quickPeriods(crm, isMobile, leads, bookings),
         16.h,
         _kpiRow(crm, isMobile, data),
         16.h,
@@ -127,6 +150,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
           (3, _leadStatus(crm, data)),
           (3, _topPerformers(crm, data)),
         ]),
+        16.h,
+        _reportTable(crm, data),
         16.h,
         // Row 3 — recent leads + achievement
         _responsiveRow(isWide, isMobile, [
@@ -194,6 +219,26 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
     );
   }
 
+  Widget _picker(CrmTheme crm,
+      {required IconData icon, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: crm.textSecondary),
+          8.w,
+          child,
+        ],
+      ),
+    );
+  }
+
   Widget _header(CrmTheme crm, bool isMobile, _DashboardData d) {
     return Flex(
       direction: isMobile ? Axis.vertical : Axis.horizontal,
@@ -217,16 +262,213 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
         ),
         if (isMobile) 12.h,
         Wrap(
-          spacing: 8,
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            for (final o in const [(7, 'This Week'), (30, '30 Days'), (90, '90 Days')])
-              ChoiceChip(
-                selected: _days == o.$1,
-                label: Text(o.$2),
-                onSelected: (_) => setState(() => _days = o.$1),
+            // Financial year (Indian FY, April–March).
+            _picker(
+              crm,
+              icon: Icons.calendar_today_outlined,
+              child: DropdownButton<int>(
+                value: _fyStartYear,
+                underline: const SizedBox.shrink(),
+                isDense: true,
+                items: [
+                  for (var y = _currentFyStartYear() - 4;
+                      y <= _currentFyStartYear() + 1;
+                      y++)
+                    DropdownMenuItem(
+                      value: y,
+                      child: Text('FY $y-${(y + 1) % 100}'),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setState(() => _fyStartYear = v ?? _fyStartYear),
               ),
+            ),
+            // Month within that FY, or the whole year.
+            _picker(
+              crm,
+              icon: Icons.date_range_outlined,
+              child: DropdownButton<int>(
+                value: _month ?? 0,
+                underline: const SizedBox.shrink(),
+                isDense: true,
+                items: [
+                  const DropdownMenuItem(
+                      value: 0, child: Text('Full Year')),
+                  for (final m in _fyMonths)
+                    DropdownMenuItem(
+                      value: m,
+                      child: Text(
+                          '${_monthNames[m - 1]} ${_yearForMonth(m)}'),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setState(() => _month = (v == null || v == 0) ? null : v),
+              ),
+            ),
           ],
         ),
+      ],
+    );
+  }
+
+  // ── Today / This week shortcuts ───────────────────────────────────────────
+  /// Live totals for today and the trailing week, independent of the FY/month
+  /// filter above, each opening a detailed drill-down page.
+  Widget _quickPeriods(
+      CrmTheme crm, bool isMobile, List<Lead> leads, List<Booking> bookings) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final weekFrom = today.subtract(const Duration(days: 6));
+
+    bool inRange(DateTime? d, DateTime a, DateTime b) {
+      if (d == null) return false;
+      final x = DateTime(d.year, d.month, d.day);
+      return !x.isBefore(a) && !x.isAfter(b);
+    }
+
+    ({int leads, int bookings, double revenue}) stats(DateTime a, DateTime b) {
+      final ls = leads.where((l) => inRange(l.leadDate, a, b)).length;
+      final bs =
+          bookings.where((x) => inRange(x.createdAt ?? x.bookingDate, a, b));
+      return (
+        leads: ls,
+        bookings: bs.length,
+        revenue:
+            bs.fold<double>(0, (s, x) => s + (x.totalPrice - x.discountAmount)),
+      );
+    }
+
+    final t = stats(today, today);
+    final w = stats(weekFrom, today);
+
+    Widget tile({
+      required String title,
+      required String subtitle,
+      required IconData icon,
+      required Color color,
+      required ({int leads, int bookings, double revenue}) v,
+      required String route,
+    }) {
+      return InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => context.go(route),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  color.withValues(alpha: 0.10),
+                  color.withValues(alpha: 0.02),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withValues(alpha: 0.22)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(icon, size: 17, color: color),
+                    ),
+                    10.w,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: crm.textPrimary)),
+                          Text(subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11, color: crm.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: color),
+                  ],
+                ),
+                12.h,
+                Row(
+                  children: [
+                    _miniStat(crm, '${v.leads}', 'leads'),
+                    16.w,
+                    _miniStat(crm, '${v.bookings}', 'bookings'),
+                    16.w,
+                    Flexible(child: _miniStat(crm, _money(v.revenue), 'revenue')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      );
+    }
+
+    final todayTile = tile(
+        title: 'Today',
+        subtitle: DateFormat('EEEE, d MMM').format(today),
+        icon: Icons.today_outlined,
+        color: _cLeads,
+        v: t,
+        route: '/sales/dashboard/today',
+    );
+    final weekTile = tile(
+        title: 'This Week',
+        subtitle:
+            '${DateFormat('d MMM').format(weekFrom)} – ${DateFormat('d MMM').format(today)}',
+        icon: Icons.date_range_outlined,
+        color: _cBlue,
+        v: w,
+        route: '/sales/dashboard/week',
+    );
+
+    // Expanded is only valid inside the Row; stacked mode uses plain children.
+    return isMobile
+        ? Column(children: [todayTile, 12.h, weekTile])
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: todayTile),
+              16.w,
+              Expanded(child: weekTile),
+            ],
+          );
+  }
+
+  Widget _miniStat(CrmTheme crm, String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: crm.textPrimary)),
+        ),
+        Text(label,
+            style: TextStyle(fontSize: 10, color: crm.textSecondary)),
       ],
     );
   }
@@ -244,15 +486,29 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
           Icons.event_available_outlined, _cBlue, d.bookingsTrend),
       _Kpi('Revenue', _money(d.revenue), Icons.payments_outlined,
           const Color(0xFF10B981), d.revenueTrend),
+      // Only the part traceable to a converted lead — the sales team's own
+      // contribution, as opposed to walk-ins booked without a lead.
+      _Kpi(
+        'From Leads',
+        _money(d.attributedRevenue),
+        Icons.link_outlined,
+        _cLeads,
+        double.nan,
+        note: d.revenue <= 0
+            ? 'no revenue yet'
+            : '${((d.attributedRevenue / d.revenue) * 100).toStringAsFixed(0)}% of revenue',
+      ),
     ];
 
     return GridView.count(
-      crossAxisCount: isMobile ? 2 : 5,
+      crossAxisCount: isMobile ? 2 : 6,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: isMobile ? 1.45 : 1.55,
+      // Six narrow columns make each cell short, so keep the ratio low enough
+      // that the icon + value + trend line always fit.
+      childAspectRatio: isMobile ? 1.4 : 1.25,
       children: [for (final t in tiles) _kpiCard(crm, t)],
     );
   }
@@ -261,43 +517,52 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
     final up = t.trend >= 0;
     return _card(
       crm,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(9),
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: t.color.withValues(alpha: 0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(t.icon, size: 17, color: t.color),
+                child: Icon(t.icon, size: 15, color: t.color),
               ),
               8.w,
               Expanded(
                 child: Text(t.label,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
                         TextStyle(fontSize: 11.5, color: crm.textSecondary)),
               ),
             ],
           ),
-          10.h,
+          8.h,
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(t.value,
+                maxLines: 1,
                 style: TextStyle(
-                    fontSize: 23,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     color: crm.textPrimary)),
           ),
-          6.h,
-          if (t.trend.isFinite)
+          4.h,
+          if (t.note != null)
+            Text(
+              t.note!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+            )
+          else if (t.trend.isFinite)
             Row(
               children: [
                 Icon(up ? Icons.arrow_upward : Icons.arrow_downward,
@@ -655,6 +920,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
   }
 
   // ── Horizontal bar lists ──────────────────────────────────────────────────
+  
   Widget _leadsByRegion(CrmTheme crm, _DashboardData d) =>
       _barListCard(crm, 'Leads by District', d.byRegion, d.totalLeads);
 
@@ -841,7 +1107,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                                   fontWeight: FontWeight.w700)),
                           2.h,
                           Text(
-                              '${d.performers[i].leads} leads · ${d.performers[i].converted} won',
+                              '${d.performers[i].leads} leads · ${d.performers[i].converted} won'
+                              '${d.performers[i].revenue > 0 ? ' · ${_money(d.performers[i].revenue)}' : ''}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -860,6 +1127,155 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                   ],
                 ),
               ),
+        ],
+      ),
+    );
+  }
+
+  // ── Period report: one row per day (or per month for a full FY) ───────────
+  Widget _reportTable(CrmTheme crm, _DashboardData d) {
+    final rows = d.daily;
+    final totLeads = rows.fold<int>(0, (a, r) => a + r.leads);
+    final totConv = rows.fold<int>(0, (a, r) => a + r.converted);
+    final totBook = rows.fold<int>(0, (a, r) => a + r.bookings);
+    final totRev = rows.fold<double>(0, (a, r) => a + r.revenue);
+
+    Widget cell(String text, int flex,
+            {bool bold = false, Color? color, TextAlign align = TextAlign.right}) =>
+        Expanded(
+          flex: flex,
+          child: Text(text,
+              textAlign: align,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
+                  color: color ?? crm.textPrimary)),
+        );
+
+    Widget head(String text, int flex, {TextAlign align = TextAlign.right}) =>
+        Expanded(
+          flex: flex,
+          child: Text(text,
+              textAlign: align,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                  color: crm.textSecondary)),
+        );
+
+    return _card(
+      crm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle(
+            crm,
+            d.monthly ? 'Day-wise Report' : 'Month-wise Report',
+            trailing: Text(
+                d.monthly
+                    ? '${d.rangeLabel}  ·  tap a day for detail'
+                    : '${d.rangeLabel}  ·  tap a month to open it',
+                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          ),
+          12.h,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth.isFinite && constraints.maxWidth > 620
+                  ? constraints.maxWidth
+                  : 620.0;
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: w,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            head(d.monthly ? 'DATE' : 'MONTH', 3,
+                                align: TextAlign.left),
+                            head('LEADS', 2),
+                            head('CONVERTED', 2),
+                            head('CONV %', 2),
+                            head('BOOKINGS', 2),
+                            head('REVENUE', 3),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, color: crm.border),
+                      // Rows with no activity are skipped so the report stays
+                      // readable across a 31-day month.
+                      for (final r in rows.where((r) =>
+                          r.leads > 0 || r.bookings > 0 || r.revenue > 0))
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          // A day opens its own detail page; a month row
+                          // re-scopes the whole dashboard to that month.
+                          onTap: () {
+                            if (d.monthly) {
+                              final ymd =
+                                  DateFormat('yyyy-MM-dd').format(r.date);
+                              context.go('/sales/dashboard/day?date=$ymd');
+                            } else {
+                              setState(() => _month = r.date.month);
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 7, horizontal: 4),
+                            child: Row(
+                              children: [
+                                cell(r.label, 3,
+                                    bold: true, align: TextAlign.left),
+                                cell('${r.leads}', 2),
+                                cell('${r.converted}', 2,
+                                    color: r.converted > 0
+                                        ? const Color(0xFF10B981)
+                                        : null),
+                                cell('${r.rate.toStringAsFixed(0)}%', 2),
+                                cell('${r.bookings}', 2),
+                                cell(_money(r.revenue), 3),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (!rows.any((r) =>
+                          r.leads > 0 || r.bookings > 0 || r.revenue > 0))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 22),
+                          child: _empty(crm, 'No activity in this period'),
+                        ),
+                      Divider(height: 1, color: crm.border),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 9),
+                        child: Row(
+                          children: [
+                            cell('TOTAL', 3, bold: true, align: TextAlign.left),
+                            cell('$totLeads', 2, bold: true),
+                            cell('$totConv', 2, bold: true),
+                            cell(
+                                totLeads == 0
+                                    ? '0%'
+                                    : '${((totConv / totLeads) * 100).toStringAsFixed(0)}%',
+                                2,
+                                bold: true),
+                            cell('$totBook', 2, bold: true),
+                            cell(_money(totRev), 3, bold: true),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -1034,7 +1450,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _cardTitle(crm, 'This Period vs Previous'),
+          _cardTitle(crm,
+              _month == null ? 'This FY vs Previous FY' : 'This Month vs Last Month'),
           14.h,
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
@@ -1043,7 +1460,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Previous $_days days',
+                    Text(_month == null ? 'Previous FY' : 'Previous month',
                         style: TextStyle(
                             fontSize: 11, color: crm.textSecondary)),
                     4.h,
@@ -1128,7 +1545,10 @@ class _Kpi {
   final IconData icon;
   final Color color;
   final double trend;
-  const _Kpi(this.label, this.value, this.icon, this.color, this.trend);
+  /// Shown instead of the trend line when set.
+  final String? note;
+  const _Kpi(this.label, this.value, this.icon, this.color, this.trend,
+      {this.note});
 }
 
 class _Slice {
@@ -1144,7 +1564,12 @@ class _DayPoint {
   final int leads;
   final int converted;
   final double rate;
-  const _DayPoint(this.label, this.leads, this.converted, this.rate);
+  final int bookings;
+  final double revenue;
+  /// First date in this bucket — the day itself, or the 1st for a month.
+  final DateTime date;
+  const _DayPoint(this.label, this.leads, this.converted, this.rate,
+      {this.bookings = 0, this.revenue = 0, required this.date});
 }
 
 class _Performer {
@@ -1152,7 +1577,10 @@ class _Performer {
   final int leads;
   final int converted;
   final double rate;
-  const _Performer(this.name, this.leads, this.converted, this.rate);
+  /// Revenue from bookings linked to this person's converted leads.
+  final double revenue;
+  const _Performer(this.name, this.leads, this.converted, this.rate,
+      {this.revenue = 0});
 }
 
 class _RecentLead {
@@ -1168,6 +1596,8 @@ class _DashboardData {
   final int converted;
   final int bookingsCreated;
   final double revenue;
+  /// Portion of [revenue] traceable to a converted lead (Lead.bookingId).
+  final double attributedRevenue;
   final double conversionRate;
 
   final double leadsTrend;
@@ -1189,6 +1619,8 @@ class _DashboardData {
   final List<_RecentLead> recent;
   final List<Lead> todayFollowUps;
   final String rangeLabel;
+  /// True when reporting a single month (day-wise), false for a full FY.
+  final bool monthly;
 
   const _DashboardData({
     required this.totalLeads,
@@ -1196,6 +1628,7 @@ class _DashboardData {
     required this.converted,
     required this.bookingsCreated,
     required this.revenue,
+    required this.attributedRevenue,
     required this.conversionRate,
     required this.leadsTrend,
     required this.newLeadsTrend,
@@ -1214,6 +1647,7 @@ class _DashboardData {
     required this.recent,
     required this.todayFollowUps,
     required this.rangeLabel,
+    required this.monthly,
   });
 
   static const _palette = [
@@ -1258,13 +1692,27 @@ class _DashboardData {
     required List<Lead> leads,
     required List<Booking> bookings,
     required List<CrmUser> people,
-    required int days,
+    required int fyStartYear,
+    required int? month,
   }) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final from = today.subtract(Duration(days: days - 1));
-    final prevFrom = from.subtract(Duration(days: days));
-    final prevTo = from.subtract(const Duration(days: 1));
+    // A month selection reports that month day-by-day; no month reports the
+    // whole Indian financial year (Apr–Mar) month-by-month. The comparison
+    // period is the previous month / previous FY respectively.
+    final DateTime from, to, prevFrom, prevTo;
+    final bool monthly = month != null;
+    if (monthly) {
+      final year = month >= 4 ? fyStartYear : fyStartYear + 1;
+      from = DateTime(year, month, 1);
+      to = DateTime(year, month + 1, 0);
+      prevFrom = DateTime(year, month - 1, 1);
+      prevTo = DateTime(year, month, 0);
+    } else {
+      from = DateTime(fyStartYear, 4, 1);
+      to = DateTime(fyStartYear + 1, 3, 31);
+      prevFrom = DateTime(fyStartYear - 1, 4, 1);
+      prevTo = DateTime(fyStartYear, 3, 31);
+    }
+    final today = to;
 
     bool within(DateTime? d, DateTime a, DateTime b) {
       if (d == null) return false;
@@ -1292,31 +1740,78 @@ class _DashboardData {
     double rev(List<Booking> bs) =>
         bs.fold(0.0, (s, b) => s + (b.totalPrice - b.discountAmount));
 
-    // Day-wise series.
+    // Buckets: one per day of the month, or one per month across the FY.
     final daily = <_DayPoint>[];
-    for (var i = 0; i < days; i++) {
-      final day = from.add(Duration(days: i));
-      final dayLeads =
-          windowLeads.where((l) => within(l.leadDate, day, day)).toList();
+    final buckets = <(DateTime, DateTime, String)>[];
+    if (monthly) {
+      final dayCount = to.day;
+      for (var i = 0; i < dayCount; i++) {
+        final day = DateTime(from.year, from.month, i + 1);
+        buckets.add((day, day, DateFormat('d MMM').format(day)));
+      }
+    } else {
+      for (var i = 0; i < 12; i++) {
+        final m = DateTime(fyStartYear, 4 + i, 1);
+        final last = DateTime(m.year, m.month + 1, 0);
+        buckets.add((m, last, DateFormat('MMM').format(m)));
+      }
+    }
+
+    for (final b in buckets) {
+      final dayLeads = windowLeads
+          .where((l) => within(l.leadDate, b.$1, b.$2))
+          .toList();
       final won = dayLeads.where(isConverted).length;
+      final dayBookings = windowBookings
+          .where((bk) => within(bk.createdAt ?? bk.bookingDate, b.$1, b.$2))
+          .toList();
       daily.add(_DayPoint(
-        DateFormat('d MMM').format(day),
+        b.$3,
         dayLeads.length,
         won,
         dayLeads.isEmpty ? 0 : (won / dayLeads.length) * 100,
+        bookings: dayBookings.length,
+        revenue: rev(dayBookings),
+        date: b.$1,
       ));
     }
 
-    // Per-salesperson.
+    // Revenue is attributed through Lead.bookingId, so a salesperson is
+    // credited with the actual booking their converted lead produced rather
+    // than a share of overall takings.
+    final bookingById = {for (final b in bookings) b.id: b};
+    double revenueForLeads(Iterable<Lead> ls) {
+      var total = 0.0;
+      final counted = <String>{};
+      for (final l in ls) {
+        final id = l.bookingId;
+        if (id == null || id.isEmpty || !counted.add(id)) continue;
+        final b = bookingById[id];
+        if (b == null) continue;
+        total += b.totalPrice - b.discountAmount;
+      }
+      return total;
+    }
+
     final nameById = {for (final u in people) u.id: u.name};
     final performers = <_Performer>[];
     for (final u in people) {
       final mine = windowLeads.where((l) => l.assignedTo == u.id).toList();
       final won = mine.where(isConverted).length;
-      performers.add(_Performer(u.name, mine.length, won,
-          mine.isEmpty ? 0 : (won / mine.length) * 100));
+      performers.add(_Performer(
+        u.name,
+        mine.length,
+        won,
+        mine.isEmpty ? 0 : (won / mine.length) * 100,
+        revenue: revenueForLeads(mine),
+      ));
     }
-    performers.sort((a, b) => b.converted.compareTo(a.converted));
+    performers.sort((a, b) => b.revenue != a.revenue
+        ? b.revenue.compareTo(a.revenue)
+        : b.converted.compareTo(a.converted));
+
+    // Revenue traceable to a lead, vs all bookings taken in the period.
+    final attributedRevenue = revenueForLeads(windowLeads);
 
     final recentSorted = [...windowLeads]
       ..sort((a, b) => b.leadDate.compareTo(a.leadDate));
@@ -1331,6 +1826,7 @@ class _DashboardData {
       converted: converted,
       bookingsCreated: windowBookings.length,
       revenue: rev(windowBookings),
+      attributedRevenue: attributedRevenue,
       conversionRate: total == 0 ? 0 : (converted / total) * 100,
       leadsTrend: _trend(total, prevLeads.length),
       newLeadsTrend: _trend(
@@ -1365,8 +1861,10 @@ class _DashboardData {
           .toList()
         ..sort((a, b) => (a.followUpDate ?? today)
             .compareTo(b.followUpDate ?? today)),
-      rangeLabel:
-          '${DateFormat('d MMM').format(from)} – ${DateFormat('d MMM yyyy').format(today)}',
+      monthly: monthly,
+      rangeLabel: monthly
+          ? '${DateFormat('MMMM yyyy').format(from)}  ·  FY $fyStartYear-${(fyStartYear + 1) % 100}'
+          : 'FY $fyStartYear-${(fyStartYear + 1) % 100}  ·  Apr $fyStartYear – Mar ${fyStartYear + 1}',
     );
   }
 }

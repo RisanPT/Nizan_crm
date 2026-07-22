@@ -11,6 +11,7 @@ import '../../core/models/district.dart';
 import '../../core/providers/booking_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/booking_print_service.dart';
+import '../../core/utils/phone_utils.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/models/addon_service.dart';
 import '../../core/models/employee.dart';
@@ -939,7 +940,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         packageId: isMultiItem
             ? booking.packageId
             : selectedPackageId.value.trim(),
-        phone: phoneCtrl.text.trim(),
+        phone: normalizePhone(phoneCtrl.text),
         address: addressCtrl.text.trim(),
         pincode: pincodeCtrl.text.trim(),
         email: emailCtrl.text.trim(),
