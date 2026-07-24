@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
-import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'fleet_mobile_ui.dart';
 
 bool _isResolved(String status) {

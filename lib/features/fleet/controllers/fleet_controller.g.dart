@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'fleet_service.dart';
+part of 'fleet_controller.dart';
 
 // **************************************************************************
 // RiverpodGenerator

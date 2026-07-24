@@ -33,7 +33,7 @@ final class BookingNotifierProvider
   BookingNotifier create() => BookingNotifier();
 }
 
-String _$bookingNotifierHash() => r'90fe511d982e0c491af6164321a5f7e21b6d3c4b';
+String _$bookingNotifierHash() => r'79e04558e77f27c2f065d9caddaf20401354c3cc';
 
 abstract class _$BookingNotifier extends $AsyncNotifier<List<Booking>> {
   FutureOr<List<Booking>> build();

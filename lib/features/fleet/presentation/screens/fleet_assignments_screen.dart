@@ -4,12 +4,12 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/booking.dart';
 import 'package:nizan_crm/core/models/employee.dart';
-import 'package:nizan_crm/core/models/vehicle.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle.dart';
 import 'package:nizan_crm/core/providers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
-import 'package:nizan_crm/services/vehicle_service.dart';
+import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 
 enum AssignmentFilter { all, unassigned, assigned }

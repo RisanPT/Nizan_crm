@@ -1,4 +1,4 @@
-import 'employee.dart';
+import 'package:nizan_crm/core/models/employee.dart';
 
 class Vehicle {
   final String id;

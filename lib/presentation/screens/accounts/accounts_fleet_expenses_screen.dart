@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/extensions/space_extension.dart';
-import '../../../core/models/fuel_expense.dart';
+import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../core/utils/responsive_builder.dart';
-import '../../../services/fuel_expense_service.dart';
+import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
 import '../inventory/inventory_widgets.dart';
 
 /// Accounts → Operations → Fleet Expenses. Driver-submitted fleet expenses

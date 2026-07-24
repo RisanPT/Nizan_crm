@@ -22,8 +22,8 @@ import '../../services/addon_service_service.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
 import '../../services/district_service.dart';
-import '../../services/vehicle_service.dart';
-import '../../core/models/vehicle.dart';
+import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle.dart';
 import '../../core/utils/whatsapp_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 

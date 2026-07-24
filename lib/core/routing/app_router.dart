@@ -36,7 +36,7 @@ import '../../features/sales/presentation/screens/sales_period_detail_screen.dar
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_vehicles_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_drivers_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_assignments_screen.dart';
-import '../../presentation/screens/fuel_expenses_screen.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fuel_expenses_screen.dart';
 import '../../presentation/screens/artist_finance_screen.dart';
 import '../../presentation/screens/leave_request_screen.dart';
 import '../../presentation/screens/profile_screen.dart';

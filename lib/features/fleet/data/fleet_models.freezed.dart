@@ -15,8 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$FleetJob {
 
-@JsonKey(name: '_id') String get id; String get bookingNumber; String? get driverId; dynamic get vehicleId;// Could be String or a Map depending on populate
- List<String> get preTripPhotos; String get tripStatus; String get customerName; String? get address; String? get mapUrl; String get service; String? get eventSlot; DateTime get serviceStart; DateTime get serviceEnd; double get travelDistanceKm; String? get pocName; String? get pocPhone; List<Map<String, dynamic>> get assignedStaff;
+@JsonKey(name: '_id') String get id; String get bookingNumber; String? get driverId; dynamic get vehicleId; List<String> get preTripPhotos; String get tripStatus; String get customerName; String? get address; String? get mapUrl; String get service; String? get eventSlot; DateTime get serviceStart; DateTime get serviceEnd; double get travelDistanceKm; String? get pocName; String? get pocPhone; List<Map<String, dynamic>> get assignedStaff;
 /// Create a copy of FleetJob
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -233,9 +232,7 @@ class _FleetJob implements FleetJob {
 @override final  String bookingNumber;
 @override final  String? driverId;
 @override final  dynamic vehicleId;
-// Could be String or a Map depending on populate
  final  List<String> _preTripPhotos;
-// Could be String or a Map depending on populate
 @override@JsonKey() List<String> get preTripPhotos {
   if (_preTripPhotos is EqualUnmodifiableListView) return _preTripPhotos;
   // ignore: implicit_dynamic_type

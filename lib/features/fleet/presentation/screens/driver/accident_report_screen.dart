@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 
 class AccidentReportScreen extends ConsumerStatefulWidget {

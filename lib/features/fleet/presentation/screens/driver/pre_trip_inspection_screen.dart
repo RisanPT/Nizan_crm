@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
-import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 
 class PreTripInspectionScreen extends ConsumerStatefulWidget {
