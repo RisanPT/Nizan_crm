@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/extensions/space_extension.dart';
-import '../../core/models/trial.dart';
-import '../../core/models/booking.dart' show BookingAssignment;
-import '../../core/models/employee.dart';
-import '../../core/providers/trial_provider.dart';
-import '../../core/models/trial_package.dart';
-import '../../core/providers/trial_package_provider.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../services/employee_service.dart';
-import '../../services/trial_service.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/trial.dart';
+import 'package:nizan_crm/core/models/booking.dart' show BookingAssignment;
+import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/core/providers/trial_provider.dart';
+import 'package:nizan_crm/core/models/trial_package.dart';
+import 'package:nizan_crm/core/providers/trial_package_provider.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/services/trial_service.dart';
 
 // ── Outcome config ─────────────────────────────────────────────────────────
 const _outcomes = [

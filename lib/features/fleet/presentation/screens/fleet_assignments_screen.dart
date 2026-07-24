@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../core/extensions/space_extension.dart';
-import '../../core/models/booking.dart';
-import '../../core/models/employee.dart';
-import '../../core/models/vehicle.dart';
-import '../../core/providers/booking_provider.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../core/utils/responsive_builder.dart';
-import '../../services/employee_service.dart';
-import '../../services/vehicle_service.dart';
-import 'fleet/fleet_mobile_ui.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/core/models/vehicle.dart';
+import 'package:nizan_crm/core/providers/booking_provider.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/services/vehicle_service.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 
 enum AssignmentFilter { all, unassigned, assigned }
 

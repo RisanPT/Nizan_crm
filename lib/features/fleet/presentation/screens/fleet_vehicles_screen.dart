@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import '../../core/extensions/space_extension.dart';
-import '../../core/models/employee.dart';
-import '../../core/models/list_page_params.dart';
-import '../../core/models/vehicle.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../core/utils/responsive_builder.dart';
-import '../../services/employee_service.dart';
-import '../../services/vehicle_service.dart';
-import '../common_widgets/paginated_footer.dart';
-import 'fleet/fleet_mobile_ui.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/core/models/list_page_params.dart';
+import 'package:nizan_crm/core/models/vehicle.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/services/vehicle_service.dart';
+import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 
 class FleetVehiclesScreen extends HookConsumerWidget {
   const FleetVehiclesScreen({super.key});

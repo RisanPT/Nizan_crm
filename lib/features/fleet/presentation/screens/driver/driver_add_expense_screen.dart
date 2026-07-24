@@ -3,9 +3,9 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../../services/fleet_service.dart';
-import '../../../services/fuel_expense_service.dart';
-import '../../../services/upload_service.dart';
+import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/services/fuel_expense_service.dart';
+import 'package:nizan_crm/services/upload_service.dart';
 
 class DriverAddExpenseScreen extends HookConsumerWidget {
   final String jobId;

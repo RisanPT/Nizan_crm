@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/extensions/space_extension.dart';
-import '../../../core/models/employee.dart';
-import '../../../core/models/vehicle.dart';
-import '../../../core/theme/crm_theme.dart';
-import '../../../services/employee_service.dart';
-import '../../../services/fleet_service.dart';
-import '../../../services/vehicle_service.dart';
-import '../../../models/fleet_models.dart';
-import '../../common_widgets/export_report_dialog.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/core/models/vehicle.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/services/vehicle_service.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
 import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
 

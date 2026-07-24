@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
 
 /// A single stat rendered inside [FleetStatStrip].
 ///

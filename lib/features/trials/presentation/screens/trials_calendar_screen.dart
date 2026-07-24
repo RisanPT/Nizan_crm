@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/extensions/space_extension.dart';
-import '../../core/models/trial.dart';
-import '../../core/providers/trial_provider.dart';
-import '../../services/trial_service.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/trial.dart';
+import 'package:nizan_crm/core/providers/trial_provider.dart';
+import 'package:nizan_crm/services/trial_service.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 /// Trials calendar — mirrors the booking calendar's UI/UX (Month / Week / Day)
 /// but bound to studio trials. Isolated from the booking calendar.

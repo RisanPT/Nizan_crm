@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/models/trial_package.dart';
-import '../../core/providers/trial_package_provider.dart';
-import '../../core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/models/trial_package.dart';
+import 'package:nizan_crm/core/providers/trial_package_provider.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
 
 class TrialPackagesScreen extends ConsumerWidget {
   const TrialPackagesScreen({super.key});

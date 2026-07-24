@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../models/fleet_models.dart';
-import '../providers/dio_provider.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/providers/dio_provider.dart';
 
 part 'fleet_service.g.dart';
 

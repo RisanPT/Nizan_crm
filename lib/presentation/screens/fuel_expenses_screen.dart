@@ -13,7 +13,7 @@ import '../../services/fuel_expense_service.dart';
 import '../../services/vehicle_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../common_widgets/export_report_dialog.dart';
-import 'fleet/fleet_mobile_ui.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
 
 class FuelExpensesScreen extends HookConsumerWidget {

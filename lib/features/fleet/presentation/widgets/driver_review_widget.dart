@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../services/fleet_service.dart';
+import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
 
 class DriverReviewWidget extends ConsumerStatefulWidget {
   final String driverId;

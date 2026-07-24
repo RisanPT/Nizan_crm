@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../services/fleet_service.dart';
-import '../../../models/fleet_models.dart';
+import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 
 class DriverTodaysWorkScreen extends ConsumerStatefulWidget {
   const DriverTodaysWorkScreen({super.key});
