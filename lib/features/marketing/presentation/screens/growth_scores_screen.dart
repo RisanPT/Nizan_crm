@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
 import '../widgets/marketing_widgets.dart';
+import '../marketing_snapshot_editor.dart';
 
 /// Marketing → Weekly Growth Score board. Overall ranking (with signal evidence)
 /// plus the Top-25 Reels / Websites / Collaborations leaderboards (FR-2.4), and
@@ -19,6 +21,7 @@ class GrowthScoresScreen extends ConsumerStatefulWidget {
 
 class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
   int _tab = 0; // 0 overall · 1 reels · 2 websites · 3 collaborations
+  String? _formCompetitorId;
 
   static const _tabs = ['Overall', 'Top Reels', 'Top Websites', 'Top Collabs'];
 
@@ -69,6 +72,8 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                 ),
               ],
             ),
+            16.h,
+            _scoreForm(crm),
             16.h,
             // Tab selector
             SingleChildScrollView(
@@ -248,9 +253,15 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: crm.surface,
+      // A competitor with many signals overflows a fixed-height sheet, so allow
+      // it to grow and scroll instead of clipping.
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => ConstrainedBox(
+        constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8),
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -267,6 +278,11 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
               ScoreBadge(score: r.score, large: true),
             ]),
             12.h,
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
             if (r.signals.isEmpty)
               Text('No signals triggered — base score 1.',
                   style: TextStyle(color: crm.textSecondary))
@@ -316,19 +332,158 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                                       color: s.evidence.isEmpty
                                           ? crm.destructive
                                           : crm.textSecondary)),
+                              // The manually-scored reel / post, opened in the
+                              // browser or the Instagram app.
+                              if (s.link.trim().isNotEmpty) ...[
+                                6.h,
+                                InkWell(
+                                  onTap: () async {
+                                    final uri = Uri.tryParse(s.link.trim());
+                                    if (uri != null &&
+                                        await canLaunchUrl(uri)) {
+                                      await launchUrl(uri,
+                                          mode: LaunchMode
+                                              .externalApplication);
+                                    }
+                                  },
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.play_circle_outline,
+                                          size: 15, color: crm.primary),
+                                      6.w,
+                                      Flexible(
+                                        child: Text('Open reel / post',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: crm.primary,
+                                                decoration: TextDecoration
+                                                    .underline)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
                       ],
                     ),
                   )),
+                  ],
+                ),
+              ),
+            ),
           ],
+        ),
         ),
       ),
     );
   }
 
   // ── Weights editor (FR-2.3) ─────────────────────────────────────────────
+  /// Inline "score a competitor this week" form: pick an existing competitor
+  /// and open the shared scoring editor (metrics, signals, reel/post links).
+  Widget _scoreForm(CrmTheme crm) {
+    final async = ref.watch(competitorsProvider);
+    final competitors = async.value ?? const <Competitor>[];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            crm.primary.withValues(alpha: 0.08),
+            crm.primary.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.primary.withValues(alpha: 0.20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.add_chart, size: 18, color: crm.primary),
+              8.w,
+              Text('Score a competitor this week',
+                  style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+            ],
+          ),
+          4.h,
+          Text('Pick a competitor, enter this week\'s metrics and signals, and '
+              'paste the reel / post you scored.',
+              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          12.h,
+          if (async.isLoading)
+            const LinearProgressIndicator()
+          else if (competitors.isEmpty)
+            Text('No competitors yet — add one on the Competitors screen first.',
+                style: TextStyle(fontSize: 12.5, color: crm.textSecondary))
+          else
+            LayoutBuilder(builder: (context, c) {
+              final stack = c.maxWidth < 520;
+              final dropdown = DropdownButtonFormField<String>(
+                initialValue: _formCompetitorId,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Competitor',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.storefront_outlined, size: 18),
+                ),
+                items: [
+                  for (final comp in competitors)
+                    DropdownMenuItem(
+                      value: comp.id,
+                      child: Text(
+                        comp.city.trim().isEmpty
+                            ? comp.name
+                            : '${comp.name} · ${comp.city}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _formCompetitorId = v),
+              );
+              final button = SizedBox(
+                height: 48,
+                width: stack ? double.infinity : null,
+                child: FilledButton.icon(
+                  onPressed: _formCompetitorId == null
+                      ? null
+                      : () async {
+                          final comp = competitors.firstWhere(
+                              (x) => x.id == _formCompetitorId,
+                              orElse: () => competitors.first);
+                          await showSnapshotEditor(context, ref, comp);
+                        },
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: const Text('Enter score'),
+                ),
+              );
+              return stack
+                  ? Column(children: [dropdown, 10.h, button])
+                  : Row(children: [
+                      Expanded(child: dropdown),
+                      12.w,
+                      button,
+                    ]);
+            }),
+        ],
+      ),
+    );
+  }
+
   Future<void> _editWeights() async {
     final crm = context.crmColors;
     final cfg = await ref.read(scoringConfigProvider.future);

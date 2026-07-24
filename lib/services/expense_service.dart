@@ -57,12 +57,14 @@ class ExpenseService {
     required DateTime date,
     String notes = '',
     String receiptImage = '',
+    String workType = 'bridal',
   }) async {
     try {
       final payload = {
         'employeeId': employeeId,
         if (bookingId != null && bookingId.isNotEmpty) 'bookingId': bookingId,
         'category': category,
+        'workType': workType,
         'amount': amount,
         'date': date.toIso8601String(),
         'notes': notes,
@@ -90,9 +92,11 @@ class ExpenseService {
     DateTime? date,
     String? notes,
     String? receiptImage,
+    String? workType,
   }) async {
     try {
       final response = await _dio.put('/expenses/$id', data: {
+        'workType': ?workType,
         'bookingId': ?bookingId,
         'category': ?category,
         'amount': ?amount,

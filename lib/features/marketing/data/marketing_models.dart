@@ -27,6 +27,8 @@ class CompetitorSnapshot {
   final int score;
   final String notes;
   final Map<String, String> signalEvidence;
+  /// Reel / post / ad URL per signal that was manually scored.
+  final Map<String, String> signalLinks;
 
   const CompetitorSnapshot({
     this.id = '',
@@ -53,6 +55,7 @@ class CompetitorSnapshot {
     this.score = 0,
     this.notes = '',
     this.signalEvidence = const {},
+    this.signalLinks = const {},
   });
 
   /// Score breakdown for display: label → points contributed.
@@ -97,6 +100,10 @@ class CompetitorSnapshot {
       notes: json['notes'] as String? ?? '',
       signalEvidence: (json['signalEvidence'] is Map)
           ? (json['signalEvidence'] as Map).map(
+              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+          : const {},
+      signalLinks: (json['signalLinks'] is Map)
+          ? (json['signalLinks'] as Map).map(
               (k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
           : const {},
     );
@@ -218,17 +225,21 @@ class ScoreSignal {
   final String label;
   final int points;
   final String evidence;
+  /// Reel / post / ad URL that was scored, if attached.
+  final String link;
   const ScoreSignal(
       {required this.key,
       required this.label,
       required this.points,
-      this.evidence = ''});
+      this.evidence = '',
+      this.link = ''});
 
   factory ScoreSignal.fromJson(Map<String, dynamic> j) => ScoreSignal(
         key: j['key'] as String? ?? '',
         label: j['label'] as String? ?? '',
         points: (j['points'] as num?)?.toInt() ?? 0,
         evidence: j['evidence'] as String? ?? '',
+        link: j['link'] as String? ?? '',
       );
 }
 

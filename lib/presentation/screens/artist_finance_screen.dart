@@ -35,6 +35,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     ('split', 'Split Payment (Cash + UPI)'),
   ];
 
+  /// What the spend was for. Separate from category (kind of spend) so bridal
+  /// client work and internal model shoots report independently.
+  static const _workTypes = [
+    ('bridal', 'Bridal Work', Icons.diamond_outlined),
+    ('model_shoot', 'Model Shoot', Icons.camera_alt_outlined),
+  ];
+
   static const _expenseCategories = [
     ('food', 'Food'),
     ('travel', 'Travel'),
@@ -43,6 +50,47 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     ('fuel', 'Fuel'),
     ('other', 'Other'),
   ];
+
+  /// Small total card used for the bridal / model-shoot expense split.
+  static Widget _workTypeTotalCard(
+      CrmTheme crm, String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.20)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          8.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+                2.h,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value,
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: crm.textPrimary)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   String _fmt(DateTime d) {
     const months = [
@@ -135,10 +183,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       0.0,
       (sum, item) => sum + item.amount,
     );
-    filteredExpenses.fold(
-      0.0,
-      (sum, item) => sum + item.amount,
-    );
+    // Split by what the spend was for, so the two streams can be read
+    // independently rather than as one lump.
+    final bridalExpenseTotal = filteredExpenses
+        .where((e) => e.workType != 'model_shoot')
+        .fold(0.0, (sum, item) => sum + item.amount);
+    final modelShootExpenseTotal = filteredExpenses
+        .where((e) => e.workType == 'model_shoot')
+        .fold(0.0, (sum, item) => sum + item.amount);
 
     // ── Split Payment Prompt Dialog ─────────────────────────────────────────
     Future<bool?> showSplitPaymentDialog(BuildContext ctx) {
@@ -705,6 +757,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           ? (existing.employee?.id ?? myEmployeeId)
           : (isScopedToOwn ? myEmployeeId : '');
       var selCategory = existing?.category ?? 'food';
+      var selWorkType = existing?.workType ?? 'bridal';
       var selDate = existing?.date ?? DateTime.now();
       XFile? attachmentFile;
       bool isUploading = false;
@@ -805,6 +858,80 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                             16.h,
                           ],
+                          // What the spend was FOR — asked first because it
+                          // determines whether a client booking applies.
+                          Text(
+                            'WHAT IS THIS FOR?',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                              color: crm.textSecondary,
+                            ),
+                          ),
+                          8.h,
+                          Row(
+                            children: [
+                              for (final w in _workTypes) ...[
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () =>
+                                        setState(() => selWorkType = w.$1),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 12, horizontal: 10),
+                                      decoration: BoxDecoration(
+                                        color: selWorkType == w.$1
+                                            ? crm.primary
+                                                .withValues(alpha: 0.10)
+                                            : null,
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: selWorkType == w.$1
+                                              ? crm.primary
+                                              : crm.border,
+                                          width: selWorkType == w.$1 ? 1.6 : 1,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(w.$3,
+                                              size: 16,
+                                              color: selWorkType == w.$1
+                                                  ? crm.primary
+                                                  : crm.textSecondary),
+                                          6.w,
+                                          Flexible(
+                                            child: Text(
+                                              w.$2,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                fontSize: 12.5,
+                                                fontWeight:
+                                                    selWorkType == w.$1
+                                                        ? FontWeight.w800
+                                                        : FontWeight.w600,
+                                                color: selWorkType == w.$1
+                                                    ? crm.primary
+                                                    : crm.textSecondary,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (w != _workTypes.last) 10.w,
+                              ],
+                            ],
+                          ),
+                          16.h,
                           DropdownButtonFormField<String>(
                             decoration: InputDecoration(
                               labelText: 'Category',
@@ -1030,6 +1157,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                 amount: amt,
                                                 date: selDate,
                                                 notes: notesCtrl.text.trim(),
+                                                workType: selWorkType,
                                                 // Keep the old receipt unless
                                                 // a new one was attached.
                                                 receiptImage: uploadedUrl,
@@ -1045,6 +1173,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                 amount: amt,
                                                 date: selDate,
                                                 notes: notesCtrl.text.trim(),
+                                                workType: selWorkType,
                                                 receiptImage: uploadedUrl ?? '',
                                               );
                                         }
@@ -1396,6 +1525,36 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               SliverOverlapInjector(
                 handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
+              // Bridal vs model-shoot spend at a glance.
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      isMobile ? 16 : 0, 12, isMobile ? 16 : 0, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _workTypeTotalCard(
+                          crm,
+                          'Bridal Work',
+                          _currency(bridalExpenseTotal),
+                          Icons.diamond_outlined,
+                          crm.primary,
+                        ),
+                      ),
+                      12.w,
+                      Expanded(
+                        child: _workTypeTotalCard(
+                          crm,
+                          'Model Shoot',
+                          _currency(modelShootExpenseTotal),
+                          Icons.camera_alt_outlined,
+                          crm.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
                 sliver: SliverList(
@@ -1409,6 +1568,11 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           )
                           .$2;
                       final metadataStr = [
+                        // Lead with the work type so bridal vs model-shoot
+                        // spend is obvious at a glance.
+                        e.workType == 'model_shoot'
+                            ? 'Model Shoot'
+                            : 'Bridal Work',
                         catLabel,
                         _fmt(e.date),
                         if (e.booking != null) e.booking!.customerName,
