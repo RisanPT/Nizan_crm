@@ -1,21 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/models/budget.dart';
-import '../providers/dio_provider.dart';
-
-final budgetServiceProvider = Provider<BudgetService>((ref) {
-  return BudgetService(ref.watch(dioProvider));
-});
-
-final currentBudgetProvider = FutureProvider<Budget?>((ref) async {
-  final service = ref.watch(budgetServiceProvider);
-  final now = DateTime.now();
-  final budgets = await service.getBudgets(month: now.month, year: now.year);
-  if (budgets.isNotEmpty) {
-    return budgets.first; // Returning 'General' or first budget found
-  }
-  return null;
-});
+import 'package:nizan_crm/features/accounts/data/budget.dart';
 
 class BudgetService {
   final Dio _dio;

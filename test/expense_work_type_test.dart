@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nizan_crm/core/models/artist_expense.dart';
+import 'package:nizan_crm/features/accounts/data/artist_expense.dart';
 
 ArtistExpense _fromJson(Map<String, dynamic> json) =>
     ArtistExpense.fromJson({

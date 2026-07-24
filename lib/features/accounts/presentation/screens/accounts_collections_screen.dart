@@ -5,10 +5,10 @@ import 'package:nizan_crm/features/accounts/presentation/widgets/collection_imag
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
-import '../../../../services/collection_service.dart';
+import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 import '../../../../services/employee_service.dart';
-import '../../../../providers/collection_filters_provider.dart';
-import '../../../../core/models/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/controllers/collection_filters_provider.dart';
+import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 import '../../../../core/models/booking.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../services/report_service.dart';

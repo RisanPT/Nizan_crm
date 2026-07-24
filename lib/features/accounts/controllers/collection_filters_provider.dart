@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
-import '../core/models/artist_collection.dart';
-import '../services/collection_service.dart';
+import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 
 class CollectionFilters {
   final String? employeeId;

@@ -19,8 +19,8 @@ import '../../presentation/screens/geographic_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/package_detail_screen.dart';
 import '../../presentation/screens/booking_requests_screen.dart';
-import '../../presentation/screens/accounts_budget_screen.dart';
-import '../../presentation/screens/accounts_invoices_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_budget_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_invoices_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
@@ -43,9 +43,9 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../features/trials/presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
-import '../../presentation/screens/accounts/accounts_dashboard_screen.dart';
-import '../../presentation/screens/accounts/accounts_fleet_expenses_screen.dart';
-import '../../presentation/screens/accounts/accounts_bills_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_dashboard_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
 import '../../presentation/screens/inventory/inventory_dashboard_screen.dart';
 import '../../presentation/screens/inventory/inventory_stock_screen.dart';
 import '../../presentation/screens/inventory/inventory_kits_screen.dart';

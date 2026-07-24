@@ -1,4 +1,4 @@
-import '../models/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 import '../models/lead.dart';
 import '../models/booking.dart';
 import '../models/employee.dart';

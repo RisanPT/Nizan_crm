@@ -3,15 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../core/extensions/space_extension.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../core/models/artist_collection.dart';
-import '../../core/models/artist_expense.dart';
-import '../../core/models/booking.dart';
-import '../../core/providers/booking_provider.dart';
-import '../../services/collection_service.dart';
-import '../../services/expense_service.dart';
-import '../../services/budget_service.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/data/artist_expense.dart';
+import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
+import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
+import 'package:nizan_crm/features/accounts/controllers/budget_controller.dart';
 
 class AccountsBudgetScreen extends ConsumerStatefulWidget {
   const AccountsBudgetScreen({super.key});

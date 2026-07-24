@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../core/extensions/space_extension.dart';
-import '../../../core/models/purchase.dart';
-import '../../../core/models/vendor.dart';
-import '../../../core/theme/crm_theme.dart';
-import '../../../core/utils/responsive_builder.dart';
-import '../../../services/inventory_service.dart';
-import '../inventory/inventory_widgets.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/purchase.dart';
+import 'package:nizan_crm/core/models/vendor.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/services/inventory_service.dart';
+import 'package:nizan_crm/presentation/screens/inventory/inventory_widgets.dart';
 
 /// Accounts → Bills / Payables. Vendor bills (from inventory purchases) with
 /// paid/unpaid + GST tracking, bill viewing, and payment recording — Zoho-style.

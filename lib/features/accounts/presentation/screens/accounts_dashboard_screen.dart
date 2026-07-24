@@ -3,20 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../core/extensions/space_extension.dart';
-import '../../../core/models/artist_collection.dart';
-import '../../../core/models/artist_expense.dart';
-import '../../../core/models/booking.dart';
-import '../../../core/models/purchase.dart';
-import '../../../core/models/trial.dart';
-import '../../../core/providers/booking_provider.dart';
-import '../../../core/providers/trial_provider.dart';
-import '../../../core/theme/crm_theme.dart';
-import '../../../core/utils/responsive_builder.dart';
-import '../../../services/collection_service.dart';
-import '../../../services/expense_service.dart';
-import '../../../services/inventory_service.dart';
-import '../../common_widgets/export_report_dialog.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/data/artist_expense.dart';
+import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/core/models/purchase.dart';
+import 'package:nizan_crm/core/models/trial.dart';
+import 'package:nizan_crm/core/providers/booking_provider.dart';
+import 'package:nizan_crm/core/providers/trial_provider.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
+import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
+import 'package:nizan_crm/services/inventory_service.dart';
+import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',

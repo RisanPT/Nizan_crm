@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import '../../../core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
-import '../../../core/theme/crm_theme.dart';
-import '../../../core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
-import '../inventory/inventory_widgets.dart';
+import 'package:nizan_crm/presentation/screens/inventory/inventory_widgets.dart';
 
 /// Accounts → Operations → Fleet Expenses. Driver-submitted fleet expenses
 /// (with the uploaded bill) surfaced in Accounts, reviewable/approvable here.

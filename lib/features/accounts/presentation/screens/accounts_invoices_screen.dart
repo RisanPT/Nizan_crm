@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/extensions/space_extension.dart';
-import '../../core/models/booking.dart';
-import '../../core/models/trial.dart';
-import '../../core/providers/booking_provider.dart';
-import '../../core/providers/trial_provider.dart';
-import '../../core/theme/crm_theme.dart';
-import '../../core/utils/booking_print_service.dart';
-import '../../core/utils/gst_calculator.dart';
-import '../../core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/core/models/trial.dart';
+import 'package:nizan_crm/core/providers/booking_provider.dart';
+import 'package:nizan_crm/core/providers/trial_provider.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/booking_print_service.dart';
+import 'package:nizan_crm/core/utils/gst_calculator.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 class AccountsInvoicesScreen extends ConsumerStatefulWidget {
   const AccountsInvoicesScreen({super.key});
