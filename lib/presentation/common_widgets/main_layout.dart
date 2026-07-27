@@ -72,7 +72,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     } else if (role == AppRole.driver) {
       if (location.startsWith('/driver/jobs')) return 0;
       if (location.startsWith('/driver/works')) return 1;
-      if (location == '/profile') return 2;
+      if (location.startsWith('/driver/expenses')) return 2;
+      if (location == '/profile') return 3;
     } else if (role == AppRole.accounts) {
       if (location == '/accounts/dashboard') return 0;
       if (location.startsWith('/finance')) return 1;
@@ -140,7 +141,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       switch (index) {
         case 0: context.go('/driver/jobs'); break;
         case 1: context.go('/driver/works'); break;
-        case 2: context.go('/profile'); break;
+        case 2: context.go('/driver/expenses'); break;
+        case 3: context.go('/profile'); break;
       }
     } else if (role == AppRole.accounts) {
       switch (index) {
@@ -303,6 +305,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                             icon: Icon(Icons.list_alt_outlined),
                             selectedIcon: Icon(Icons.list_alt),
                             label: 'Works',
+                          ),
+                          NavigationDestination(
+                            icon: Icon(Icons.receipt_long_outlined),
+                            selectedIcon: Icon(Icons.receipt_long),
+                            label: 'Expense',
                           ),
                           NavigationDestination(
                             icon: Icon(Icons.person_outline),

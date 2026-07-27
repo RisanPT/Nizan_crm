@@ -1,4 +1,4 @@
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 
 Future<void> shareArtistOnWhatsApp({
   required String phoneNumber,

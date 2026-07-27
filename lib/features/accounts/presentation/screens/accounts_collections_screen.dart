@@ -9,10 +9,10 @@ import 'package:nizan_crm/features/accounts/controllers/collection_controller.da
 import '../../../../services/employee_service.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_filters_provider.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
-import '../../../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../services/report_service.dart';
-import '../../../../services/booking_service.dart';
+import 'package:nizan_crm/features/bookings/services/booking_service.dart';
 import '../../../../core/utils/export_utils.dart';
 
 // ─── Provider: bookings that have at least one verified collection ────────────

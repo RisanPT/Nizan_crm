@@ -6,14 +6,14 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
-import '../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
-import '../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/models/trial.dart';
 import '../../core/providers/trial_provider.dart';
 import '../../core/utils/booking_print_service.dart';
-import '../../services/inventory_service.dart';
+import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
 

@@ -2,14 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
-import 'package:nizan_crm/services/upload_service.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/bill_attachment_field.dart';
+
+/// Extracts the vehicle id out of a job's `vehicleId`, which the API returns
+/// either as a raw id string or as a populated vehicle object.
+String vehicleIdOf(FleetJob job) {
+  final v = job.vehicleId;
+  if (v is String) return v;
+  if (v is Map) {
+    return v['_id']?.toString() ?? v['id']?.toString() ?? '';
+  }
+  return '';
+}
+
+/// Human-readable label for a trip in the picker: date + destination.
+String _jobLabel(FleetJob job) {
+  final d = job.serviceStart.toLocal();
+  final date =
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+  final who = job.customerName.trim();
+  return who.isEmpty ? '$date — ${job.bookingNumber}' : '$date — $who';
+}
 
 class DriverAddExpenseScreen extends HookConsumerWidget {
-  final String jobId;
-  const DriverAddExpenseScreen({super.key, required this.jobId});
+  /// Job the expense belongs to. Null when the driver opened the screen from
+  /// the Expenses tab instead of from inside an active trip — they then pick
+  /// the trip from a dropdown.
+  final String? jobId;
+  const DriverAddExpenseScreen({super.key, this.jobId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -17,48 +40,35 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
     final descriptionCtrl = useTextEditingController();
     final isSaving = useState(false);
     final billImage = useState<String?>(null);
-    final uploadingBill = useState(false);
+    final billMissing = useState(false);
+    final asyncJobs = ref.watch(driverJobsProvider);
+    final jobs = asyncJobs.value ?? const <FleetJob>[];
 
-    Future<void> attachBill() async {
-      final source = await showModalBottomSheet<ImageSource>(
-        context: context,
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_camera_outlined),
-                title: const Text('Take a photo'),
-                onTap: () => Navigator.pop(ctx, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined),
-                title: const Text('Choose from gallery'),
-                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      );
-      if (source == null) return;
-      final img =
-          await ImagePicker().pickImage(source: source, imageQuality: 70);
-      if (img == null) return;
-      uploadingBill.value = true;
-      try {
-        final url = await ref.read(uploadServiceProvider).uploadImage(img);
-        billImage.value = url;
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Bill upload failed: $e')));
-        }
-      } finally {
-        uploadingBill.value = false;
+    // Trips the driver can book an expense against. A job with no vehicle
+    // attached can't take one, so it never reaches the dropdown.
+    final selectableJobs =
+        jobs.where((j) => vehicleIdOf(j).isNotEmpty).toList();
+
+    final selectedJobId = useState<String?>(jobId);
+    // Pre-select when there is exactly one trip to choose from.
+    useEffect(() {
+      if (selectedJobId.value == null && selectableJobs.length == 1) {
+        selectedJobId.value = selectableJobs.first.id;
       }
-    }
+      return null;
+    }, [selectableJobs.length]);
+
+    final activeJobId = selectedJobId.value;
 
     Future<void> submitExpense() async {
+      // Proof of spend is mandatory.
+      if (billImage.value == null || billImage.value!.isEmpty) {
+        billMissing.value = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Attach the bill / screenshot first')),
+        );
+        return;
+      }
       final amount = double.tryParse(amountCtrl.text.trim()) ?? 0.0;
       if (amount <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -67,25 +77,29 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
         return;
       }
 
-      final asyncJobs = ref.read(driverJobsProvider);
-      final job = asyncJobs.value?.firstWhere(
-        (j) => j.id == jobId,
-      );
-      
-      if (job?.vehicleId == null) {
+      if (activeJobId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vehicle not found for this job')),
+          const SnackBar(content: Text('Select the trip this expense belongs to')),
         );
         return;
       }
 
-      String vId = '';
-      if (job!.vehicleId is String) {
-        vId = job.vehicleId as String;
-      } else if (job.vehicleId is Map) {
-        vId = job.vehicleId['_id']?.toString() ?? job.vehicleId['id']?.toString() ?? '';
+      // firstWhereOrNull semantics — the job list can be stale or filtered.
+      FleetJob? job;
+      for (final j in jobs) {
+        if (j.id == activeJobId) {
+          job = j;
+          break;
+        }
+      }
+      if (job == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Trip not found — pull to refresh and try again')),
+        );
+        return;
       }
 
+      final vId = vehicleIdOf(job);
       if (vId.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Vehicle ID could not be determined')),
@@ -129,16 +143,63 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
         title: const Text('Add Expense'),
         centerTitle: true,
       ),
-      body: Padding(
+      // Scrollable: the form grows with the trip picker and has to stay
+      // usable on a short phone screen with the keyboard open.
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Record an expense incurred during this trip (e.g., Toll, Fuel, Parking).',
+              'Record an expense incurred during a trip (e.g., Toll, Fuel, Parking).',
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 24),
+            // Trip selector — shown whenever the driver has a choice to make,
+            // i.e. they came from the Expenses tab rather than an active job.
+            if (jobId == null) ...[
+              if (asyncJobs.isLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(),
+                )
+              else if (selectableJobs.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    border: Border.all(color: Colors.orange.shade200),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'No trips assigned to you yet. An expense has to be booked '
+                    'against a trip, so ask your fleet manager to assign one.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: activeJobId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Trip *',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.local_shipping_outlined),
+                  ),
+                  items: [
+                    for (final j in selectableJobs)
+                      DropdownMenuItem(
+                        value: j.id,
+                        child: Text(
+                          _jobLabel(j),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => selectedJobId.value = v,
+                ),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: amountCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -159,63 +220,21 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
               ),
             ),
             const SizedBox(height: 16),
-            // Bill / receipt upload → goes to the fleet manager.
-            InkWell(
-              onTap: uploadingBill.value ? null : attachBill,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                      color: billImage.value != null
-                          ? Colors.green
-                          : Colors.grey.shade400),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    if (uploadingBill.value)
-                      const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                    else
-                      Icon(
-                          billImage.value != null
-                              ? Icons.check_circle
-                              : Icons.receipt_long_outlined,
-                          color: billImage.value != null
-                              ? Colors.green
-                              : Colors.grey),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        billImage.value != null
-                            ? 'Bill attached — tap to change'
-                            : 'Attach bill / receipt (photo)',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    if (billImage.value != null)
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 18),
-                        onPressed: () => billImage.value = null,
-                      ),
-                  ],
-                ),
-              ),
+            // Bill / screenshot proof — required before submitting.
+            BillAttachmentField(
+              value: billImage.value,
+              isMissing: billMissing.value,
+              onChanged: (url) {
+                billImage.value = url;
+                if (url != null) billMissing.value = false;
+              },
             ),
-            if (billImage.value != null) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(billImage.value!,
-                    height: 160, fit: BoxFit.cover),
-              ),
-            ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: isSaving.value ? null : submitExpense,
+              onPressed:
+                  isSaving.value || (jobId == null && selectableJobs.isEmpty)
+                      ? null
+                      : submitExpense,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),

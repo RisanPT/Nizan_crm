@@ -1,4 +1,4 @@
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'artist_share_service_stub.dart'
     if (dart.library.html) 'artist_share_service_web.dart' as impl;
 

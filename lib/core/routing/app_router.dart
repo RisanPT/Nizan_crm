@@ -8,17 +8,17 @@ import '../../presentation/common_widgets/main_layout.dart';
 import '../../presentation/screens/dashboard_screen.dart';
 import '../../presentation/screens/clients_directory_screen.dart';
 import '../../presentation/screens/client_profile_screen.dart';
-import '../../presentation/screens/calendar_screen.dart';
+import 'package:nizan_crm/features/bookings/presentation/screens/calendar_screen.dart';
 import '../../presentation/screens/staff_management_screen.dart';
 import '../../presentation/screens/slot_management_screen.dart';
 import '../../presentation/screens/services_management_screen.dart';
-import '../../presentation/screens/add_booking_screen.dart';
-import '../../presentation/screens/manage_booking_screen.dart';
+import 'package:nizan_crm/features/bookings/presentation/screens/add_booking_screen.dart';
+import 'package:nizan_crm/features/bookings/presentation/screens/manage_booking_screen.dart';
 import '../../presentation/screens/add_service_screen.dart';
 import '../../presentation/screens/geographic_management_screen.dart';
 import '../../presentation/screens/addon_services_management_screen.dart';
 import '../../presentation/screens/package_detail_screen.dart';
-import '../../presentation/screens/booking_requests_screen.dart';
+import 'package:nizan_crm/features/bookings/presentation/screens/booking_requests_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_budget_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_invoices_screen.dart';
 
@@ -46,17 +46,17 @@ import '../../features/accounts/presentation/screens/accounts_collections_screen
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
-import '../../presentation/screens/inventory/inventory_dashboard_screen.dart';
-import '../../presentation/screens/inventory/inventory_stock_screen.dart';
-import '../../presentation/screens/inventory/inventory_kits_screen.dart';
-import '../../presentation/screens/inventory/inventory_alerts_screen.dart';
-import '../../presentation/screens/inventory/inventory_expiry_screen.dart';
-import '../../presentation/screens/inventory/inventory_reports_screen.dart';
-import '../../presentation/screens/inventory/inventory_purchases_screen.dart';
-import '../../presentation/screens/inventory/inventory_vendors_screen.dart';
-import '../../presentation/screens/inventory/artist_inventory_screen.dart';
-import '../../presentation/screens/sales_leads_screen.dart';
-import '../../presentation/screens/lead_details_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_dashboard_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_stock_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_kits_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_alerts_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_expiry_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_reports_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_purchases_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/inventory_vendors_screen.dart';
+import 'package:nizan_crm/features/inventory/presentation/screens/artist_inventory_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/pre_trip_inspection_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/active_job_screen.dart';
@@ -218,6 +218,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Driver Dashboard';
           } else if (state.uri.path == '/driver/works') {
             title = 'Driver Works';
+          } else if (state.uri.path == '/driver/expenses') {
+            title = 'Add Expense';
           } else if (state.uri.path == '/inventory') {
             title = 'Inventory Dashboard';
           } else if (state.uri.path == '/inventory/stock') {
@@ -560,6 +562,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               final id = state.pathParameters['id'] ?? '';
               return ActiveJobScreen(jobId: id); 
             },
+          ),
+          GoRoute(
+            path: '/driver/expenses',
+            builder: (context, state) => const DriverAddExpenseScreen(),
           ),
           GoRoute(
             path: '/driver/works/:id/expense',

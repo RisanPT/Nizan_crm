@@ -1,6 +1,6 @@
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
-import '../models/lead.dart';
-import '../models/booking.dart';
+import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../models/employee.dart';
 import '../models/service_package.dart';
 import '../models/district.dart';

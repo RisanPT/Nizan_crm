@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
-import '../../../../presentation/screens/inventory/inventory_widgets.dart';
+import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
 import '../widgets/marketing_widgets.dart';

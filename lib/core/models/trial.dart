@@ -2,7 +2,7 @@
 // A Trial is a studio appointment where a bride tries one or more looks/packages.
 // Trial packages are completely independent of the services Package catalog.
 
-import 'booking.dart' show BookingAssignment;
+import 'package:nizan_crm/features/bookings/data/booking.dart' show BookingAssignment;
 
 // ── TrialItem ────────────────────────────────────────────────────────────────
 class TrialItem {

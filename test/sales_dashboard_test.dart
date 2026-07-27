@@ -3,14 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/models/crm_user.dart';
-import 'package:nizan_crm/core/models/lead.dart';
-import 'package:nizan_crm/core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_dashboard_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_period_detail_screen.dart';
-import 'package:nizan_crm/services/lead_service.dart';
+import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/services/user_service.dart';
 
 class _FakeBookingNotifier extends BookingNotifier {

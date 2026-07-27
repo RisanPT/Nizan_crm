@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/bill_attachment_field.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
@@ -129,6 +130,10 @@ class FuelExpensesScreen extends HookConsumerWidget {
       var selectedCategory = expense?.category ?? 'fuel';
       var paymentMode = expense?.paymentMode ?? 'cash';
       var selectedDate = expense?.date ?? DateTime.now();
+      // Bill / screenshot proof — mandatory before an expense can be saved.
+      String? billImage =
+          (expense?.billImage.isNotEmpty ?? false) ? expense!.billImage : null;
+      var billMissing = false;
 
       await showDialog(
         context: context,
@@ -345,6 +350,15 @@ class FuelExpensesScreen extends HookConsumerWidget {
                         maxLines: 3,
                         decoration: const InputDecoration(labelText: 'Notes'),
                       ),
+                      16.h,
+                      BillAttachmentField(
+                        value: billImage,
+                        isMissing: billMissing,
+                        onChanged: (url) => setState(() {
+                          billImage = url;
+                          if (url != null) billMissing = false;
+                        }),
+                      ),
                     ],
                   ),
                 ),
@@ -356,6 +370,11 @@ class FuelExpensesScreen extends HookConsumerWidget {
                 ),
                 ElevatedButton(
                   onPressed: () async {
+                    // Proof of spend is mandatory.
+                    if (billImage == null || billImage!.isEmpty) {
+                      setState(() => billMissing = true);
+                      return;
+                    }
                     await ref.read(fuelExpenseServiceProvider).saveFuelExpense(
                           id: expense?.id,
                           vehicleId: selectedVehicleId,
@@ -371,6 +390,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                           paymentMode: paymentMode,
                           station: stationCtrl.text.trim(),
                           notes: notesCtrl.text.trim(),
+                          billImage: billImage ?? '',
                         );
                     ref.invalidate(fuelExpensesProvider);
                     ref.invalidate(paginatedFuelExpensesProvider);

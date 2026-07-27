@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/trial.dart';
-import 'package:nizan_crm/core/models/booking.dart' show BookingAssignment;
+import 'package:nizan_crm/features/bookings/data/booking.dart' show BookingAssignment;
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/core/models/trial_package.dart';

@@ -18,10 +18,10 @@ import '../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 import '../../services/employee_service.dart';
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
-import '../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../services/upload_service.dart';
 import '../../services/report_service.dart';
-import '../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 
 class ArtistFinanceScreen extends HookConsumerWidget {

@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/extensions/space_extension.dart';
-import '../common_widgets/add_booking_mode_sheet.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mode_sheet.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
-import '../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
 

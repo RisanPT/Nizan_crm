@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'booking_print_service.dart';
 
 Future<void> printBookingDetails(

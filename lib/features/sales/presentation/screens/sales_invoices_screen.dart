@@ -4,9 +4,9 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/extensions/space_extension.dart';
-import '../../../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/trial.dart';
-import '../../../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../../../core/providers/trial_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/dashboard_report_service.dart';

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
-import '../../../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/trial.dart';
-import '../../../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../../../core/providers/trial_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
-import '../../../../presentation/screens/inventory/inventory_widgets.dart';
+import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 
 /// Sales → Quarterly performance inner page. Overall Q1–Q4 view for the
 /// selected financial year: works, revenue, advance, and a month breakdown.

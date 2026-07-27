@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nizan_crm/core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/presentation/common_widgets/reference_images.dart';
 

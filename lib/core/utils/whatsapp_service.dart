@@ -1,4 +1,4 @@
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'whatsapp_service_native.dart'
     if (dart.library.html) 'whatsapp_service_web.dart'
     as impl;

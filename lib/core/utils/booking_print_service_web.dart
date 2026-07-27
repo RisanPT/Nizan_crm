@@ -2,7 +2,7 @@ import 'dart:js_interop';
 
 import 'package:web/web.dart' as web;
 
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'booking_print_service.dart';
 
 String _staffWorkLabel(BookingAssignment staff) {

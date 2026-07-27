@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nizan_crm/core/models/lead.dart';
+import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/core/utils/lead_priority.dart';
 
 void main() {

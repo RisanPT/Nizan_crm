@@ -1,6 +1,6 @@
 import 'package:url_launcher/url_launcher.dart';
 
-import '../models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 
 Future<void> sendInvoiceMessage(Booking booking) async {
   final phone = _formatPhoneNumber(booking.phone);

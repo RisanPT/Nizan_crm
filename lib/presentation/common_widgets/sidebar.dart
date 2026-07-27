@@ -217,6 +217,13 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/driver/works',
                     onTap: () => context.go('/driver/works'),
                   ),
+                  _SidebarItem(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'Add Expense',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/driver/expenses',
+                    onTap: () => context.go('/driver/expenses'),
+                  ),
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────

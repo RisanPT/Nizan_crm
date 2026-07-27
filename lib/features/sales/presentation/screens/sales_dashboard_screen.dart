@@ -5,14 +5,14 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/extensions/space_extension.dart';
-import '../../../../core/models/booking.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/crm_user.dart';
-import '../../../../core/models/lead.dart';
-import '../../../../core/providers/booking_provider.dart';
+import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/lead_priority.dart';
 import '../../../../core/utils/responsive_builder.dart';
-import '../../../../services/lead_service.dart';
+import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import '../../../../services/user_service.dart';
 
 // ── Chart palette ───────────────────────────────────────────────────────────

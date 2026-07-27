@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../providers/dio_provider.dart';
-import '../core/models/booking.dart';
+
 
 part 'booking_service.g.dart';
 
