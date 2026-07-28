@@ -7,6 +7,7 @@ import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mod
 import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/utils/client_report_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/customer_service.dart';
 
@@ -25,6 +26,31 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
         ListPageParams(page: pageState.value, limit: pageSize),
       ),
     );
+    final isExporting = useState(false);
+
+    // Pulls the FULL client list (not just the current page) and renders a
+    // printable PDF report.
+    Future<void> exportReport() async {
+      if (isExporting.value) return;
+      isExporting.value = true;
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        final clients = await ref.read(customerServiceProvider).getCustomers();
+        if (clients.isEmpty) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('No clients to export.')),
+          );
+          return;
+        }
+        await printClientsReport(clients);
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Failed to export report: $e')),
+        );
+      } finally {
+        isExporting.value = false;
+      }
+    }
 
     return SingleChildScrollView(
       child: Column(
@@ -56,19 +82,38 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
               if (!isMobile) ...[
                 16.w,
                 OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('Export'),
+                  onPressed: isExporting.value ? null : exportReport,
+                  icon: isExporting.value
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  label: Text(
+                    isExporting.value ? 'Preparing…' : 'Client Report (PDF)',
+                  ),
                 ),
               ],
             ],
           ),
           if (isMobile) ...[
             16.h,
-            OutlinedButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.download, size: 18),
-              label: const Text('Export'),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: isExporting.value ? null : exportReport,
+                icon: isExporting.value
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: Text(
+                  isExporting.value ? 'Preparing…' : 'Client Report (PDF)',
+                ),
+              ),
             ),
           ],
           24.h,

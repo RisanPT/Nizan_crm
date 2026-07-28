@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/models/service_region.dart';
+import 'package:nizan_crm/services/region_service.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
@@ -23,6 +25,9 @@ class CompetitorsScreen extends ConsumerStatefulWidget {
 // Numeric snapshot fields: (key, label).
 class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
   String _query = '';
+  // '' = all regions; otherwise a region id from our geographics. Empty-string
+  // sentinel '__none__' isolates competitors with no region assigned.
+  String _regionFilter = '';
 
   DateTime get _thisMonday {
     final d = DateTime.now();
@@ -35,6 +40,8 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(competitorsProvider);
+    // Preload our geographics regions for the filter + add/edit dropdown.
+    final regions = ref.watch(regionsProvider).value ?? const <ServiceRegion>[];
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -63,10 +70,17 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
             : all.map((c) => c.score).fold<int>(0, (a, b) => a > b ? a : b);
 
         final filtered = all.where((c) {
+          // Region filter: '' = all, '__none__' = unassigned, else a region id.
+          if (_regionFilter == '__none__') {
+            if (c.regionId.isNotEmpty) return false;
+          } else if (_regionFilter.isNotEmpty && c.regionId != _regionFilter) {
+            return false;
+          }
           if (_query.isEmpty) return true;
           final q = _query.toLowerCase();
           return c.name.toLowerCase().contains(q) ||
               c.city.toLowerCase().contains(q) ||
+              c.region.toLowerCase().contains(q) ||
               c.category.toLowerCase().contains(q);
         }).toList();
 
@@ -90,7 +104,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
               ],
             ),
             18.h,
-            _toolbar(crm, isMobile),
+            _toolbar(crm, isMobile, regions),
             14.h,
             if (filtered.isEmpty)
               Padding(
@@ -133,22 +147,46 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
         ],
       );
 
-  Widget _toolbar(CrmTheme crm, bool isMobile) => Wrap(
+  Widget _toolbar(CrmTheme crm, bool isMobile, List<ServiceRegion> regions) =>
+      Wrap(
         spacing: 10,
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: isMobile ? double.infinity : 280,
+            width: isMobile ? double.infinity : 260,
             child: TextField(
               onChanged: (v) => setState(() => _query = v.trim()),
               decoration: InputDecoration(
-                hintText: 'Search name, city, category',
+                hintText: 'Search name, city, region',
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
+            ),
+          ),
+          // Region filter — sourced from our geographics.
+          SizedBox(
+            width: isMobile ? double.infinity : 220,
+            child: DropdownButtonFormField<String>(
+              initialValue: _regionFilter,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Region',
+                prefixIcon: const Icon(Icons.public, size: 20),
+                isDense: true,
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('All regions')),
+                const DropdownMenuItem(
+                    value: '__none__', child: Text('No region')),
+                for (final r in regions)
+                  DropdownMenuItem(value: r.id, child: Text(r.name)),
+              ],
+              onChanged: (v) => setState(() => _regionFilter = v ?? ''),
             ),
           ),
           FilledButton.icon(
@@ -204,6 +242,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                 4.h,
                 Text(
                   [
+                    if (c.region.isNotEmpty) '📍 ${c.region}',
                     if (c.city.isNotEmpty) c.city,
                     if (c.category.isNotEmpty) c.category,
                     if (socials.isNotEmpty) socials,
@@ -294,6 +333,10 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
       ])
         k: TextEditingController(text: _fieldOf(existing, k)),
     };
+    final regions = ref.read(regionsProvider).value ?? const <ServiceRegion>[];
+    // Only offer a region that still exists in our geographics.
+    var selectedRegionId =
+        regions.any((r) => r.id == existing?.regionId) ? existing!.regionId : '';
     var saving = false;
 
     await showDialog<void>(
@@ -315,10 +358,19 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
           setLocal(() => saving = true);
           final messenger = ScaffoldMessenger.of(context);
           final svc = ref.read(marketingServiceProvider);
+          final regionName = selectedRegionId.isEmpty
+              ? ''
+              : regions
+                  .firstWhere((r) => r.id == selectedRegionId,
+                      orElse: () => const ServiceRegion(
+                          id: '', name: '', status: '', stateId: '', stateName: ''))
+                  .name;
           final model = Competitor(
             id: existing?.id ?? '',
             name: ctrls['name']!.text.trim(),
             city: ctrls['city']!.text.trim(),
+            regionId: selectedRegionId,
+            region: regionName,
             website: ctrls['website']!.text.trim(),
             category: ctrls['category']!.text.trim(),
             instagram: ctrls['instagram']!.text.trim(),
@@ -350,6 +402,26 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 f('name', 'Name *'),
+                // Region from our geographics — the primary geo dimension.
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: DropdownButtonFormField<String>(
+                    initialValue: selectedRegionId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Region',
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('— None —')),
+                      for (final r in regions)
+                        DropdownMenuItem(value: r.id, child: Text(r.name)),
+                    ],
+                    onChanged: (v) =>
+                        setLocal(() => selectedRegionId = v ?? ''),
+                  ),
+                ),
                 Row(children: [
                   Expanded(child: f('city', 'City')),
                   10.w,
@@ -507,8 +579,8 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'First row = headers. Recognised columns: name, city, website, '
-                  'category, instagram, facebook, youtube, linkedin, followers, '
+                  'First row = headers. Recognised columns: name, city, region, '
+                  'website, category, instagram, facebook, youtube, linkedin, followers, '
                   'weeklyGrowthPct, engagementRate, adCampaigns, offers, '
                   'postingFrequency, seoScore, reviews, collaborations, '
                   'contentThemes, and yes/no flags: newCampaign, viralContent, '
@@ -542,7 +614,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                   style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                   decoration: InputDecoration(
                     hintText:
-                        'name,city,followers,newCampaign\nGlow Studio,Kochi,12000,yes',
+                        'name,city,region,followers,newCampaign\nGlow Studio,Kochi,Ernakulam,12000,yes',
                     isDense: true,
                     border:
                         OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -607,6 +679,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
   static const _headerAliases = <String, String>{
     'name': 'name', 'competitor': 'name', 'brand': 'name',
     'city': 'city', 'location': 'city',
+    'region': 'region', 'zone': 'region',
     'website': 'website', 'site': 'website',
     'category': 'category', 'type': 'category',
     'instagram': 'instagram', 'ig': 'instagram',

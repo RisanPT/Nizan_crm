@@ -6,8 +6,30 @@ import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mod
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
+import '../../core/utils/kerala_pincodes.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
+
+/// Last 10 digits of a phone number, ignoring spaces/dashes/country codes —
+/// the reliable key for matching a booking to a client.
+String clientPhoneKey(String? p) {
+  final digits = (p ?? '').replaceAll(RegExp(r'\D'), '');
+  return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+}
+
+/// Whether [b] belongs to the client identified by [phoneKey]/[nameLower].
+/// Phone is authoritative; name is a fallback for records without a phone.
+bool bookingMatchesClient(
+  Booking b, {
+  required String phoneKey,
+  required String nameLower,
+}) {
+  final byPhone = phoneKey.length >= 10 && clientPhoneKey(b.phone) == phoneKey;
+  final byName =
+      nameLower.isNotEmpty && b.customerName.trim().toLowerCase() == nameLower;
+  return byPhone || byName;
+}
 
 class ClientProfileScreen extends HookConsumerWidget {
   final String clientId;
@@ -29,11 +51,53 @@ class ClientProfileScreen extends HookConsumerWidget {
         );
 
     // ── Load bookings for this customer ─────────────────────────────────────
+    // Match on the last 10 phone digits (reliable across formatting), falling
+    // back to an exact name match for clients created before phones were saved.
+    final custPhoneKey = clientPhoneKey(customer?.phone);
+    final custName = (customer?.name ?? '').trim().toLowerCase();
     final asyncBookings = ref.watch(bookingProvider);
-    final bookings = asyncBookings.value
-            ?.where((b) => b.customerName == customer?.name)
-            .toList() ??
-        [];
+    final bookings =
+        (asyncBookings.value ?? [])
+            .where((b) =>
+                customer != null &&
+                bookingMatchesClient(b,
+                    phoneKey: custPhoneKey, nameLower: custName))
+            .toList()
+          ..sort((a, b) => b.serviceStart.compareTo(a.serviceStart));
+
+    // Financial rollup + geography derived from this client's bookings.
+    final totalSpend = bookings.fold<double>(0, (s, b) => s + b.totalPrice);
+    final totalAdvance = bookings.fold<double>(0, (s, b) => s + b.advanceAmount);
+    final totalBalance = bookings.fold<double>(0, (s, b) => s + b.balanceDue);
+    // Newest booking that carries geography (bookings are sorted newest-first).
+    Booking? latestWithGeo;
+    for (final b in bookings) {
+      if (b.address.trim().isNotEmpty || b.district.trim().isNotEmpty) {
+        latestWithGeo = b;
+        break;
+      }
+    }
+    final clientAddress = (customer?.address ?? '').trim().isNotEmpty
+        ? customer!.address!.trim()
+        : (latestWithGeo?.address ?? '').trim();
+    final clientPincode = (customer?.pincode ?? '').trim().isNotEmpty
+        ? customer!.pincode!.trim()
+        : (latestWithGeo?.pincode ?? '').trim();
+    // The district is derived from the client's PINCODE (authoritative), falling
+    // back to whatever the booking recorded when the pincode can't be resolved.
+    final pinDistrict = keralaDistrict(clientPincode);
+    final effectiveDistrict = (pinDistrict != null && pinDistrict.isNotEmpty)
+        ? pinDistrict
+        : (latestWithGeo?.district ?? '').trim();
+    final bookingRegion = (latestWithGeo?.region ?? '').trim();
+    final locationParts = <String>[
+      if (effectiveDistrict.isNotEmpty) effectiveDistrict,
+      // Skip the region when it just repeats the district.
+      if (bookingRegion.isNotEmpty &&
+          bookingRegion.toLowerCase() != effectiveDistrict.toLowerCase())
+        bookingRegion,
+    ];
+    final clientLocation = locationParts.join(', ');
 
     // ── Edit dialog state ───────────────────────────────────────────────────
     Future<void> showEditDialog(Customer current) async {
@@ -261,6 +325,17 @@ class ClientProfileScreen extends HookConsumerWidget {
                         : customer.phone!),
                 16.h,
                 _buildInfoRow(context, Icons.email, 'EMAIL', displayEmail),
+                16.h,
+                _buildInfoRow(context, Icons.location_on_outlined, 'ADDRESS',
+                    clientAddress.isEmpty ? '—' : clientAddress),
+                16.h,
+                _buildInfoRow(context, Icons.markunread_mailbox_outlined,
+                    'PINCODE', clientPincode.isEmpty ? '—' : clientPincode),
+                if (clientLocation.isNotEmpty) ...[
+                  16.h,
+                  _buildInfoRow(
+                      context, Icons.public, 'LOCATION', clientLocation),
+                ],
                 if (customer.company != null &&
                     customer.company!.isNotEmpty) ...[
                   16.h,
@@ -274,10 +349,34 @@ class ClientProfileScreen extends HookConsumerWidget {
       ],
     );
 
-    // ── Right column (bookings) ─────────────────────────────────────────────
+    String money(double v) => '₹${v.toStringAsFixed(0)}';
+
+    // ── Right column (summary + bookings) ────────────────────────────────────
     final rightColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Financial rollup across all of this client's bookings.
+        Card(
+          child: Padding(
+            padding: 20.p,
+            child: Row(
+              children: [
+                _buildStat(context, 'Bookings', '${bookings.length}',
+                    crmColors.primary),
+                _statDivider(crmColors),
+                _buildStat(context, 'Total Spend', money(totalSpend),
+                    crmColors.success),
+                _statDivider(crmColors),
+                _buildStat(context, 'Advance', money(totalAdvance),
+                    crmColors.accent),
+                _statDivider(crmColors),
+                _buildStat(context, 'Balance Due', money(totalBalance),
+                    totalBalance > 0 ? crmColors.warning : crmColors.textSecondary),
+              ],
+            ),
+          ),
+        ),
+        16.h,
         Card(
           child: Padding(
             padding: 24.p,
@@ -306,18 +405,27 @@ class ClientProfileScreen extends HookConsumerWidget {
                   )
                 else
                   ...bookings.map((b) {
-                    final date = b.bookingDate.toString().split(' ')[0];
+                    // Show the actual EVENT date (service date), not when the
+                    // booking was placed.
+                    final event = b.serviceStart.toLocal();
+                    const mon = [
+                      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+                    ];
                     return _buildAppointmentCard(
                       context,
-                      date.substring(5, 7), // MM
-                      date.substring(8, 10), // DD
+                      mon[event.month - 1],
+                      event.day.toString().padLeft(2, '0'),
                       b.service,
-                      '${_fmtTime(b.serviceStart)} — ${_fmtTime(b.serviceEnd)}',
+                      '${event.day} ${mon[event.month - 1]} ${event.year}'
+                      '  ·  ${_fmtTime(b.serviceStart)} — ${_fmtTime(b.serviceEnd)}',
                       b.serviceEnd.isBefore(DateTime.now())
                           ? 'Completed'
                           : 'Upcoming',
                       isUpcoming:
                           b.serviceEnd.isAfter(DateTime.now()),
+                      amount: '₹${b.totalPrice.toStringAsFixed(0)}'
+                          '${b.balanceDue > 0 ? '  ·  ₹${b.balanceDue.toStringAsFixed(0)} due' : ''}',
                     );
                   }),
               ],
@@ -468,6 +576,33 @@ class ClientProfileScreen extends HookConsumerWidget {
     );
   }
 
+  Widget _buildStat(
+      BuildContext context, String label, String value, Color color) {
+    final crmColors = context.crmColors;
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.w800, color: color)),
+          4.h,
+          Text(label.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                  color: crmColors.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider(CrmTheme crmColors) =>
+      Container(width: 1, height: 34, color: crmColors.border);
+
   Widget _buildAppointmentCard(
     BuildContext context,
     String month,
@@ -476,6 +611,7 @@ class ClientProfileScreen extends HookConsumerWidget {
     String time,
     String status, {
     bool isUpcoming = false,
+    String amount = '',
   }) {
     final crmColors = context.crmColors;
     return Padding(
@@ -516,6 +652,14 @@ class ClientProfileScreen extends HookConsumerWidget {
                     Text(time,
                         style: TextStyle(
                             color: crmColors.textSecondary, fontSize: 13)),
+                    if (amount.isNotEmpty) ...[
+                      2.h,
+                      Text(amount,
+                          style: TextStyle(
+                              color: crmColors.textPrimary,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600)),
+                    ],
                   ],
                 ),
               ),

@@ -18,14 +18,44 @@ String vehicleIdOf(FleetJob job) {
   return '';
 }
 
-/// Human-readable label for a trip in the picker: date + destination.
+/// Name of the main (lead) artist assigned to a job, falling back to any
+/// assistant, then to an empty string when no artist is assigned yet.
+String mainArtistOf(FleetJob job) {
+  String pick(String role) {
+    for (final s in job.assignedStaff) {
+      if (s['roleType'] == role) {
+        final name = (s['artistName'] as String? ?? '').trim();
+        if (name.isNotEmpty) return name;
+      }
+    }
+    return '';
+  }
+
+  final lead = pick('lead');
+  if (lead.isNotEmpty) return lead;
+  return pick('assistant');
+}
+
+/// Human-readable label for a trip in the picker. Identified by the main
+/// artist assigned to the work (not the client), falling back to the booking
+/// number when no artist is assigned yet.
 String _jobLabel(FleetJob job) {
   final d = job.serviceStart.toLocal();
   final date =
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
-  final who = job.customerName.trim();
-  return who.isEmpty ? '$date — ${job.bookingNumber}' : '$date — $who';
+  final artist = mainArtistOf(job);
+  return artist.isEmpty ? '$date — ${job.bookingNumber}' : '$date — $artist';
 }
+
+/// Vehicle-related expense categories a driver can log during a trip.
+const _driverCategories = <(String, String, IconData)>[
+  ('fuel', 'Fuel', Icons.local_gas_station_outlined),
+  ('toll', 'Toll', Icons.toll_outlined),
+  ('parking', 'Parking', Icons.local_parking_outlined),
+  ('food', 'Food', Icons.restaurant_outlined),
+  ('service', 'Service / Repair', Icons.build_outlined),
+  ('other', 'Other', Icons.receipt_long_outlined),
+];
 
 class DriverAddExpenseScreen extends HookConsumerWidget {
   /// Job the expense belongs to. Null when the driver opened the screen from
@@ -41,13 +71,15 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
     final isSaving = useState(false);
     final billImage = useState<String?>(null);
     final billMissing = useState(false);
+    final category = useState('fuel');
     final asyncJobs = ref.watch(driverJobsProvider);
     final jobs = asyncJobs.value ?? const <FleetJob>[];
 
     // Trips the driver can book an expense against. A job with no vehicle
     // attached can't take one, so it never reaches the dropdown.
-    final selectableJobs =
-        jobs.where((j) => vehicleIdOf(j).isNotEmpty).toList();
+    final selectableJobs = jobs
+        .where((j) => vehicleIdOf(j).isNotEmpty)
+        .toList();
 
     final selectedJobId = useState<String?>(jobId);
     // Pre-select when there is exactly one trip to choose from.
@@ -79,7 +111,9 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
 
       if (activeJobId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select the trip this expense belongs to')),
+          const SnackBar(
+            content: Text('Select the trip this expense belongs to'),
+          ),
         );
         return;
       }
@@ -94,7 +128,9 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
       }
       if (job == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Trip not found — pull to refresh and try again')),
+          const SnackBar(
+            content: Text('Trip not found — pull to refresh and try again'),
+          ),
         );
         return;
       }
@@ -106,21 +142,23 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
         );
         return;
       }
-      
+
       isSaving.value = true;
       try {
-        await ref.read(fuelExpenseServiceProvider).saveFuelExpense(
-          vehicleId: vId,
-          category: 'other',
-          notes: descriptionCtrl.text.trim(),
-          date: DateTime.now(),
-          odometerKm: 0,
-          liters: 0,
-          totalAmount: amount,
-          paymentMode: 'cash',
-          station: '',
-          billImage: billImage.value ?? '',
-        );
+        await ref
+            .read(fuelExpenseServiceProvider)
+            .saveFuelExpense(
+              vehicleId: vId,
+              category: category.value,
+              notes: descriptionCtrl.text.trim(),
+              date: DateTime.now(),
+              odometerKm: 0,
+              liters: 0,
+              totalAmount: amount,
+              paymentMode: 'cash',
+              station: '',
+              billImage: billImage.value ?? '',
+            );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Expense added successfully')),
@@ -129,9 +167,9 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed: $e')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Failed: $e')));
         }
       } finally {
         isSaving.value = false;
@@ -139,10 +177,7 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Add Expense'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Add Expense'), centerTitle: true),
       // Scrollable: the form grows with the trip picker and has to stay
       // usable on a short phone screen with the keyboard open.
       body: SingleChildScrollView(
@@ -179,6 +214,7 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
                 )
               else
                 DropdownButtonFormField<String>(
+                  key: const Key('tripPicker'),
                   initialValue: activeJobId,
                   isExpanded: true,
                   decoration: const InputDecoration(
@@ -200,9 +236,39 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
                 ),
               const SizedBox(height: 16),
             ],
+            // Expense category — what the money was spent on.
+            DropdownButtonFormField<String>(
+              key: const Key('categoryPicker'),
+              initialValue: category.value,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              items: [
+                for (final c in _driverCategories)
+                  DropdownMenuItem(
+                    value: c.$1,
+                    child: Row(
+                      children: [
+                        Icon(c.$3, size: 18, color: Colors.grey),
+                        const SizedBox(width: 10),
+                        Text(c.$2),
+                      ],
+                    ),
+                  ),
+              ],
+              onChanged: (v) {
+                if (v != null) category.value = v;
+              },
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: amountCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(
                 labelText: 'Amount (₹)',
                 border: OutlineInputBorder(),
@@ -233,14 +299,17 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
             ElevatedButton(
               onPressed:
                   isSaving.value || (jobId == null && selectableJobs.isEmpty)
-                      ? null
-                      : submitExpense,
+                  ? null
+                  : submitExpense,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
               child: isSaving.value
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Submit Expense', style: TextStyle(fontSize: 16)),
+                  : const Text(
+                      'Submit Expense',
+                      style: TextStyle(fontSize: 16),
+                    ),
             ),
           ],
         ),

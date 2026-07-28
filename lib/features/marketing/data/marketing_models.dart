@@ -27,6 +27,7 @@ class CompetitorSnapshot {
   final int score;
   final String notes;
   final Map<String, String> signalEvidence;
+
   /// Reel / post / ad URL per signal that was manually scored.
   final Map<String, String> signalLinks;
 
@@ -60,24 +61,26 @@ class CompetitorSnapshot {
 
   /// Score breakdown for display: label → points contributed.
   Map<String, int> get breakdown => {
-        if (newCampaign) 'New campaign': 6,
-        if (viralContent) 'Viral content': 5,
-        if (qualityCreative) 'Quality creative': 5,
-        if (followerGrowth) 'Follower growth': 3,
-        if (engagementIncrease) 'Engagement increase': 3,
-        if (newService) 'New service': 2,
-        if (newPartnership) 'New partnership': 2,
-      };
+    if (newCampaign) 'New campaign': 6,
+    if (viralContent) 'Viral content': 5,
+    if (qualityCreative) 'Quality creative': 5,
+    if (followerGrowth) 'Follower growth': 3,
+    if (engagementIncrease) 'Engagement increase': 3,
+    if (newService) 'New service': 2,
+    if (newPartnership) 'New partnership': 2,
+  };
 
   factory CompetitorSnapshot.fromJson(Map<String, dynamic> json) {
-    String cid(dynamic v) => (v is Map) ? (v['_id'] ?? '').toString() : (v ?? '').toString();
+    String cid(dynamic v) =>
+        (v is Map) ? (v['_id'] ?? '').toString() : (v ?? '').toString();
     int i(dynamic v) => (v as num?)?.toInt() ?? 0;
     double d(dynamic v) => (v as num?)?.toDouble() ?? 0;
     bool b(dynamic v) => v == true;
     return CompetitorSnapshot(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       competitorId: cid(json['competitor']),
-      weekOf: DateTime.tryParse(json['weekOf'] as String? ?? '') ?? DateTime.now(),
+      weekOf:
+          DateTime.tryParse(json['weekOf'] as String? ?? '') ?? DateTime.now(),
       followers: d(json['followers']),
       weeklyGrowthPct: d(json['weeklyGrowthPct']),
       engagementRate: d(json['engagementRate']),
@@ -100,11 +103,13 @@ class CompetitorSnapshot {
       notes: json['notes'] as String? ?? '',
       signalEvidence: (json['signalEvidence'] is Map)
           ? (json['signalEvidence'] as Map).map(
-              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
+            )
           : const {},
       signalLinks: (json['signalLinks'] is Map)
           ? (json['signalLinks'] as Map).map(
-              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''))
+              (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
+            )
           : const {},
     );
   }
@@ -114,6 +119,11 @@ class Competitor {
   final String id;
   final String name;
   final String city;
+
+  /// Our own geographics region this competitor operates in. [regionId] is the
+  /// reference; [region] the resolved name for display.
+  final String regionId;
+  final String region;
   final String website;
   final String category;
   final String instagram;
@@ -128,6 +138,8 @@ class Competitor {
     required this.id,
     required this.name,
     this.city = '',
+    this.regionId = '',
+    this.region = '',
     this.website = '',
     this.category = '',
     this.instagram = '',
@@ -148,6 +160,10 @@ class Competitor {
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       city: json['city'] as String? ?? '',
+      regionId: json['regionId'] is Map
+          ? (json['regionId']['_id'] as String? ?? '')
+          : (json['regionId'] as String? ?? ''),
+      region: json['region'] as String? ?? '',
       website: json['website'] as String? ?? '',
       category: json['category'] as String? ?? '',
       instagram: json['instagram'] as String? ?? '',
@@ -163,17 +179,19 @@ class Competitor {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'city': city,
-        'website': website,
-        'category': category,
-        'instagram': instagram,
-        'facebook': facebook,
-        'youtube': youtube,
-        'linkedin': linkedin,
-        'active': active,
-        'notes': notes,
-      };
+    'name': name,
+    'city': city,
+    'regionId': regionId,
+    'region': region,
+    'website': website,
+    'category': category,
+    'instagram': instagram,
+    'facebook': facebook,
+    'youtube': youtube,
+    'linkedin': linkedin,
+    'active': active,
+    'notes': notes,
+  };
 }
 
 /// One row of the Weekly Growth Score ranking board.
@@ -225,22 +243,24 @@ class ScoreSignal {
   final String label;
   final int points;
   final String evidence;
+
   /// Reel / post / ad URL that was scored, if attached.
   final String link;
-  const ScoreSignal(
-      {required this.key,
-      required this.label,
-      required this.points,
-      this.evidence = '',
-      this.link = ''});
+  const ScoreSignal({
+    required this.key,
+    required this.label,
+    required this.points,
+    this.evidence = '',
+    this.link = '',
+  });
 
   factory ScoreSignal.fromJson(Map<String, dynamic> j) => ScoreSignal(
-        key: j['key'] as String? ?? '',
-        label: j['label'] as String? ?? '',
-        points: (j['points'] as num?)?.toInt() ?? 0,
-        evidence: j['evidence'] as String? ?? '',
-        link: j['link'] as String? ?? '',
-      );
+    key: j['key'] as String? ?? '',
+    label: j['label'] as String? ?? '',
+    points: (j['points'] as num?)?.toInt() ?? 0,
+    evidence: j['evidence'] as String? ?? '',
+    link: j['link'] as String? ?? '',
+  );
 }
 
 /// A row in a sub-leaderboard (Top Reels / Websites / Collaborations).
@@ -261,13 +281,13 @@ class LeaderboardEntry {
   });
 
   factory LeaderboardEntry.fromJson(Map<String, dynamic> j) => LeaderboardEntry(
-        rank: (j['rank'] as num?)?.toInt() ?? 0,
-        competitorId: j['competitorId']?.toString() ?? '',
-        name: j['name'] as String? ?? '',
-        city: j['city'] as String? ?? '',
-        metric: (j['metric'] as num?)?.toDouble() ?? 0,
-        score: (j['score'] as num?)?.toInt() ?? 0,
-      );
+    rank: (j['rank'] as num?)?.toInt() ?? 0,
+    competitorId: j['competitorId']?.toString() ?? '',
+    name: j['name'] as String? ?? '',
+    city: j['city'] as String? ?? '',
+    metric: (j['metric'] as num?)?.toDouble() ?? 0,
+    score: (j['score'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// Versioned Growth-Score weights (FR-2.3).

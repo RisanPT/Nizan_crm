@@ -394,6 +394,16 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/sales/leads'),
                         ),
                       ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.event_busy_outlined,
+                          title: 'Cancelled Works',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/sales/cancelled',
+                          onTap: () => context.go('/sales/cancelled'),
+                        ),
+                      ),
                     ],
                   ],
                   if (access.canSeeFinance) ...[

@@ -475,7 +475,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // ── Booking info ────────────────────────────────────────────────────────────
   final addonTotal      = _addonTotal(booking);
   final packageAmount   = _packageAmountFromTotal(booking.totalPrice, addonTotal);
-  final remainingBalance = booking.balanceDue;
+  // remainingBalance is derived later from the printed lines (see invoiceTotal).
 
   final invoiceDate = booking.bookingDate;
   final invoiceDateStr =
@@ -540,10 +540,6 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // ── Services table rows ─────────────────────────────────────────────────────
   final serviceRows = StringBuffer();
 
-  // Per-day charge added on top of each package's base price (mirrors the
-  // booking controller), so each date's line reads base + day charge.
-  const dayCharge = 3000.0;
-
   String datesLabel(List<DateTime> dates) {
     if (dates.isEmpty) return '';
     const months = [
@@ -565,10 +561,15 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   // total drifts by a paisa or two once an invoice has several works.
   double lineCgstTotal = 0;
   double lineSgstTotal = 0;
+  // Sum of every printed line's amount. The invoice total is derived from this
+  // (not booking.totalPrice) so the SERVICES lines always reconcile with the
+  // summary — even for bookings whose stored total predates a pricing fix.
+  double lineAmountTotal = 0;
 
   // Writes one SERVICES line. [subLine] carries the date / assigned time /
   // slot for that day. [incl] is the GST-inclusive amount.
   void writeServiceRow(String name, String subLine, double incl) {
+    lineAmountTotal += incl;
     final rowCgst = gstCgst(incl);
     final rowSgst = gstSgst(incl);
     // Derive the base from the rounded taxes so base + CGST + SGST always
@@ -604,8 +605,9 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
     // every day it covers instead of collapsing into a single total. These sum
     // exactly to the package amount used in the totals block below.
     for (final item in booking.bookingItems) {
-      // ₹3000 is charged per package, not per day.
-      final incl = item.totalPrice + dayCharge;
+      // The ₹3000/package is the advance, not part of the bill — the line
+      // shows the package base price only.
+      final incl = item.totalPrice;
       final label = item.service.trim().isEmpty ? 'Package' : item.service.trim();
       final dates = datesLabel(item.selectedDates);
       final slot = item.eventSlot.trim();
@@ -636,6 +638,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   if (variant != BookingPrintVariant.clientAdvanceReceipt) {
     for (final addon in booking.addons) {
       final addonIncl  = addon.amount * addon.persons;
+      lineAmountTotal += addonIncl;
       final addonCgst  = gstCgst(addonIncl);
       final addonSgst  = gstSgst(addonIncl);
       final addonBase  =
@@ -654,15 +657,29 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   }
 
   // ── Summary numbers ─────────────────────────────────────────────────────────
+  // The invoice total is the sum of the printed lines, not booking.totalPrice —
+  // so the summary always equals what's itemised above. Advance receipts print
+  // only the advance line, so fall back to the stored total there.
+  final invoiceTotal = lineAmountTotal > 0
+      ? double.parse(lineAmountTotal.toStringAsFixed(2))
+      : booking.totalPrice;
+  // Balance recomputed from the line-derived total for the same reason.
+  final remainingBalance = (invoiceTotal -
+          booking.discountAmount -
+          booking.advanceAmount -
+          booking.collectedAmount)
+      .clamp(0, double.infinity)
+      .toDouble();
+
   // Taken from the printed lines so the SERVICES tax columns reconcile exactly
   // with the summary. Falls back to the grand total when no line carried GST
   // (e.g. the advance receipt, which prints no tax columns).
   final totalCgst = lineCgstTotal > 0
       ? double.parse(lineCgstTotal.toStringAsFixed(2))
-      : gstCgst(booking.totalPrice);
+      : gstCgst(invoiceTotal);
   final totalSgst = lineSgstTotal > 0
       ? double.parse(lineSgstTotal.toStringAsFixed(2))
-      : gstSgst(booking.totalPrice);
+      : gstSgst(invoiceTotal);
   final totalGst  = double.parse((totalCgst + totalSgst).toStringAsFixed(2));
 
   // ── Discount line ────────────────────────────────────────────────────────────
@@ -765,7 +782,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
     <table class="summary-table">
       <tr class="sum-row">
         <td colspan="2" class="right sum-label">${variant == BookingPrintVariant.clientAdvanceReceipt ? "Total Received" : (variant == BookingPrintVariant.clientConfirmation ? "Subtotal" : "Subtotal (Incl. GST)")}</td>
-        <td class="right sum-val">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : inr(booking.totalPrice)}</td>
+        <td class="right sum-val">${variant == BookingPrintVariant.clientAdvanceReceipt ? inr(booking.advanceAmount) : inr(invoiceTotal)}</td>
       </tr>
       ${(variant == BookingPrintVariant.clientConfirmation || variant == BookingPrintVariant.clientAdvanceReceipt) ? "" : '''<tr class="sum-row gst-breakdown-row">
         <td class="right sum-label sub-indent" colspan="2">CGST @ 2.5%</td>
@@ -855,8 +872,6 @@ Future<void> printMultipleBookingDetails(
   // Build a virtual combined Booking from all selectedBookings.
   // Use the first booking as the base for client info (name, phone, address, etc.)
   // then merge all bookingItems (or synthesize one per booking if no items).
-  const double dayCharge = 3000.0;
-
   final base = selectedBookings.first;
 
   // Merge all BookingItems from all selected bookings.
@@ -866,9 +881,8 @@ Future<void> printMultipleBookingDetails(
     if (b.bookingItems.isNotEmpty) {
       mergedItems.addAll(b.bookingItems);
     } else {
-      // Synthesise from root-level fields
-      // One synthesised package, so back out a single package charge.
-      final basePrice = b.totalPrice - dayCharge;
+      // Synthesise from root-level fields. totalPrice already excludes the
+      // per-package advance, so use it directly as the item base.
       mergedItems.add(BookingItem(
         packageId: b.packageId,
         service: b.service,
@@ -876,18 +890,17 @@ Future<void> printMultipleBookingDetails(
         selectedDates: b.selectedDates.isNotEmpty
             ? b.selectedDates
             : [b.bookingDate],
-        totalPrice: basePrice > 0 ? basePrice : b.totalPrice,
+        totalPrice: b.totalPrice,
         advanceAmount: b.advanceAmount,
         assignedStaff: b.assignedStaff,
       ));
     }
   }
 
-  // Compute combined totals (mirrors the aggregate logic in manage_booking_screen).
-  // ₹3000 is charged per package, so total = Σ base + (package count × 3000).
-  final double combinedTotalPrice = mergedItems.fold<double>(
-          0.0, (sum, item) => sum + item.totalPrice) +
-      (mergedItems.length * dayCharge);
+  // Combined total = Σ package base prices. The ₹3000/package is the advance,
+  // not part of the bill (mirrors manage_booking_screen + the backend).
+  final double combinedTotalPrice =
+      mergedItems.fold<double>(0.0, (sum, item) => sum + item.totalPrice);
   final double combinedAdvance =
       mergedItems.fold(0.0, (sum, item) => sum + item.advanceAmount);
 

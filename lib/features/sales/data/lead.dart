@@ -6,17 +6,22 @@ class Lead {
   final String source;
   final String location;
   final String leadType;
-  final DateTime leadDate;       // manually set: actual date lead was received
+  final DateTime leadDate; // manually set: actual date lead was received
   final DateTime enquiryDate;
   final DateTime? bookedDate;
   final DateTime? followUpDate; // date+time for follow-up reminder
-  final String? assignedTo;      // ID of the assigned salesman user
+  /// How many times a follow-up has been scheduled for this lead.
+  final int followUpCount;
+  final String? assignedTo; // ID of the assigned salesman user
   final String status;
+
   /// How likely the lead is to close: Hot / Warm / Cold. Tracked separately
   /// from [status] so a lead can be e.g. "Follow-up" and "Hot" at once.
   final String priority;
+
   /// Set when a booking exists for this lead's phone number.
   final String? bookingId;
+
   /// Geography copied from the booking once the lead converts.
   final String address;
   final String pincode;
@@ -39,6 +44,7 @@ class Lead {
     required this.enquiryDate,
     this.bookedDate,
     this.followUpDate,
+    this.followUpCount = 0,
     this.assignedTo,
     required this.status,
     this.priority = 'Warm',
@@ -78,6 +84,7 @@ class Lead {
       followUpDate: json['followUpDate'] != null
           ? DateTime.parse(json['followUpDate'] as String).toLocal()
           : null,
+      followUpCount: (json['followUpCount'] as num?)?.toInt() ?? 0,
       assignedTo: json['assignedTo'] is Map
           ? json['assignedTo']['_id'] as String?
           : json['assignedTo'] as String?,
@@ -134,6 +141,7 @@ class Lead {
     DateTime? enquiryDate,
     DateTime? bookedDate,
     DateTime? followUpDate,
+    int? followUpCount,
     String? assignedTo,
     String? status,
     String? priority,
@@ -154,6 +162,7 @@ class Lead {
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
       followUpDate: followUpDate ?? this.followUpDate,
+      followUpCount: followUpCount ?? this.followUpCount,
       assignedTo: assignedTo ?? this.assignedTo,
       status: status ?? this.status,
       priority: priority ?? this.priority,

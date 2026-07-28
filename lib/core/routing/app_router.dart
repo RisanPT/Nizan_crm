@@ -26,6 +26,7 @@ import 'package:nizan_crm/features/accounts/presentation/screens/accounts_invoic
 import '../../presentation/screens/login_screen.dart';
 import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
 import '../../features/sales/presentation/screens/sales_quarterly_screen.dart';
+import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
@@ -117,6 +118,35 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   return true; // unknown routes — let the 404 handle it
 }
 
+/// A route the signed-in user is guaranteed to be able to open.
+///
+/// Prefers their configured landing page, but ONLY when they can actually
+/// access it. A custom role (e.g. "Sales Manager") resolves to
+/// [AppRole.unknown], whose default home is '/', and its landing page may be
+/// left as '/' too — yet it might not have the `dashboard` permission. Without
+/// this check the guard would redirect '/' → '/', which go_router treats as a
+/// no-op, so the dashboard would render despite being unticked. Here we fall
+/// back to the first section the role can actually reach.
+String landingRouteFor(Access access, {bool inventoryAccess = false}) {
+  final configured = access.homeRoute;
+  if (configured.isNotEmpty &&
+      isRouteAllowed(configured, access, inventoryAccess: inventoryAccess)) {
+    return configured;
+  }
+  if (access.canSeeDashboard) return '/';
+  if (access.canSeeSales) return '/sales/dashboard';
+  if (access.canSeeBookings) return '/booking/requests';
+  if (access.canSeeClients) return '/clients';
+  if (access.canSeeCalendar) return '/calendar';
+  if (access.canSeeFinance) return '/finance';
+  if (access.canSeePayables) return '/accounts/dashboard';
+  if (access.canManageMarketing) return '/marketing/dashboard';
+  if (access.canManageInventory) return '/inventory';
+  if (access.canSeeFleet) return '/fleet/assignments';
+  if (access.canSeeStaff) return '/staff';
+  return '/login';
+}
+
 final goRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
 
@@ -137,17 +167,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         return isLoginRoute ? null : '/login';
       }
 
-      // After login, redirect to role-specific home
+      final access = Access.of(auth.session);
+      final inventoryAccess = auth.session?.inventoryAccess ?? false;
+
+      // After login, land on a page the role can actually open (respecting its
+      // configured home when accessible, else the first reachable section).
       if (isLoadingRoute || isLoginRoute) {
-        final role = AppRole.fromString(auth.session?.role);
-        return role.homeRoute;
+        return landingRouteFor(access, inventoryAccess: inventoryAccess);
       }
 
-      // Role-based route guards
-      final access = Access.of(auth.session);
-      if (!isRouteAllowed(path, access,
-          inventoryAccess: auth.session?.inventoryAccess ?? false)) {
-        return access.homeRoute;
+      // Role-based route guards.
+      if (!isRouteAllowed(path, access, inventoryAccess: inventoryAccess)) {
+        return landingRouteFor(access, inventoryAccess: inventoryAccess);
       }
 
       return null;
@@ -196,6 +227,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Day Report';
           } else if (state.uri.path == '/sales/quarterly') {
             title = 'Quarterly Performance';
+          } else if (state.uri.path == '/sales/cancelled') {
+            title = 'Cancelled Works';
           } else if (state.uri.path == '/sales/leads') {
             title = 'Leads Management';
           } else if (state.uri.path.startsWith('/sales/leads/')) {
@@ -358,6 +391,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               dateBasis:
                   state.uri.queryParameters['basis'] ?? 'event_date',
             ),
+          ),
+          GoRoute(
+            path: '/sales/cancelled',
+            builder: (context, state) => const CancelledWorksScreen(),
           ),
           GoRoute(
             path: '/sales/leads',

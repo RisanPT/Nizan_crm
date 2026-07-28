@@ -753,7 +753,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             .toList();
             
         final printTotalPrice = filteredItems.fold<double>(
-            0.0, (sum, item) => sum + item.totalPrice + 3000);
+            0.0, (sum, item) => sum + item.totalPrice);
         final printAdvanceAmount = filteredItems.fold<double>(
             0.0, (sum, item) => sum + item.advanceAmount);
             
@@ -870,11 +870,10 @@ class ManageBookingScreen extends HookConsumerWidget {
       // ALL items — never from just the item currently being edited —
       // otherwise saving one package corrupts the price/dates of the whole
       // booking. For a single-item booking we keep the existing behaviour.
-      const double extraDateChargePerPackage = 3000;
       // Roll totals up from the items whenever the booking is item-based —
-      // even a single package spanning several days needs the extra-date
-      // charge and per-day advance aggregated. Only packageId keeps a distinct
-      // "multiple packages" special-case (see copyWith below).
+      // even a single package spanning several days aggregates its per-package
+      // advance. Only packageId keeps a distinct "multiple packages"
+      // special-case (see copyWith below).
       final bool useItemAggregates = updatedBookingItems.isNotEmpty;
       final bool isMultiItem = updatedBookingItems.length > 1;
 
@@ -901,13 +900,11 @@ class ManageBookingScreen extends HookConsumerWidget {
         mergedItemDates = normalizedBookingDates;
       }
 
-      // ₹3000 per PACKAGE (package count × 3000), mirroring the backend.
-      final double aggregateDayCharge =
-          updatedBookingItems.length * extraDateChargePerPackage;
+      // Total = Σ package base prices + add-ons. The ₹3000/package is the
+      // advance (aggregateAdvance below), NOT an addition to the bill.
       final double aggregateTotalPrice =
           updatedBookingItems.fold(0.0, (sum, item) => sum + item.totalPrice) +
-          addonsTotal +
-          aggregateDayCharge;
+          addonsTotal;
 
       // Advance: each package's advance, once per package.
       final double aggregateAdvance = updatedBookingItems.fold(
@@ -2475,7 +2472,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                         onPressed: () async {
                           final singleItemBooking = booking.copyWith(
                             bookingItems: [item],
-                            totalPrice: item.totalPrice + 3000,
+                            totalPrice: item.totalPrice,
                             advanceAmount: item.advanceAmount,
                           );
                           await printBookingDetails(
@@ -4140,8 +4137,6 @@ class ManageBookingScreen extends HookConsumerWidget {
     Booking booking,
     List<BookingItem> items,
   ) {
-    const double extraDateChargePerPackage = 3000;
-
     // Distinct, chronologically-sorted union of every item's dates.
     final seen = <String>{};
     final merged = <DateTime>[];
@@ -4158,11 +4153,10 @@ class ManageBookingScreen extends HookConsumerWidget {
       0.0,
       (sum, a) => sum + (a.amount * a.persons),
     );
-    final dayCharge = items.length * extraDateChargePerPackage;
+    // Total = Σ package base prices + add-ons. The ₹3000/package is the
+    // advance, not part of the bill.
     final total =
-        items.fold<double>(0.0, (s, i) => s + i.totalPrice) +
-        addonsTotal +
-        dayCharge;
+        items.fold<double>(0.0, (s, i) => s + i.totalPrice) + addonsTotal;
     final advance = items.fold<double>(0.0, (s, i) => s + i.advanceAmount);
 
     final service = <String>{

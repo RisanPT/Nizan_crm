@@ -208,9 +208,42 @@ const Map<String, String> _keralaPincodes = {
   '671543': 'Kasaragod',
 };
 
-/// Returns the Kerala district name for the given 6-digit [pincode],
-/// or `null` if the pincode is not in the Kerala database.
-String? keralaDistrict(String pincode) => _keralaPincodes[pincode.trim()];
+/// Builds `prefix → district`, keeping ONLY prefixes of [len] digits that map
+/// to a single district in the exact table — so a pincode not listed
+/// individually can be resolved without guessing across district boundaries.
+Map<String, String> _prefixMap(int len) {
+  final byPrefix = <String, Set<String>>{};
+  for (final entry in _keralaPincodes.entries) {
+    if (entry.key.length < len) continue;
+    byPrefix
+        .putIfAbsent(entry.key.substring(0, len), () => <String>{})
+        .add(entry.value);
+  }
+  final resolved = <String, String>{};
+  byPrefix.forEach((prefix, districts) {
+    if (districts.length == 1) resolved[prefix] = districts.first;
+  });
+  return resolved;
+}
+
+/// 4-digit prefixes are almost always a single district (e.g. 6736 → Kozhikode);
+/// 3-digit is a coarser fallback for the ones that stay unambiguous.
+final Map<String, String> _prefix4 = _prefixMap(4);
+final Map<String, String> _prefix3 = _prefixMap(3);
+
+/// Returns the Kerala district name for a [pincode]. Tries an exact match, then
+/// the 4-digit prefix, then the 3-digit prefix. `null` if it can't be resolved.
+String? keralaDistrict(String pincode) {
+  final p = pincode.trim();
+  final exact = _keralaPincodes[p];
+  if (exact != null) return exact;
+  if (p.length >= 4) {
+    final byFour = _prefix4[p.substring(0, 4)];
+    if (byFour != null) return byFour;
+  }
+  if (p.length >= 3) return _prefix3[p.substring(0, 3)];
+  return null;
+}
 
 /// Returns `true` if the [pincode] is a known Kerala pincode.
 bool isKeralaPin(String pincode) => _keralaPincodes.containsKey(pincode.trim());

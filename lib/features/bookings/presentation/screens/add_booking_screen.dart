@@ -15,8 +15,6 @@ import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/district.dart';
 
-const double kExtraDateChargePerPackage = 3000;
-
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
 
@@ -60,7 +58,6 @@ class AddBookingScreen extends HookConsumerWidget {
     final totalPrice = useState<double>(0);
     final advanceAmount = useState<double>(0);
     final basePackageAmount = useState<double>(0);
-    final extraDateCharge = useState<double>(0);
     final totalPackageCount = bookingCart.value.fold<int>(
       0,
       (sum, item) => sum + item.quantity,
@@ -129,7 +126,6 @@ class AddBookingScreen extends HookConsumerWidget {
       final bookingItems = buildBookingItems();
       if (packages.isEmpty || bookingItems.isEmpty) {
         basePackageAmount.value = 0;
-        extraDateCharge.value = 0;
         totalPrice.value = 0;
         advanceAmount.value = 0;
         return;
@@ -141,12 +137,10 @@ class AddBookingScreen extends HookConsumerWidget {
         0,
         (sum, item) => sum + item.totalPrice,
       );
-      // ₹3000 is charged PER PACKAGE — package count × 3000. Two packages on
-      // the same day cost the same as two packages on different days.
-      extraDateCharge.value =
-          bookingItems.length * kExtraDateChargePerPackage;
-      totalPrice.value = basePackageAmount.value + extraDateCharge.value;
-      // Advance is likewise per package, once each.
+      // Total = Σ package base prices. The ₹3000/package is the ADVANCE (below),
+      // not an addition to the bill.
+      totalPrice.value = basePackageAmount.value;
+      // Advance is per package, once each (package count × ₹3000).
       advanceAmount.value = bookingItems.fold<double>(
         0,
         (sum, item) => sum + item.advanceAmount,
@@ -1531,26 +1525,6 @@ class AddBookingScreen extends HookConsumerWidget {
                                 children: [
                                   Expanded(
                                     child: _summaryBox(
-                                      label: 'BASE PACKAGE AMOUNT',
-                                      value:
-                                          '₹ ${basePackageAmount.value.toStringAsFixed(0)}',
-                                      border: crmColors.border,
-                                      valueColor: crmColors.textPrimary,
-                                    ),
-                                  ),
-                                  16.w,
-                                  Expanded(
-                                    child: _summaryBox(
-                                      label: 'PACKAGE CHARGE (₹3000 EACH)',
-                                      value:
-                                          '₹ ${extraDateCharge.value.toStringAsFixed(0)}',
-                                      border: crmColors.border,
-                                      valueColor: crmColors.warning,
-                                    ),
-                                  ),
-                                  16.w,
-                                  Expanded(
-                                    child: _summaryBox(
                                       label: 'TOTAL AMOUNT',
                                       value:
                                           '₹ ${totalPrice.value.toStringAsFixed(0)}',
@@ -1561,11 +1535,21 @@ class AddBookingScreen extends HookConsumerWidget {
                                   16.w,
                                   Expanded(
                                     child: _summaryBox(
-                                      label: 'ADVANCE TO CONFIRM',
+                                      label: 'ADVANCE (₹3000 / PACKAGE)',
                                       value:
                                           '₹ ${advanceAmount.value.toStringAsFixed(0)}',
                                       border: crmColors.border,
                                       valueColor: crmColors.accent,
+                                    ),
+                                  ),
+                                  16.w,
+                                  Expanded(
+                                    child: _summaryBox(
+                                      label: 'BALANCE DUE',
+                                      value:
+                                          '₹ ${(totalPrice.value - advanceAmount.value).clamp(0, double.infinity).toStringAsFixed(0)}',
+                                      border: crmColors.border,
+                                      valueColor: crmColors.textPrimary,
                                     ),
                                   ),
                                   16.w,

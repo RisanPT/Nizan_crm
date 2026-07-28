@@ -60,4 +60,58 @@ void _permissionDrivenAccessTests() {
       expect(admin.canSeeSettings, isTrue);
     });
   });
+
+  _salesManagerRoleTests();
+}
+
+/// A custom "Sales Manager" role resolves to [AppRole.unknown] with explicit
+/// granted permissions and (often) a landing page left at '/'.
+void _salesManagerRoleTests() {
+  group('Custom Sales Manager role', () {
+    const salesManager = Access(
+      AppRole.unknown,
+      {'clients', 'calendar', 'bookings', 'sales', 'marketing'},
+      configuredHomeRoute: '/',
+    );
+
+    test('main dashboard stays hidden when not ticked', () {
+      expect(salesManager.canSeeDashboard, isFalse);
+      expect(isRouteAllowed('/', salesManager), isFalse);
+    });
+
+    test('is not stranded on the dashboard it cannot open', () {
+      // Configured home is '/', but they lack the dashboard permission — the
+      // landing route must send them somewhere they can actually reach instead
+      // of looping back to '/'.
+      final landing = landingRouteFor(salesManager);
+      expect(landing, isNot('/'));
+      expect(isRouteAllowed(landing, salesManager), isTrue);
+      expect(landing, '/sales/dashboard');
+    });
+
+    test('can add a booking with the bookings permission', () {
+      expect(salesManager.canSeeBookings, isTrue);
+      expect(isRouteAllowed('/booking/add', salesManager), isTrue);
+      expect(isRouteAllowed('/booking/requests', salesManager), isTrue);
+    });
+
+    test('a configured, accessible home is respected', () {
+      const withSalesHome = Access(
+        AppRole.unknown,
+        {'sales', 'bookings'},
+        configuredHomeRoute: '/sales/dashboard',
+      );
+      expect(landingRouteFor(withSalesHome), '/sales/dashboard');
+    });
+
+    test('dashboard, once ticked, lets them land on /', () {
+      const withDashboard = Access(
+        AppRole.unknown,
+        {'dashboard', 'sales'},
+        configuredHomeRoute: '/',
+      );
+      expect(isRouteAllowed('/', withDashboard), isTrue);
+      expect(landingRouteFor(withDashboard), '/');
+    });
+  });
 }

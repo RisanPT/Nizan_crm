@@ -118,6 +118,15 @@ _ParsedLead _parseClipboardText(String raw) {
 bool _matchKey(String key, List<String> options) =>
     options.any((o) => key.contains(o));
 
+/// Selectable lead pipeline statuses. "Qualified" was retired — legacy leads
+/// still carrying it are coerced via [coerceLeadStatus] so dropdowns don't crash.
+const List<String> kLeadStatuses = ['New', 'Contacted', 'Follow-up', 'Converted', 'Lost'];
+const List<String> kLeadStatusFilters = ['All', ...kLeadStatuses];
+
+/// Map a possibly-legacy status onto a selectable one so a status dropdown
+/// never gets a `value` that isn't among its items (which would assert).
+String coerceLeadStatus(String s) => kLeadStatuses.contains(s) ? s : 'Contacted';
+
 String _fmtDate(DateTime d) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return '${d.day.toString().padLeft(2, '0')}-${months[d.month - 1]}-${d.year}';
@@ -361,7 +370,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         onChanged: (val) {
                                           if (val != null) onFilterChange(selectedStatus, val);
                                         },
-                                        items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
+                                        items: kLeadStatusFilters.map((s) {
                                           return DropdownMenuItem(
                                             value: s,
                                             child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
@@ -501,7 +510,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   onChanged: (val) {
                                     if (val != null) onFilterChange(selectedStatus, val);
                                   },
-                                  items: ['All', 'New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost'].map((s) {
+                                  items: kLeadStatusFilters.map((s) {
                                     return DropdownMenuItem(
                                       value: s,
                                       child: Text(s == 'All' ? 'All Statuses' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -835,7 +844,7 @@ class _LeadForm extends HookConsumerWidget {
     final enquiryDate   = useState(initialLead?.enquiryDate ?? DateTime.now());
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
-    final status        = useState(initialLead?.status ?? 'New');
+    final status        = useState(coerceLeadStatus(initialLead?.status ?? 'New'));
     final priority      = useState(initialLead?.priority ?? 'Warm');
     final assignedTo    = useState<String?>(initialLead?.assignedTo);
     final asyncUsers    = ref.watch(crmUsersProvider);
@@ -900,6 +909,15 @@ class _LeadForm extends HookConsumerWidget {
       if (nameCtrl.text.isEmpty || phoneCtrl.text.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Name and Phone are required')),
+        );
+        return;
+      }
+      // A lost lead must record WHY — block the update until a reason is given.
+      if (status.value == 'Lost' && reasonCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter a reason before marking this lead as Lost'),
+          ),
         );
         return;
       }
@@ -1197,7 +1215,7 @@ class _LeadForm extends HookConsumerWidget {
             labelText: 'Status',
             prefixIcon: Icon(Icons.info_outline),
           ),
-          items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
+          items: kLeadStatuses
               .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (v) {
@@ -1882,6 +1900,25 @@ class _LeadCardState extends State<_LeadCard> {
                         ],
                       ),
                   ],
+                  // How many times this lead has been followed up — shown even
+                  // after it has moved off the Follow-up stage.
+                  if (lead.followUpCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.repeat_rounded, size: 14, color: Color(0xFFF97316)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${lead.followUpCount} follow-up${lead.followUpCount == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFF97316),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (lead.remarks.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Container(
@@ -2259,7 +2296,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    final status = useState(lead.status);
+    final status = useState(coerceLeadStatus(lead.status));
     final followUpDate = useState<DateTime?>(lead.followUpDate);
     final remarksCtrl = useTextEditingController(text: lead.remarks);
     final reasonCtrl = useTextEditingController(text: lead.reason);
@@ -2287,6 +2324,15 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
     }
 
     Future<void> saveOutcome() async {
+      // A lost lead must record WHY — block the update until a reason is given.
+      if (status.value == 'Lost' && reasonCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter a reason before marking this lead as Lost'),
+          ),
+        );
+        return;
+      }
       isSaving.value = true;
       try {
         final dio = ref.read(dioProvider);
@@ -2369,7 +2415,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
                   labelText: 'Select Status / Outcome *',
                   prefixIcon: Icon(Icons.info_outline),
                 ),
-                items: ['New', 'Contacted', 'Qualified', 'Follow-up', 'Converted', 'Lost']
+                items: kLeadStatuses
                     .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                     .toList(),
                 onChanged: (v) {

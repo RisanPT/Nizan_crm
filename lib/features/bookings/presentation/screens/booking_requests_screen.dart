@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mode_sheet.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
@@ -130,7 +131,16 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                     ],
                   ),
                 ),
-                if (!isMobile)
+                // Create a booking from here too — the Booking section grants
+                // 'bookings' access, but until now a new booking could only be
+                // started from the Calendar (which needs a separate permission).
+                OutlinedButton.icon(
+                  onPressed: () => showAddBookingModeChooser(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(isMobile ? 'New' : 'New Booking'),
+                ),
+                if (!isMobile) ...[
+                  12.w,
                   FilledButton.icon(
                     onPressed: _bulkSaving || _selectedIds.isEmpty
                         ? null
@@ -144,6 +154,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                         : const Icon(Icons.done_all),
                     label: Text('Bulk Accept (${_selectedIds.length})'),
                   ),
+                ],
               ],
             ),
             24.h,

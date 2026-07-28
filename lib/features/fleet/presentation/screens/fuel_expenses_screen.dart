@@ -27,12 +27,26 @@ class FuelExpensesScreen extends HookConsumerWidget {
     ('parking', 'Parking'),
     ('service', 'Service'),
     ('other', 'Other'),
+    ('outsource_salary', 'Outsource Driver Salary'),
   ];
+
+  /// Categories that aren't tied to a vehicle. Everything else requires one.
+  static const _vehiclelessCategories = {'outsource_salary'};
 
   String _formatDate(DateTime value) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${value.day.toString().padLeft(2, '0')} ${months[value.month - 1]} ${value.year}';
   }
@@ -47,6 +61,16 @@ class FuelExpensesScreen extends HookConsumerWidget {
     if (value >= 100000) return '₹${(value / 100000).toStringAsFixed(1)}L';
     if (value >= 1000) return '₹${(value / 1000).toStringAsFixed(1)}k';
     return '₹${value.toStringAsFixed(0)}';
+  }
+
+  /// What an expense row leads with: the vehicle, or — for an outsourced
+  /// salary, which has no vehicle — the driver who was paid.
+  String? _expenseSubject(FuelExpense e) {
+    if (e.category == 'outsource_salary') {
+      final name = e.driver?.name.trim() ?? '';
+      return name.isEmpty ? 'Driver salary' : name;
+    }
+    return e.vehicle?.name;
   }
 
   String _categoryLabel(String category) {
@@ -70,6 +94,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
         return Icons.local_parking_outlined;
       case 'service':
         return Icons.build_outlined;
+      case 'outsource_salary':
+        return Icons.badge_outlined;
       default:
         return Icons.receipt_long_outlined;
     }
@@ -86,6 +112,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
         return colors.accent;
       case 'service':
         return colors.success;
+      case 'outsource_salary':
+        return colors.destructive;
       default:
         return colors.textSecondary;
     }
@@ -107,7 +135,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
     final asyncVehicles = ref.watch(vehiclesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
     // Full list drives the KPI totals in the mobile header.
-    final allExpenses = ref.watch(fuelExpensesProvider).value ?? const <FuelExpense>[];
+    final allExpenses =
+        ref.watch(fuelExpensesProvider).value ?? const <FuelExpense>[];
 
     Future<void> openExpenseDialog([FuelExpense? expense]) async {
       final odometerCtrl = TextEditingController(
@@ -131,9 +160,11 @@ class FuelExpensesScreen extends HookConsumerWidget {
       var paymentMode = expense?.paymentMode ?? 'cash';
       var selectedDate = expense?.date ?? DateTime.now();
       // Bill / screenshot proof — mandatory before an expense can be saved.
-      String? billImage =
-          (expense?.billImage.isNotEmpty ?? false) ? expense!.billImage : null;
+      String? billImage = (expense?.billImage.isNotEmpty ?? false)
+          ? expense!.billImage
+          : null;
       var billMissing = false;
+      var vehicleMissing = false;
 
       await showDialog(
         context: context,
@@ -153,15 +184,10 @@ class FuelExpensesScreen extends HookConsumerWidget {
               )
               .toList();
           final driverOptions = [
-            const DropdownMenuItem(
-              value: '',
-              child: Text('Unassigned'),
-            ),
+            const DropdownMenuItem(value: '', child: Text('Unassigned')),
             ...drivers.map(
-              (driver) => DropdownMenuItem(
-                value: driver.id,
-                child: Text(driver.name),
-              ),
+              (driver) =>
+                  DropdownMenuItem(value: driver.id, child: Text(driver.name)),
             ),
           ];
           final hasSelectedVehicle = vehicleOptions.any(
@@ -172,244 +198,274 @@ class FuelExpensesScreen extends HookConsumerWidget {
           );
 
           return StatefulBuilder(
-            builder: (context, setState) => AlertDialog(
-              title: Text(
-                expense == null ? 'Add Expense' : 'Edit Expense',
-              ),
-              content: SizedBox(
-                width: isMobile ? double.maxFinite : 460,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        items: _expenseCategories
-                            .map(
-                              (category) => DropdownMenuItem(
-                                value: category.$1,
-                                child: Text(category.$2),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedCategory = value);
-                          }
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Expense Category',
-                        ),
-                      ),
-                      16.h,
-                      DropdownButtonFormField<String>(
-                        initialValue:
-                            hasSelectedVehicle ? selectedVehicleId : null,
-                        items: vehicleOptions,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedVehicleId = value);
-                          }
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Vehicle',
-                        ),
-                      ),
-                      16.h,
-                      DropdownButtonFormField<String>(
-                        initialValue: hasSelectedDriver ? selectedDriverId : '',
-                        items: driverOptions,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => selectedDriverId = value);
-                          }
-                        },
-                        decoration: const InputDecoration(labelText: 'Driver'),
-                      ),
-                      16.h,
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: selectedDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null) {
-                            setState(() => selectedDate = picked);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
+            builder: (context, setState) {
+              final isSalary = _vehiclelessCategories.contains(
+                selectedCategory,
+              );
+              return AlertDialog(
+                title: Text(expense == null ? 'Add Expense' : 'Edit Expense'),
+                content: SizedBox(
+                  width: isMobile ? double.maxFinite : 460,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory,
+                          items: _expenseCategories
+                              .map(
+                                (category) => DropdownMenuItem(
+                                  value: category.$1,
+                                  child: Text(category.$2),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => selectedCategory = value);
+                            }
+                          },
                           decoration: const InputDecoration(
-                            labelText: 'Expense Date',
-                            suffixIcon: Icon(Icons.calendar_today_outlined),
+                            labelText: 'Expense Category',
                           ),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              _formatDate(selectedDate),
+                        ),
+                        16.h,
+                        // A salary isn't tied to a vehicle, so the picker is
+                        // hidden for it; every other category needs one.
+                        if (!isSalary) ...[
+                          DropdownButtonFormField<String>(
+                            initialValue: hasSelectedVehicle
+                                ? selectedVehicleId
+                                : null,
+                            items: vehicleOptions,
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  selectedVehicleId = value;
+                                  vehicleMissing = false;
+                                });
+                              }
+                            },
+                            decoration: InputDecoration(
+                              labelText: 'Vehicle',
+                              errorText: vehicleMissing
+                                  ? 'Please select a vehicle'
+                                  : null,
+                            ),
+                          ),
+                          16.h,
+                        ],
+                        DropdownButtonFormField<String>(
+                          initialValue: hasSelectedDriver
+                              ? selectedDriverId
+                              : '',
+                          items: driverOptions,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => selectedDriverId = value);
+                            }
+                          },
+                          decoration: InputDecoration(
+                            labelText: isSalary
+                                ? 'Outsourced Driver'
+                                : 'Driver',
+                            helperText: isSalary
+                                ? 'Who this salary was paid to'
+                                : null,
+                          ),
+                        ),
+                        16.h,
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              setState(() => selectedDate = picked);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Expense Date',
+                              suffixIcon: Icon(Icons.calendar_today_outlined),
+                            ),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(_formatDate(selectedDate)),
                             ),
                           ),
                         ),
-                      ),
-                      16.h,
-                      if (selectedCategory == 'fuel') ...[
+                        16.h,
+                        if (selectedCategory == 'fuel') ...[
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: odometerCtrl,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Odometer (KM)',
+                                  ),
+                                ),
+                              ),
+                              16.w,
+                              Expanded(
+                                child: TextField(
+                                  controller: litersCtrl,
+                                  keyboardType:
+                                      const TextInputType.numberWithOptions(
+                                        decimal: true,
+                                      ),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Liters',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          16.h,
+                        ],
                         Row(
                           children: [
                             Expanded(
                               child: TextField(
-                                controller: odometerCtrl,
-                                keyboardType: TextInputType.number,
+                                controller: amountCtrl,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
                                 decoration: const InputDecoration(
-                                  labelText: 'Odometer (KM)',
+                                  labelText: 'Total Amount',
                                 ),
                               ),
                             ),
                             16.w,
                             Expanded(
-                              child: TextField(
-                                controller: litersCtrl,
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
+                              child: DropdownButtonFormField<String>(
+                                initialValue: paymentMode,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'cash',
+                                    child: Text('Cash'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'upi',
+                                    child: Text('UPI'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'card',
+                                    child: Text('Card'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'credit',
+                                    child: Text('Credit'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'other',
+                                    child: Text('Other'),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => paymentMode = value);
+                                  }
+                                },
                                 decoration: const InputDecoration(
-                                  labelText: 'Liters',
+                                  labelText: 'Payment Mode',
                                 ),
                               ),
                             ),
                           ],
                         ),
                         16.h,
-                      ],
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: amountCtrl,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              decoration: const InputDecoration(
-                                labelText: 'Total Amount',
-                              ),
-                            ),
+                        TextField(
+                          controller: stationCtrl,
+                          decoration: InputDecoration(
+                            labelText: selectedCategory == 'fuel'
+                                ? 'Fuel Station'
+                                : 'Vendor / Place',
                           ),
-                          16.w,
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: paymentMode,
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'cash',
-                                  child: Text('Cash'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'upi',
-                                  child: Text('UPI'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'card',
-                                  child: Text('Card'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'credit',
-                                  child: Text('Credit'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'other',
-                                  child: Text('Other'),
-                                ),
-                              ],
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() => paymentMode = value);
-                                }
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Payment Mode',
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      16.h,
-                      TextField(
-                        controller: stationCtrl,
-                        decoration: InputDecoration(
-                          labelText: selectedCategory == 'fuel'
-                              ? 'Fuel Station'
-                              : 'Vendor / Place',
                         ),
-                      ),
-                      16.h,
-                      TextField(
-                        controller: notesCtrl,
-                        maxLines: 3,
-                        decoration: const InputDecoration(labelText: 'Notes'),
-                      ),
-                      16.h,
-                      BillAttachmentField(
-                        value: billImage,
-                        isMissing: billMissing,
-                        onChanged: (url) => setState(() {
-                          billImage = url;
-                          if (url != null) billMissing = false;
-                        }),
-                      ),
-                    ],
+                        16.h,
+                        TextField(
+                          controller: notesCtrl,
+                          maxLines: 3,
+                          decoration: const InputDecoration(labelText: 'Notes'),
+                        ),
+                        16.h,
+                        BillAttachmentField(
+                          value: billImage,
+                          isMissing: billMissing,
+                          onChanged: (url) => setState(() {
+                            billImage = url;
+                            if (url != null) billMissing = false;
+                          }),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    // Proof of spend is mandatory.
-                    if (billImage == null || billImage!.isEmpty) {
-                      setState(() => billMissing = true);
-                      return;
-                    }
-                    await ref.read(fuelExpenseServiceProvider).saveFuelExpense(
-                          id: expense?.id,
-                          vehicleId: selectedVehicleId,
-                          driverId: selectedDriverId,
-                          category: selectedCategory,
-                          date: selectedDate,
-                          odometerKm:
-                              double.tryParse(odometerCtrl.text.trim()) ?? 0,
-                          liters:
-                              double.tryParse(litersCtrl.text.trim()) ?? 0,
-                          totalAmount:
-                              double.tryParse(amountCtrl.text.trim()) ?? 0,
-                          paymentMode: paymentMode,
-                          station: stationCtrl.text.trim(),
-                          notes: notesCtrl.text.trim(),
-                          billImage: billImage ?? '',
-                        );
-                    ref.invalidate(fuelExpensesProvider);
-                    ref.invalidate(paginatedFuelExpensesProvider);
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      // Proof of spend is mandatory.
+                      if (billImage == null || billImage!.isEmpty) {
+                        setState(() => billMissing = true);
+                        return;
+                      }
+                      // Vehicle-related expenses must name a vehicle.
+                      if (!isSalary && selectedVehicleId.isEmpty) {
+                        setState(() => vehicleMissing = true);
+                        return;
+                      }
+                      await ref
+                          .read(fuelExpenseServiceProvider)
+                          .saveFuelExpense(
+                            id: expense?.id,
+                            vehicleId: selectedVehicleId,
+                            driverId: selectedDriverId,
+                            category: selectedCategory,
+                            date: selectedDate,
+                            odometerKm:
+                                double.tryParse(odometerCtrl.text.trim()) ?? 0,
+                            liters:
+                                double.tryParse(litersCtrl.text.trim()) ?? 0,
+                            totalAmount:
+                                double.tryParse(amountCtrl.text.trim()) ?? 0,
+                            paymentMode: paymentMode,
+                            station: stationCtrl.text.trim(),
+                            notes: notesCtrl.text.trim(),
+                            billImage: billImage ?? '',
+                          );
+                      ref.invalidate(fuelExpensesProvider);
+                      ref.invalidate(paginatedFuelExpensesProvider);
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                    },
+                    child: const Text('Save'),
+                  ),
+                ],
+              );
+            },
           );
         },
       );
     }
 
     final now = DateTime.now();
-    final totalSpend =
-        allExpenses.fold<double>(0, (sum, e) => sum + e.totalAmount);
+    final totalSpend = allExpenses.fold<double>(
+      0,
+      (sum, e) => sum + e.totalAmount,
+    );
     final monthSpend = allExpenses
         .where((e) => e.date.year == now.year && e.date.month == now.month)
         .fold<double>(0, (sum, e) => sum + e.totalAmount);
@@ -448,7 +504,16 @@ class FuelExpensesScreen extends HookConsumerWidget {
                       items: items,
                       getVehicleName: (e) => e.vehicle?.name,
                       getDriverName: (e) => e.driver?.name,
-                      headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
+                      headers: const [
+                        'Date',
+                        'Vehicle',
+                        'Driver',
+                        'Category',
+                        'Amount',
+                        'Payment Mode',
+                        'Station',
+                        'Notes',
+                      ],
                       buildRow: (e) => [
                         DateFormat('yyyy-MM-dd').format(e.date),
                         e.vehicle?.name ?? 'N/A',
@@ -496,7 +561,16 @@ class FuelExpensesScreen extends HookConsumerWidget {
                     items: items,
                     getVehicleName: (e) => e.vehicle?.name,
                     getDriverName: (e) => e.driver?.name,
-                    headers: const ['Date', 'Vehicle', 'Driver', 'Category', 'Amount', 'Payment Mode', 'Station', 'Notes'],
+                    headers: const [
+                      'Date',
+                      'Vehicle',
+                      'Driver',
+                      'Category',
+                      'Amount',
+                      'Payment Mode',
+                      'Station',
+                      'Notes',
+                    ],
                     buildRow: (e) => [
                       DateFormat('yyyy-MM-dd').format(e.date),
                       e.vehicle?.name ?? 'N/A',
@@ -523,17 +597,20 @@ class FuelExpensesScreen extends HookConsumerWidget {
             ),
             stats: [
               FleetStat(
-                  value: _compactCurrency(totalSpend),
-                  label: 'Total',
-                  color: crmColors.primary),
+                value: _compactCurrency(totalSpend),
+                label: 'Total',
+                color: crmColors.primary,
+              ),
               FleetStat(
-                  value: _compactCurrency(monthSpend),
-                  label: 'This Month',
-                  color: crmColors.accent),
+                value: _compactCurrency(monthSpend),
+                label: 'This Month',
+                color: crmColors.accent,
+              ),
               FleetStat(
-                  value: '${allExpenses.length}',
-                  label: 'Entries',
-                  color: crmColors.success),
+                value: '${allExpenses.length}',
+                label: 'Entries',
+                color: crmColors.success,
+              ),
             ],
           ),
           16.h,
@@ -612,7 +689,11 @@ class FuelExpensesScreen extends HookConsumerWidget {
                               Expanded(
                                 child: Padding(
                                   padding: const EdgeInsets.fromLTRB(
-                                      12, 12, 8, 12),
+                                    12,
+                                    12,
+                                    8,
+                                    12,
+                                  ),
                                   child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -622,9 +703,12 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                         width: 42,
                                         height: 42,
                                         decoration: BoxDecoration(
-                                          color: catColor.withValues(alpha: 0.10),
-                                          borderRadius:
-                                              BorderRadius.circular(10),
+                                          color: catColor.withValues(
+                                            alpha: 0.10,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
                                         ),
                                         child: Icon(
                                           catIcon,
@@ -644,7 +728,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                               children: [
                                                 Text(
                                                   _formatCurrency(
-                                                      exp.totalAmount),
+                                                    exp.totalAmount,
+                                                  ),
                                                   style: const TextStyle(
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 15,
@@ -654,18 +739,22 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                                 Container(
                                                   padding:
                                                       const EdgeInsets.symmetric(
-                                                          horizontal: 7,
-                                                          vertical: 2),
+                                                        horizontal: 7,
+                                                        vertical: 2,
+                                                      ),
                                                   decoration: BoxDecoration(
-                                                    color: catColor
-                                                        .withValues(alpha: 0.10),
+                                                    color: catColor.withValues(
+                                                      alpha: 0.10,
+                                                    ),
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            5),
+                                                          5,
+                                                        ),
                                                   ),
                                                   child: Text(
-                                                    _categoryLabel(exp.category)
-                                                        .toUpperCase(),
+                                                    _categoryLabel(
+                                                      exp.category,
+                                                    ).toUpperCase(),
                                                     style: TextStyle(
                                                       fontSize: 9,
                                                       fontWeight:
@@ -679,8 +768,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                             4.h,
                                             // Date + vehicle
                                             Text(
-                                              exp.vehicle != null
-                                                  ? '${exp.vehicle!.name} • ${_formatDate(exp.date)}'
+                                              _expenseSubject(exp) != null
+                                                  ? '${_expenseSubject(exp)} • ${_formatDate(exp.date)}'
                                                   : _formatDate(exp.date),
                                               style: TextStyle(
                                                 fontSize: 11,
@@ -696,35 +785,41 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                                 children: [
                                                   if (exp.liters > 0) ...[
                                                     Icon(
-                                                        Icons
-                                                            .local_gas_station_outlined,
-                                                        size: 11,
-                                                        color: crmColors
-                                                            .textSecondary),
+                                                      Icons
+                                                          .local_gas_station_outlined,
+                                                      size: 11,
+                                                      color: crmColors
+                                                          .textSecondary,
+                                                    ),
                                                     3.w,
                                                     Text(
                                                       '${exp.liters.toStringAsFixed(1)} L',
                                                       style: TextStyle(
-                                                          fontSize: 11,
-                                                          color: crmColors
-                                                              .textSecondary),
+                                                        fontSize: 11,
+                                                        color: crmColors
+                                                            .textSecondary,
+                                                      ),
                                                     ),
                                                     8.w,
                                                   ],
-                                                  if (exp.station
+                                                  if (exp
+                                                      .station
                                                       .isNotEmpty) ...[
-                                                    Icon(Icons.store_outlined,
-                                                        size: 11,
-                                                        color: crmColors
-                                                            .textSecondary),
+                                                    Icon(
+                                                      Icons.store_outlined,
+                                                      size: 11,
+                                                      color: crmColors
+                                                          .textSecondary,
+                                                    ),
                                                     3.w,
                                                     Expanded(
                                                       child: Text(
                                                         exp.station,
                                                         style: TextStyle(
-                                                            fontSize: 11,
-                                                            color: crmColors
-                                                                .textSecondary),
+                                                          fontSize: 11,
+                                                          color: crmColors
+                                                              .textSecondary,
+                                                        ),
                                                         maxLines: 1,
                                                         overflow: TextOverflow
                                                             .ellipsis,
@@ -739,8 +834,9 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                             Container(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2),
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: crmColors.textSecondary
                                                     .withValues(alpha: 0.08),
@@ -762,34 +858,40 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                       ),
                                       // Menu
                                       PopupMenuButton<String>(
-                                        icon: Icon(Icons.more_vert,
-                                            size: 18,
-                                            color: crmColors.textSecondary),
+                                        icon: Icon(
+                                          Icons.more_vert,
+                                          size: 18,
+                                          color: crmColors.textSecondary,
+                                        ),
                                         onSelected: (val) async {
                                           if (val == 'edit') {
                                             openExpenseDialog(exp);
                                           } else if (val == 'delete') {
-                                            final confirm =
-                                                await showDialog<bool>(
+                                            final confirm = await showDialog<bool>(
                                               context: context,
                                               builder: (ctx) => AlertDialog(
                                                 title: const Text(
-                                                    'Delete Expense'),
+                                                  'Delete Expense',
+                                                ),
                                                 content: const Text(
-                                                    'Delete this expense?'),
+                                                  'Delete this expense?',
+                                                ),
                                                 actions: [
                                                   TextButton(
                                                     onPressed: () =>
                                                         Navigator.pop(
-                                                            ctx, false),
+                                                          ctx,
+                                                          false,
+                                                        ),
                                                     child: const Text('Cancel'),
                                                   ),
                                                   TextButton(
                                                     onPressed: () =>
                                                         Navigator.pop(
-                                                            ctx, true),
-                                                    style:
-                                                        TextButton.styleFrom(
+                                                          ctx,
+                                                          true,
+                                                        ),
+                                                    style: TextButton.styleFrom(
                                                       foregroundColor:
                                                           crmColors.destructive,
                                                     ),
@@ -801,36 +903,48 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                             if (confirm == true) {
                                               await ref
                                                   .read(
-                                                      fuelExpenseServiceProvider)
+                                                    fuelExpenseServiceProvider,
+                                                  )
                                                   .deleteFuelExpense(exp.id);
                                               ref.invalidate(
-                                                  fuelExpensesProvider);
+                                                fuelExpensesProvider,
+                                              );
                                               ref.invalidate(
-                                                  paginatedFuelExpensesProvider);
+                                                paginatedFuelExpensesProvider,
+                                              );
                                             }
                                           }
                                         },
                                         itemBuilder: (ctx) => [
                                           const PopupMenuItem(
                                             value: 'edit',
-                                            child: Row(children: [
-                                              Icon(Icons.edit, size: 16),
-                                              SizedBox(width: 8),
-                                              Text('Edit'),
-                                            ]),
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.edit, size: 16),
+                                                SizedBox(width: 8),
+                                                Text('Edit'),
+                                              ],
+                                            ),
                                           ),
                                           PopupMenuItem(
                                             value: 'delete',
-                                            child: Row(children: [
-                                              Icon(Icons.delete,
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.delete,
                                                   size: 16,
-                                                  color: crmColors.destructive),
-                                              const SizedBox(width: 8),
-                                              Text('Delete',
+                                                  color: crmColors.destructive,
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  'Delete',
                                                   style: TextStyle(
-                                                      color: crmColors
-                                                          .destructive)),
-                                            ]),
+                                                    color:
+                                                        crmColors.destructive,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -857,8 +971,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                     final expense = expenses[index];
                     return ListTile(
                       title: Text(
-                        expense.vehicle != null
-                            ? '${expense.vehicle!.name} • ${_formatCurrency(expense.totalAmount)}'
+                        _expenseSubject(expense) != null
+                            ? '${_expenseSubject(expense)} • ${_formatCurrency(expense.totalAmount)}'
                             : _formatCurrency(expense.totalAmount),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
@@ -883,8 +997,9 @@ class FuelExpensesScreen extends HookConsumerWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: crmColors.textSecondary
-                                  .withValues(alpha: 0.12),
+                              color: crmColors.textSecondary.withValues(
+                                alpha: 0.12,
+                              ),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -908,7 +1023,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                   builder: (ctx) => AlertDialog(
                                     title: const Text('Delete Expense'),
                                     content: const Text(
-                                        'Are you sure you want to delete this expense?'),
+                                      'Are you sure you want to delete this expense?',
+                                    ),
                                     actions: [
                                       TextButton(
                                         onPressed: () =>
@@ -919,8 +1035,9 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                         onPressed: () =>
                                             Navigator.pop(ctx, true),
                                         style: TextButton.styleFrom(
-                                            foregroundColor:
-                                                crmColors.destructive),
+                                          foregroundColor:
+                                              crmColors.destructive,
+                                        ),
                                         child: const Text('Delete'),
                                       ),
                                     ],
@@ -950,13 +1067,18 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                 value: 'delete',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete,
-                                        size: 16,
-                                        color: crmColors.destructive),
+                                    Icon(
+                                      Icons.delete,
+                                      size: 16,
+                                      color: crmColors.destructive,
+                                    ),
                                     const SizedBox(width: 8),
-                                    Text('Delete',
-                                        style: TextStyle(
-                                            color: crmColors.destructive)),
+                                    Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                        color: crmColors.destructive,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -979,9 +1101,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
             totalPages: response.totalPages,
             totalItems: response.totalItems,
             currentItemCount: response.items.length,
-            onPrevious: response.page > 1
-                ? () => pageState.value -= 1
-                : null,
+            onPrevious: response.page > 1 ? () => pageState.value -= 1 : null,
             onNext: response.page < response.totalPages
                 ? () => pageState.value += 1
                 : null,
