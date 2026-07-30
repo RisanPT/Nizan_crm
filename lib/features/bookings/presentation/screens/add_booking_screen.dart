@@ -31,11 +31,13 @@ class AddBookingScreen extends HookConsumerWidget {
     final formKey = useMemoized(() => GlobalKey<FormState>());
     TextEditingController? autoCompleteNameCtrl;
     final qParams = GoRouterState.of(context).uri.queryParameters;
+    // Prefill from query params — used by the Lead → Booking conversion so the
+    // salesperson only has to pick the package + dates (see lead_conversion.dart).
     final nameCtrl = useTextEditingController(text: qParams['name'] ?? '');
-    final emailCtrl = useTextEditingController();
+    final emailCtrl = useTextEditingController(text: qParams['email'] ?? '');
     final phoneCtrl = useTextEditingController(text: qParams['phone'] ?? '');
-    final addressCtrl = useTextEditingController();
-    final pincodeCtrl = useTextEditingController();
+    final addressCtrl = useTextEditingController(text: qParams['address'] ?? '');
+    final pincodeCtrl = useTextEditingController(text: qParams['pincode'] ?? '');
     final allowMissingEmail = useState(false);
     final isSubmitting = useState(false);
 
@@ -658,6 +660,12 @@ class AddBookingScreen extends HookConsumerWidget {
                                   final customersList = asyncCustomers.value ?? [];
 
                                   return Autocomplete<Customer>(
+                                    // Seed the field from the prefill (e.g. a
+                                    // Lead → Booking conversion). The Autocomplete
+                                    // owns its own controller, so without this the
+                                    // name never shows and submits blank.
+                                    initialValue:
+                                        TextEditingValue(text: qParams['name'] ?? ''),
                                     optionsBuilder:
                                         (TextEditingValue textEditingValue) {
                                           if (textEditingValue.text.isEmpty) {

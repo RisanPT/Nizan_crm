@@ -12,6 +12,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/dashboard_report_service.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
@@ -1874,6 +1875,7 @@ class _LeadsTable extends ConsumerWidget {
           onEdit: () => _showEditDialog(context, ref, lead),
           onDelete: () => _confirmDelete(context, ref, lead),
           onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
+          onConvert: () => convertLeadToBooking(context, lead),
           onViewDetails: () => context.go('/sales/leads/${lead.id}'),
         );
       },
@@ -1889,6 +1891,7 @@ class _LeadCard extends StatefulWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onRecordOutcome;
+  final VoidCallback onConvert;
   final VoidCallback onViewDetails;
 
   const _LeadCard({
@@ -1896,6 +1899,7 @@ class _LeadCard extends StatefulWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onRecordOutcome,
+    required this.onConvert,
     required this.onViewDetails,
   });
 
@@ -2120,6 +2124,13 @@ class _LeadCardState extends State<_LeadCard> {
                         color: Colors.orange,
                         onPressed: widget.onRecordOutcome,
                       ),
+                      if (canConvertLead(lead))
+                        _ActionButton(
+                          icon: Icons.event_available_outlined,
+                          tooltip: 'Convert to Booking',
+                          color: const Color(0xFFEAB308),
+                          onPressed: widget.onConvert,
+                        ),
                       _ActionButton(
                         icon: Icons.edit_outlined,
                         tooltip: 'Edit',

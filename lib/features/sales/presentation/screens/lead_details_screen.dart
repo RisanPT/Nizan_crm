@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
 import 'package:nizan_crm/core/models/lead_activity.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/services/lead_activity_service.dart';
@@ -370,20 +371,9 @@ class LeadDetailsScreen extends HookConsumerWidget {
                       ),
                     ),
                   ),
-                if (lead.status != 'Converted' && lead.status != 'Lost')
+                if (canConvertLead(lead))
                   OutlinedButton.icon(
-                    onPressed: () {
-                      final uri = Uri(
-                        path: '/booking/add',
-                        queryParameters: {
-                          'mode': 'single',
-                          'leadId': lead.id,
-                          'name': lead.name,
-                          'phone': lead.phone,
-                        },
-                      );
-                      context.push(uri.toString());
-                    },
+                    onPressed: () => convertLeadToBooking(context, lead),
                     icon: const Icon(
                       Icons.event_available_outlined,
                       size: 16,
