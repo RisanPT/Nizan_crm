@@ -31,14 +31,71 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
     // Pulls the FULL client list (not just the current page) and renders a
     // printable PDF report.
     Future<void> exportReport() async {
+      final filterChoice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Export Client Report'),
+          content: const Text('Do you want to export all clients or filter by event date?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'all'),
+              child: const Text('All Clients'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, 'date'),
+              child: const Text('Filter by Date'),
+            ),
+          ],
+        ),
+      );
+
+      if (filterChoice == null) return;
+
+      DateTimeRange? dateRange;
+      if (filterChoice == 'date') {
+        dateRange = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+          helpText: 'Select Event Date Range',
+        );
+        if (dateRange == null) return;
+      }
+
       if (isExporting.value) return;
       isExporting.value = true;
       final messenger = ScaffoldMessenger.of(context);
       try {
-        final clients = await ref.read(customerServiceProvider).getCustomers();
+        var clients = await ref.read(customerServiceProvider).getCustomers();
+        
+        if (dateRange != null) {
+          clients = clients.where((c) {
+            if (c.eventDate == null || c.eventDate!.isEmpty) return false;
+            final d = DateTime.tryParse(c.eventDate!);
+            if (d == null) return false;
+            final start = dateRange!.start;
+            final end = dateRange!.end.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+            return d.isAfter(start.subtract(const Duration(seconds: 1))) && d.isBefore(end);
+          }).toList();
+        }
+
+        // Sort clients by eventDate (descending - latest events first)
+        clients.sort((a, b) {
+          final dateA = DateTime.tryParse(a.eventDate ?? '');
+          final dateB = DateTime.tryParse(b.eventDate ?? '');
+          if (dateA == null && dateB == null) return 0;
+          if (dateA == null) return 1;
+          if (dateB == null) return -1;
+          return dateB.compareTo(dateA);
+        });
+
         if (clients.isEmpty) {
           messenger.showSnackBar(
-            const SnackBar(content: Text('No clients to export.')),
+            const SnackBar(content: Text('No clients found for the selected criteria.')),
           );
           return;
         }

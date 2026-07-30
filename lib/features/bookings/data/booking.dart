@@ -406,6 +406,7 @@ class Booking {
   final String discountType;
   final double discountValue;
   final int duplicateCount;
+  final String? leadId;
   final List<BookingAssignment> assignedStaff;
   final List<BookingAddon> addons;
   final List<BookingItem> bookingItems;
@@ -463,6 +464,7 @@ class Booking {
     required this.serviceEnd,
     required this.totalPrice,
     required this.advanceAmount,
+    this.leadId,
     this.discountAmount = 0,
     this.discountType = 'inr',
     this.discountValue = 0,
@@ -770,6 +772,7 @@ class Booking {
       discountValue: (json['discountValue'] as num?)?.toDouble() ?? 0.0,
       collectedAmount: (json['collectedAmount'] as num?)?.toDouble() ?? 0.0,
       duplicateCount: (json['duplicateCount'] as num?)?.toInt() ?? 0,
+      leadId: json['leadId'] as String?,
       assignedStaff: ((json['assignedStaff'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(BookingAssignment.fromJson)
@@ -835,6 +838,7 @@ class Booking {
       'discountType': discountType,
       'discountValue': discountValue,
       'duplicateCount': duplicateCount,
+      if (leadId != null) 'leadId': leadId,
       'assignedStaff': assignedStaff.map((item) => item.toJson()).toList(),
       'addons': addons.map((item) => item.toJson()).toList(),
       'bookingItems': bookingItems.map((item) => item.toJson()).toList(),
@@ -896,6 +900,7 @@ class Booking {
     String? discountType,
     double? discountValue,
     int? duplicateCount,
+    String? leadId,
     List<BookingAssignment>? assignedStaff,
     List<BookingAddon>? addons,
     List<BookingItem>? bookingItems,
@@ -953,6 +958,7 @@ class Booking {
       discountType: discountType ?? this.discountType,
       discountValue: discountValue ?? this.discountValue,
       duplicateCount: duplicateCount ?? this.duplicateCount,
+      leadId: leadId ?? this.leadId,
       assignedStaff: assignedStaff ?? this.assignedStaff,
       addons: addons ?? this.addons,
       bookingItems: bookingItems ?? this.bookingItems,

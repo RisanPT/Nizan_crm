@@ -14,6 +14,7 @@ _Customer _$CustomerFromJson(Map<String, dynamic> json) => _Customer(
   address: json['address'] as String?,
   pincode: json['pincode'] as String?,
   company: json['company'] as String?,
+  eventDate: json['eventDate'] as String?,
   status: json['status'] as String? ?? 'Prospect',
 );
 
@@ -25,5 +26,6 @@ Map<String, dynamic> _$CustomerToJson(_Customer instance) => <String, dynamic>{
   'address': instance.address,
   'pincode': instance.pincode,
   'company': instance.company,
+  'eventDate': instance.eventDate,
   'status': instance.status,
 };

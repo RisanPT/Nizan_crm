@@ -24,6 +24,22 @@ Future<void> printClientsReport(List<Customer> clients) async {
     return (s.isEmpty || s.contains('@placeholder')) ? '—' : s;
   }
 
+  String formatEventDate(String? dateString) {
+    final s = (dateString ?? '').trim();
+    if (s.isEmpty) return '—';
+    try {
+      final d = DateTime.parse(s);
+      const m = [
+        'january', 'february', 'march', 'april', 'may', 'june',
+        'july', 'august', 'september', 'october', 'november', 'december'
+      ];
+      final day = d.day.toString().padLeft(2, '0');
+      return '$day ${m[d.month - 1]} ${d.year}';
+    } catch (_) {
+      return s;
+    }
+  }
+
   final now = DateTime.now();
   const months = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -65,7 +81,8 @@ Future<void> printClientsReport(List<Customer> clients) async {
     3: pw.FlexColumnWidth(2.6),
     4: pw.FlexColumnWidth(2.6),
     5: pw.FlexColumnWidth(1.1),
-    6: pw.FlexColumnWidth(1.4),
+    6: pw.FlexColumnWidth(1.6),
+    7: pw.FlexColumnWidth(1.2),
   };
 
   pdf.addPage(
@@ -147,6 +164,7 @@ Future<void> printClientsReport(List<Customer> clients) async {
                   headerCell('Email'),
                   headerCell('Address'),
                   headerCell('Pincode'),
+                  headerCell('Event Date'),
                   headerCell('Status'),
                 ],
               ),
@@ -162,6 +180,7 @@ Future<void> printClientsReport(List<Customer> clients) async {
                     cell(email(clients[i].email)),
                     cell(dash(clients[i].address)),
                     cell(dash(clients[i].pincode)),
+                    cell(formatEventDate(clients[i].eventDate)),
                     cell(dash(clients[i].status)),
                   ],
                 ),

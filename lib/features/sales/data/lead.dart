@@ -6,6 +6,10 @@ class Lead {
   final String source;
   final String location;
   final String leadType;
+  /// Event Type (Wedding, Reception, …) — replaces the old Lead Type in the UI.
+  final String eventType;
+  /// Optional secondary contact number.
+  final String alternateNumber;
   final DateTime leadDate; // manually set: actual date lead was received
   final DateTime enquiryDate;
   final DateTime? bookedDate;
@@ -29,6 +33,11 @@ class Lead {
   final String region;
   final String reason;
   final String remarks;
+  /// Lost-approval workflow.
+  final String competitorName;
+  final String lostAttachment;
+  final String lostDecision; // '', 'approved', 'rejected'
+  final String lostReviewNote;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +49,8 @@ class Lead {
     required this.source,
     required this.location,
     required this.leadType,
+    this.eventType = '',
+    this.alternateNumber = '',
     required this.leadDate,
     required this.enquiryDate,
     this.bookedDate,
@@ -55,6 +66,10 @@ class Lead {
     this.region = '',
     required this.reason,
     required this.remarks,
+    this.competitorName = '',
+    this.lostAttachment = '',
+    this.lostDecision = '',
+    this.lostReviewNote = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -71,6 +86,8 @@ class Lead {
       source: json['source'] as String? ?? 'Walk-in',
       location: json['location'] as String? ?? '',
       leadType: json['leadType'] as String? ?? 'Individual',
+      eventType: json['eventType'] as String? ?? '',
+      alternateNumber: json['alternateNumber'] as String? ?? '',
       // leadDate: manually set received date, fallback to createdAt
       leadDate: json['leadDate'] != null
           ? DateTime.parse(json['leadDate'] as String).toLocal()
@@ -99,6 +116,10 @@ class Lead {
       region: json['region'] as String? ?? '',
       reason: json['reason'] as String? ?? '',
       remarks: json['remarks'] as String? ?? '',
+      competitorName: json['competitorName'] as String? ?? '',
+      lostAttachment: json['lostAttachment'] as String? ?? '',
+      lostDecision: json['lostDecision'] as String? ?? '',
+      lostReviewNote: json['lostReviewNote'] as String? ?? '',
       createdAt: createdAt,
       updatedAt: json['updatedAt'] != null
           ? DateTime.parse(json['updatedAt'] as String).toLocal()
@@ -115,6 +136,8 @@ class Lead {
       'source': source,
       'location': location,
       'leadType': leadType,
+      'eventType': eventType,
+      'alternateNumber': alternateNumber,
       'leadDate': leadDate.toIso8601String(),
       'enquiryDate': enquiryDate.toIso8601String(),
       if (bookedDate != null) 'bookedDate': bookedDate?.toIso8601String(),
@@ -137,6 +160,8 @@ class Lead {
     String? source,
     String? location,
     String? leadType,
+    String? eventType,
+    String? alternateNumber,
     DateTime? leadDate,
     DateTime? enquiryDate,
     DateTime? bookedDate,
@@ -147,6 +172,10 @@ class Lead {
     String? priority,
     String? reason,
     String? remarks,
+    String? competitorName,
+    String? lostAttachment,
+    String? lostDecision,
+    String? lostReviewNote,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -158,6 +187,8 @@ class Lead {
       source: source ?? this.source,
       location: location ?? this.location,
       leadType: leadType ?? this.leadType,
+      eventType: eventType ?? this.eventType,
+      alternateNumber: alternateNumber ?? this.alternateNumber,
       leadDate: leadDate ?? this.leadDate,
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
@@ -168,6 +199,10 @@ class Lead {
       priority: priority ?? this.priority,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,
+      competitorName: competitorName ?? this.competitorName,
+      lostAttachment: lostAttachment ?? this.lostAttachment,
+      lostDecision: lostDecision ?? this.lostDecision,
+      lostReviewNote: lostReviewNote ?? this.lostReviewNote,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

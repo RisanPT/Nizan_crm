@@ -17,6 +17,7 @@ String buildClientsReportHtml(List<Customer> clients, {DateTime? generatedAt}) {
   <td>${_dash(c.address)}</td>
   <td class="center">${_dash(c.pincode)}</td>
   <td>${_dash(c.company)}</td>
+  <td class="center">${_formatEventDate(c.eventDate)}</td>
   <td class="center"><span class="status">${_dash(c.status)}</span></td>
 </tr>''');
   }
@@ -82,6 +83,7 @@ String buildClientsReportHtml(List<Customer> clients, {DateTime? generatedAt}) {
         <th>Address</th>
         <th class="center">Pincode</th>
         <th>Company</th>
+        <th class="center">Event Date</th>
         <th class="center">Status</th>
       </tr>
     </thead>
@@ -109,6 +111,24 @@ String _esc(String? v) {
 String _dash(String? v) {
   final s = (v ?? '').trim();
   return s.isEmpty ? '—' : _esc(s);
+}
+
+String _formatEventDate(String? dateString) {
+  final s = (dateString ?? '').trim();
+  if (s.isEmpty) return '—';
+  
+  try {
+    final d = DateTime.parse(s);
+    const months = [
+      'january', 'february', 'march', 'april', 'may', 'june',
+      'july', 'august', 'september', 'october', 'november', 'december',
+    ];
+    final day = d.day.toString().padLeft(2, '0');
+    final month = months[d.month - 1];
+    return '$day $month ${d.year}';
+  } catch (_) {
+    return _esc(s);
+  }
 }
 
 String _cleanEmail(String email) {

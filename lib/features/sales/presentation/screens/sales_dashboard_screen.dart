@@ -1073,6 +1073,17 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                 onPressed: () => context.go('/sales/leads'),
                 child: const Text('View All'),
               )),
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _miniStat(crm, '${d.pendingFollowUps}', 'Pending'),
+                _miniStat(crm, '${d.completedFollowUps}', 'Completed'),
+                _miniStat(crm, '${d.overdueFollowUps}', 'Overdue'),
+              ],
+            ),
+          ),
           6.h,
           if (d.todayFollowUps.isEmpty)
             Padding(
@@ -1711,6 +1722,9 @@ class _DashboardData {
   final List<_Performer> performers;
   final List<_RecentLead> recent;
   final List<Lead> todayFollowUps;
+  final int pendingFollowUps;
+  final int completedFollowUps;
+  final int overdueFollowUps;
   final String rangeLabel;
   /// True when reporting a single month (day-wise), false for a full FY.
   final bool monthly;
@@ -1741,6 +1755,9 @@ class _DashboardData {
     required this.performers,
     required this.recent,
     required this.todayFollowUps,
+    required this.pendingFollowUps,
+    required this.completedFollowUps,
+    required this.overdueFollowUps,
     required this.rangeLabel,
     required this.monthly,
   });
@@ -1980,6 +1997,9 @@ class _DashboardData {
           .toList()
         ..sort((a, b) => (a.followUpDate ?? today)
             .compareTo(b.followUpDate ?? today)),
+      pendingFollowUps: leads.where((l) => l.status == 'Follow-up' && (l.followUpDate?.isAfter(today) ?? false)).length,
+      completedFollowUps: leads.where((l) => l.followUpCount > 0 && l.status != 'Follow-up').length,
+      overdueFollowUps: leads.where((l) => l.status == 'Follow-up' && (l.followUpDate?.isBefore(today) ?? false)).length,
       monthly: monthly,
       rangeLabel: monthly
           ? '${DateFormat('MMMM yyyy').format(from)}  ·  FY $fyStartYear-${(fyStartYear + 1) % 100}'

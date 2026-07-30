@@ -119,4 +119,49 @@ class LeadService {
       throw Exception('Failed to bulk assign leads: ${e.message}');
     }
   }
+
+  /// A Sales Executive requests marking a lead Lost (needs manager approval).
+  /// Managers/admins close it as Lost directly (handled server-side).
+  Future<void> requestLostApproval(
+    String id, {
+    required String reason,
+    required String remarks,
+    String competitorName = '',
+    String? lostAttachment,
+  }) async {
+    try {
+      await _dio.post('/leads/$id/request-lost', data: {
+        'reason': reason,
+        'remarks': remarks,
+        'competitorName': competitorName,
+        'lostAttachment': ?lostAttachment,
+      });
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to submit lost request'));
+    }
+  }
+
+  /// A manager approves or rejects a pending lost request.
+  Future<void> reviewLostApproval(
+    String id, {
+    required bool approve,
+    String note = '',
+  }) async {
+    try {
+      await _dio.post('/leads/$id/review-lost', data: {
+        'decision': approve ? 'approved' : 'rejected',
+        'note': note,
+      });
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to review lost request'));
+    }
+  }
+
+  String _message(DioException e, String fallback) {
+    final data = e.response?.data;
+    if (data is Map && data['message'] != null) {
+      return data['message'].toString();
+    }
+    return e.message ?? fallback;
+  }
 }

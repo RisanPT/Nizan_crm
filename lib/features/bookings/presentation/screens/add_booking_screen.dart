@@ -30,9 +30,10 @@ class AddBookingScreen extends HookConsumerWidget {
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
     TextEditingController? autoCompleteNameCtrl;
-    final nameCtrl = useTextEditingController();
+    final qParams = GoRouterState.of(context).uri.queryParameters;
+    final nameCtrl = useTextEditingController(text: qParams['name'] ?? '');
     final emailCtrl = useTextEditingController();
-    final phoneCtrl = useTextEditingController();
+    final phoneCtrl = useTextEditingController(text: qParams['phone'] ?? '');
     final addressCtrl = useTextEditingController();
     final pincodeCtrl = useTextEditingController();
     final allowMissingEmail = useState(false);
@@ -498,6 +499,7 @@ class AddBookingScreen extends HookConsumerWidget {
           serviceEnd: sEnd,
           totalPrice: totalPrice.value,
           advanceAmount: advanceAmount.value,
+          leadId: qParams['leadId'],
           bookingItems: bookingItems,
         );
         await ref.read(bookingProvider.notifier).addBooking(booking);

@@ -14,6 +14,9 @@ import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:nizan_crm/services/notification_service.dart';
+
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 
 // ─────────────────────────────────────────────────────────
@@ -118,14 +121,58 @@ _ParsedLead _parseClipboardText(String raw) {
 bool _matchKey(String key, List<String> options) =>
     options.any((o) => key.contains(o));
 
-/// Selectable lead pipeline statuses. "Qualified" was retired — legacy leads
-/// still carrying it are coerced via [coerceLeadStatus] so dropdowns don't crash.
-const List<String> kLeadStatuses = ['New', 'Contacted', 'Follow-up', 'Converted', 'Lost'];
-const List<String> kLeadStatusFilters = ['All', ...kLeadStatuses];
+/// Statuses a user picks directly when creating/editing a lead. "Lost" is NOT
+/// here — it goes through the lost-approval flow in the outcome dialog. So do
+/// the system states "Pending Lost Approval" and "Converted".
+const List<String> kLeadStatuses = ['New', 'Contacted', 'Follow-up'];
+
+/// Outcome-dialog options: the pickers PLUS Lost (which triggers the approval).
+const List<String> kOutcomeStatuses = [...kLeadStatuses, 'Lost'];
+
+/// Every status a lead can be in (for filters, badges, colours).
+const List<String> kAllLeadStatuses = [
+  'New',
+  'Contacted',
+  'Follow-up',
+  'Pending Lost Approval',
+  'Lost',
+  'Converted',
+];
+const List<String> kLeadStatusFilters = ['All', ...kAllLeadStatuses];
+
+/// Event types (replaces the old free-text Lead Type).
+const List<String> kEventTypes = [
+  'Wedding',
+  'Reception',
+  'Engagement',
+  'Haldi',
+  'Mehendi',
+  'Sangeet',
+  'Baby Shower',
+  'Birthday',
+  'Corporate Event',
+  'Photoshoot',
+  'Fashion Show',
+  'Celebrity Event',
+  'Housewarming',
+  'Other',
+];
 
 /// Map a possibly-legacy status onto a selectable one so a status dropdown
 /// never gets a `value` that isn't among its items (which would assert).
 String coerceLeadStatus(String s) => kLeadStatuses.contains(s) ? s : 'Contacted';
+
+/// Roles allowed to approve/reject a lost-lead request. Mirrors the backend
+/// `LOST_REVIEWER_ROLES` in leadController.js — keep the two in sync.
+const Set<String> kLostReviewerRoles = {
+  'admin',
+  'manager',
+  'sales_manager',
+  'regional_manager',
+};
+
+bool isLostReviewer(String? role) =>
+    role != null && kLostReviewerRoles.contains(role);
 
 String _fmtDate(DateTime d) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -147,6 +194,7 @@ Color _statusColor(String status) {
   switch (status.toLowerCase()) {
     case 'converted': return const Color(0xFF22C55E);
     case 'lost':      return const Color(0xFFEF4444);
+    case 'pending lost approval': return const Color(0xFFB45309); // amber-700
     case 'contacted': return const Color(0xFF3B82F6);
     case 'qualified': return const Color(0xFF14B8A6);
     case 'follow-up': return const Color(0xFFF97316);
@@ -833,18 +881,27 @@ class _LeadForm extends HookConsumerWidget {
 
     final nameCtrl      = useTextEditingController(text: initialLead?.name ?? '');
     final phoneCtrl     = useTextEditingController(text: initialLead?.phone ?? '');
+    final alternateCtrl = useTextEditingController(text: initialLead?.alternateNumber ?? '');
     final selectedSource   = useState(initialLead?.source ?? 'Instagram');
     final customSourceCtrl = useTextEditingController(
       text: _isKnownSource(initialLead?.source) ? '' : (initialLead?.source ?? ''),
     );
     final locationCtrl  = useTextEditingController(text: initialLead?.location ?? '');
     final leadTypeCtrl  = useTextEditingController(text: initialLead?.leadType ?? 'Individual');
-    final reasonCtrl    = useTextEditingController(text: initialLead?.reason ?? '');
+    // Event Type replaces Lead Type. Default to a valid option so the dropdown
+    // never gets an unknown value.
+    final eventType = useState(
+      kEventTypes.contains(initialLead?.eventType)
+          ? initialLead!.eventType
+          : (initialLead?.eventType.isNotEmpty ?? false ? 'Other' : 'Wedding'),
+    );
     final remarksCtrl   = useTextEditingController(text: initialLead?.remarks ?? '');
     final enquiryDate   = useState(initialLead?.enquiryDate ?? DateTime.now());
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
-    final status        = useState(coerceLeadStatus(initialLead?.status ?? 'New'));
+    // Keep the real status so a system state (Converted / Lost / Pending) isn't
+    // silently downgraded on edit — the picker just can't SELECT those.
+    final status        = useState(initialLead?.status ?? 'New');
     final priority      = useState(initialLead?.priority ?? 'Warm');
     final assignedTo    = useState<String?>(initialLead?.assignedTo);
     final asyncUsers    = ref.watch(crmUsersProvider);
@@ -912,18 +969,69 @@ class _LeadForm extends HookConsumerWidget {
         );
         return;
       }
-      // A lost lead must record WHY — block the update until a reason is given.
-      if (status.value == 'Lost' && reasonCtrl.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Enter a reason before marking this lead as Lost'),
-          ),
-        );
-        return;
-      }
       isSaving.value = true;
       try {
         final dio = ref.read(dioProvider);
+
+        // Set when the user chooses to create a lead despite a duplicate match,
+        // so the server-side duplicate guard lets it through.
+        var allowDuplicate = false;
+
+        // 1. Duplicate Check
+        if (!isEditing) {
+          final phoneNorm = normalizePhone(phoneCtrl.text);
+          final altNorm = normalizePhone(alternateCtrl.text);
+          
+          if (phoneNorm.isNotEmpty || altNorm.isNotEmpty) {
+            try {
+              final dupRes = await dio.get('/leads', queryParameters: {
+                'limit': 10,
+                'search': phoneNorm.isNotEmpty ? phoneNorm : altNorm,
+              });
+              final data = dupRes.data;
+              List items = [];
+              if (data is Map && data.containsKey('items')) {
+                items = data['items'] as List;
+              } else if (data is Map) {
+                items = (data['data'] ?? data['leads'] ?? []) as List;
+              } else if (data is List) {
+                items = data;
+              }
+              
+              bool duplicateFound = false;
+              for (var i in items) {
+                final leadPhone = i['phone']?.toString() ?? '';
+                final leadAlt = i['alternateNumber']?.toString() ?? '';
+                
+                if (phoneNorm.isNotEmpty && (leadPhone == phoneNorm || leadAlt == phoneNorm)) duplicateFound = true;
+                if (altNorm.isNotEmpty && (leadPhone == altNorm || leadAlt == altNorm)) duplicateFound = true;
+              }
+
+              if (duplicateFound && context.mounted) {
+                final proceed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Duplicate Contact Found'),
+                    content: const Text('A lead with this Primary or Alternate number already exists. Do you still want to create it?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Proceed')),
+                    ],
+                  ),
+                );
+                if (proceed != true) {
+                  isSaving.value = false;
+                  return;
+                }
+                // User accepted the duplicate — tell the server to allow it.
+                allowDuplicate = true;
+              }
+            } catch (e) {
+              // Ignore search errors and proceed
+            }
+          }
+        }
+
         final payload = {
           'name': nameCtrl.text,
           'phone': normalizePhone(phoneCtrl.text),
@@ -933,33 +1041,62 @@ class _LeadForm extends HookConsumerWidget {
               : selectedSource.value,
           'location': locationCtrl.text,
           'leadType': leadTypeCtrl.text,
+          'eventType': eventType.value,
+          'alternateNumber': normalizePhone(alternateCtrl.text),
           'enquiryDate': enquiryDate.value.toIso8601String(),
           'bookedDate': bookedDate.value?.toIso8601String(),
           'followUpDate': followUpDate.value?.toIso8601String(),
-          'status': status.value,
-          'reason': reasonCtrl.text,
+          // Only send an editable status. System states (Lost / Pending /
+          // Converted) are managed by their own flows and preserved server-side.
+          if (kLeadStatuses.contains(status.value)) 'status': status.value,
+          // 'reason' is intentionally omitted — it belongs to the Lost-approval
+          // flow. Sending it here would erase the reason on a normal edit.
           'remarks': remarksCtrl.text,
           'assignedTo': (session?.role == 'sales') ? session?.userId : assignedTo.value,
+          if (allowDuplicate) 'allowDuplicate': true,
         };
 
+        String leadIdStr = '';
         if (isEditing) {
-          await dio.put('/leads/${initialLead!.id}', data: payload);
+          leadIdStr = initialLead!.id;
+          await dio.put('/leads/$leadIdStr', data: payload);
         } else {
-          await dio.post('/leads', data: payload);
+          final res = await dio.post('/leads', data: payload);
+          if (res.data is Map) {
+             leadIdStr = res.data['_id']?.toString() ?? res.data['id']?.toString() ?? '';
+          }
           // Reset form after add
           nameCtrl.clear();
           phoneCtrl.clear();
           locationCtrl.clear();
-          reasonCtrl.clear();
+          alternateCtrl.clear();
           remarksCtrl.clear();
           customSourceCtrl.clear();
           leadTypeCtrl.text = 'Individual';
+          eventType.value = 'Wedding';
           selectedSource.value = 'Instagram';
           enquiryDate.value = DateTime.now();
           bookedDate.value = null;
           followUpDate.value = null;
           status.value = 'New';
           assignedTo.value = null;
+        }
+
+        // Schedule or cancel notification
+        if (leadIdStr.isNotEmpty) {
+          final notifId = leadIdStr.hashCode;
+          if (payload['followUpDate'] != null) {
+            final dt = DateTime.parse(payload['followUpDate'] as String);
+            // import required: import 'package:nizan_crm/services/notification_service.dart';
+            await NotificationService().scheduleFollowUpNotification(
+              id: notifId,
+              title: 'Follow-up Due: ${payload['name']}',
+              body: 'Follow-up with ${payload['name']} (${payload['phone']})',
+              scheduledDate: dt,
+            );
+          } else {
+            await NotificationService().cancelNotification(notifId);
+          }
         }
 
         onSaved();
@@ -1194,13 +1331,34 @@ class _LeadForm extends HookConsumerWidget {
         desktopWidth: 180,
       ),
 
-      // Lead Type
+      // Event Type (replaces Lead Type)
+      responsiveField(
+        DropdownButtonFormField<String>(
+          initialValue: eventType.value,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Event Type',
+            prefixIcon: Icon(Icons.celebration_outlined),
+          ),
+          items: kEventTypes
+              .map((e) => DropdownMenuItem(
+                  value: e, child: Text(e, overflow: TextOverflow.ellipsis)))
+              .toList(),
+          onChanged: (v) {
+            if (v != null) eventType.value = v;
+          },
+        ),
+        desktopWidth: 180,
+      ),
+
+      // Alternate Number (optional)
       responsiveField(
         TextFormField(
-          controller: leadTypeCtrl,
+          controller: alternateCtrl,
+          keyboardType: TextInputType.phone,
           decoration: const InputDecoration(
-            labelText: 'Lead Type',
-            prefixIcon: Icon(Icons.category_outlined),
+            labelText: 'Alternate Number (Optional)',
+            prefixIcon: Icon(Icons.phone_forwarded_outlined),
           ),
         ),
         desktopWidth: 180,
@@ -1215,7 +1373,12 @@ class _LeadForm extends HookConsumerWidget {
             labelText: 'Status',
             prefixIcon: Icon(Icons.info_outline),
           ),
-          items: kLeadStatuses
+          items: <String>{
+            ...kLeadStatuses,
+            // Show the current status even if it's a system state, so the
+            // dropdown never gets a value that isn't among its items.
+            status.value,
+          }
               .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (v) {
@@ -1270,17 +1433,8 @@ class _LeadForm extends HookConsumerWidget {
           desktopWidth: 240,
         ),
 
-      // Reason
-      responsiveField(
-        TextFormField(
-          controller: reasonCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Reason (if Lost)',
-            prefixIcon: Icon(Icons.help_outline),
-          ),
-        ),
-        desktopWidth: 250,
-      ),
+      // The lost reason is captured in the Lost-approval flow (Record Outcome),
+      // not on the entry form — a lead can't be marked Lost from here.
 
       // Assign Sales Executive (Admin/Manager view only)
       if (isAdminOrManager)
@@ -2296,12 +2450,26 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
+    final session = ref.watch(authSessionProvider);
+    final canReview = isLostReviewer(session?.role);
+    final isPendingLost = lead.status == 'Pending Lost Approval';
     final status = useState(coerceLeadStatus(lead.status));
     final followUpDate = useState<DateTime?>(lead.followUpDate);
     final remarksCtrl = useTextEditingController(text: lead.remarks);
     final reasonCtrl = useTextEditingController(text: lead.reason);
+    final competitorCtrl = useTextEditingController(text: lead.competitorName);
+    final reviewNoteCtrl = useTextEditingController();
     final reminderMinutes = useState<int>(0); // 0 = None, 5 = 5m prior, 10 = 10m prior
+    final lostAttachmentPath = useState<String?>(null);
     final isSaving = useState(false);
+
+    Future<void> pickAttachment() async {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery);
+      if (picked != null) {
+        lostAttachmentPath.value = picked.path;
+      }
+    }
 
     Future<void> pickDateTime() async {
       final pickedDate = await showDatePicker(
@@ -2323,20 +2491,98 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
       );
     }
 
-    Future<void> saveOutcome() async {
-      // A lost lead must record WHY — block the update until a reason is given.
-      if (status.value == 'Lost' && reasonCtrl.text.trim().isEmpty) {
+    // Marking a lead Lost is a request that a Sales Manager / Regional Manager
+    // (or Admin) must approve — it does NOT close the lead outright. Reason and
+    // remarks are mandatory; competitor name is optional. Reviewers still go
+    // through this call, but the server closes the lead for them immediately.
+    Future<void> requestLost() async {
+      if (reasonCtrl.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Enter a reason before marking this lead as Lost'),
-          ),
+          const SnackBar(content: Text('A Lost reason is required')),
+        );
+        return;
+      }
+      if (remarksCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Remarks are required to mark a lead Lost')),
         );
         return;
       }
       isSaving.value = true;
       try {
+        await ref.read(leadServiceProvider).requestLostApproval(
+              lead.id,
+              reason: reasonCtrl.text.trim(),
+              remarks: remarksCtrl.text.trim(),
+              competitorName: competitorCtrl.text.trim(),
+              lostAttachment: lostAttachmentPath.value,
+            );
+        onSaved();
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(canReview
+                  ? 'Lead marked as Lost.'
+                  : 'Lost request submitted for approval.'),
+              backgroundColor: Colors.green[700],
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      } finally {
+        isSaving.value = false;
+      }
+    }
+
+    // A reviewer approves (→ Lost) or rejects (→ back to the prior stage) a
+    // pending lost request.
+    Future<void> reviewLost(bool approve) async {
+      isSaving.value = true;
+      try {
+        await ref.read(leadServiceProvider).reviewLostApproval(
+              lead.id,
+              approve: approve,
+              note: reviewNoteCtrl.text.trim(),
+            );
+        onSaved();
+        if (context.mounted) {
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(approve
+                  ? 'Lost request approved — lead closed.'
+                  : 'Lost request rejected — lead reopened.'),
+              backgroundColor: approve ? Colors.green[700] : Colors.orange[800],
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          );
+        }
+      } finally {
+        isSaving.value = false;
+      }
+    }
+
+    Future<void> saveOutcome() async {
+      // Lost is not a plain status change — it routes through the approval flow.
+      if (status.value == 'Lost') {
+        await requestLost();
+        return;
+      }
+      isSaving.value = true;
+      try {
         final dio = ref.read(dioProvider);
-        
+
         // Append reminder info to remarks if any reminder selected
         var finalRemarks = remarksCtrl.text;
         if (status.value == 'Follow-up' && reminderMinutes.value > 0) {
@@ -2349,6 +2595,8 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
           'source': lead.source,
           'location': lead.location,
           'leadType': lead.leadType,
+          'eventType': lead.eventType,
+          'alternateNumber': lead.alternateNumber,
           'enquiryDate': lead.enquiryDate.toIso8601String(),
           'bookedDate': lead.bookedDate?.toIso8601String(),
           'followUpDate': followUpDate.value?.toIso8601String(),
@@ -2359,13 +2607,13 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
 
         await dio.put('/leads/${lead.id}', data: payload);
         onSaved();
-        
+
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(reminderMinutes.value > 0 
-                ? 'Outcome updated and reminder scheduled!' 
+              content: Text(reminderMinutes.value > 0
+                ? 'Outcome updated and reminder scheduled!'
                 : 'Outcome updated successfully!'),
               backgroundColor: Colors.green[700],
             ),
@@ -2407,113 +2655,290 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
               ),
               const Divider(),
               const SizedBox(height: 12),
-              
-              // Status Dropdown
-              DropdownButtonFormField<String>(
-                initialValue: status.value,
-                decoration: const InputDecoration(
-                  labelText: 'Select Status / Outcome *',
-                  prefixIcon: Icon(Icons.info_outline),
-                ),
-                items: kLeadStatuses
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: (v) {
-                  status.value = v!;
-                  if (v != 'Follow-up') followUpDate.value = null;
-                },
-              ),
-              const SizedBox(height: 16),
 
-              // Follow-up Date/Time
-              if (status.value == 'Follow-up') ...[
-                InkWell(
-                  onTap: pickDateTime,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Follow-up Date & Time *',
-                      prefixIcon: Icon(Icons.event_available_outlined, color: Color(0xFFF97316)),
-                    ),
-                    child: Text(
-                      followUpDate.value != null
-                          ? _fmtDateTime(followUpDate.value!)
-                          : 'Tap to schedule',
-                    ),
+              // ── A lead awaiting lost approval: show the request + reviewer actions.
+              if (isPendingLost) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFF59E0B)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.hourglass_top, size: 18, color: Color(0xFFB45309)),
+                          SizedBox(width: 8),
+                          Text(
+                            'Pending Lost Approval',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFB45309),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _pendingLostRow('Reason', lead.reason),
+                      _pendingLostRow('Remarks', lead.remarks),
+                      if (lead.competitorName.trim().isNotEmpty)
+                        _pendingLostRow('Competitor', lead.competitorName),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Reminder Offset
-                DropdownButtonFormField<int>(
-                  initialValue: reminderMinutes.value,
-                  decoration: const InputDecoration(
-                    labelText: 'Set Reminder',
-                    prefixIcon: Icon(Icons.alarm_on_outlined),
+                if (canReview) ...[
+                  TextFormField(
+                    controller: reviewNoteCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Review note (optional)',
+                      prefixIcon: Icon(Icons.rate_review_outlined),
+                      alignLabelWithHint: true,
+                    ),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 0, child: Text('No Reminder')),
-                    DropdownMenuItem(value: 5, child: Text('5 minutes prior')),
-                    DropdownMenuItem(value: 10, child: Text('10 minutes prior')),
-                    DropdownMenuItem(value: 30, child: Text('30 minutes prior')),
-                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: isSaving.value ? null : () => reviewLost(false),
+                          icon: const Icon(Icons.close),
+                          label: const Text('Reject'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFFB91C1C),
+                            side: const BorderSide(color: Color(0xFFB91C1C)),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: isSaving.value ? null : () => reviewLost(true),
+                          icon: isSaving.value
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.check),
+                          label: const Text('Approve'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF15803D),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  const Text(
+                    'This lead is awaiting a manager\'s approval before it can be '
+                    'closed as Lost. You will be notified once it is reviewed.',
+                    style: TextStyle(color: Colors.black54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Close'),
+                    ),
+                  ),
+                ],
+              ] else ...[
+                // ── Normal outcome editor.
+                // Status Dropdown
+                DropdownButtonFormField<String>(
+                  initialValue: status.value,
+                  decoration: const InputDecoration(
+                    labelText: 'Select Status / Outcome *',
+                    prefixIcon: Icon(Icons.info_outline),
+                  ),
+                  items: kOutcomeStatuses
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
                   onChanged: (v) {
-                    if (v != null) reminderMinutes.value = v;
+                    status.value = v!;
+                    if (v != 'Follow-up') followUpDate.value = null;
                   },
                 ),
                 const SizedBox(height: 16),
-              ],
 
-              // Reason if Lost
-              if (status.value == 'Lost') ...[
-                TextFormField(
-                  controller: reasonCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Reason for Lost',
-                    prefixIcon: Icon(Icons.help_outline),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Remarks
-              TextFormField(
-                controller: remarksCtrl,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Remarks / Call Context',
-                  prefixIcon: Icon(Icons.notes),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: isSaving.value ? null : saveOutcome,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: crm.primary,
-                      foregroundColor: Colors.white,
+                // Follow-up Date/Time
+                if (status.value == 'Follow-up') ...[
+                  InkWell(
+                    onTap: pickDateTime,
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Follow-up Date & Time *',
+                        prefixIcon: Icon(Icons.event_available_outlined, color: Color(0xFFF97316)),
+                      ),
+                      child: Text(
+                        followUpDate.value != null
+                            ? _fmtDateTime(followUpDate.value!)
+                            : 'Tap to schedule',
+                      ),
                     ),
-                    child: isSaving.value
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Save Outcome'),
                   ),
+                  const SizedBox(height: 16),
+
+                  // Reminder Offset
+                  DropdownButtonFormField<int>(
+                    initialValue: reminderMinutes.value,
+                    decoration: const InputDecoration(
+                      labelText: 'Set Reminder',
+                      prefixIcon: Icon(Icons.alarm_on_outlined),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('No Reminder')),
+                      DropdownMenuItem(value: 5, child: Text('5 minutes prior')),
+                      DropdownMenuItem(value: 10, child: Text('10 minutes prior')),
+                      DropdownMenuItem(value: 30, child: Text('30 minutes prior')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) reminderMinutes.value = v;
+                    },
+                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
+
+                // Lost workflow fields: reason + competitor (remarks below is
+                // reused as the mandatory remark for a lost request).
+                if (status.value == 'Lost') ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFFED7AA)),
+                    ),
+                    child: Text(
+                      canReview
+                          ? 'This will close the lead as Lost and record the reason in the audit log.'
+                          : 'Marking Lost sends a request to your manager for approval. '
+                              'The lead stays open until it is approved.',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF9A3412)),
+                    ),
+                  ),
+                  TextFormField(
+                    controller: reasonCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Reason for Lost *',
+                      prefixIcon: Icon(Icons.help_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: competitorCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Competitor Name (optional)',
+                      prefixIcon: Icon(Icons.groups_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: pickAttachment,
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: const Text('Add Attachment'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[200],
+                          foregroundColor: Colors.black87,
+                          elevation: 0,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      if (lostAttachmentPath.value != null)
+                        const Expanded(
+                          child: Text('Attachment added',
+                            style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Remarks
+                TextFormField(
+                  controller: remarksCtrl,
+                  maxLines: 3,
+                  decoration: InputDecoration(
+                    labelText: status.value == 'Lost'
+                        ? 'Remarks *'
+                        : 'Remarks / Call Context',
+                    prefixIcon: const Icon(Icons.notes),
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Actions
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: isSaving.value ? null : saveOutcome,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: status.value == 'Lost'
+                            ? const Color(0xFFB91C1C)
+                            : crm.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: isSaving.value
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text(status.value == 'Lost'
+                              ? (canReview ? 'Mark Lost' : 'Request Lost Approval')
+                              : 'Save Outcome'),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
     );
   }
+}
+
+/// One labelled row inside the pending-lost-approval summary panel.
+Widget _pendingLostRow(String label, String value) {
+  final text = value.trim().isEmpty ? '—' : value.trim();
+  return Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 84,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF92400E),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF78350F)),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$Customer {
 
-@JsonKey(name: '_id') String? get id; String get name; String get email; String? get phone; String? get address; String? get pincode; String? get company; String get status;
+@JsonKey(name: '_id') String? get id; String get name; String get email; String? get phone; String? get address; String? get pincode; String? get company; String? get eventDate; String get status;
 /// Create a copy of Customer
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +28,16 @@ $CustomerCopyWith<Customer> get copyWith => _$CustomerCopyWithImpl<Customer>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Customer&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.address, address) || other.address == address)&&(identical(other.pincode, pincode) || other.pincode == pincode)&&(identical(other.company, company) || other.company == company)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Customer&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.address, address) || other.address == address)&&(identical(other.pincode, pincode) || other.pincode == pincode)&&(identical(other.company, company) || other.company == company)&&(identical(other.eventDate, eventDate) || other.eventDate == eventDate)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,email,phone,address,pincode,company,status);
+int get hashCode => Object.hash(runtimeType,id,name,email,phone,address,pincode,company,eventDate,status);
 
 @override
 String toString() {
-  return 'Customer(id: $id, name: $name, email: $email, phone: $phone, address: $address, pincode: $pincode, company: $company, status: $status)';
+  return 'Customer(id: $id, name: $name, email: $email, phone: $phone, address: $address, pincode: $pincode, company: $company, eventDate: $eventDate, status: $status)';
 }
 
 
@@ -48,7 +48,7 @@ abstract mixin class $CustomerCopyWith<$Res>  {
   factory $CustomerCopyWith(Customer value, $Res Function(Customer) _then) = _$CustomerCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: '_id') String? id, String name, String email, String? phone, String? address, String? pincode, String? company, String status
+@JsonKey(name: '_id') String? id, String name, String email, String? phone, String? address, String? pincode, String? company, String? eventDate, String status
 });
 
 
@@ -65,7 +65,7 @@ class _$CustomerCopyWithImpl<$Res>
 
 /// Create a copy of Customer
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? name = null,Object? email = null,Object? phone = freezed,Object? address = freezed,Object? pincode = freezed,Object? company = freezed,Object? status = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = freezed,Object? name = null,Object? email = null,Object? phone = freezed,Object? address = freezed,Object? pincode = freezed,Object? company = freezed,Object? eventDate = freezed,Object? status = null,}) {
   return _then(_self.copyWith(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -74,6 +74,7 @@ as String,phone: freezed == phone ? _self.phone : phone // ignore: cast_nullable
 as String?,address: freezed == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
 as String?,pincode: freezed == pincode ? _self.pincode : pincode // ignore: cast_nullable_to_non_nullable
 as String?,company: freezed == company ? _self.company : company // ignore: cast_nullable_to_non_nullable
+as String?,eventDate: freezed == eventDate ? _self.eventDate : eventDate // ignore: cast_nullable_to_non_nullable
 as String?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,
   ));
@@ -160,10 +161,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String status)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String? eventDate,  String status)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Customer() when $default != null:
-return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.status);case _:
+return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.eventDate,_that.status);case _:
   return orElse();
 
 }
@@ -181,10 +182,10 @@ return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String status)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String? eventDate,  String status)  $default,) {final _that = this;
 switch (_that) {
 case _Customer():
-return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.status);case _:
+return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.eventDate,_that.status);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -201,10 +202,10 @@ return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String status)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String? id,  String name,  String email,  String? phone,  String? address,  String? pincode,  String? company,  String? eventDate,  String status)?  $default,) {final _that = this;
 switch (_that) {
 case _Customer() when $default != null:
-return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.status);case _:
+return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.pincode,_that.company,_that.eventDate,_that.status);case _:
   return null;
 
 }
@@ -216,7 +217,7 @@ return $default(_that.id,_that.name,_that.email,_that.phone,_that.address,_that.
 @JsonSerializable()
 
 class _Customer implements Customer {
-   _Customer({@JsonKey(name: '_id') this.id, required this.name, required this.email, this.phone, this.address, this.pincode, this.company, this.status = 'Prospect'});
+   _Customer({@JsonKey(name: '_id') this.id, required this.name, required this.email, this.phone, this.address, this.pincode, this.company, this.eventDate, this.status = 'Prospect'});
   factory _Customer.fromJson(Map<String, dynamic> json) => _$CustomerFromJson(json);
 
 @override@JsonKey(name: '_id') final  String? id;
@@ -226,6 +227,7 @@ class _Customer implements Customer {
 @override final  String? address;
 @override final  String? pincode;
 @override final  String? company;
+@override final  String? eventDate;
 @override@JsonKey() final  String status;
 
 /// Create a copy of Customer
@@ -241,16 +243,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Customer&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.address, address) || other.address == address)&&(identical(other.pincode, pincode) || other.pincode == pincode)&&(identical(other.company, company) || other.company == company)&&(identical(other.status, status) || other.status == status));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Customer&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.phone, phone) || other.phone == phone)&&(identical(other.address, address) || other.address == address)&&(identical(other.pincode, pincode) || other.pincode == pincode)&&(identical(other.company, company) || other.company == company)&&(identical(other.eventDate, eventDate) || other.eventDate == eventDate)&&(identical(other.status, status) || other.status == status));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,email,phone,address,pincode,company,status);
+int get hashCode => Object.hash(runtimeType,id,name,email,phone,address,pincode,company,eventDate,status);
 
 @override
 String toString() {
-  return 'Customer(id: $id, name: $name, email: $email, phone: $phone, address: $address, pincode: $pincode, company: $company, status: $status)';
+  return 'Customer(id: $id, name: $name, email: $email, phone: $phone, address: $address, pincode: $pincode, company: $company, eventDate: $eventDate, status: $status)';
 }
 
 
@@ -261,7 +263,7 @@ abstract mixin class _$CustomerCopyWith<$Res> implements $CustomerCopyWith<$Res>
   factory _$CustomerCopyWith(_Customer value, $Res Function(_Customer) _then) = __$CustomerCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: '_id') String? id, String name, String email, String? phone, String? address, String? pincode, String? company, String status
+@JsonKey(name: '_id') String? id, String name, String email, String? phone, String? address, String? pincode, String? company, String? eventDate, String status
 });
 
 
@@ -278,7 +280,7 @@ class __$CustomerCopyWithImpl<$Res>
 
 /// Create a copy of Customer
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? name = null,Object? email = null,Object? phone = freezed,Object? address = freezed,Object? pincode = freezed,Object? company = freezed,Object? status = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = freezed,Object? name = null,Object? email = null,Object? phone = freezed,Object? address = freezed,Object? pincode = freezed,Object? company = freezed,Object? eventDate = freezed,Object? status = null,}) {
   return _then(_Customer(
 id: freezed == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String?,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -287,6 +289,7 @@ as String,phone: freezed == phone ? _self.phone : phone // ignore: cast_nullable
 as String?,address: freezed == address ? _self.address : address // ignore: cast_nullable_to_non_nullable
 as String?,pincode: freezed == pincode ? _self.pincode : pincode // ignore: cast_nullable_to_non_nullable
 as String?,company: freezed == company ? _self.company : company // ignore: cast_nullable_to_non_nullable
+as String?,eventDate: freezed == eventDate ? _self.eventDate : eventDate // ignore: cast_nullable_to_non_nullable
 as String?,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,
   ));

@@ -370,6 +370,36 @@ class LeadDetailsScreen extends HookConsumerWidget {
                       ),
                     ),
                   ),
+                if (lead.status != 'Converted' && lead.status != 'Lost')
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      final uri = Uri(
+                        path: '/booking/add',
+                        queryParameters: {
+                          'mode': 'single',
+                          'leadId': lead.id,
+                          'name': lead.name,
+                          'phone': lead.phone,
+                        },
+                      );
+                      context.push(uri.toString());
+                    },
+                    icon: const Icon(
+                      Icons.event_available_outlined,
+                      size: 16,
+                      color: Color(0xFFEAB308),
+                    ),
+                    label: const Text(
+                      'Convert to Booking',
+                      style: TextStyle(color: Color(0xFFEAB308)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFEAB308)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],

@@ -13,6 +13,7 @@ abstract class Customer with _$Customer {
     String? address,
     String? pincode,
     String? company,
+    String? eventDate,
     @Default('Prospect') String status,
   }) = _Customer;
 
