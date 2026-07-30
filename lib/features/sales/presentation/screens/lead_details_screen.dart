@@ -285,10 +285,16 @@ class LeadDetailsScreen extends HookConsumerWidget {
                   lead.source,
                 ),
                 _buildHeaderMeta(
-                  Icons.category_outlined,
-                  'Type',
-                  lead.leadType,
+                  Icons.celebration_outlined,
+                  'Event',
+                  lead.eventType.isNotEmpty ? lead.eventType : lead.leadType,
                 ),
+                if (lead.alternateNumber.trim().isNotEmpty)
+                  _buildHeaderMeta(
+                    Icons.phone_forwarded_outlined,
+                    'Alternate No.',
+                    lead.alternateNumber,
+                  ),
               ],
             ),
             16.h,
@@ -334,6 +340,45 @@ class LeadDetailsScreen extends HookConsumerWidget {
                     ),
                   ),
                 ),
+                // Alternate contact — call or message the second number too.
+                if (lead.alternateNumber.trim().isNotEmpty) ...[
+                  OutlinedButton.icon(
+                    onPressed: () => _launchCall(context, lead.alternateNumber),
+                    icon: const Icon(
+                      Icons.phone_forwarded_outlined,
+                      size: 16,
+                      color: Color(0xFF6366F1),
+                    ),
+                    label: const Text(
+                      'Call Alt',
+                      style: TextStyle(color: Color(0xFF6366F1)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF6366F1)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _launchWhatsApp(context, lead.alternateNumber),
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 16,
+                      color: Color(0xFF6366F1),
+                    ),
+                    label: const Text(
+                      'Msg Alt',
+                      style: TextStyle(color: Color(0xFF6366F1)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF6366F1)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ],
                 OutlinedButton.icon(
                   onPressed: () => _showEditDialog(context, ref, lead),
                   icon: const Icon(

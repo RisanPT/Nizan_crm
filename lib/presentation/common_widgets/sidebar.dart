@@ -7,6 +7,7 @@ import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../features/notifications/controllers/notification_providers.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -104,6 +105,15 @@ class Sidebar extends ConsumerWidget {
             child: ListView(
               padding: 16.p,
               children: [
+                // Notifications — available to every role.
+                _SidebarItem(
+                  icon: Icons.notifications_none,
+                  title: 'Notifications',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath == '/notifications',
+                  onTap: () => context.go('/notifications'),
+                  trailing: _unreadBadge(ref, crmColors, isCollapsed),
+                ),
                 if (role == AppRole.artist) ...[
                   // ── ARTIST VIEW ───────────────────────────────────────────
                   _SidebarItem(
@@ -872,6 +882,33 @@ class Sidebar extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Unread-count badge for the sidebar Notifications item. A count pill when the
+/// sidebar is expanded, a small dot when collapsed, nothing when all read.
+Widget? _unreadBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
+  final count = ref.watch(unreadCountProvider).asData?.value ?? 0;
+  if (count <= 0) return null;
+  if (collapsed) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: crm.destructive, shape: BoxShape.circle),
+    );
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: crm.destructive,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    constraints: const BoxConstraints(minWidth: 18),
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
 }
 
 class _SidebarItem extends StatelessWidget {

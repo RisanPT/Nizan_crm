@@ -58,6 +58,7 @@ import 'package:nizan_crm/features/inventory/presentation/screens/inventory_vend
 import 'package:nizan_crm/features/inventory/presentation/screens/artist_inventory_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
+import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/pre_trip_inspection_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/active_job_screen.dart';
@@ -293,6 +294,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'My Works';
           } else if (state.uri.path == '/leave-requests') {
             title = 'Leave Requests';
+          } else if (state.uri.path == '/notifications') {
+            title = 'Notifications';
           } else if (state.uri.path == '/profile') {
             title = 'My Profile';
           } else if (state.uri.path == '/settings') {
@@ -395,6 +398,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales/cancelled',
             builder: (context, state) => const CancelledWorksScreen(),
+          ),
+          GoRoute(
+            path: '/notifications',
+            builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
             path: '/sales/leads',

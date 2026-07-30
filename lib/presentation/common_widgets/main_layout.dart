@@ -8,6 +8,11 @@ import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
 import 'sidebar.dart';
+import '../../features/notifications/controllers/notification_providers.dart';
+
+/// Tab-root screens that render their OWN AppBar — the mobile shell bar is
+/// suppressed for these so they don't show two stacked bars.
+const _mobileOwnAppBarRoutes = {'/works', '/hr/slots'};
 
 class MainLayout extends ConsumerStatefulWidget {
   final Widget child;
@@ -178,7 +183,26 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     final invAccess = session?.inventoryAccess ?? false;
 
     if (isMobile) {
+      // Pushed detail screens (canPop) carry their own AppBar with a back
+      // button; only tab-root screens get the shell bar with the bell.
+      final canPop = Navigator.of(context).canPop();
+      final currentPath = GoRouterState.of(context).uri.path;
+      final showShellBar =
+          !canPop && !_mobileOwnAppBarRoutes.contains(currentPath);
+      final unread = ref.watch(unreadCountProvider).asData?.value ?? 0;
+
       return Scaffold(
+        appBar: showShellBar
+            ? AppBar(
+                title: Text(widget.title),
+                actions: [
+                  _MobileBell(
+                    count: unread,
+                    onPressed: () => context.go('/notifications'),
+                  ),
+                ],
+              )
+            : null,
         body: SafeArea(child: widget.child),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _calculateSelectedIndex(context, role),
@@ -469,6 +493,45 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Bell + unread badge for the mobile shell app bar.
+class _MobileBell extends StatelessWidget {
+  final int count;
+  final VoidCallback onPressed;
+
+  const _MobileBell({required this.count, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        IconButton(
+          tooltip: 'Notifications',
+          icon: const Icon(Icons.notifications_none),
+          onPressed: onPressed,
+        ),
+        if (count > 0)
+          Positioned(
+            right: 6,
+            top: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.error,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                count > 99 ? '99+' : '$count',
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

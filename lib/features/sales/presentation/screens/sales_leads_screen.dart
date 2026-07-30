@@ -360,6 +360,9 @@ class SalesLeadsScreen extends HookConsumerWidget {
                         currentPage.value = 1;
                       },
                     ),
+                    16.h,
+                    // Follow-up management widgets: Today's / Pending / Completed / Overdue.
+                    _FollowUpStatsRow(stats: paginated.stats ?? {}),
                     24.h,
                     // Filter Bar
                     Container(
@@ -2018,10 +2021,40 @@ class _LeadCardState extends State<_LeadCard> {
                       ),
                     ),
                   ),
+                  // Optional alternate contact — also tap-to-call.
+                  if (lead.alternateNumber.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: () => _launchCall(context, lead.alternateNumber),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.phone_forwarded_outlined,
+                              size: 12, color: Color(0xFF6366F1)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Alt: ${lead.alternateNumber}',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFF6366F1),
+                                  fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   _InfoRow(icon: Icons.campaign_outlined, label: 'Source', value: lead.source),
                   const SizedBox(height: 6),
-                  _InfoRow(icon: Icons.category_outlined, label: 'Type', value: lead.leadType),
+                  _InfoRow(
+                    icon: Icons.celebration_outlined,
+                    label: 'Event',
+                    // Prefer the new Event Type; fall back to legacy Lead Type
+                    // for leads created before the field existed.
+                    value: lead.eventType.isNotEmpty ? lead.eventType : lead.leadType,
+                  ),
                   const SizedBox(height: 6),
                   _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
                   const SizedBox(height: 6),
@@ -3101,6 +3134,90 @@ class _LeadStatsRow extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Follow-up management widgets required by the enhancement spec:
+/// Today's Follow-ups, Pending, Completed and Overdue.
+class _FollowUpStatsRow extends StatelessWidget {
+  final Map<String, int> stats;
+
+  const _FollowUpStatsRow({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final isMobile = ResponsiveBuilder.isMobile(context);
+
+    final cards = <Widget>[
+      _miniStat(crm, "Today's Follow-ups", stats['followUpsToday'] ?? 0,
+          Icons.today_outlined, const Color(0xFFF59E0B)),
+      _miniStat(crm, 'Pending', stats['followUpsPending'] ?? 0,
+          Icons.hourglass_bottom_outlined, const Color(0xFF3B82F6)),
+      _miniStat(crm, 'Completed', stats['followUpsCompleted'] ?? 0,
+          Icons.task_alt_outlined, const Color(0xFF16A34A)),
+      _miniStat(crm, 'Overdue', stats['followUpsOverdue'] ?? 0,
+          Icons.error_outline, const Color(0xFFDC2626)),
+    ];
+
+    if (isMobile) {
+      return Row(
+        children: [
+          for (var i = 0; i < cards.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(child: cards[i]),
+          ],
+        ],
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 36) / 4;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (final c in cards) SizedBox(width: itemWidth, child: c),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _miniStat(
+      CrmTheme crm, String title, int count, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  count.toString(),
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.bold, color: color),
+                ),
+                Text(
+                  title,
+                  style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
