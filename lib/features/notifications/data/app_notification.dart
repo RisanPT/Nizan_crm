@@ -7,6 +7,8 @@ class AppNotification {
   final String? leadId;
   final String? leadName;
   final String? bookingId;
+  /// Generic in-app route this notification points at (e.g. '/fleet/assignments').
+  final String link;
   final bool read;
   final DateTime createdAt;
 
@@ -18,6 +20,7 @@ class AppNotification {
     this.leadId,
     this.leadName,
     this.bookingId,
+    this.link = '',
     this.read = false,
     required this.createdAt,
   });
@@ -38,6 +41,7 @@ class AppNotification {
       leadId: _id(lead),
       leadName: lead is Map ? lead['name'] as String? : null,
       bookingId: _id(json['bookingId']),
+      link: json['link'] as String? ?? '',
       read: json['read'] as bool? ?? false,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String).toLocal()
@@ -53,6 +57,7 @@ class AppNotification {
         leadId: leadId,
         leadName: leadName,
         bookingId: bookingId,
+        link: link,
         read: read ?? this.read,
         createdAt: createdAt,
       );

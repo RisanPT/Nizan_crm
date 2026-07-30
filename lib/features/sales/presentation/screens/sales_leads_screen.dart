@@ -297,17 +297,22 @@ class SalesLeadsScreen extends HookConsumerWidget {
           children: [
             const _AddLeadCard(),
             24.h,
+            // On mobile the app bar already shows "Leads Management", so keep the
+            // in-body header compact and drop the redundant subtitle.
             Text(
               'All Leads',
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: (isMobile
+                      ? Theme.of(context).textTheme.titleLarge
+                      : Theme.of(context).textTheme.headlineSmall)
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
-            8.h,
-            Text(
-              'Track and manage all potential customer inquiries.',
-              style: TextStyle(color: crm.textSecondary),
-            ),
+            if (!isMobile) ...[
+              8.h,
+              Text(
+                'Track and manage all potential customer inquiries.',
+                style: TextStyle(color: crm.textSecondary),
+              ),
+            ],
             20.h,
             asyncPaginatedLeads.when(
               loading: () => const Center(child: Padding(
@@ -1861,6 +1866,30 @@ class _LeadsTable extends ConsumerWidget {
             ? 2
             : (width < 1400 ? 3 : 4));
 
+    _LeadCard buildCard(Lead lead, {bool flexible = false}) => _LeadCard(
+          lead: lead,
+          flexible: flexible,
+          onEdit: () => _showEditDialog(context, ref, lead),
+          onDelete: () => _confirmDelete(context, ref, lead),
+          onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
+          onConvert: () => convertLeadToBooking(context, lead),
+          onViewDetails: () => context.go('/sales/leads/${lead.id}'),
+        );
+
+    // Single column (phones): a plain list of content-sized cards. Avoids the
+    // fixed 360px cell that clipped rich leads and left blank space on sparse
+    // ones.
+    if (crossAxisCount == 1) {
+      return Column(
+        children: [
+          for (var i = 0; i < leads.length; i++) ...[
+            if (i > 0) const SizedBox(height: 16),
+            buildCard(leads[i], flexible: true),
+          ],
+        ],
+      );
+    }
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1871,17 +1900,7 @@ class _LeadsTable extends ConsumerWidget {
         mainAxisExtent: 360,
       ),
       itemCount: leads.length,
-      itemBuilder: (context, index) {
-        final lead = leads[index];
-        return _LeadCard(
-          lead: lead,
-          onEdit: () => _showEditDialog(context, ref, lead),
-          onDelete: () => _confirmDelete(context, ref, lead),
-          onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
-          onConvert: () => convertLeadToBooking(context, lead),
-          onViewDetails: () => context.go('/sales/leads/${lead.id}'),
-        );
-      },
+      itemBuilder: (context, index) => buildCard(leads[index]),
     );
   }
 }
@@ -1896,6 +1915,9 @@ class _LeadCard extends StatefulWidget {
   final VoidCallback onRecordOutcome;
   final VoidCallback onConvert;
   final VoidCallback onViewDetails;
+  /// When true the card sizes to its content (used for the single-column mobile
+  /// list) instead of filling a fixed-height grid cell.
+  final bool flexible;
 
   const _LeadCard({
     required this.lead,
@@ -1904,6 +1926,7 @@ class _LeadCard extends StatefulWidget {
     required this.onRecordOutcome,
     required this.onConvert,
     required this.onViewDetails,
+    this.flexible = false,
   });
 
   @override
@@ -1957,6 +1980,7 @@ class _LeadCardState extends State<_LeadCard> {
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: widget.flexible ? MainAxisSize.min : MainAxisSize.max,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2128,7 +2152,9 @@ class _LeadCardState extends State<_LeadCard> {
                       ),
                     ),
                   ],
-                  const Spacer(),
+                  // Fixed-height grid cells push the actions to the bottom; the
+                  // content-sized mobile card just leaves a small gap.
+                  if (widget.flexible) const SizedBox(height: 12) else const Spacer(),
                   const Divider(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -3162,12 +3188,20 @@ class _FollowUpStatsRow extends StatelessWidget {
     ];
 
     if (isMobile) {
-      return Row(
+      // 2×2 grid — four cards in one row is unreadable on a phone.
+      return Column(
         children: [
-          for (var i = 0; i < cards.length; i++) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(child: cards[i]),
-          ],
+          Row(children: [
+            Expanded(child: cards[0]),
+            const SizedBox(width: 8),
+            Expanded(child: cards[1]),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: cards[2]),
+            const SizedBox(width: 8),
+            Expanded(child: cards[3]),
+          ]),
         ],
       );
     }

@@ -39,7 +39,20 @@ void main() {
       expect(n.bookingId, isNull);
       expect(n.title, '');
       expect(n.body, '');
+      expect(n.link, '');
       expect(n.read, isFalse);
+    });
+
+    test('parses a generic deep-link for a department notification', () {
+      final n = AppNotification.fromJson({
+        '_id': 'n5',
+        'type': 'low_stock',
+        'title': 'Low stock alert',
+        'link': '/inventory/alerts',
+        'createdAt': '2026-07-30T10:00:00.000Z',
+      });
+      expect(n.link, '/inventory/alerts');
+      expect(n.leadId, isNull);
     });
 
     test('copyWith flips read state only', () {

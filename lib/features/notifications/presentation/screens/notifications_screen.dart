@@ -32,7 +32,12 @@ class NotificationsScreen extends ConsumerWidget {
         ref.invalidate(notificationsProvider);
         ref.invalidate(unreadCountProvider);
       }
-      if (n.leadId != null && n.leadId!.isNotEmpty && context.mounted) {
+      if (!context.mounted) return;
+      // Prefer the generic deep-link; fall back to the lead route for older
+      // lead notifications that predate the link field.
+      if (n.link.isNotEmpty) {
+        context.push(n.link);
+      } else if (n.leadId != null && n.leadId!.isNotEmpty) {
         context.push('/sales/leads/${n.leadId}');
       }
     }
@@ -235,6 +240,21 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.gavel_outlined, Color(0xFF7C3AED));
     case 'booking_created':
       return const _TypeMeta(Icons.event_available_outlined, Color(0xFF0D9488));
+    // Accounts
+    case 'payment_received':
+      return const _TypeMeta(Icons.payments_outlined, Color(0xFF16A34A));
+    case 'expense_recorded':
+      return const _TypeMeta(Icons.receipt_long_outlined, Color(0xFFB45309));
+    // Fleet
+    case 'trip_assigned':
+      return const _TypeMeta(Icons.local_shipping_outlined, Color(0xFF2563EB));
+    case 'trip_completed':
+      return const _TypeMeta(Icons.where_to_vote_outlined, Color(0xFF16A34A));
+    case 'accident_reported':
+      return const _TypeMeta(Icons.car_crash_outlined, Color(0xFFDC2626));
+    // Inventory
+    case 'low_stock':
+      return const _TypeMeta(Icons.inventory_2_outlined, Color(0xFFEA580C));
     default:
       return const _TypeMeta(Icons.notifications_outlined, Color(0xFF6B7280));
   }
