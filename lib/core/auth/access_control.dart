@@ -35,8 +35,61 @@ class Access {
   bool get _usesFallback => granted.isEmpty;
 
   /// True when [key] is granted; falls back to the hard-coded default.
-  bool has(String key, bool fallback) =>
-      _usesFallback ? fallback : granted.contains(key);
+  /// Parent-aware: a module counts as visible if either the parent key OR any
+  /// of its sub-keys (`parent.child`) is granted.
+  bool has(String key, bool fallback) {
+    if (_usesFallback) return fallback;
+    return granted.contains(key) || granted.any((k) => k.startsWith('$key.'));
+  }
+
+  /// True when a specific sub-section (`sales.leads`) is allowed.
+  /// Backward compatible:
+  ///  • a role with NO explicit permissions uses the parent's role default;
+  ///  • granting the parent key alone means the whole module (all sub-sections);
+  ///  • otherwise the exact sub-key must be present.
+  bool canSeeSub(String subKey) {
+    final dot = subKey.indexOf('.');
+    final parent = dot == -1 ? subKey : subKey.substring(0, dot);
+    if (_usesFallback) return _parentFallback(parent);
+    if (granted.contains(parent)) return true;
+    return granted.contains(subKey);
+  }
+
+  bool _parentFallback(String parent) {
+    switch (parent) {
+      case 'dashboard':
+        return role.canSeeDashboard;
+      case 'clients':
+        return role.canSeeClients;
+      case 'calendar':
+        return role.canSeeCalendar;
+      case 'bookings':
+      case 'trials':
+        return role.canSeeBookings;
+      case 'services':
+        return role.canSeeServices;
+      case 'staff':
+        return role.canSeeStaff;
+      case 'sales':
+        return role.canSeeSales;
+      case 'finance':
+        return role.canSeeFinance;
+      case 'payables':
+        return role.canSeePayables;
+      case 'fleet':
+        return role.canSeeFleet;
+      case 'inventory':
+        return role.canManageInventory;
+      case 'marketing':
+        return role.canManageMarketing;
+      case 'reports':
+        return role.canSeeCEOReport;
+      case 'leave':
+        return role.canSeeLeaveRequests;
+      default:
+        return false;
+    }
+  }
 
   // Admin and manager keep blanket access regardless of the matrix, so an
   // administrator can never lock themselves out of Settings.

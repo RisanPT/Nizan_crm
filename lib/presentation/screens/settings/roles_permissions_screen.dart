@@ -23,6 +23,8 @@ class _RolesPermissionsScreenState
     extends ConsumerState<RolesPermissionsScreen> {
   String? _selectedRoleId;
   Set<String> _draft = {};
+  // Which feature cards are expanded to show their sub-feature checkboxes.
+  final Set<String> _expanded = {};
   bool _saving = false;
 
   @override
@@ -250,16 +252,19 @@ class _RolesPermissionsScreenState
             ],
           ),
           8.h,
-          GridView.count(
-            crossAxisCount: isMobile ? 1 : 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: isMobile ? 5.2 : 4.6,
-            children: [
-              for (final f in kAppFeatures) _featureTile(f, crm),
-            ],
+          LayoutBuilder(
+            builder: (context, c) {
+              final cols = isMobile ? 1 : 2;
+              final w = (c.maxWidth - (cols - 1) * 8) / cols;
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final f in kAppFeatures)
+                    SizedBox(width: w, child: _featureTile(f, crm)),
+                ],
+              );
+            },
           ),
           16.h,
           Row(
@@ -295,61 +300,151 @@ class _RolesPermissionsScreenState
     );
   }
 
-  Widget _featureTile(AppFeature f, CrmTheme crm) {
-    final on = _draft.contains(f.key);
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
-      onTap: () => setState(() {
-        if (on) {
-          _draft.remove(f.key);
-        } else {
-          _draft.add(f.key);
+  // Toggle the whole module on/off. On = grant the parent key (which means "all
+  // sub-sections"); off = remove the parent and every sub-key.
+  void _toggleParent(AppFeature f) => setState(() {
+        final anyOn =
+            _draft.contains(f.key) || f.subs.any((s) => _draft.contains(s.key));
+        _draft.remove(f.key);
+        for (final s in f.subs) {
+          _draft.remove(s.key);
         }
-      }),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: on ? crm.primary.withValues(alpha: 0.06) : null,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: on ? crm.primary.withValues(alpha: 0.4) : crm.border),
-        ),
-        child: Row(
-          children: [
-            Checkbox(
-              value: on,
-              visualDensity: VisualDensity.compact,
-              onChanged: (_) => setState(() {
-                if (on) {
-                  _draft.remove(f.key);
-                } else {
-                  _draft.add(f.key);
-                }
-              }),
+        if (!anyOn) _draft.add(f.key);
+      });
+
+  // Toggle one sub-section. If the parent was granted (meaning "all"), expand it
+  // into explicit sub-keys first so the rest stay on. If toggling on completes
+  // the set, collapse back to the single parent key.
+  void _toggleSub(AppFeature f, AppSubFeature s) => setState(() {
+        if (_draft.contains(f.key)) {
+          _draft.remove(f.key);
+          for (final x in f.subs) {
+            _draft.add(x.key);
+          }
+          _draft.remove(s.key);
+        } else if (_draft.contains(s.key)) {
+          _draft.remove(s.key);
+        } else {
+          _draft.add(s.key);
+          if (f.subs.every((x) => _draft.contains(x.key))) {
+            for (final x in f.subs) {
+              _draft.remove(x.key);
+            }
+            _draft.add(f.key);
+          }
+        }
+      });
+
+  Widget _featureTile(AppFeature f, CrmTheme crm) {
+    final hasSubs = f.subs.isNotEmpty;
+    final parentOn = _draft.contains(f.key);
+    final anySub = hasSubs && f.subs.any((s) => _draft.contains(s.key));
+    final allSubs = hasSubs && f.subs.every((s) => _draft.contains(s.key));
+    final fully = parentOn || allSubs;
+    final on = fully || anySub;
+    final expanded = _expanded.contains(f.key);
+
+    final subtitle = hasSubs && anySub && !fully
+        ? '${f.subs.where((s) => _draft.contains(s.key)).length} of ${f.subs.length} sections'
+        : f.description;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: on ? crm.primary.withValues(alpha: 0.06) : null,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: on ? crm.primary.withValues(alpha: 0.4) : crm.border),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => _toggleParent(f),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  Checkbox(
+                    value: fully ? true : (anySub ? null : false),
+                    tristate: true,
+                    visualDensity: VisualDensity.compact,
+                    onChanged: (_) => _toggleParent(f),
+                  ),
+                  Icon(f.icon,
+                      size: 16, color: on ? crm.primary : crm.textSecondary),
+                  8.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(f.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 13)),
+                        Text(subtitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 10.5, color: crm.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  if (hasSubs)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => setState(() {
+                        if (expanded) {
+                          _expanded.remove(f.key);
+                        } else {
+                          _expanded.add(f.key);
+                        }
+                      }),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                            expanded ? Icons.expand_less : Icons.expand_more,
+                            size: 20,
+                            color: crm.textSecondary),
+                      ),
+                    ),
+                ],
+              ),
             ),
-            Icon(f.icon,
-                size: 16, color: on ? crm.primary : crm.textSecondary),
-            8.w,
-            Expanded(
+          ),
+          if (hasSubs && expanded) ...[
+            Divider(height: 1, color: crm.border),
+            Padding(
+              padding:
+                  const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 6),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(f.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 13)),
-                  Text(f.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+                  for (final s in f.subs)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _toggleSub(f, s),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: parentOn || _draft.contains(s.key),
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (_) => _toggleSub(f, s),
+                          ),
+                          Expanded(
+                            child: Text(s.label,
+                                style: const TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

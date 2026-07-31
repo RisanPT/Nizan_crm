@@ -131,43 +131,113 @@ class _PaginationBar extends StatelessWidget {
     final endItem = totalItems == 0 ? 0 : startItem + currentItemCount - 1;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: crmColors.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: crmColors.border),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Showing $startItem-$endItem of $totalItems bookings',
-              style: TextStyle(
-                color: crmColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Text(
-            'Page $page of $totalPages',
-            style: TextStyle(
-              color: crmColors.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          12.w,
-          OutlinedButton.icon(
+      child: LayoutBuilder(
+        builder: (context, c) {
+          // Full labelled controls need room; below this, use compact icon
+          // buttons with the page info centred so nothing overflows on a phone.
+          final compact = c.maxWidth < 520;
+
+          final prevIcon = IconButton(
             onPressed: onPrevious,
             icon: const Icon(Icons.chevron_left),
-            label: const Text('Previous'),
-          ),
-          8.w,
-          ElevatedButton.icon(
+            tooltip: 'Previous',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: crmColors.input,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+          final nextIcon = IconButton(
             onPressed: onNext,
             icon: const Icon(Icons.chevron_right),
-            label: const Text('Next'),
-          ),
-        ],
+            tooltip: 'Next',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: crmColors.primary.withValues(alpha: 0.12),
+              foregroundColor: crmColors.primary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+
+          if (compact) {
+            return Row(
+              children: [
+                prevIcon,
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Page $page of $totalPages',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: crmColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (totalItems > 0)
+                        Text(
+                          '$startItem–$endItem of $totalItems',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: crmColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                nextIcon,
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Showing $startItem-$endItem of $totalItems bookings',
+                  style: TextStyle(
+                    color: crmColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                'Page $page of $totalPages',
+                style: TextStyle(
+                  color: crmColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              12.w,
+              OutlinedButton.icon(
+                onPressed: onPrevious,
+                icon: const Icon(Icons.chevron_left),
+                label: const Text('Previous'),
+              ),
+              8.w,
+              ElevatedButton.icon(
+                onPressed: onNext,
+                icon: const Icon(Icons.chevron_right),
+                label: const Text('Next'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -347,11 +417,15 @@ class _MobileBookingCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.go('/booking/manage/${booking.id}'),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: accent),
-            Expanded(
+        // IntrinsicHeight bounds the Row's height so the full-height accent bar
+        // (crossAxisAlignment.stretch) can size to the card instead of forcing
+        // infinite height inside a scroll view.
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(width: 4, color: accent),
+              Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                 child: Column(
@@ -435,6 +509,7 @@ class _MobileBookingCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

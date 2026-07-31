@@ -26,6 +26,65 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
         .updateBooking(booking.copyWith(status: status));
   }
 
+  // Accept a single request straight from its card (no dialog needed).
+  Future<void> _acceptSingle(Booking booking) async {
+    try {
+      await _updateStatus(booking, 'confirmed');
+      if (mounted) {
+        setState(() => _selectedIds.remove(booking.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Booking confirmed and moved to calendar.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to confirm booking: $error')),
+        );
+      }
+    }
+  }
+
+  // Reject a single request (with a confirmation, since it's destructive).
+  Future<void> _rejectSingle(Booking booking) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject booking request?'),
+        content: Text(
+            "This rejects ${booking.customerName}'s booking request."),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFB91C1C)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _updateStatus(booking, 'rejected');
+      if (mounted) {
+        setState(() => _selectedIds.remove(booking.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Booking rejected.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reject booking: $error')),
+        );
+      }
+    }
+  }
+
   Future<void> _bulkConfirm(List<Booking> pendingBookings) async {
     if (_selectedIds.isEmpty) return;
 
@@ -112,34 +171,54 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Booking Requests',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      8.h,
-                      Text(
-                        'Review new bookings, accept or reject individually, and bulk confirm orders from one place.',
-                        style: TextStyle(color: crmColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                // Create a booking from here too — the Booking section grants
-                // 'bookings' access, but until now a new booking could only be
-                // started from the Calendar (which needs a separate permission).
-                OutlinedButton.icon(
+            // Mobile: the app bar already shows "Booking Requests", so skip the
+            // duplicate heading — give the description full width and a proper
+            // full-width action button instead of cramming it beside the text.
+            if (isMobile) ...[
+              Text(
+                'Review new bookings, accept or reject individually, and bulk confirm orders from one place.',
+                style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
+              ),
+              12.h,
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
                   onPressed: () => showAddBookingModeChooser(context),
                   icon: const Icon(Icons.add, size: 18),
-                  label: Text(isMobile ? 'New' : 'New Booking'),
+                  label: const Text('New Booking'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
-                if (!isMobile) ...[
+              ),
+            ] else
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Booking Requests',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        8.h,
+                        Text(
+                          'Review new bookings, accept or reject individually, and bulk confirm orders from one place.',
+                          style: TextStyle(color: crmColors.textSecondary),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Create a booking from here too — the Booking section grants
+                  // 'bookings' access, but until now a new booking could only be
+                  // started from the Calendar (which needs a separate permission).
+                  OutlinedButton.icon(
+                    onPressed: () => showAddBookingModeChooser(context),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('New Booking'),
+                  ),
                   12.w,
                   FilledButton.icon(
                     onPressed: _bulkSaving || _selectedIds.isEmpty
@@ -155,9 +234,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                     label: Text('Bulk Accept (${_selectedIds.length})'),
                   ),
                 ],
-              ],
-            ),
-            24.h,
+              ),
+            isMobile ? 16.h : 24.h,
             if (isMobile && pendingEntries.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -233,6 +311,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                           }
                         });
                       },
+                      onAccept: () => _acceptSingle(booking.booking),
+                      onReject: () => _rejectSingle(booking.booking),
                       onReview: () async {
                         await showDialog<void>(
                           context: context,
@@ -548,53 +628,187 @@ class _MobileBookingRequestCard extends StatelessWidget {
   final bool selected;
   final ValueChanged<bool?> onSelected;
   final VoidCallback onReview;
+  final VoidCallback onAccept;
+  final VoidCallback onReject;
+
+  static const _pending = Color(0xFFB45309);
+  static const _accept = Color(0xFF15803D);
+  static const _reject = Color(0xFFB91C1C);
 
   const _MobileBookingRequestCard({
     required this.booking,
     required this.selected,
     required this.onSelected,
     required this.onReview,
+    required this.onAccept,
+    required this.onReject,
   });
 
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
+    final b = booking.booking;
 
-    return Card(
-      child: Padding(
-        padding: 16.p,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: selected ? crmColors.primary : crmColors.border,
+          width: selected ? 1.5 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onReview,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Checkbox(value: selected, onChanged: onSelected),
-                Expanded(
-                  child: Text(
-                    booking.booking.customerName,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+                // ── Header: avatar · name + Pending pill + summary · select ──
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: _pending.withValues(alpha: 0.12),
+                      child: Text(
+                        b.initials,
+                        style: const TextStyle(
+                            color: _pending, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    12.w,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  b.customerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 15),
+                                ),
+                              ),
+                              8.w,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 7, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _pending.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  'Pending',
+                                  style: TextStyle(
+                                      color: _pending,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          2.h,
+                          Text(
+                            booking.summaryLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: crmColors.textSecondary, fontSize: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Bulk-select checkbox.
+                    Checkbox(
+                      value: selected,
+                      onChanged: onSelected,
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ],
+                ),
+                8.h,
+                // ── Event date row ──
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event_outlined,
+                          size: 15, color: crmColors.textSecondary),
+                      6.w,
+                      Expanded(
+                        child: Text(
+                          _formatBookingDateSummary(booking),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              color: crmColors.textSecondary, fontSize: 12.5),
+                        ),
+                      ),
+                      Text(
+                        'Details',
+                        style: TextStyle(
+                            color: crmColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 16, color: crmColors.primary),
+                    ],
+                  ),
+                ),
+                12.h,
+                // ── Inline triage actions ──
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: onReject,
+                          icon: const Icon(Icons.close, size: 18),
+                          label: const Text('Reject'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _reject,
+                            side: const BorderSide(color: _reject),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      10.w,
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: onAccept,
+                          icon: const Icon(Icons.check, size: 18),
+                          label: const Text('Accept'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _accept,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            Text(
-              booking.summaryLabel,
-              style: TextStyle(color: crmColors.textSecondary),
-            ),
-            8.h,
-            Text(
-              _formatBookingDateSummary(booking),
-              style: TextStyle(color: crmColors.textSecondary),
-            ),
-            14.h,
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.tonal(
-                onPressed: onReview,
-                child: const Text('Review Booking'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

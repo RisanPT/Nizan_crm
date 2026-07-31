@@ -333,26 +333,28 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveHrExpanded) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.badge_outlined,
-                          title: 'Staff Management',
-                          isCollapsed: false,
-                          isSelected: currentPath.startsWith('/staff'),
-                          onTap: () => context.go('/staff'),
+                      if (access.canSeeSub('staff.employees'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.badge_outlined,
+                            title: 'Staff Management',
+                            isCollapsed: false,
+                            isSelected: currentPath.startsWith('/staff'),
+                            onTap: () => context.go('/staff'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.event_available_outlined,
-                          title: 'Slot Management',
-                          isCollapsed: false,
-                          isSelected: currentPath.startsWith('/hr/slots'),
-                          onTap: () => context.go('/hr/slots'),
+                      if (access.canSeeSub('staff.slots'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.event_available_outlined,
+                            title: 'Slot Management',
+                            isCollapsed: false,
+                            isSelected: currentPath.startsWith('/hr/slots'),
+                            onTap: () => context.go('/hr/slots'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
                   if (access.canSeeSales) ...[
@@ -374,49 +376,53 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveSalesExpanded) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.dashboard_outlined,
-                          title: 'Sales Dashboard',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/sales/dashboard',
-                          onTap: () => context.go('/sales/dashboard'),
+                      if (access.canSeeSub('sales.dashboard'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.dashboard_outlined,
+                            title: 'Sales Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/dashboard',
+                            onTap: () => context.go('/sales/dashboard'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Invoices & Bookings',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/sales',
-                          onTap: () => context.go('/sales'),
+                      if (access.canSeeSub('sales.invoices'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.receipt_long_outlined,
+                            title: 'Invoices & Bookings',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales',
+                            onTap: () => context.go('/sales'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.person_add_alt_1_outlined,
-                          title: 'Leads Data Entry',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/sales/leads',
-                          onTap: () => context.go('/sales/leads'),
+                      if (access.canSeeSub('sales.leads'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.person_add_alt_1_outlined,
+                            title: 'Leads Data Entry',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/leads',
+                            onTap: () => context.go('/sales/leads'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.event_busy_outlined,
-                          title: 'Cancelled Works',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/sales/cancelled',
-                          onTap: () => context.go('/sales/cancelled'),
+                      if (access.canSeeSub('sales.cancelled'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.event_busy_outlined,
+                            title: 'Cancelled Works',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/cancelled',
+                            onTap: () => context.go('/sales/cancelled'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
-                  if (access.canSeeFinance) ...[
+                  if (access.canSeeFinance || access.canSeePayables) ...[
                     _SidebarItem(
                       icon: Icons.account_balance,
                       title: 'Accounts',
@@ -455,81 +461,88 @@ class Sidebar extends ConsumerWidget {
                         ),
                       ),
                       if (effectiveOperationsExpanded) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(left: 32),
-                          child: _SidebarItem(
-                            icon: Icons.donut_small_outlined,
-                            title: 'Dashboard',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/accounts/dashboard',
-                            onTap: () => context.go('/accounts/dashboard'),
+                        if (access.canSeeSub('payables.dashboard'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.donut_small_outlined,
+                              title: 'Dashboard',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/dashboard',
+                              onTap: () => context.go('/accounts/dashboard'),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 32),
-                          child: _SidebarItem(
-                            icon: Icons.receipt_outlined,
-                            title: 'Artist Finance',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/finance',
-                            onTap: () => context.go('/finance'),
+                        if (access.canSeeFinance)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.receipt_outlined,
+                              title: 'Artist Finance',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/finance',
+                              onTap: () => context.go('/finance'),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 32),
-                          child: _SidebarItem(
-                            icon: Icons.account_balance_wallet_outlined,
-                            title: 'Artist Collection',
-                            isCollapsed: false,
-                            isSelected:
-                                currentPath == '/accounts/artist-collections',
-                            onTap: () =>
-                                context.go('/accounts/artist-collections'),
+                        if (access.canSeeSub('payables.collections'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.account_balance_wallet_outlined,
+                              title: 'Artist Collection',
+                              isCollapsed: false,
+                              isSelected:
+                                  currentPath == '/accounts/artist-collections',
+                              onTap: () =>
+                                  context.go('/accounts/artist-collections'),
+                            ),
                           ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 32),
-                          child: _SidebarItem(
-                            icon: Icons.local_shipping_outlined,
-                            title: 'Fleet Expenses',
-                            isCollapsed: false,
-                            isSelected:
-                                currentPath == '/accounts/fleet-expenses',
-                            onTap: () =>
-                                context.go('/accounts/fleet-expenses'),
+                        if (access.canSeeSub('payables.fleet_expenses'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.local_shipping_outlined,
+                              title: 'Fleet Expenses',
+                              isCollapsed: false,
+                              isSelected:
+                                  currentPath == '/accounts/fleet-expenses',
+                              onTap: () =>
+                                  context.go('/accounts/fleet-expenses'),
+                            ),
                           ),
-                        ),
                       ],
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.request_quote_outlined,
-                          title: 'Bills & Payables',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/accounts/bills',
-                          onTap: () => context.go('/accounts/bills'),
+                      if (access.canSeeSub('payables.bills'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.request_quote_outlined,
+                            title: 'Bills & Payables',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/bills',
+                            onTap: () => context.go('/accounts/bills'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.receipt_long_outlined,
-                          title: 'Invoice',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/accounts/invoices',
-                          onTap: () => context.go('/accounts/invoices'),
+                      if (access.canSeeSub('payables.invoices'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.receipt_long_outlined,
+                            title: 'Invoice',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/invoices',
+                            onTap: () => context.go('/accounts/invoices'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.pie_chart_outline,
-                          title: 'Budget',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/accounts/budget',
-                          onTap: () => context.go('/accounts/budget'),
+                      if (access.canSeePayables)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.pie_chart_outline,
+                            title: 'Budget',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/budget',
+                            onTap: () => context.go('/accounts/budget'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
                   if (access.canManageInventory) ...[
@@ -552,76 +565,83 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveInventoryExpanded) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.donut_small_outlined,
-                          title: 'Dashboard',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory',
-                          onTap: () => context.go('/inventory'),
+                      if (access.canSeeSub('inventory.dashboard'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.donut_small_outlined,
+                            title: 'Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory',
+                            onTap: () => context.go('/inventory'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.list_alt_outlined,
-                          title: 'Stock List',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/stock',
-                          onTap: () => context.go('/inventory/stock'),
+                      if (access.canSeeSub('inventory.stock'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.list_alt_outlined,
+                            title: 'Stock List',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/stock',
+                            onTap: () => context.go('/inventory/stock'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.work_outline,
-                          title: 'Staff Kits',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/kits',
-                          onTap: () => context.go('/inventory/kits'),
+                      if (access.canSeeSub('inventory.kits'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.work_outline,
+                            title: 'Staff Kits',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/kits',
+                            onTap: () => context.go('/inventory/kits'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.warning_amber_rounded,
-                          title: 'Restock Alerts',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/alerts',
-                          onTap: () => context.go('/inventory/alerts'),
+                      if (access.canSeeSub('inventory.alerts'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.warning_amber_rounded,
+                            title: 'Restock Alerts',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/alerts',
+                            onTap: () => context.go('/inventory/alerts'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.hourglass_bottom_outlined,
-                          title: 'Expiry Tracker',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/expiry',
-                          onTap: () => context.go('/inventory/expiry'),
+                      if (access.canSeeSub('inventory.expiry'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.hourglass_bottom_outlined,
+                            title: 'Expiry Tracker',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/expiry',
+                            onTap: () => context.go('/inventory/expiry'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.bar_chart_outlined,
-                          title: 'Reports',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/reports',
-                          onTap: () => context.go('/inventory/reports'),
+                      if (access.canSeeSub('inventory.reports'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.bar_chart_outlined,
+                            title: 'Reports',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/reports',
+                            onTap: () => context.go('/inventory/reports'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.add_shopping_cart_outlined,
-                          title: 'Purchases',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/inventory/purchases',
-                          onTap: () => context.go('/inventory/purchases'),
+                      if (access.canSeeSub('inventory.purchases'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.add_shopping_cart_outlined,
+                            title: 'Purchases',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/purchases',
+                            onTap: () => context.go('/inventory/purchases'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
                   if (access.canManageMarketing) ...[
@@ -633,36 +653,39 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/marketing/dashboard'),
                     ),
                     if (!isCollapsed) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.donut_small_outlined,
-                          title: 'Dashboard',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/marketing/dashboard',
-                          onTap: () => context.go('/marketing/dashboard'),
+                      if (access.canSeeSub('marketing.dashboard'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.donut_small_outlined,
+                            title: 'Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/dashboard',
+                            onTap: () => context.go('/marketing/dashboard'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.dataset_outlined,
-                          title: 'Competitors',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/marketing/competitors',
-                          onTap: () => context.go('/marketing/competitors'),
+                      if (access.canSeeSub('marketing.competitors'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.dataset_outlined,
+                            title: 'Competitors',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/competitors',
+                            onTap: () => context.go('/marketing/competitors'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.leaderboard_outlined,
-                          title: 'Weekly Score',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/marketing/scores',
-                          onTap: () => context.go('/marketing/scores'),
+                      if (access.canSeeSub('marketing.scores'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.leaderboard_outlined,
+                            title: 'Weekly Score',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/scores',
+                            onTap: () => context.go('/marketing/scores'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
                   if (access.canSeeFleet) ...[
@@ -684,76 +707,83 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveFleetExpanded) ...[
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.directions_car_outlined,
-                          title: 'Cars',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/vehicles',
-                          onTap: () => context.go('/fleet/vehicles'),
+                      if (access.canSeeSub('fleet.vehicles'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.directions_car_outlined,
+                            title: 'Cars',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/vehicles',
+                            onTap: () => context.go('/fleet/vehicles'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.badge_outlined,
-                          title: 'Drivers',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/drivers',
-                          onTap: () => context.go('/fleet/drivers'),
+                      if (access.canSeeSub('fleet.drivers'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.badge_outlined,
+                            title: 'Drivers',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/drivers',
+                            onTap: () => context.go('/fleet/drivers'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.assignment_outlined,
-                          title: 'Assignments',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/assignments',
-                          onTap: () => context.go('/fleet/assignments'),
+                      if (access.canSeeSub('fleet.assignments'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.assignment_outlined,
+                            title: 'Assignments',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/assignments',
+                            onTap: () => context.go('/fleet/assignments'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.local_gas_station_outlined,
-                          title: 'Expenses',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/fuel',
-                          onTap: () => context.go('/fleet/fuel'),
+                      if (access.canSeeSub('fleet.fuel'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.local_gas_station_outlined,
+                            title: 'Expenses',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/fuel',
+                            onTap: () => context.go('/fleet/fuel'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.warning_amber_rounded,
-                          title: 'Accidents',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/accidents',
-                          onTap: () => context.go('/fleet/accidents'),
+                      if (access.canSeeSub('fleet.accidents'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.warning_amber_rounded,
+                            title: 'Accidents',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/accidents',
+                            onTap: () => context.go('/fleet/accidents'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.task_alt_rounded,
-                          title: 'Completed Works',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/completed-works',
-                          onTap: () => context.go('/fleet/completed-works'),
+                      if (access.canSeeSub('fleet.completed'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.task_alt_rounded,
+                            title: 'Completed Works',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/completed-works',
+                            onTap: () => context.go('/fleet/completed-works'),
+                          ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 14),
-                        child: _SidebarItem(
-                          icon: Icons.build_circle_outlined,
-                          title: 'Service Reminders',
-                          isCollapsed: false,
-                          isSelected: currentPath == '/fleet/service-reminders',
-                          onTap: () => context.go('/fleet/service-reminders'),
+                      if (access.canSeeSub('fleet.reminders'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.build_circle_outlined,
+                            title: 'Service Reminders',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/service-reminders',
+                            onTap: () => context.go('/fleet/service-reminders'),
+                          ),
                         ),
-                      ),
                     ],
                   ],
 

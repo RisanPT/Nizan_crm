@@ -8,6 +8,7 @@ import '../../../../core/providers/auth_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../services/role_service.dart';
 import '../../../../services/user_service.dart';
+import '../../../../services/employee_service.dart';
 
 /// Scoped user-management screen for Department Heads.
 ///
@@ -45,6 +46,9 @@ class TeamManagementScreen extends HookConsumerWidget {
       final allowed = access.creatableRoles.toList();
       var selectedRole = user?.role ?? (allowed.isNotEmpty ? allowed.first : '');
       var active = user?.active ?? true;
+      // Artist/driver logins MUST link to an Employee profile, otherwise their
+      // assigned works never resolve (their screens filter by employeeId).
+      var selEmployeeId = user?.employeeId ?? '';
 
       await showDialog<void>(
         context: context,
@@ -124,6 +128,50 @@ class TeamManagementScreen extends HookConsumerWidget {
                         },
                       ),
                       16.h,
+                      // Link to Employee profile — required for artist/driver so
+                      // their assigned works resolve; optional for other roles.
+                      Consumer(
+                        builder: (ctx, ref, _) {
+                          final needsLink = selectedRole == 'artist' ||
+                              selectedRole == 'driver';
+                          final asyncEmployees = ref.watch(employeesProvider);
+                          final employees = asyncEmployees.value ?? [];
+                          if (asyncEmployees.isLoading) {
+                            return const LinearProgressIndicator();
+                          }
+                          return DropdownButtonFormField<String>(
+                            initialValue:
+                                selEmployeeId.isEmpty ? null : selEmployeeId,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: needsLink
+                                  ? 'Link to Employee Profile *'
+                                  : 'Link to Employee Profile (Optional)',
+                              prefixIcon: const Icon(Icons.link_outlined),
+                              helperText:
+                                  'Connects this login to a staff profile so assigned works show up.',
+                              helperMaxLines: 2,
+                            ),
+                            items: [
+                              const DropdownMenuItem(
+                                value: '',
+                                child: Text('Not linked'),
+                              ),
+                              for (final e in employees)
+                                DropdownMenuItem(
+                                  value: e.id,
+                                  child: Text(
+                                    '${e.name} (${e.artistRole})',
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (v) =>
+                                setState(() => selEmployeeId = v ?? ''),
+                          );
+                        },
+                      ),
+                      16.h,
                       // Active toggle
                       SwitchListTile(
                         title: const Text('Account Active'),
@@ -161,6 +209,18 @@ class TeamManagementScreen extends HookConsumerWidget {
                       );
                       return;
                     }
+                    // Without an employee link, an artist/driver login can never
+                    // see the works assigned to them — block it here.
+                    if ((selectedRole == 'artist' || selectedRole == 'driver') &&
+                        selEmployeeId.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                              'Link this login to an Employee profile so assigned works show up.'),
+                        ),
+                      );
+                      return;
+                    }
 
                     try {
                       final svc = ref.read(userServiceProvider);
@@ -171,6 +231,8 @@ class TeamManagementScreen extends HookConsumerWidget {
                           password: password,
                           role: selectedRole,
                           active: active,
+                          employeeId:
+                              selEmployeeId.isEmpty ? null : selEmployeeId,
                         );
                       } else {
                         await svc.updateUser(
@@ -180,6 +242,8 @@ class TeamManagementScreen extends HookConsumerWidget {
                           role: selectedRole,
                           active: active,
                           password: password.isNotEmpty ? password : null,
+                          employeeId:
+                              selEmployeeId.isEmpty ? null : selEmployeeId,
                         );
                       }
                       ref.invalidate(crmUsersProvider);

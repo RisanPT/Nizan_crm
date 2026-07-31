@@ -232,6 +232,7 @@ class SettingsScreen extends HookConsumerWidget {
                           const Text('Could not load employees')
                         else
                           DropdownButtonFormField<String>(
+                            isExpanded: true,
                             decoration: const InputDecoration(
                               labelText: 'Link to Employee Profile (Optional)',
                               prefixIcon: Icon(Icons.link_outlined),
@@ -239,6 +240,20 @@ class SettingsScreen extends HookConsumerWidget {
                                   'Connects user to an employee profile for geographic limits',
                             ),
                             initialValue: selEmployeeId.isEmpty ? null : selEmployeeId,
+                            // Selected display stays single-line so the 2-line
+                            // menu items don't overflow the form field.
+                            selectedItemBuilder: (context) => employees
+                                .map(
+                                  (e) => Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      e.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                             items: employees
                                 .map(
                                   (e) => DropdownMenuItem(

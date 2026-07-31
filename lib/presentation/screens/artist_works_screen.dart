@@ -389,6 +389,15 @@ class ArtistWorksScreen extends HookConsumerWidget {
     final upcomingPage = useState<int>(1);
     final completedPage = useState<int>(1);
 
+    // The month picker only scopes the Completed tab now; track the active tab
+    // so we can hide it on Upcoming / Trials where it no longer applies.
+    final tabIndex = useState(0);
+    useEffect(() {
+      void listener() => tabIndex.value = tabController.index;
+      tabController.addListener(listener);
+      return () => tabController.removeListener(listener);
+    }, [tabController]);
+
     final formattedMonth = '${selectedMonth.value.year}-${selectedMonth.value.month.toString().padLeft(2, '0')}';
 
     useEffect(() {
@@ -401,7 +410,9 @@ class ArtistWorksScreen extends HookConsumerWidget {
       page: upcomingPage.value,
       limit: 10,
       employeeId: employeeId,
-      month: formattedMonth,
+      // Upcoming = ALL future works, not just the picked month. Month-scoping
+      // here hid works dated in a later month (the reported bug).
+      month: '',
       status: 'upcoming',
     );
 
@@ -423,7 +434,8 @@ class ArtistWorksScreen extends HookConsumerWidget {
         backgroundColor: context.crmColors.surface,
         elevation: 0,
         actions: [
-          _buildAppBarMonthChip(context, selectedMonth),
+          // Month picker is only relevant to the Completed tab.
+          if (tabIndex.value == 1) _buildAppBarMonthChip(context, selectedMonth),
           const SizedBox(width: 16),
         ],
         bottom: TabBar(
@@ -453,7 +465,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
                 if (upcomingResponse.items.isEmpty) {
                   return const _EmptyState(
                     title: 'No Upcoming Works',
-                    message: 'You have no upcoming works for this month.',
+                    message: 'You have no upcoming works assigned yet.',
                   );
                 }
                 return _BookingCardStack(
@@ -570,10 +582,13 @@ class _ArtistTrialCard extends StatelessWidget {
         border: Border.all(color: crm.border),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(width: 4, color: c),
+      // IntrinsicHeight bounds the Row height so the full-height accent bar
+      // doesn't force infinite height inside a scrolling list.
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: c),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(14),
@@ -620,6 +635,7 @@ class _ArtistTrialCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -877,12 +893,16 @@ class _PaginationBar extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Page $page of $totalPages ($totalItems total)',
-            style: TextStyle(
-              fontSize: 12,
-              color: crm.textPrimary,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              'Page $page of $totalPages ($totalItems total)',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: crm.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           Row(

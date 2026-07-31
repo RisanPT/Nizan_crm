@@ -1038,7 +1038,12 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Page $_currentPage of $totalPages', style: theme.textTheme.bodySmall),
+          Flexible(
+            child: Text('Page $_currentPage of $totalPages',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall),
+          ),
           Row(
             children: [
               IconButton(

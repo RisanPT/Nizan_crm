@@ -90,6 +90,48 @@ DateTime? _parseCalendarFocusDate(String? raw) {
   );
 }
 
+/// Maps a concrete route to its sub-feature permission key (`sales.leads`),
+/// or null when the route has no finer-grained key (fall back to the module).
+String? subKeyForPath(String path) {
+  // Sales
+  if (path.startsWith('/sales/leads')) return 'sales.leads';
+  if (path.startsWith('/sales/dashboard')) return 'sales.dashboard';
+  if (path == '/sales/quarterly') return 'sales.quarterly';
+  if (path == '/sales/cancelled') return 'sales.cancelled';
+  if (path == '/sales') return 'sales.invoices';
+  // Accounts (payables)
+  if (path == '/accounts/dashboard') return 'payables.dashboard';
+  if (path == '/accounts/invoices') return 'payables.invoices';
+  if (path.startsWith('/accounts/bills')) return 'payables.bills';
+  if (path == '/accounts/artist-collections') return 'payables.collections';
+  if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
+  // Inventory
+  if (path == '/inventory') return 'inventory.dashboard';
+  if (path.startsWith('/inventory/stock')) return 'inventory.stock';
+  if (path.startsWith('/inventory/kits')) return 'inventory.kits';
+  if (path.startsWith('/inventory/alerts')) return 'inventory.alerts';
+  if (path.startsWith('/inventory/expiry')) return 'inventory.expiry';
+  if (path.startsWith('/inventory/reports')) return 'inventory.reports';
+  if (path.startsWith('/inventory/purchases')) return 'inventory.purchases';
+  if (path.startsWith('/inventory/vendors')) return 'inventory.vendors';
+  // Fleet
+  if (path.startsWith('/fleet/assignments')) return 'fleet.assignments';
+  if (path.startsWith('/fleet/vehicles')) return 'fleet.vehicles';
+  if (path.startsWith('/fleet/drivers')) return 'fleet.drivers';
+  if (path.startsWith('/fleet/fuel')) return 'fleet.fuel';
+  if (path.startsWith('/fleet/accidents')) return 'fleet.accidents';
+  if (path.startsWith('/fleet/completed-works')) return 'fleet.completed';
+  if (path.startsWith('/fleet/service-reminders')) return 'fleet.reminders';
+  // Marketing
+  if (path.startsWith('/marketing/competitors')) return 'marketing.competitors';
+  if (path.startsWith('/marketing/scores')) return 'marketing.scores';
+  if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
+  // Staff / HR
+  if (path == '/hr/slots') return 'staff.slots';
+  if (path.startsWith('/staff')) return 'staff.employees';
+  return null;
+}
+
 bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) {
   final role = access.role;
   if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
@@ -100,20 +142,40 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   }
   if (path.startsWith('/booking')) return access.canSeeBookings;
   if (path.startsWith('/services')) return access.canSeeServices;
-  if (path.startsWith('/staff')) return access.canSeeStaff;
-  if (path.startsWith('/sales')) return access.canSeeSales;
-  if (path.startsWith('/accounts/bills')) return access.canSeePayables;
+  if (path == '/hr/slots') return access.canSeeSub('staff.slots');
+  if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
+  if (path.startsWith('/sales')) {
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canSeeSales;
+  }
   if (path.startsWith('/finance')) return access.canSeeFinance;
-  if (path.startsWith('/fleet')) return access.canSeeFleet;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
-  // need the inventory-manager (or full-access) role.
-  // Artists with inventory access reach their own inventory + their own kit.
-  if (path == '/inventory/my' || path == '/inventory/kits') {
+  // need the inventory-manager (or full-access) role. Artists with inventory
+  // access reach their own inventory + their own kit.
+  if (path == '/inventory/my') {
     return access.canManageInventory ||
         (role == AppRole.artist && inventoryAccess);
   }
-  if (path.startsWith('/inventory')) return access.canManageInventory;
-  if (path.startsWith('/marketing')) return access.canManageMarketing;
+  if (path == '/inventory/kits') {
+    return access.canSeeSub('inventory.kits') ||
+        (role == AppRole.artist && inventoryAccess);
+  }
+  if (path.startsWith('/inventory')) {
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canManageInventory;
+  }
+  if (path.startsWith('/accounts')) {
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canSeePayables;
+  }
+  if (path.startsWith('/fleet')) {
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canSeeFleet;
+  }
+  if (path.startsWith('/marketing')) {
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canManageMarketing;
+  }
   if (path.startsWith('/trials')) return access.canSeeBookings;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
   if (path.startsWith('/settings')) return access.canSeeSettings;
@@ -136,17 +198,30 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
       isRouteAllowed(configured, access, inventoryAccess: inventoryAccess)) {
     return configured;
   }
-  if (access.canSeeDashboard) return '/';
-  if (access.canSeeSales) return '/sales/dashboard';
-  if (access.canSeeBookings) return '/booking/requests';
-  if (access.canSeeClients) return '/clients';
-  if (access.canSeeCalendar) return '/calendar';
-  if (access.canSeeFinance) return '/finance';
-  if (access.canSeePayables) return '/accounts/dashboard';
-  if (access.canManageMarketing) return '/marketing/dashboard';
-  if (access.canManageInventory) return '/inventory';
-  if (access.canSeeFleet) return '/fleet/assignments';
-  if (access.canSeeStaff) return '/staff';
+  // Fall back to the first route the role can actually open. Each module lists
+  // its sub-routes so a role with only, say, `sales.leads` still lands on a page
+  // it can reach (not the module's default sub-page it may lack).
+  const candidates = <String>[
+    '/',
+    '/sales/dashboard', '/sales/leads', '/sales', '/sales/quarterly', '/sales/cancelled',
+    '/booking/requests',
+    '/clients',
+    '/calendar',
+    '/finance',
+    '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
+    '/accounts/artist-collections', '/accounts/fleet-expenses',
+    '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
+    '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
+    '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
+    '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
+    '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
+    '/staff', '/hr/slots',
+  ];
+  for (final route in candidates) {
+    if (isRouteAllowed(route, access, inventoryAccess: inventoryAccess)) {
+      return route;
+    }
+  }
   return '/login';
 }
 
