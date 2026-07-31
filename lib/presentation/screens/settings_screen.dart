@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
+import '../../core/auth/access_control.dart';
 import '../../services/role_service.dart';
 import '../../core/models/crm_user.dart';
 import '../../core/models/list_page_params.dart';
@@ -33,6 +34,7 @@ class SettingsScreen extends HookConsumerWidget {
     );
     final auth = ref.read(authControllerProvider);
     final session = ref.watch(authSessionProvider);
+    final access = Access.of(session);
     final isMobile = ResponsiveBuilder.isMobile(context);
     // ✅ Watched at build level — valid Riverpod usage
     final asyncEmployees = ref.watch(employeesProvider);
@@ -49,6 +51,7 @@ class SettingsScreen extends HookConsumerWidget {
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
       var inventoryAccess = user?.inventoryAccess ?? false;
+      var isDepartmentHead = user?.isDepartmentHead ?? false;
       var selEmployeeId = user?.employeeId ?? '';
       var selZoneId = user?.zoneId ?? '';
       var selStateId = user?.stateId ?? '';
@@ -121,10 +124,19 @@ class SettingsScreen extends HookConsumerWidget {
                         // Roles are configured in Settings → Roles &
                         // Permissions, so this list is driven by the Role
                         // collection rather than a hard-coded set.
+                        // For Department Heads (non-full-access), the list is
+                        // further scoped to only their creatableRoles.
                         Consumer(
                           builder: (context, ref, _) {
                             final rolesAsync = ref.watch(rolesProvider);
-                            final roles = rolesAsync.value ?? const [];
+                            final allRoles = rolesAsync.value ?? const [];
+                            final creatableKeys = access.creatableRoles;
+                            // Empty creatableRoles = admin/manager = no filter
+                            final roles = creatableKeys.isEmpty
+                                ? allRoles
+                                : allRoles
+                                    .where((r) => creatableKeys.contains(r.key))
+                                    .toList();
                             final values =
                                 roles.map((r) => r.key).toSet();
                             return DropdownButtonFormField<String>(
@@ -180,6 +192,34 @@ class SettingsScreen extends HookConsumerWidget {
                                   style: TextStyle(fontSize: 12)),
                               secondary:
                                   const Icon(Icons.inventory_2_outlined),
+                            ),
+                          ),
+                        ],
+
+                        // ── Department Head toggle ───────────────────────────
+                        // Settings is already admin/manager-only at the route
+                        // level, so no extra isFullAccess guard is needed here.
+                        if (role != 'artist') ...[
+                          8.h,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: crmColors.accent.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: isDepartmentHead
+                                      ? crmColors.accent
+                                      : crmColors.border),
+                            ),
+                            child: SwitchListTile(
+                              value: isDepartmentHead,
+                              onChanged: (v) =>
+                                  setState(() => isDepartmentHead = v),
+                              title: const Text('Department Head'),
+                              subtitle: const Text(
+                                  'Allows this user to add & manage staff in their own department',
+                                  style: TextStyle(fontSize: 12)),
+                              secondary: const Icon(
+                                  Icons.manage_accounts_outlined),
                             ),
                           ),
                         ],
@@ -370,6 +410,7 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             inventoryAccess: inventoryAccess,
+                            isDepartmentHead: isDepartmentHead,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,
                             zoneId: selZoneId.isEmpty ? null : selZoneId,
@@ -386,6 +427,7 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             inventoryAccess: inventoryAccess,
+                            isDepartmentHead: isDepartmentHead,
                             password: password.isEmpty ? null : password,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,

@@ -32,6 +32,7 @@ import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
+import '../../features/team/presentation/screens/team_management_screen.dart';
 import '../../features/sales/presentation/screens/sales_dashboard_screen.dart';
 import '../../features/sales/presentation/screens/sales_period_detail_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_vehicles_screen.dart';
@@ -116,6 +117,7 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/trials')) return access.canSeeBookings;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
   if (path.startsWith('/settings')) return access.canSeeSettings;
+  if (path.startsWith('/team')) return access.canManageTeam;
   return true; // unknown routes — let the 404 handle it
 }
 
@@ -584,6 +586,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings/roles',
             builder: (context, state) => const RolesPermissionsScreen(),
+          ),
+          GoRoute(
+            path: '/team/manage',
+            builder: (context, state) => const TeamManagementScreen(),
           ),
           GoRoute(
             path: '/driver/jobs',

@@ -757,6 +757,20 @@ class Sidebar extends ConsumerWidget {
                     ],
                   ],
 
+                  // ── MY TEAM (Department Heads only) ─────────────────────────
+                  if (access.canManageTeam && !access.isFullAccess) ...[
+                    32.h,
+                    _buildSectionTitle('MY DEPARTMENT', isCollapsed: isCollapsed, theme: theme),
+                    8.h,
+                    _SidebarItem(
+                      icon: Icons.group_outlined,
+                      title: 'My Team',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/team'),
+                      onTap: () => context.go('/team/manage'),
+                    ),
+                  ],
+
                   // ── BUSINESS SECTION ─────────────────────────────────────────
                   if (access.canSeeSettings || access.isFullAccess) ...[
                     32.h,

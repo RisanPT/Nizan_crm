@@ -13,6 +13,10 @@ class CrmUser {
   final String pincodeId;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  /// True when this user can manage (add/edit/deactivate) staff in their own department.
+  final bool isDepartmentHead;
+  /// The user-ID of the Department Head who created this user; blank for Admin-created users.
+  final String managedBy;
 
   const CrmUser({
     required this.id,
@@ -29,6 +33,8 @@ class CrmUser {
     this.pincodeId = '',
     this.createdAt,
     this.updatedAt,
+    this.isDepartmentHead = false,
+    this.managedBy = '',
   });
 
   factory CrmUser.fromJson(Map<String, dynamic> json) {
@@ -47,6 +53,8 @@ class CrmUser {
       pincodeId: json['pincodeId'] as String? ?? '',
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
+      isDepartmentHead: json['isDepartmentHead'] as bool? ?? false,
+      managedBy: json['managedBy'] as String? ?? '',
     );
   }
 
@@ -65,6 +73,8 @@ class CrmUser {
     String? pincodeId,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isDepartmentHead,
+    String? managedBy,
   }) {
     return CrmUser(
       id: id ?? this.id,
@@ -81,6 +91,8 @@ class CrmUser {
       pincodeId: pincodeId ?? this.pincodeId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      isDepartmentHead: isDepartmentHead ?? this.isDepartmentHead,
+      managedBy: managedBy ?? this.managedBy,
     );
   }
 

@@ -135,4 +135,32 @@ enum AppRole {
         return '/';
     }
   }
+
+  // ── Department Head: which roles can this head create? ────────────────────
+
+  /// Returns the role keys this Department Head is allowed to assign when
+  /// creating new team members. Returns an empty set for Admin/Manager
+  /// (they are handled separately with full role access) and for non-head roles.
+  Set<String> get allowedSubordinateRoles {
+    switch (this) {
+      case AppRole.sales:
+        return {'sales'};
+      case AppRole.crm:
+        return {'crm'};
+      case AppRole.accounts:
+        return {'accounts'};
+      case AppRole.fleetManager:
+        return {'driver'};
+      case AppRole.inventoryManager:
+        return {'inventoryManager'};
+      case AppRole.marketingAdmin:
+        return {'marketingAdmin'};
+      // Admin and Manager: empty = no restriction (all roles shown by caller)
+      case AppRole.admin:
+      case AppRole.manager:
+        return {};
+      default:
+        return {};
+    }
+  }
 }

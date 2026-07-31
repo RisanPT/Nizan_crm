@@ -21,6 +21,8 @@ class AuthSession {
   final String regionId;
   final String districtId;
   final String pincodeId;
+  /// True when this user is a Department Head and can manage their own team.
+  final bool isDepartmentHead;
 
   const AuthSession({
     required this.token,
@@ -37,6 +39,7 @@ class AuthSession {
     this.regionId = '',
     this.districtId = '',
     this.pincodeId = '',
+    this.isDepartmentHead = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +58,7 @@ class AuthSession {
       'regionId': regionId,
       'districtId': districtId,
       'pincodeId': pincodeId,
+      'isDepartmentHead': isDepartmentHead,
     },
   };
 
@@ -80,6 +84,7 @@ class AuthSession {
       regionId: user['regionId'] as String? ?? '',
       districtId: user['districtId'] as String? ?? '',
       pincodeId: user['pincodeId'] as String? ?? '',
+      isDepartmentHead: user['isDepartmentHead'] as bool? ?? false,
     );
   }
 

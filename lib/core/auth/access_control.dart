@@ -16,7 +16,11 @@ class Access {
   /// so built-in roles behave exactly as before.
   final String configuredHomeRoute;
 
-  const Access(this.role, this.granted, {this.configuredHomeRoute = ''});
+  /// Mirrors [AuthSession.isDepartmentHead] — true when this user can manage
+  /// their own department's staff members.
+  final bool isDepartmentHead;
+
+  const Access(this.role, this.granted, {this.configuredHomeRoute = '', this.isDepartmentHead = false});
 
   factory Access.of(AuthSession? session) {
     final role = AppRole.fromString(session?.role);
@@ -24,6 +28,7 @@ class Access {
       role,
       (session?.permissions ?? const []).toSet(),
       configuredHomeRoute: session?.homeRoute ?? '',
+      isDepartmentHead: session?.isDepartmentHead ?? false,
     );
   }
 
@@ -62,4 +67,19 @@ class Access {
   bool get isScopedToOwnEntries => role.isScopedToOwnEntries;
   String get homeRoute =>
       configuredHomeRoute.isNotEmpty ? configuredHomeRoute : role.homeRoute;
+
+  // ── Department Head team management ───────────────────────────────────────
+
+  /// True when this user may add/edit/deactivate staff in their own department.
+  /// Full-access roles (admin/manager) always qualify.
+  bool get canManageTeam => isFullAccess || isDepartmentHead;
+
+  /// The set of role keys this user is allowed to assign when creating a new
+  /// team member. An empty set means "no restriction" (admin / manager can
+  /// assign any role — the caller shows the full list).
+  Set<String> get creatableRoles {
+    if (isFullAccess) return {};
+    if (isDepartmentHead) return role.allowedSubordinateRoles;
+    return {};
+  }
 }
