@@ -31,8 +31,18 @@ class TeamManagementScreen extends HookConsumerWidget {
     final asyncUsers = ref.watch(crmUsersProvider);
 
     final myTeam = asyncUsers.when(
-      data: (users) =>
-          users.where((u) => u.managedBy == session?.userId).toList(),
+      // Filter to users whose managedBy matches the current department head's ID.
+      // Guard against null: managedBy is null for admin-created users and must
+      // not accidentally match a blank userId string.
+      data: (users) {
+        final myId = session?.userId ?? '';
+        return myId.isEmpty
+            ? <CrmUser>[]
+            : users
+                .where((u) => u.managedBy.isNotEmpty && u.managedBy == myId)
+                .toList();
+
+      },
       loading: () => <CrmUser>[],
       error: (e, _) => <CrmUser>[],
     );
