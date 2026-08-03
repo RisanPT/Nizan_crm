@@ -10,6 +10,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../../core/utils/client_report_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/customer_service.dart';
+import '../../models/customer.dart';
 
 class ClientsDirectoryScreen extends HookConsumerWidget {
   const ClientsDirectoryScreen({super.key});
@@ -71,7 +72,51 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
       final messenger = ScaffoldMessenger.of(context);
       try {
         var clients = await ref.read(customerServiceProvider).getCustomers();
-        
+
+        // Collapse duplicate client records. Legacy imports created several
+        // customers for the same person with different placeholder emails and no
+        // phone, so the directory showed one person multiple times. Key by phone
+        // (last 10 digits) when present, otherwise by name; keep the most complete
+        // record and carry over an event date if the winner is missing one.
+        String dedupKey(Customer c) {
+          final digits = (c.phone ?? '').replaceAll(RegExp(r'\D'), '');
+          final phoneKey =
+              digits.length >= 10 ? digits.substring(digits.length - 10) : '';
+          return phoneKey.isNotEmpty
+              ? 'p:$phoneKey'
+              : 'n:${c.name.trim().toLowerCase()}';
+        }
+
+        bool isPlaceholder(String? e) =>
+            e == null ||
+            e.contains('legacy.local') ||
+            e.contains('placeholder.local');
+
+        int score(Customer c) {
+          var s = 0;
+          final digits = (c.phone ?? '').replaceAll(RegExp(r'\D'), '');
+          if (digits.length >= 10) s += 4;
+          if (!isPlaceholder(c.email)) s += 2;
+          if ((c.eventDate ?? '').isNotEmpty) s += 1;
+          return s;
+        }
+
+        final unique = <String, Customer>{};
+        for (final c in clients) {
+          final k = dedupKey(c);
+          final existing = unique[k];
+          if (existing == null) {
+            unique[k] = c;
+            continue;
+          }
+          final winner = score(c) > score(existing) ? c : existing;
+          final other = identical(winner, c) ? existing : c;
+          unique[k] = (winner.eventDate == null || winner.eventDate!.isEmpty)
+              ? winner.copyWith(eventDate: other.eventDate)
+              : winner;
+        }
+        clients = unique.values.toList();
+
         if (dateRange != null) {
           clients = clients.where((c) {
             if (c.eventDate == null || c.eventDate!.isEmpty) return false;

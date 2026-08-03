@@ -118,7 +118,11 @@ String _formatEventDate(String? dateString) {
   if (s.isEmpty) return '—';
   
   try {
-    final d = DateTime.parse(s);
+    // Render in local (IST) so a stored UTC datetime (e.g. an event at IST
+    // midnight, stored as the previous UTC day) shows the correct calendar day —
+    // matching the Calendar screen. Date-only "YYYY-MM-DD" values parse as local
+    // already, so toLocal() leaves them unchanged.
+    final d = DateTime.parse(s).toLocal();
     const months = [
       'january', 'february', 'march', 'april', 'may', 'june',
       'july', 'august', 'september', 'october', 'november', 'december',
