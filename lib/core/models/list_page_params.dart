@@ -9,10 +9,15 @@ class ListPageParams {
   final String? districtId;
   final String? pincodeId;
 
+  final String? department;
+  final String? artistRole;
+
   const ListPageParams({
     required this.page,
     required this.limit,
     this.category,
+    this.department,
+    this.artistRole,
     this.search,
     this.zoneId,
     this.stateId,
@@ -27,6 +32,8 @@ class ListPageParams {
         other.page == page &&
         other.limit == limit &&
         other.category == category &&
+        other.department == department &&
+        other.artistRole == artistRole &&
         other.search == search &&
         other.zoneId == zoneId &&
         other.stateId == stateId &&
@@ -40,6 +47,8 @@ class ListPageParams {
         page,
         limit,
         category,
+        department,
+        artistRole,
         search,
         zoneId,
         stateId,

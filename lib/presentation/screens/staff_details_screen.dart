@@ -110,14 +110,19 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
     
     final isArtist = _employee.artistRole == 'artist';
     final isDriver = _employee.artistRole == 'driver';
+    final isAssistant = _employee.artistRole == 'assistant';
+    final isOps = isDriver || isArtist || isAssistant || _employee.category == 'operations' || _employee.category == 'creative';
+    final isAdmin = !isOps;
     
-    final levelLabel = isArtist ? 'Artist' : (isDriver ? 'Driver' : 'Assistant');
-    final levelColor = isArtist 
-        ? crmColors.accent 
-        : (isDriver ? crmColors.warning : crmColors.primary);
-    final levelBackground = isArtist
-        ? crmColors.accent.withValues(alpha: 0.12)
-        : (isDriver ? crmColors.warning.withValues(alpha: 0.12) : crmColors.primary.withValues(alpha: 0.10));
+    final levelLabel = isAdmin
+        ? (_employee.department ?? 'Administrative')
+        : (isArtist ? 'Artist' : (isDriver ? 'Fleet Driver' : 'Assistant'));
+    final levelColor = isAdmin
+        ? Colors.indigo
+        : (isArtist 
+            ? crmColors.accent 
+            : (isDriver ? Colors.orange : crmColors.primary));
+    final levelBackground = levelColor.withValues(alpha: 0.12);
 
     return Scaffold(
       appBar: AppBar(
@@ -137,7 +142,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 children: [
                   CircleAvatar(
                     radius: 60,
-                    backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    backgroundColor: levelColor.withValues(alpha: 0.1),
                     backgroundImage: _employee.profileImage.isNotEmpty 
                         ? NetworkImage(_employee.profileImage) 
                         : null,
@@ -147,7 +152,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                                 ? _employee.name.substring(0, 1).toUpperCase()
                                 : '?',
                             style: TextStyle(
-                              color: theme.colorScheme.primary,
+                              color: levelColor,
                               fontWeight: FontWeight.bold,
                               fontSize: 48,
                             ),
@@ -198,6 +203,22 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isAdmin ? Colors.teal : crmColors.accent).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isAdmin ? 'Administrative' : 'Operations',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: isAdmin ? Colors.teal : crmColors.accent,
+                    ),
+                  ),
+                ),
                 if (_employee.type == 'in-house') ...[
                   const SizedBox(width: 8),
                   Container(
@@ -212,24 +233,6 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: crmColors.accent,
-                      ),
-                    ),
-                  ),
-                ],
-                if (_employee.department != null && _employee.department!.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: crmColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _employee.department!,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: crmColors.primary,
                       ),
                     ),
                   ),
@@ -255,36 +258,43 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                       ),
                     ),
                     const Divider(height: 32),
-                    if (_employee.department != null && _employee.department!.isNotEmpty) ...[
-                      _buildInfoRow(Icons.corporate_fare, 'Department', _employee.department!, crmColors),
+                    if (isAdmin) ...[
+                      _buildInfoRow(Icons.apartment_outlined, 'Department', _employee.department ?? 'General', crmColors),
+                      const SizedBox(height: 16),
+                      if (_employee.role?.isNotEmpty == true || _employee.specialization.isNotEmpty) ...[
+                        _buildInfoRow(Icons.badge_outlined, 'Designation', _employee.role?.isNotEmpty == true ? _employee.role! : _employee.specialization, crmColors),
+                        const SizedBox(height: 16),
+                      ],
+                    ] else ...[
+                      _buildInfoRow(Icons.work_outline, 'Specialization', _employee.specialization.isEmpty ? 'General' : _employee.specialization, crmColors),
                       const SizedBox(height: 16),
                     ],
-                    _buildInfoRow(Icons.phone, 'Phone', _employee.phone, crmColors),
+                    _buildInfoRow(Icons.phone_outlined, 'Phone', _employee.phone.isEmpty ? 'Not provided' : _employee.phone, crmColors),
                     const SizedBox(height: 16),
-                    _buildInfoRow(Icons.email, 'Email', _employee.email.isEmpty ? 'Not provided' : _employee.email, crmColors),
+                    _buildInfoRow(Icons.email_outlined, 'Email', _employee.email.isEmpty ? 'Not provided' : _employee.email, crmColors),
                     const SizedBox(height: 16),
-                    _buildInfoRow(Icons.work, 'Specialization', _employee.specialization.isEmpty ? 'None' : _employee.specialization, crmColors),
-                    const SizedBox(height: 16),
-                    _buildInfoRow(
-                      Icons.location_on,
-                      'Assigned Area',
-                      [
-                        if (_employee.zoneName.isNotEmpty) _employee.zoneName,
-                        if (_employee.stateName.isNotEmpty) _employee.stateName,
-                        if (_employee.regionName.isNotEmpty) _employee.regionName,
-                        if (_employee.districtName.isNotEmpty) _employee.districtName,
-                        if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
-                      ].isEmpty
-                          ? 'Not assigned'
-                          : [
-                              if (_employee.zoneName.isNotEmpty) _employee.zoneName,
-                              if (_employee.stateName.isNotEmpty) _employee.stateName,
-                              if (_employee.regionName.isNotEmpty) _employee.regionName,
-                              if (_employee.districtName.isNotEmpty) _employee.districtName,
-                              if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
-                            ].join(' → '),
-                      crmColors,
-                    ),
+                    if (!isAdmin) ...[
+                      _buildInfoRow(
+                        Icons.location_on_outlined,
+                        'Assigned Area',
+                        [
+                          if (_employee.zoneName.isNotEmpty) _employee.zoneName,
+                          if (_employee.stateName.isNotEmpty) _employee.stateName,
+                          if (_employee.regionName.isNotEmpty) _employee.regionName,
+                          if (_employee.districtName.isNotEmpty) _employee.districtName,
+                          if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
+                        ].isEmpty
+                            ? 'Not assigned'
+                            : [
+                                if (_employee.zoneName.isNotEmpty) _employee.zoneName,
+                                if (_employee.stateName.isNotEmpty) _employee.stateName,
+                                if (_employee.regionName.isNotEmpty) _employee.regionName,
+                                if (_employee.districtName.isNotEmpty) _employee.districtName,
+                                if (_employee.pincodeCode.isNotEmpty) _employee.pincodeCode,
+                              ].join(' → '),
+                        crmColors,
+                      ),
+                    ],
                   ],
                 ),
               ),
