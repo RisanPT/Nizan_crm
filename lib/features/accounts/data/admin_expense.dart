@@ -53,6 +53,8 @@ class AdminExpense {
         return 'Travel & Transport';
       case 'food_beverage':
         return 'Food & Refreshments';
+      case 'staff_mess':
+        return 'Staff Mess';
       case 'hardware_equipment':
         return 'Hardware & Equipment';
       case 'marketing_ads':
@@ -63,6 +65,8 @@ class AdminExpense {
         return 'Repairs & Maintenance';
       case 'training':
         return 'Training & Development';
+      case 'staff_welfare':
+        return 'Staff Welfare';
       default:
         return 'Other Expense';
     }

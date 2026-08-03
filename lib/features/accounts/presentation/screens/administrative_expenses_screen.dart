@@ -31,11 +31,13 @@ const _categories = [
   'rent_utilities',
   'travel_transport',
   'food_beverage',
+  'staff_mess',
   'hardware_equipment',
   'marketing_ads',
   'professional_services',
   'maintenance',
   'training',
+  'staff_welfare',
   'other',
 ];
 
@@ -99,6 +101,7 @@ class _AdministrativeExpensesScreenState
       case 'travel_transport':
         return Icons.directions_car_outlined;
       case 'food_beverage':
+      case 'staff_mess':
         return Icons.restaurant_outlined;
       case 'hardware_equipment':
         return Icons.devices_outlined;
@@ -110,6 +113,8 @@ class _AdministrativeExpensesScreenState
         return Icons.build_outlined;
       case 'training':
         return Icons.school_outlined;
+      case 'staff_welfare':
+        return Icons.celebration_outlined;
       default:
         return Icons.receipt_long_outlined;
     }
@@ -1109,21 +1114,34 @@ class _AddEditAdminExpenseDialogState
                 ),
                 12.h,
 
-                // Paid By Employee / Staff
+                // Paid By — Staff Member (dropdown) *or* Vendor name (text) — mandatory
                 employeesAsync.when(
                   loading: () => const LinearProgressIndicator(),
                   error: (_, _) => TextFormField(
                     controller: _paidByNameCtrl,
                     decoration: const InputDecoration(
-                      labelText: 'Paid By (Staff / Vendor Name)',
+                      labelText: 'Vendor / Payee Name *',
+                      hintText: 'Enter vendor or staff name',
                     ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty)
+                            ? 'Vendor / payee name is required'
+                            : null,
                   ),
                   data: (staffList) {
                     return DropdownButtonFormField<String?>(
                       initialValue: _selectedEmployeeId,
                       decoration: const InputDecoration(
-                        labelText: 'Responsible Staff Member',
+                        labelText: 'Responsible Staff Member *',
                       ),
+                      validator: (_) {
+                        // Pass if a staff member is chosen OR a vendor name is typed
+                        if ((_selectedEmployeeId != null && _selectedEmployeeId!.isNotEmpty) ||
+                            _paidByNameCtrl.text.trim().isNotEmpty) {
+                          return null;
+                        }
+                        return 'Select a staff member or enter a vendor name below';
+                      },
                       items: [
                         const DropdownMenuItem(value: null, child: Text('None / Company Direct')),
                         ...staffList.map((emp) => DropdownMenuItem(
@@ -1134,6 +1152,16 @@ class _AddEditAdminExpenseDialogState
                       onChanged: (val) => setState(() => _selectedEmployeeId = val),
                     );
                   },
+                ),
+                8.h,
+                // Vendor / Payee free-text — required when no staff member is selected
+                TextFormField(
+                  controller: _paidByNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Vendor / Payee Name',
+                    hintText: 'If not a staff member, enter vendor name here',
+                    prefixIcon: Icon(Icons.store_outlined, size: 18),
+                  ),
                 ),
                 12.h,
 
@@ -1163,9 +1191,13 @@ class _AddEditAdminExpenseDialogState
                       child: TextFormField(
                         controller: _invoiceCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Invoice / Bill #',
-                          hintText: 'Optional',
+                          labelText: 'Invoice / Bill # *',
+                          hintText: 'Required',
                         ),
+                        validator: (v) =>
+                            (v == null || v.trim().isEmpty)
+                                ? 'Invoice / bill number is required'
+                                : null,
                       ),
                     ),
                   ],
@@ -1176,10 +1208,14 @@ class _AddEditAdminExpenseDialogState
                 TextFormField(
                   controller: _receiptCtrl,
                   decoration: const InputDecoration(
-                    labelText: 'Receipt / Bill URL',
+                    labelText: 'Receipt / Bill URL *',
                     hintText: 'https://...',
                     prefixIcon: Icon(Icons.link, size: 18),
                   ),
+                  validator: (v) =>
+                      (v == null || v.trim().isEmpty)
+                          ? 'Bill attachment is required — upload and paste the URL'
+                          : null,
                 ),
                 12.h,
 
