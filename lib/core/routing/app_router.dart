@@ -23,6 +23,9 @@ import 'package:nizan_crm/features/accounts/presentation/screens/accounts_budget
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_invoices_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_expenses_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_subscriptions_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/administrative_salaries_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/operations_salaries_screen.dart';
+import '../../presentation/screens/hr_salaries_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
@@ -111,6 +114,8 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
   if (path == '/accounts/admin-expenses') return 'payables.admin_expenses';
   if (path == '/accounts/subscriptions') return 'payables.subscriptions';
+  if (path == '/accounts/admin-salaries') return 'payables.admin_salaries';
+  if (path == '/accounts/operations-salaries') return 'payables.operations_salaries';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -133,6 +138,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/scores')) return 'marketing.scores';
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
+  if (path == '/hr/salaries') return 'staff.salaries';
   if (path == '/hr/slots') return 'staff.slots';
   if (path.startsWith('/staff')) return 'staff.employees';
   return null;
@@ -218,12 +224,13 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
     '/accounts/artist-collections', '/accounts/fleet-expenses',
     '/accounts/admin-expenses', '/accounts/subscriptions',
+    '/accounts/admin-salaries', '/accounts/operations-salaries',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
     '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
-    '/staff', '/hr/slots',
+    '/staff', '/hr/slots', '/hr/salaries',
   ];
   for (final route in candidates) {
     if (isRouteAllowed(route, access, inventoryAccess: inventoryAccess)) {
@@ -484,6 +491,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const StaffManagementScreen(),
           ),
           GoRoute(
+            path: '/hr/salaries',
+            builder: (context, state) => const HRSalariesScreen(),
+          ),
+          GoRoute(
             path: '/hr/slots',
             builder: (context, state) => const SlotManagementScreen(),
           ),
@@ -577,6 +588,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/accounts/subscriptions',
             builder: (context, state) =>
                 const AdministrativeSubscriptionsScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/admin-salaries',
+            builder: (context, state) =>
+                const AdministrativeSalariesScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/operations-salaries',
+            builder: (context, state) =>
+                const OperationsSalariesScreen(),
           ),
           // ── Marketing (Competitor Intelligence) ──────────────────────
           GoRoute(

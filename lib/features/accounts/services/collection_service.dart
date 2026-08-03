@@ -37,7 +37,8 @@ class CollectionService {
   }
 
   Future<ArtistCollection> createCollection({
-    required String bookingId,
+    String? bookingId,
+    String? trialId,
     required String employeeId,
     required double amount,
     required DateTime date,
@@ -47,7 +48,8 @@ class CollectionService {
   }) async {
     try {
       final payload = {
-        'bookingId': bookingId,
+        'bookingId': ?bookingId,
+        'trialId': ?trialId,
         'employeeId': employeeId,
         'amount': amount,
         'date': date.toIso8601String(),

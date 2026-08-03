@@ -17,6 +17,8 @@ const _sections = <_Section>[
   _Section('Fleet Expenses', Icons.local_shipping_outlined, '/accounts/fleet-expenses'),
   _Section('Admin Expenses', Icons.payments_outlined, '/accounts/admin-expenses'),
   _Section('Subscriptions', Icons.cloud_sync_outlined, '/accounts/subscriptions'),
+  _Section('Admin Salaries', Icons.badge_outlined, '/accounts/admin-salaries'),
+  _Section('Staff Payouts', Icons.brush_outlined, '/accounts/operations-salaries'),
   _Section('Bills & Payables', Icons.request_quote_outlined, '/accounts/bills'),
   _Section('Invoice', Icons.receipt_long_outlined, '/accounts/invoices'),
   _Section('Budget', Icons.pie_chart_outline, '/accounts/budget'),
@@ -110,18 +112,20 @@ Future<void> showAccountsMenuSheet(BuildContext context, WidgetRef ref) {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
+                GridView.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 2.8,
                   children: [
-                    for (var i = 0; i < _sections.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 10),
-                      Expanded(
-                        child: _SectionTile(
-                          section: _sections[i],
-                          selected: currentPath == _sections[i].route,
-                          onTap: () => goTo(sheetCtx, _sections[i].route),
-                        ),
+                    for (final sec in _sections)
+                      _SectionTile(
+                        section: sec,
+                        selected: currentPath == sec.route,
+                        onTap: () => goTo(sheetCtx, sec.route),
                       ),
-                    ],
                   ],
                 ),
                 Divider(color: crmColors.border, height: 28),

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../features/accounts/controllers/collection_controller.dart';
 import '../../core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/models/trial.dart';
@@ -544,7 +545,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
 }
 
 /// A trial card in the artist's TRIALS tab.
-class _ArtistTrialCard extends StatelessWidget {
+class _ArtistTrialCard extends ConsumerWidget {
   final Trial trial;
   const _ArtistTrialCard({required this.trial});
 
@@ -562,9 +563,11 @@ class _ArtistTrialCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final c = _statusColor();
+    final total = trial.trialItems.fold<double>(0, (s, i) => s + i.price);
+    final canCollect = trial.status.toLowerCase() != 'cancelled';
     final looks = trial.trialItems
         .map((i) => i.lookLabel.trim().isNotEmpty
             ? i.lookLabel.trim()
@@ -629,12 +632,217 @@ class _ArtistTrialCard extends StatelessWidget {
                     ].join('  ·  '),
                     style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
                   ),
+                  if (total > 0 || canCollect) ...[
+                    10.h,
+                    Row(
+                      children: [
+                        if (total > 0)
+                          Text('Amount: ₹${total.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: crm.textPrimary)),
+                        const Spacer(),
+                        if (canCollect)
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                _collect(context, ref, total),
+                            icon: const Icon(Icons.payments_outlined, size: 16),
+                            label: const Text('Collect'),
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: const Color(0xFF15803D),
+                              side: const BorderSide(color: Color(0xFF15803D)),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
           ),
         ],
       ),
+      ),
+    );
+  }
+
+  Future<void> _collect(
+      BuildContext context, WidgetRef ref, double total) async {
+    final session = ref.read(authSessionProvider);
+    final empId = session?.employeeId ?? '';
+    if (empId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text(
+                'Your login isn\'t linked to a staff profile — contact admin.')),
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _TrialCollectSheet(
+        trial: trial,
+        employeeId: empId,
+        defaultAmount: total,
+      ),
+    );
+  }
+}
+
+/// Bottom sheet for an artist to record a trial payment collection.
+class _TrialCollectSheet extends ConsumerStatefulWidget {
+  final Trial trial;
+  final String employeeId;
+  final double defaultAmount;
+
+  const _TrialCollectSheet({
+    required this.trial,
+    required this.employeeId,
+    required this.defaultAmount,
+  });
+
+  @override
+  ConsumerState<_TrialCollectSheet> createState() => _TrialCollectSheetState();
+}
+
+class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
+  late final TextEditingController _amountCtrl = TextEditingController(
+      text: widget.defaultAmount > 0
+          ? widget.defaultAmount.toStringAsFixed(0)
+          : '');
+  final _notesCtrl = TextEditingController();
+  String _mode = 'cash';
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amount = double.tryParse(_amountCtrl.text.trim()) ?? 0;
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid amount')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(collectionServiceProvider).createCollection(
+            trialId: widget.trial.id,
+            employeeId: widget.employeeId,
+            amount: amount,
+            date: DateTime.now(),
+            paymentMode: _mode,
+            notes: _notesCtrl.text.trim(),
+          );
+      ref.invalidate(artistCollectionsProvider);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Collected ₹${amount.toStringAsFixed(0)} for ${widget.trial.clientName}.'),
+            backgroundColor: Colors.green[700],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Collect Trial Payment',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: crm.textPrimary)),
+            const SizedBox(height: 2),
+            Text('${widget.trial.clientName} · Trial',
+                style: TextStyle(color: crm.textSecondary, fontSize: 13)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Amount collected (₹) *',
+                prefixIcon: Icon(Icons.currency_rupee),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _mode,
+              decoration: const InputDecoration(
+                labelText: 'Payment mode',
+                prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'upi', child: Text('UPI')),
+                DropdownMenuItem(
+                    value: 'bank_transfer', child: Text('Bank transfer')),
+                DropdownMenuItem(value: 'other', child: Text('Other')),
+              ],
+              onChanged: (v) => setState(() => _mode = v ?? 'cash'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                prefixIcon: Icon(Icons.notes_outlined),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _saving ? null : _submit,
+                icon: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check),
+                label: Text(_saving ? 'Recording…' : 'Record Collection'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF15803D),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

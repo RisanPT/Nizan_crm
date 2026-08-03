@@ -65,14 +65,16 @@ class Sidebar extends ConsumerWidget {
     final isTablet = ResponsiveBuilder.isTablet(context);
     final currentPath = GoRouterState.of(context).uri.path;
     final isFleetRoute = currentPath.startsWith('/fleet');
-    // Operations (Dashboard / Artist Finance / Artist Collection / Fleet Expenses) live under Accounts.
+    // Operations (Dashboard / Artist Finance / Artist Collection / Fleet Expenses / Operations Salaries) live under Accounts.
     final isOperationsRoute = currentPath == '/accounts/dashboard' ||
         currentPath == '/finance' ||
         currentPath == '/accounts/artist-collections' ||
-        currentPath == '/accounts/fleet-expenses';
-    // Administrative (Expenses / Subscriptions) live under Accounts.
+        currentPath == '/accounts/fleet-expenses' ||
+        currentPath == '/accounts/operations-salaries';
+    // Administrative (Expenses / Subscriptions / Salaries) live under Accounts.
     final isAdministrativeRoute = currentPath == '/accounts/admin-expenses' ||
-        currentPath == '/accounts/subscriptions';
+        currentPath == '/accounts/subscriptions' ||
+        currentPath == '/accounts/admin-salaries';
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
@@ -385,6 +387,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/hr/slots'),
                           ),
                         ),
+                      if (access.canSeeSub('staff.salaries'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.payments_outlined,
+                            title: 'Salaries & Payroll',
+                            isCollapsed: false,
+                            isSelected: currentPath.startsWith('/hr/salaries'),
+                            onTap: () => context.go('/hr/salaries'),
+                          ),
+                        ),
                     ],
                   ],
                   if (access.canSeeSales) ...[
@@ -539,6 +552,19 @@ class Sidebar extends ConsumerWidget {
                                   context.go('/accounts/fleet-expenses'),
                             ),
                           ),
+                        if (access.canSeeSub('payables.operations_salaries'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.payments_outlined,
+                              title: 'Staff Payouts',
+                              isCollapsed: false,
+                              isSelected:
+                                  currentPath == '/accounts/operations-salaries',
+                              onTap: () =>
+                                  context.go('/accounts/operations-salaries'),
+                            ),
+                          ),
                       ],
                       // Administrative — nested expandable group.
                       Padding(
@@ -580,6 +606,17 @@ class Sidebar extends ConsumerWidget {
                               isCollapsed: false,
                               isSelected: currentPath == '/accounts/subscriptions',
                               onTap: () => context.go('/accounts/subscriptions'),
+                            ),
+                          ),
+                        if (access.canSeeSub('payables.admin_salaries'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.payments_outlined,
+                              title: 'Salaries',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/admin-salaries',
+                              onTap: () => context.go('/accounts/admin-salaries'),
                             ),
                           ),
                       ],

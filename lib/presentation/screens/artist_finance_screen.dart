@@ -1465,7 +1465,10 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       }
 
                       return _FinanceEntryCard(
-                        title: c.booking?.customerName ?? 'Unknown Client',
+                        title: c.booking?.customerName ??
+                            (c.trial != null
+                                ? '${c.trial!.clientName} (Trial)'
+                                : 'Unknown Client'),
                         amount: _currency(c.amount),
                         status: c.status,
                         metadata: metadataStr,

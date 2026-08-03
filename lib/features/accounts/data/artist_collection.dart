@@ -23,9 +23,30 @@ class BookingRef {
   }
 }
 
+class TrialRef {
+  final String id;
+  final String trialNumber;
+  final String clientName;
+
+  const TrialRef({
+    required this.id,
+    required this.trialNumber,
+    required this.clientName,
+  });
+
+  factory TrialRef.fromJson(Map<String, dynamic> json) {
+    return TrialRef(
+      id: json['_id'] as String? ?? json['id'] as String? ?? '',
+      trialNumber: json['trialNumber'] as String? ?? '',
+      clientName: json['clientName'] as String? ?? '',
+    );
+  }
+}
+
 class ArtistCollection {
   final String id;
   final BookingRef? booking;
+  final TrialRef? trial;
   final Employee? employee;
   final double amount;
   final DateTime date;
@@ -42,6 +63,7 @@ class ArtistCollection {
   const ArtistCollection({
     required this.id,
     this.booking,
+    this.trial,
     this.employee,
     required this.amount,
     required this.date,
@@ -61,6 +83,9 @@ class ArtistCollection {
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       booking: json['bookingId'] != null
           ? BookingRef.fromJson(json['bookingId'] as Map<String, dynamic>)
+          : null,
+      trial: json['trialId'] != null
+          ? TrialRef.fromJson(json['trialId'] as Map<String, dynamic>)
           : null,
       employee: json['employeeId'] != null
           ? Employee.fromJson(json['employeeId'] as Map<String, dynamic>)

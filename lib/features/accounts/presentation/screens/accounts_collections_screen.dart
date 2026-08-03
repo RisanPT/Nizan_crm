@@ -321,7 +321,7 @@ class _AccountsCollectionsScreenState
               ),
             ),
             title: Text(
-              '${c.booking?.customerName ?? 'Unknown Client'}  •  ${_currency(c.amount)}',
+              '${c.booking?.customerName ?? c.trial?.clientName ?? 'Unknown Client'}${c.trial != null ? ' (Trial)' : ''}  •  ${_currency(c.amount)}',
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             subtitle: Text(
@@ -369,11 +369,16 @@ class _AccountsCollectionsScreenState
           children: [
             _DetailItem(
               label: 'Client',
-              value: c.booking?.customerName ?? 'N/A',
+              value: c.booking?.customerName ?? c.trial?.clientName ?? 'N/A',
             ),
             _DetailItem(
-              label: 'Booking #',
-              value: c.booking?.bookingNumber ?? 'N/A',
+              label: c.trial != null ? 'Trial #' : 'Booking #',
+              value: c.booking?.bookingNumber ??
+                  (c.trial != null
+                      ? (c.trial!.trialNumber.isNotEmpty
+                          ? c.trial!.trialNumber
+                          : 'Trial')
+                      : 'N/A'),
             ),
             _DetailItem(label: 'Artist', value: c.employee?.name ?? 'N/A'),
             _DetailItem(label: 'Amount', value: _currency(c.amount)),

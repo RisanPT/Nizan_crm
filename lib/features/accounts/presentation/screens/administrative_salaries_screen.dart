@@ -1,0 +1,856 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/models/salary.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
+import 'package:nizan_crm/features/accounts/services/salary_service.dart';
+
+const _monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const _adminDepartments = [
+  'All', 'Sales', 'Marketing', 'Accounts', 'Finance', 'CRM', 'IT', 'HR', 'General',
+];
+
+String _formatCurrency(double amount) {
+  return NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
+      .format(amount);
+}
+
+class AdministrativeSalariesScreen extends ConsumerStatefulWidget {
+  const AdministrativeSalariesScreen({super.key});
+
+  @override
+  ConsumerState<AdministrativeSalariesScreen> createState() =>
+      _AdministrativeSalariesScreenState();
+}
+
+class _AdministrativeSalariesScreenState
+    extends ConsumerState<AdministrativeSalariesScreen> {
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  void _showRecordPaymentDialog(Salary salary) {
+    String paymentMethod = 'bank_transfer';
+    final refCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    DateTime paymentDate = DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  const Icon(Icons.payment, color: Colors.green),
+                  8.w,
+                  const Text('Disburse / Pay Salary',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              salary.employeeName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            2.h,
+                            Text(
+                              '${salary.department} · ${salary.role}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(ctx).hintColor),
+                            ),
+                            6.h,
+                            Text(
+                              'Payable: ${_formatCurrency(salary.netAmount)}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF6366F1)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      14.h,
+
+                      if (salary.bankName.isNotEmpty || salary.upiId.isNotEmpty) ...[
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Staff Bank Details:',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11)),
+                              4.h,
+                              if (salary.bankName.isNotEmpty)
+                                Text(
+                                    '${salary.bankName} · Acc: ${salary.accountNumber} · IFSC: ${salary.ifscCode}',
+                                    style: const TextStyle(fontSize: 11)),
+                              if (salary.upiId.isNotEmpty)
+                                Text('UPI: ${salary.upiId}',
+                                    style: const TextStyle(fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                        14.h,
+                      ],
+
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: paymentMethod,
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'bank_transfer',
+                            child: Text('Bank Transfer (NEFT / IMPS / RTGS)'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'upi',
+                            child: Text('UPI / GPay / PhonePe'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'cheque',
+                            child: Text('Cheque'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'cash',
+                            child: Text('Cash'),
+                          ),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => paymentMethod = val);
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Method *',
+                          isDense: true,
+                        ),
+                      ),
+                      12.h,
+                      TextField(
+                        controller: refCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Transaction Ref / UTR / Cheque No.',
+                          hintText: 'e.g. UTR1289382109',
+                          isDense: true,
+                        ),
+                      ),
+                      12.h,
+                      TextField(
+                        controller: notesCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Notes / Remarks',
+                          isDense: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: () async {
+                    try {
+                      await ref.read(salaryServiceProvider).paySalary(
+                            salary.id,
+                            paymentMethod: paymentMethod,
+                            transactionRef: refCtrl.text.trim(),
+                            paymentDate: paymentDate,
+                            notes: notesCtrl.text.trim(),
+                          );
+                      ref.invalidate(adminSalariesProvider);
+                      ref.invalidate(salariesProvider);
+                      if (ctx.mounted) Navigator.of(ctx).pop();
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text(e.toString())),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Confirm Payment',
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showViewPayslipDialog(Salary salary) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.receipt_long, color: Color(0xFF6366F1)),
+              8.w,
+              const Text('Administrative Staff Payslip',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          salary.employeeName,
+                          style: const TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        2.h,
+                        Text(
+                          '${salary.department} · ${salary.role}',
+                          style: TextStyle(
+                              fontSize: 12, color: Theme.of(ctx).hintColor),
+                        ),
+                        4.h,
+                        Text(
+                          'Pay Period: ${_monthNames[salary.month - 1]} ${salary.year}',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  16.h,
+                  _buildSlipRow('Base Salary', _formatCurrency(salary.baseSalary)),
+                  _buildSlipRow('Allowances', '+ ${_formatCurrency(salary.allowances)}',
+                      color: Colors.green),
+                  _buildSlipRow('Bonus / Incentive', '+ ${_formatCurrency(salary.bonus)}',
+                      color: Colors.green),
+                  _buildSlipRow('Deductions / Advances', '- ${_formatCurrency(salary.deductions)}',
+                      color: Colors.red),
+                  const Divider(height: 24),
+                  _buildSlipRow(
+                    'Net Payable Amount',
+                    _formatCurrency(salary.netAmount),
+                    isBold: true,
+                    fontSize: 16,
+                  ),
+                  16.h,
+                  if (salary.bankName.isNotEmpty || salary.upiId.isNotEmpty) ...[
+                    const Text('Bank Account & IFSC',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    6.h,
+                    if (salary.bankName.isNotEmpty)
+                      Text('Bank: ${salary.bankName} · Acc: ${salary.accountNumber} · IFSC: ${salary.ifscCode}',
+                          style: const TextStyle(fontSize: 12)),
+                    if (salary.upiId.isNotEmpty)
+                      Text('UPI ID: ${salary.upiId}',
+                          style: const TextStyle(fontSize: 12)),
+                    12.h,
+                  ],
+                  if (salary.isPaid) ...[
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                          6.w,
+                          Expanded(
+                            child: Text(
+                              'Paid on ${salary.paymentDate != null ? DateFormat('d MMM yyyy').format(salary.paymentDate!) : ''} via ${salary.paymentMethod.toUpperCase()} (${salary.transactionRef})',
+                              style: const TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSlipRow(String label, String value,
+      {bool isBold = false, Color? color, double fontSize = 13}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                  color: color)),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final theme = Theme.of(context);
+    final isMobile = ResponsiveBuilder.isMobile(context);
+    final filter = ref.watch(adminSalariesFilterProvider);
+    final salariesAsync = ref.watch(adminSalariesProvider);
+
+    return Scaffold(
+      backgroundColor: crm.background,
+      body: Padding(
+        padding: EdgeInsets.all(isMobile ? 12 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── TOP HEADER ──
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Administrative Salaries (Accounts)',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      4.h,
+                      Text(
+                        'Process and disburse monthly payroll for Sales, Marketing, HR, Finance, CRM & IT departments.',
+                        style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            16.h,
+
+            // ── PERIOD SELECTOR & STATS ──
+            salariesAsync.when(
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(16),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+              error: (err, _) => Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('Error loading salaries: $err'),
+              ),
+              data: (result) {
+                final stats = result.stats;
+                return Column(
+                  children: [
+                    // Filter bar for Period & Department
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: crm.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: crm.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_month,
+                              size: 18, color: const Color(0xFF6366F1)),
+                          8.w,
+                          const Text('Period:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                          12.w,
+                          DropdownButton<int>(
+                            value: filter.month,
+                            underline: const SizedBox(),
+                            items: List.generate(12, (i) => i + 1)
+                                .map((m) => DropdownMenuItem(
+                                      value: m,
+                                      child: Text(_monthNames[m - 1]),
+                                    ))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                ref.read(adminSalariesFilterProvider.notifier).state =
+                                    filter.copyWith(month: val);
+                              }
+                            },
+                          ),
+                          8.w,
+                          DropdownButton<int>(
+                            value: filter.year,
+                            underline: const SizedBox(),
+                            items: [2024, 2025, 2026, 2027]
+                                .map((y) => DropdownMenuItem(
+                                      value: y,
+                                      child: Text('$y'),
+                                    ))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                ref.read(adminSalariesFilterProvider.notifier).state =
+                                    filter.copyWith(year: val);
+                              }
+                            },
+                          ),
+                          24.w,
+                          Icon(Icons.apartment_outlined,
+                              size: 18, color: crm.textSecondary),
+                          8.w,
+                          const Text('Department:',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                          12.w,
+                          DropdownButton<String>(
+                            value: filter.department,
+                            underline: const SizedBox(),
+                            items: _adminDepartments
+                                .map((d) => DropdownMenuItem(
+                                      value: d,
+                                      child: Text(d),
+                                    ))
+                                .toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                ref.read(adminSalariesFilterProvider.notifier).state =
+                                    filter.copyWith(department: val);
+                              }
+                            },
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${result.salaries.length} Records',
+                            style: TextStyle(
+                                fontSize: 12, color: crm.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    12.h,
+
+                    // Stats Cards Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildMetricCard(
+                            crm,
+                            title: 'Total Admin Payroll',
+                            amount: _formatCurrency(stats.totalAdministrative),
+                            subtitle: '${stats.count} administrative staff',
+                            icon: Icons.business_center_outlined,
+                            color: const Color(0xFF6366F1),
+                          ),
+                        ),
+                        10.w,
+                        Expanded(
+                          child: _buildMetricCard(
+                            crm,
+                            title: 'Total Disbursed',
+                            amount: _formatCurrency(stats.totalPaid),
+                            subtitle: 'Paid by accounts',
+                            icon: Icons.check_circle_outline,
+                            color: Colors.green,
+                          ),
+                        ),
+                        10.w,
+                        Expanded(
+                          child: _buildMetricCard(
+                            crm,
+                            title: 'Pending Payment',
+                            amount: _formatCurrency(stats.totalPending),
+                            subtitle: 'Awaiting disbursement',
+                            icon: Icons.pending_actions_outlined,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            16.h,
+
+            // ── SEARCH & STATUS FILTER ──
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (val) {
+                      ref.read(adminSalariesFilterProvider.notifier).state =
+                          filter.copyWith(search: val);
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Search staff by name or role...',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                10.w,
+                DropdownButton<String>(
+                  value: filter.status,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('All Statuses')),
+                    DropdownMenuItem(
+                        value: 'approved_by_hr',
+                        child: Text('Pending Payment (Approved by HR)')),
+                    DropdownMenuItem(value: 'paid', child: Text('Paid')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      ref.read(adminSalariesFilterProvider.notifier).state =
+                          filter.copyWith(status: val);
+                    }
+                  },
+                ),
+              ],
+            ),
+            12.h,
+
+            // ── SALARIES LIST ──
+            Expanded(
+              child: salariesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) =>
+                    Center(child: Text('Failed to load salaries: $err')),
+                data: (result) {
+                  final list = result.salaries;
+                  if (list.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.payments_outlined,
+                              size: 48,
+                              color: crm.textSecondary.withValues(alpha: 0.5)),
+                          12.h,
+                          Text(
+                            'No administrative salary slips found for this selection.',
+                            style: TextStyle(
+                                color: crm.textSecondary, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.separated(
+                    itemCount: list.length,
+                    separatorBuilder: (context, index) => 8.h,
+                    itemBuilder: (ctx, idx) {
+                      final s = list[idx];
+                      return _buildSalaryCard(crm, s);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(
+    CrmTheme crm, {
+    required String title,
+    required String amount,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          12.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w500)),
+                2.h,
+                Text(amount,
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold)),
+                2.h,
+                Text(subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: crm.textSecondary.withValues(alpha: 0.8))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalaryCard(CrmTheme crm, Salary s) {
+    final statusColor = s.isPaid ? Colors.green : Colors.orange;
+    final statusText = s.isPaid ? 'Paid' : 'Pending Payment';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
+            child: const Icon(
+              Icons.business_center,
+              size: 20,
+              color: Color(0xFF6366F1),
+            ),
+          ),
+          14.w,
+
+          // Name, Department & Role
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      s.employeeName,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    8.w,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        s.department,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF6366F1),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                3.h,
+                Text(
+                  '${s.role} · Base: ${_formatCurrency(s.baseSalary)}',
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                ),
+              ],
+            ),
+          ),
+
+          // Bank / UPI details
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (s.bankName.isNotEmpty)
+                  Text(
+                    '${s.bankName} - ${s.accountNumber}',
+                    style: const TextStyle(
+                        fontSize: 11.5, fontWeight: FontWeight.w500),
+                  )
+                else if (s.upiId.isNotEmpty)
+                  Text(
+                    'UPI: ${s.upiId}',
+                    style: const TextStyle(
+                        fontSize: 11.5, fontWeight: FontWeight.w500),
+                  )
+                else
+                  Text(
+                    'No bank details provided',
+                    style: TextStyle(fontSize: 11, color: crm.textSecondary),
+                  ),
+                if (s.ifscCode.isNotEmpty)
+                  Text(
+                    'IFSC: ${s.ifscCode}',
+                    style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+                  ),
+              ],
+            ),
+          ),
+
+          // Net Payable
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  _formatCurrency(s.netAmount),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                2.h,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          16.w,
+
+          // Actions
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'View Payslip',
+                icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                onPressed: () => _showViewPayslipDialog(s),
+              ),
+              if (!s.isPaid)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 8),
+                  ),
+                  onPressed: () => _showRecordPaymentDialog(s),
+                  icon: const Icon(Icons.payment, size: 14),
+                  label: const Text('Pay', style: TextStyle(fontSize: 12)),
+                )
+              else
+                Text(
+                  'Paid ✓',
+                  style: TextStyle(
+                      color: Colors.green.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

@@ -167,10 +167,33 @@ class StaffManagementScreen extends HookConsumerWidget {
       final worksCtrl = TextEditingController(
         text: employee?.works.join(', ') ?? '',
       );
+      final baseSalaryCtrl = TextEditingController(
+        text: employee != null && employee.baseSalary > 0
+            ? employee.baseSalary.toStringAsFixed(0)
+            : '',
+      );
+      final allowancesCtrl = TextEditingController(
+        text: employee != null && employee.allowances > 0
+            ? employee.allowances.toStringAsFixed(0)
+            : '',
+      );
+      final deductionsCtrl = TextEditingController(
+        text: employee != null && employee.deductions > 0
+            ? employee.deductions.toStringAsFixed(0)
+            : '',
+      );
+      final bankNameCtrl = TextEditingController(text: employee?.bankName ?? '');
+      final accountNumberCtrl =
+          TextEditingController(text: employee?.accountNumber ?? '');
+      final ifscCodeCtrl = TextEditingController(text: employee?.ifscCode ?? '');
+      final upiIdCtrl = TextEditingController(text: employee?.upiId ?? '');
+      final panNumberCtrl = TextEditingController(text: employee?.panNumber ?? '');
 
       var category = initialCat;
       var type = employee?.type ?? 'in-house';
       var artistRole = employee?.artistRole ?? 'artist';
+      var salaryType = employee?.salaryType ??
+          (initialCat == 'administrative' ? 'fixed_monthly' : 'per_booking');
       var status = employee?.status ?? 'active';
       var department = employee?.department ??
           (initialCat == 'administrative' ? 'HR' : 'Operations');
@@ -641,6 +664,187 @@ class StaffManagementScreen extends HookConsumerWidget {
                             ),
                           ],
                         ),
+                        16.h,
+
+                        // ── SALARY & COMPENSATION SECTION ──
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: crmColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.currency_rupee,
+                                      size: 16, color: crmColors.primary),
+                                  6.w,
+                                  const Text(
+                                    'Salary & Compensation',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              12.h,
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: salaryType,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'fixed_monthly',
+                                    child: Text('Fixed Monthly Salary'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'per_booking',
+                                    child: Text('Per Booking / Commission'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'daily',
+                                    child: Text('Daily Wage / Day Rate'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'hybrid',
+                                    child: Text('Hybrid (Fixed + Commission)'),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setModalState(() => salaryType = val);
+                                  }
+                                },
+                                decoration: const InputDecoration(
+                                  labelText: 'Salary Scheme',
+                                  isDense: true,
+                                ),
+                              ),
+                              10.h,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: baseSalaryCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Base Salary (₹)',
+                                        hintText: 'e.g. 25000',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  8.w,
+                                  Expanded(
+                                    child: TextField(
+                                      controller: allowancesCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Allowances (₹)',
+                                        hintText: 'e.g. 3000',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  8.w,
+                                  Expanded(
+                                    child: TextField(
+                                      controller: deductionsCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Deductions (₹)',
+                                        hintText: 'e.g. 1000',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        14.h,
+
+                        // ── BANKING & PAYMENT DETAILS ──
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: crmColors.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.account_balance_outlined,
+                                      size: 16, color: crmColors.accent),
+                                  6.w,
+                                  const Text(
+                                    'Bank & Payment Info (for Accounts)',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              12.h,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: bankNameCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Bank Name',
+                                        hintText: 'e.g. HDFC / SBI',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  8.w,
+                                  Expanded(
+                                    child: TextField(
+                                      controller: accountNumberCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Account No.',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              10.h,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: ifscCodeCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'IFSC Code',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  8.w,
+                                  Expanded(
+                                    child: TextField(
+                                      controller: upiIdCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'UPI ID / PhonePe',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -690,6 +894,15 @@ class StaffManagementScreen extends HookConsumerWidget {
                             stateId: isAdministrative ? '' : stateId,
                             districtId: isAdministrative ? '' : districtId,
                             pincodeId: isAdministrative ? '' : pincodeId,
+                            salaryType: salaryType,
+                            baseSalary: double.tryParse(baseSalaryCtrl.text.trim()) ?? 0,
+                            allowances: double.tryParse(allowancesCtrl.text.trim()) ?? 0,
+                            deductions: double.tryParse(deductionsCtrl.text.trim()) ?? 0,
+                            bankName: bankNameCtrl.text.trim(),
+                            accountNumber: accountNumberCtrl.text.trim(),
+                            ifscCode: ifscCodeCtrl.text.trim(),
+                            upiId: upiIdCtrl.text.trim(),
+                            panNumber: panNumberCtrl.text.trim(),
                           );
 
                       ref.invalidate(employeesProvider);

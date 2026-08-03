@@ -22,6 +22,15 @@ class Employee {
   final String profileImage;
   final String? department;
   final String? role;
+  final String salaryType;
+  final double baseSalary;
+  final double allowances;
+  final double deductions;
+  final String bankName;
+  final String accountNumber;
+  final String ifscCode;
+  final String upiId;
+  final String panNumber;
 
   const Employee({
     required this.id,
@@ -47,6 +56,15 @@ class Employee {
     this.profileImage = '',
     this.department,
     this.role,
+    this.salaryType = 'fixed_monthly',
+    this.baseSalary = 0,
+    this.allowances = 0,
+    this.deductions = 0,
+    this.bankName = '',
+    this.accountNumber = '',
+    this.ifscCode = '',
+    this.upiId = '',
+    this.panNumber = '',
   });
 
   factory Employee.fromJson(Map<String, dynamic> json) {
@@ -103,6 +121,15 @@ class Employee {
       profileImage: json['profileImage'] as String? ?? '',
       department: json['department'] as String?,
       role: json['role'] as String?,
+      salaryType: json['salaryType'] as String? ?? 'fixed_monthly',
+      baseSalary: (json['baseSalary'] as num?)?.toDouble() ?? 0,
+      allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
+      deductions: (json['deductions'] as num?)?.toDouble() ?? 0,
+      bankName: json['bankName'] as String? ?? '',
+      accountNumber: json['accountNumber'] as String? ?? '',
+      ifscCode: json['ifscCode'] as String? ?? '',
+      upiId: json['upiId'] as String? ?? '',
+      panNumber: json['panNumber'] as String? ?? '',
     );
   }
 
@@ -125,6 +152,15 @@ class Employee {
       'profileImage': profileImage,
       if (department != null) 'department': department,
       if (role != null) 'role': role,
+      'salaryType': salaryType,
+      'baseSalary': baseSalary,
+      'allowances': allowances,
+      'deductions': deductions,
+      'bankName': bankName,
+      'accountNumber': accountNumber,
+      'ifscCode': ifscCode,
+      'upiId': upiId,
+      'panNumber': panNumber,
     };
   }
 }

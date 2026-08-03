@@ -46,6 +46,7 @@ const List<AppFeature> kAppFeatures = [
   AppFeature('staff', 'Staff / HR', 'Employees, attendance and leave',
       Icons.badge_outlined, subs: [
     AppSubFeature('staff.employees', 'Staff Management'),
+    AppSubFeature('staff.salaries', 'Salaries & Payroll'),
     AppSubFeature('staff.slots', 'Slot Management'),
   ]),
   AppFeature('sales', 'Sales', 'Leads, sales and invoices',
@@ -65,7 +66,9 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('payables.bills', 'Bills & Payables'),
     AppSubFeature('payables.collections', 'Artist Collections'),
     AppSubFeature('payables.fleet_expenses', 'Fleet Expenses'),
+    AppSubFeature('payables.operations_salaries', 'Operations Payouts'),
     AppSubFeature('payables.admin_expenses', 'Administrative Expenses'),
+    AppSubFeature('payables.admin_salaries', 'Administrative Salaries'),
     AppSubFeature('payables.subscriptions', 'Subscriptions'),
   ]),
   AppFeature('inventory', 'Inventory', 'Studio stock and staff kits',

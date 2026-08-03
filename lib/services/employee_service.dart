@@ -150,6 +150,15 @@ class EmployeeService {
     String? stateId,
     String? districtId,
     String? pincodeId,
+    String? salaryType,
+    double? baseSalary,
+    double? allowances,
+    double? deductions,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? upiId,
+    String? panNumber,
   }) async {
     try {
       final payload = {
@@ -169,6 +178,15 @@ class EmployeeService {
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
         if (districtId != null && districtId.isNotEmpty) 'districtId': districtId,
         if (pincodeId != null && pincodeId.isNotEmpty) 'pincodeId': pincodeId,
+        'salaryType': ?salaryType,
+        'baseSalary': ?baseSalary,
+        'allowances': ?allowances,
+        'deductions': ?deductions,
+        'bankName': ?bankName,
+        'accountNumber': ?accountNumber,
+        'ifscCode': ?ifscCode,
+        'upiId': ?upiId,
+        'panNumber': ?panNumber,
       };
 
       if (profileImage != null) {
