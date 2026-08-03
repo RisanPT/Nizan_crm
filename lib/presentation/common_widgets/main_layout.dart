@@ -35,6 +35,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _accountsUserCollapsed = false;
   bool _operationsExpanded = false;
   bool _operationsUserCollapsed = false;
+  bool _administrativeExpanded = false;
+  bool _administrativeUserCollapsed = false;
   bool _inventoryExpanded = false;
   bool _inventoryUserCollapsed = false;
   bool _salesExpanded = false;
@@ -450,6 +452,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               setState(() {
                 _operationsExpanded = expanded;
                 _operationsUserCollapsed = !expanded;
+              });
+            },
+            administrativeExpanded: _administrativeExpanded,
+            administrativeUserCollapsed: _administrativeUserCollapsed,
+            onAdministrativeExpandToggle: (expanded) {
+              setState(() {
+                _administrativeExpanded = expanded;
+                _administrativeUserCollapsed = !expanded;
               });
             },
             inventoryExpanded: _inventoryExpanded,

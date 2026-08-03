@@ -19,6 +19,9 @@ class Sidebar extends ConsumerWidget {
   final bool operationsExpanded;
   final bool operationsUserCollapsed;
   final ValueChanged<bool> onOperationsExpandToggle;
+  final bool administrativeExpanded;
+  final bool administrativeUserCollapsed;
+  final ValueChanged<bool> onAdministrativeExpandToggle;
   final bool inventoryExpanded;
   final bool inventoryUserCollapsed;
   final ValueChanged<bool> onInventoryExpandToggle;
@@ -40,6 +43,9 @@ class Sidebar extends ConsumerWidget {
     required this.operationsExpanded,
     required this.operationsUserCollapsed,
     required this.onOperationsExpandToggle,
+    required this.administrativeExpanded,
+    required this.administrativeUserCollapsed,
+    required this.onAdministrativeExpandToggle,
     required this.inventoryExpanded,
     required this.inventoryUserCollapsed,
     required this.onInventoryExpandToggle,
@@ -59,10 +65,14 @@ class Sidebar extends ConsumerWidget {
     final isTablet = ResponsiveBuilder.isTablet(context);
     final currentPath = GoRouterState.of(context).uri.path;
     final isFleetRoute = currentPath.startsWith('/fleet');
-    // Operations (Dashboard / Artist Finance / Artist Collection) live under Accounts.
+    // Operations (Dashboard / Artist Finance / Artist Collection / Fleet Expenses) live under Accounts.
     final isOperationsRoute = currentPath == '/accounts/dashboard' ||
         currentPath == '/finance' ||
-        currentPath == '/accounts/artist-collections';
+        currentPath == '/accounts/artist-collections' ||
+        currentPath == '/accounts/fleet-expenses';
+    // Administrative (Expenses / Subscriptions) live under Accounts.
+    final isAdministrativeRoute = currentPath == '/accounts/admin-expenses' ||
+        currentPath == '/accounts/subscriptions';
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
@@ -76,6 +86,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (accountsExpanded || (isAccountsRoute && !accountsUserCollapsed));
     final effectiveOperationsExpanded = !isCollapsed &&
         (operationsExpanded || (isOperationsRoute && !operationsUserCollapsed));
+    final effectiveAdministrativeExpanded = !isCollapsed &&
+        (administrativeExpanded || (isAdministrativeRoute && !administrativeUserCollapsed));
     final effectiveInventoryExpanded = !isCollapsed &&
         (inventoryExpanded || (isInventoryRoute && !inventoryUserCollapsed));
     final effectiveSalesExpanded =
@@ -122,6 +134,15 @@ class Sidebar extends ConsumerWidget {
                     isCollapsed: isCollapsed,
                     isSelected: currentPath == '/sales/home',
                     onTap: () => context.go('/sales/home'),
+                  ),
+                // Monthly Financial-Analyst report (Sales + CR + receivables).
+                if (access.canSeeCEOReport)
+                  _SidebarItem(
+                    icon: Icons.insights_outlined,
+                    title: 'Financial Report',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/reports/analyst',
+                    onTap: () => context.go('/reports/analyst'),
                   ),
                 if (role == AppRole.artist) ...[
                   // ── ARTIST VIEW ───────────────────────────────────────────
@@ -516,6 +537,49 @@ class Sidebar extends ConsumerWidget {
                                   currentPath == '/accounts/fleet-expenses',
                               onTap: () =>
                                   context.go('/accounts/fleet-expenses'),
+                            ),
+                          ),
+                      ],
+                      // Administrative — nested expandable group.
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.admin_panel_settings_outlined,
+                          title: 'Administrative',
+                          isCollapsed: false,
+                          isSelected: isAdministrativeRoute,
+                          trailing: Icon(
+                            effectiveAdministrativeExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            size: 18,
+                          ),
+                          onTap: () => onAdministrativeExpandToggle(
+                              !administrativeExpanded || administrativeUserCollapsed),
+                        ),
+                      ),
+                      if (effectiveAdministrativeExpanded) ...[
+                        if (access.canSeeSub('payables.admin_expenses'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.payments_outlined,
+                              title: 'Expenses',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/admin-expenses',
+                              onTap: () => context.go('/accounts/admin-expenses'),
+                            ),
+                          ),
+                        if (access.canSeeSub('payables.subscriptions'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.cloud_sync_outlined,
+                              title: 'Subscriptions',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/subscriptions',
+                              onTap: () => context.go('/accounts/subscriptions'),
                             ),
                           ),
                       ],

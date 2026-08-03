@@ -65,6 +65,8 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('payables.bills', 'Bills & Payables'),
     AppSubFeature('payables.collections', 'Artist Collections'),
     AppSubFeature('payables.fleet_expenses', 'Fleet Expenses'),
+    AppSubFeature('payables.admin_expenses', 'Administrative Expenses'),
+    AppSubFeature('payables.subscriptions', 'Subscriptions'),
   ]),
   AppFeature('inventory', 'Inventory', 'Studio stock and staff kits',
       Icons.inventory_2_outlined, subs: [

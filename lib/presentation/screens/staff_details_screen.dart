@@ -67,6 +67,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
           status: _employee.status,
           regionId: _employee.regionId,
           category: _employee.category,
+          department: _employee.department,
           profileImage: imageUrl,
           zoneId: _employee.zoneId,
           stateId: _employee.stateId,
@@ -215,6 +216,24 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     ),
                   ),
                 ],
+                if (_employee.department != null && _employee.department!.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: crmColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _employee.department!,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: crmColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 32),
@@ -236,6 +255,10 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                       ),
                     ),
                     const Divider(height: 32),
+                    if (_employee.department != null && _employee.department!.isNotEmpty) ...[
+                      _buildInfoRow(Icons.corporate_fare, 'Department', _employee.department!, crmColors),
+                      const SizedBox(height: 16),
+                    ],
                     _buildInfoRow(Icons.phone, 'Phone', _employee.phone, crmColors),
                     const SizedBox(height: 16),
                     _buildInfoRow(Icons.email, 'Email', _employee.email.isEmpty ? 'Not provided' : _employee.email, crmColors),

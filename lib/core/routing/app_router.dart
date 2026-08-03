@@ -21,6 +21,8 @@ import '../../presentation/screens/package_detail_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/booking_requests_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_budget_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_invoices_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/administrative_expenses_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/administrative_subscriptions_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
@@ -59,6 +61,7 @@ import 'package:nizan_crm/features/inventory/presentation/screens/inventory_vend
 import 'package:nizan_crm/features/inventory/presentation/screens/artist_inventory_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_workspace_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_person_dashboard_screen.dart';
+import 'package:nizan_crm/features/reports/presentation/screens/financial_analyst_report_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -106,6 +109,8 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/accounts/bills')) return 'payables.bills';
   if (path == '/accounts/artist-collections') return 'payables.collections';
   if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
+  if (path == '/accounts/admin-expenses') return 'payables.admin_expenses';
+  if (path == '/accounts/subscriptions') return 'payables.subscriptions';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -179,6 +184,7 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   }
   if (path.startsWith('/trials')) return access.canSeeBookings;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
+  if (path.startsWith('/reports')) return access.canSeeCEOReport;
   if (path.startsWith('/settings')) return access.canSeeSettings;
   if (path.startsWith('/team')) return access.canManageTeam;
   return true; // unknown routes — let the 404 handle it
@@ -211,6 +217,7 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/finance',
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
     '/accounts/artist-collections', '/accounts/fleet-expenses',
+    '/accounts/admin-expenses', '/accounts/subscriptions',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
@@ -320,6 +327,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/cancelled') {
             title = 'Cancelled Works';
+          } else if (state.uri.path == '/reports/analyst') {
+            title = 'Financial Report';
           } else if (state.uri.path == '/sales/home') {
             title = 'My Dashboard';
           } else if (state.uri.path == '/sales/leads') {
@@ -374,6 +383,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Bills & Payables';
           } else if (state.uri.path == '/accounts/fleet-expenses') {
             title = 'Fleet Expenses';
+          } else if (state.uri.path == '/accounts/admin-expenses') {
+            title = 'Administrative Expenses';
+          } else if (state.uri.path == '/accounts/subscriptions') {
+            title = 'Software & Subscriptions';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
           } else if (state.uri.path == '/marketing/competitors') {
@@ -500,6 +513,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const SalesPersonDashboardScreen(),
           ),
           GoRoute(
+            path: '/reports/analyst',
+            builder: (context, state) => const FinancialAnalystReportScreen(),
+          ),
+          GoRoute(
             path: '/sales/leads',
             builder: (context, state) => const SalesWorkspaceScreen(),
           ),
@@ -550,6 +567,16 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/accounts/fleet-expenses',
             builder: (context, state) =>
                 const AccountsFleetExpensesScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/admin-expenses',
+            builder: (context, state) =>
+                const AdministrativeExpensesScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/subscriptions',
+            builder: (context, state) =>
+                const AdministrativeSubscriptionsScreen(),
           ),
           // ── Marketing (Competitor Intelligence) ──────────────────────
           GoRoute(

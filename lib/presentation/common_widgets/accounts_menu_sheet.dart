@@ -14,6 +14,9 @@ class _Section {
 // Accounts screens with no bottom-nav slot (Dashboard / Finance / Collection
 // live in the bottom bar, so they are intentionally left out here).
 const _sections = <_Section>[
+  _Section('Fleet Expenses', Icons.local_shipping_outlined, '/accounts/fleet-expenses'),
+  _Section('Admin Expenses', Icons.payments_outlined, '/accounts/admin-expenses'),
+  _Section('Subscriptions', Icons.cloud_sync_outlined, '/accounts/subscriptions'),
   _Section('Bills & Payables', Icons.request_quote_outlined, '/accounts/bills'),
   _Section('Invoice', Icons.receipt_long_outlined, '/accounts/invoices'),
   _Section('Budget', Icons.pie_chart_outline, '/accounts/budget'),

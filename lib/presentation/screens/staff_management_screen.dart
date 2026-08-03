@@ -93,6 +93,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       var type = employee?.type ?? 'outsource';
       var artistRole = employee?.artistRole ?? presetRole ?? 'artist';
       var status = employee?.status ?? 'active';
+      var department = employee?.department ?? 'Operations';
       var regionId = employee?.regionId ?? '';
       var zoneId = employee?.zoneId ?? '';
       var stateId = employee?.stateId ?? '';
@@ -292,6 +293,30 @@ class StaffManagementScreen extends HookConsumerWidget {
                         ),
                       ),
                       16.h,
+                      DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: department,
+                        items: const [
+                          DropdownMenuItem(value: 'CRM', child: Text('CRM')),
+                          DropdownMenuItem(value: 'Finance', child: Text('Finance')),
+                          DropdownMenuItem(value: 'Accounts', child: Text('Accounts')),
+                          DropdownMenuItem(value: 'IT', child: Text('IT')),
+                          DropdownMenuItem(value: 'Sales', child: Text('Sales')),
+                          DropdownMenuItem(value: 'Marketing', child: Text('Marketing')),
+                          DropdownMenuItem(value: 'HR', child: Text('HR')),
+                          DropdownMenuItem(value: 'Operations', child: Text('Operations')),
+                          DropdownMenuItem(value: 'General', child: Text('General')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => department = value);
+                          }
+                        },
+                        decoration: const InputDecoration(
+                          labelText: 'Department',
+                        ),
+                      ),
+                      16.h,
                       TextField(
                         controller: specializationCtrl,
                         decoration: const InputDecoration(
@@ -348,6 +373,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           status: status,
                           regionId: regionId,
                           category: category,
+                          department: department,
                           zoneId: zoneId,
                           stateId: stateId,
                           districtId: districtId,
