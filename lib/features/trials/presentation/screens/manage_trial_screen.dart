@@ -959,8 +959,9 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
                     Row(children: [
                       _typeChip('LEAD', 'lead', Colors.amber, enabled: !hasLead),
                       8.w,
-                      _typeChip('ASST', 'assistant', Colors.indigo,
-                          enabled: hasLead),
+                      // Assistants can be added independently — a lead artist is
+                      // no longer required first.
+                      _typeChip('ASST', 'assistant', Colors.indigo),
                     ]),
                   ],
                 ),

@@ -57,7 +57,8 @@ import 'package:nizan_crm/features/inventory/presentation/screens/inventory_repo
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_purchases_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_vendors_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/artist_inventory_screen.dart';
-import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_workspace_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_person_dashboard_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -232,6 +233,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     navigatorKey: rootNavigatorKey,
     refreshListenable: auth,
     initialLocation: '/',
+    // An unknown location (e.g. a stale build after a route was added, or a
+    // home route the current build doesn't know) must never strand the user on
+    // a "Page Not Found". Send them to a page their role can actually open.
+    onException: (context, state, router) {
+      if (!auth.isAuthenticated) {
+        router.go('/login');
+        return;
+      }
+      final access = Access.of(auth.session);
+      final inventoryAccess = auth.session?.inventoryAccess ?? false;
+      router.go(landingRouteFor(access, inventoryAccess: inventoryAccess));
+    },
     redirect: (context, state) {
       final path = state.uri.path;
       final isLoadingRoute = path == '/auth/loading';
@@ -307,8 +320,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/cancelled') {
             title = 'Cancelled Works';
+          } else if (state.uri.path == '/sales/home') {
+            title = 'My Dashboard';
           } else if (state.uri.path == '/sales/leads') {
-            title = 'Leads Management';
+            title = 'Sales Workspace';
           } else if (state.uri.path.startsWith('/sales/leads/')) {
             title = 'Lead Details';
           } else if (state.uri.path == '/fleet/vehicles') {
@@ -481,8 +496,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const NotificationsScreen(),
           ),
           GoRoute(
+            path: '/sales/home',
+            builder: (context, state) => const SalesPersonDashboardScreen(),
+          ),
+          GoRoute(
             path: '/sales/leads',
-            builder: (context, state) => const SalesLeadsScreen(),
+            builder: (context, state) => const SalesWorkspaceScreen(),
           ),
           GoRoute(
             path: '/sales/leads/:id',

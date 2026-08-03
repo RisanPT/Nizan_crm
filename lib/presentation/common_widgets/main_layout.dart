@@ -61,10 +61,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location == '/inventory/kits') return 2;
       return 3; // Alerts / Expiry / Reports / Profile live in the Menu sheet.
     } else if (role == AppRole.sales) {
-      if (location.startsWith('/sales/leads')) return 0;
-      if (location == '/calendar') return 1;
-      if (location.startsWith('/booking')) return 2;
-      if (location == '/sales') return 3;
+      if (location.startsWith('/sales/home')) return 0;
+      if (location.startsWith('/sales/leads')) return 1;
+      if (location == '/calendar') return 2;
+      if (location.startsWith('/booking')) return 3;
       if (location == '/profile') return 4;
     } else if (role == AppRole.fleetManager) {
       if (location.startsWith('/fleet/assignments')) return 0;
@@ -128,10 +128,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       }
     } else if (role == AppRole.sales) {
       switch (index) {
-        case 0: context.go('/sales/leads'); break;
-        case 1: context.go('/calendar'); break;
-        case 2: context.go('/booking/requests'); break;
-        case 3: context.go('/sales'); break;
+        case 0: context.go('/sales/home'); break;
+        case 1: context.go('/sales/leads'); break;
+        case 2: context.go('/calendar'); break;
+        case 3: context.go('/booking/requests'); break;
         case 4: context.go('/profile'); break;
       }
     } else if (role == AppRole.fleetManager) {
@@ -265,6 +265,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               : role == AppRole.sales
                   ? const [
                       NavigationDestination(
+                        icon: Icon(Icons.dashboard_outlined),
+                        selectedIcon: Icon(Icons.dashboard),
+                        label: 'Home',
+                      ),
+                      NavigationDestination(
                         icon: Icon(Icons.person_add_alt_1_outlined),
                         selectedIcon: Icon(Icons.person_add_alt_1),
                         label: 'Leads',
@@ -278,11 +283,6 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                         icon: Icon(Icons.receipt_long_outlined),
                         selectedIcon: Icon(Icons.receipt_long),
                         label: 'Bookings',
-                      ),
-                      NavigationDestination(
-                        icon: Icon(Icons.bar_chart_outlined),
-                        selectedIcon: Icon(Icons.bar_chart),
-                        label: 'Sales',
                       ),
                       NavigationDestination(
                         icon: Icon(Icons.person_outline),

@@ -114,6 +114,15 @@ class Sidebar extends ConsumerWidget {
                   onTap: () => context.go('/notifications'),
                   trailing: _unreadBadge(ref, crmColors, isCollapsed),
                 ),
+                // Personal dashboard — the Sales Executive's landing screen.
+                if (role == AppRole.sales)
+                  _SidebarItem(
+                    icon: Icons.dashboard_outlined,
+                    title: 'My Dashboard',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/sales/home',
+                    onTap: () => context.go('/sales/home'),
+                  ),
                 if (role == AppRole.artist) ...[
                   // ── ARTIST VIEW ───────────────────────────────────────────
                   _SidebarItem(

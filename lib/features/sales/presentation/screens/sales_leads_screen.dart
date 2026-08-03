@@ -799,7 +799,7 @@ class _AddLeadCard extends HookConsumerWidget {
                 isMobile ? 20 : 24,
               ),
               child: _LeadForm(
-                onSaved: () => ref.invalidate(leadsProvider),
+                onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
               ),
             ),
         ],
@@ -1738,7 +1738,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                   child: Consumer(
                     builder: (ctx, ref, _) => _LeadForm(
                       initialLead: lead,
-                      onSaved: () => ref.invalidate(leadsProvider),
+                      onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
                     ),
                   ),
                 ),
@@ -1780,7 +1780,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                 Consumer(
                   builder: (ctx, ref, _) => _LeadForm(
                     initialLead: lead,
-                    onSaved: () => ref.invalidate(leadsProvider),
+                    onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
                   ),
                 ),
               ],
@@ -1819,7 +1819,7 @@ Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) asyn
   if (confirmed != true) return;
   try {
     await ref.read(leadServiceProvider).deleteLead(lead.id);
-    ref.invalidate(leadsProvider);
+    ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2506,7 +2506,7 @@ void _showRecordOutcomeDialog(BuildContext context, WidgetRef ref, Lead lead) {
   showDialog(
     context: context,
     builder: (context) {
-      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref.invalidate(leadsProvider));
+      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider));
     },
   );
 }

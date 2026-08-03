@@ -517,23 +517,22 @@ class ArtistWorksScreen extends HookConsumerWidget {
                 onRetry: () => ref.invalidate(artistTrialsProvider),
               ),
               data: (trials) {
-                final monthTrials = trials
-                    .where((t) =>
-                        t.trialDate.year == selectedMonth.value.year &&
-                        t.trialDate.month == selectedMonth.value.month)
-                    .toList()
+                // Show ALL trials assigned to this artist, not just the selected
+                // month — the Trials tab has no month picker, so month-scoping
+                // here hid trials dated in other months.
+                final sorted = [...trials]
                   ..sort((a, b) => a.trialDate.compareTo(b.trialDate));
-                if (monthTrials.isEmpty) {
+                if (sorted.isEmpty) {
                   return const _EmptyState(
                     title: 'No Trials',
-                    message: 'No trials assigned to you this month.',
+                    message: 'No trials assigned to you yet.',
                   );
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                  itemCount: monthTrials.length,
+                  itemCount: sorted.length,
                   separatorBuilder: (_, _) => 12.h,
-                  itemBuilder: (_, i) => _ArtistTrialCard(trial: monthTrials[i]),
+                  itemBuilder: (_, i) => _ArtistTrialCard(trial: sorted[i]),
                 );
               },
             ),
