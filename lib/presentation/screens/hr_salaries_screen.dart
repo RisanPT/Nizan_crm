@@ -8,6 +8,8 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
+import 'package:nizan_crm/features/hr/data/timebox_models.dart';
+import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 
 const _monthNames = [
@@ -32,6 +34,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
   late TabController _tabController;
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isGenerating = false;
+  bool _isTimeboxGenerating = false;
+  /// Lookup: crmEmployeeId → PayrollRow for the current month.
+  /// Populated when the administrative tab is visible.
+  Map<String, PayrollRow> _payrollRowByCrmId = {};
 
   @override
   void initState() {
@@ -90,6 +96,72 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       }
     } finally {
       if (mounted) setState(() => _isGenerating = false);
+    }
+  }
+
+  /// Generate payroll via Timebox attendance (attendance-pro-rated, admin only).
+  Future<void> _generateTimeboxPayroll(int month, int year) async {
+    // Confirm with user
+    final crm = context.crmColors;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Timebox Attendance Payroll'),
+        content: Text(
+          'This will create/update administrative salary slips for '
+          '${_monthNames[month - 1]} $year, pro-rated by Timebox attendance.\n\n'
+          '• Employees matched in Timebox get attendance-prorated amounts\n'
+          '• Unmatched employees are skipped\n'
+          '• Slips already marked "paid" are never changed.\n\n'
+          'Tip: Go to HR → Timebox → Payroll and click ↺ Sync first\n'
+          'to ensure all staff are matched by ID.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _isTimeboxGenerating = true);
+    try {
+      final tbMonth = TimeboxMonth(year, month);
+      final msg = await ref.read(timeboxServiceProvider).generatePayroll(
+            from: tbMonth.from,
+            to: tbMonth.to,
+          );
+      ref.invalidate(salariesProvider);
+      ref.invalidate(adminSalariesProvider);
+      ref.invalidate(opsSalariesProvider);
+      ref.invalidate(payrollPreviewProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: crm.success,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isTimeboxGenerating = false);
     }
   }
 
@@ -522,6 +594,19 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     final isMobile = ResponsiveBuilder.isMobile(context);
     final filter = ref.watch(salaryFilterProvider);
     final salariesAsync = ref.watch(salariesProvider);
+    // Watch Timebox payroll preview to get attendance data for admin salary cards.
+    final payrollPreviewAsync = ref.watch(payrollPreviewProvider);
+    payrollPreviewAsync.whenData((preview) {
+      final map = <String, PayrollRow>{};
+      for (final row in preview.rows) {
+        if (row.crmEmployeeId != null) {
+          map[row.crmEmployeeId!] = row;
+        }
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _payrollRowByCrmId = map);
+      });
+    });
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -566,6 +651,29 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Add Custom Slip'),
                     ),
+                    // ── Timebox Attendance Payroll ──
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF6366F1),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: (_isTimeboxGenerating)
+                          ? null
+                          : () => _generateTimeboxPayroll(filter.month, filter.year),
+                      icon: _isTimeboxGenerating
+                          ? const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.timelapse, size: 16),
+                      label: Text(
+                          _isTimeboxGenerating
+                              ? 'Generating…'
+                              : 'Attendance Payroll'),
+                    ),
+                    // ── Classic Full Payroll ──
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: crm.primary,
@@ -583,7 +691,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             )
                           : const Icon(Icons.auto_awesome, size: 16),
                       label: Text(
-                          _isGenerating ? 'Generating...' : 'Generate Monthly Payroll'),
+                          _isGenerating ? 'Generating...' : 'Full Payroll'),
                     ),
                   ],
                 ),
@@ -758,7 +866,52 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             ),
             12.h,
 
-            // ── SEARCH & STATUS FILTER ──
+            // ── TIMEBOX ATTENDANCE SUMMARY (admin tab only) ──
+            if (_tabController.index == 0)
+              payrollPreviewAsync.when(
+                loading: () => const SizedBox.shrink(),
+                error: (e, st) => const SizedBox.shrink(),
+                data: (preview) {
+                  if (preview.rows.isEmpty) return const SizedBox.shrink();
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border:
+                          Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.25)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.timelapse, size: 16, color: Color(0xFF6366F1)),
+                        8.w,
+                        Expanded(
+                          child: Text(
+                            'Timebox: ${preview.matched} matched · '
+                            '${preview.unmatched} unmatched · '
+                            'Net payable: ${NumberFormat.currency(locale: "en_IN", symbol: "₹", decimalDigits: 0).format(preview.totalNetPayable)}',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF6366F1),
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        8.w,
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF6366F1),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          ),
+                          onPressed: () => ref.invalidate(payrollPreviewProvider),
+                          child: const Text('Refresh', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
             Row(
               children: [
                 Expanded(
@@ -823,11 +976,27 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             style: TextStyle(color: crm.textSecondary, fontSize: 14),
                           ),
                           8.h,
-                          ElevatedButton.icon(
-                            onPressed: () =>
-                                _generatePayroll(filter.month, filter.year),
-                            icon: const Icon(Icons.auto_awesome, size: 16),
-                            label: const Text('Generate Payroll for this Month'),
+                          Wrap(
+                            spacing: 8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF6366F1),
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () =>
+                                    _generateTimeboxPayroll(filter.month, filter.year),
+                                icon: const Icon(Icons.timelapse, size: 16),
+                                label: const Text('Attendance Payroll (Timebox)'),
+                              ),
+                              ElevatedButton.icon(
+                                onPressed: () =>
+                                    _generatePayroll(filter.month, filter.year),
+                                icon: const Icon(Icons.auto_awesome, size: 16),
+                                label: const Text('Full Payroll (Classic)'),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -839,7 +1008,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     separatorBuilder: (context, index) => 8.h,
                     itemBuilder: (ctx, idx) {
                       final s = list[idx];
-                      return _buildSalaryCard(crm, s);
+                      final payrollRow = _payrollRowByCrmId[s.employeeId];
+                      return _buildSalaryCard(crm, s, payrollRow: payrollRow);
                     },
                   );
                 },
@@ -906,13 +1076,26 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     );
   }
 
-  Widget _buildSalaryCard(CrmTheme crm, Salary s) {
+  Widget _buildSalaryCard(CrmTheme crm, Salary s, {PayrollRow? payrollRow}) {
     final statusColor = s.isPaid
         ? Colors.green
         : (s.status == 'approved_by_hr' ? Colors.blue : Colors.orange);
     final statusText = s.isPaid
         ? 'Paid'
         : (s.status == 'approved_by_hr' ? 'Approved by HR' : 'Draft');
+
+    // Attendance context from Timebox (admin cards only)
+    Color? attColor;
+    String? attLabel;
+    if (payrollRow != null) {
+      final pct = payrollRow.attendancePercent;
+      attColor = pct >= 90
+          ? crm.success
+          : pct >= 75
+              ? crm.warning
+              : crm.destructive;
+      attLabel = '$pct% · ${payrollRow.daysPresent}/${payrollRow.expectedDays}d';
+    }
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -969,6 +1152,27 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                         ),
                       ),
                     ),
+                    // Attendance badge from Timebox
+                    if (attColor != null && attLabel != null) ...[
+                      8.w,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: attColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: attColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.timelapse, size: 10, color: attColor),
+                          3.w,
+                          Text(attLabel,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: attColor)),
+                        ]),
+                      ),
+                    ],
                   ],
                 ),
                 3.h,
@@ -997,6 +1201,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
               ],
             ),
           ),
+
 
           // Net Payable
           Expanded(

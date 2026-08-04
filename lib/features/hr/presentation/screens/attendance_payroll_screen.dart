@@ -8,6 +8,7 @@ import '../../../../core/theme/crm_theme.dart';
 import '../../data/timebox_models.dart';
 import '../../service/timebox_service.dart';
 import 'attendance_summary_screen.dart' show attendanceColor;
+import 'attendance_detail_screen.dart';
 
 const _months = [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -29,6 +30,32 @@ class AttendancePayrollScreen extends HookConsumerWidget {
     final month = ref.watch(timeboxMonthProvider);
     final previewAsync = ref.watch(payrollPreviewProvider);
     final busy = useState(false);
+    final syncing = useState(false);
+
+    Future<void> doSync() async {
+      syncing.value = true;
+      try {
+        final result = await ref.read(timeboxServiceProvider).syncEmployees();
+        ref.invalidate(payrollPreviewProvider);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.message),
+              backgroundColor: result.unmatched > 0 ? crm.warning : crm.success,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$e'), backgroundColor: crm.destructive),
+          );
+        }
+      } finally {
+        syncing.value = false;
+      }
+    }
 
     Future<void> generate(PayrollPreview preview) async {
       final ok = await showDialog<bool>(
@@ -41,7 +68,8 @@ class AttendancePayrollScreen extends HookConsumerWidget {
             '• ${preview.matched} employees will get slips\n'
             '• ${preview.unmatched} unmatched (no CRM link) will be skipped\n'
             '• Total net payable: ${_money(preview.totalNetPayable)}\n\n'
-            'Slips already marked "paid" are never changed.',
+            'Slips already marked "paid" are never changed.\n'
+            'Tip: Run "Sync Timebox → CRM" first to maximise matched employees.',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -79,8 +107,25 @@ class AttendancePayrollScreen extends HookConsumerWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // ── Sync Timebox → CRM ──
+          Tooltip(
+            message: 'Sync Timebox employees → CRM (establishes ID bindings for stable matching)',
+            child: syncing.value
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.sync_alt),
+                    onPressed: doSync,
+                  ),
+          ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: 'Refresh payroll preview',
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(payrollPreviewProvider),
           ),
@@ -88,29 +133,8 @@ class AttendancePayrollScreen extends HookConsumerWidget {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () =>
-                      ref.read(timeboxMonthProvider.notifier).state = month.prev,
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text('${_months[month.month]} ${month.year}',
-                        style: TextStyle(fontWeight: FontWeight.w700, color: crm.accent, fontSize: 15)),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () =>
-                      ref.read(timeboxMonthProvider.notifier).state = month.next,
-                ),
-              ],
-            ),
-          ),
+          // ── Month navigation bar ──
+          _MonthBar(month: month, crm: crm, ref: ref),
           const Divider(height: 1),
           Expanded(
             child: previewAsync.when(
@@ -144,7 +168,26 @@ class AttendancePayrollScreen extends HookConsumerWidget {
                         if (preview.unmatched > 0) 10.h,
                         ...preview.rows.map((r) => Padding(
                               padding: const EdgeInsets.only(bottom: 8),
-                              child: _PayrollCard(row: r, crm: crm),
+                              child: _PayrollCard(
+                                row: r,
+                                crm: crm,
+                                onTapAttendance: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AttendanceDetailScreen(
+                                        employeeId: r.timeboxId,
+                                        employeeName: r.name,
+                                        department: r.department,
+                                        attendancePercent: r.attendancePercent,
+                                        daysPresent: r.daysPresent,
+                                        expectedDays: r.expectedDays,
+                                        hoursWorked: r.hoursWorked,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             )),
                       ],
                     ),
@@ -164,6 +207,44 @@ class AttendancePayrollScreen extends HookConsumerWidget {
     );
   }
 }
+
+// ── Month navigation bar ─────────────────────────────────────────────────────
+
+class _MonthBar extends StatelessWidget {
+  const _MonthBar({required this.month, required this.crm, required this.ref});
+  final TimeboxMonth month;
+  final CrmTheme crm;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () =>
+                ref.read(timeboxMonthProvider.notifier).state = month.prev,
+          ),
+          Expanded(
+            child: Center(
+              child: Text('${_months[month.month]} ${month.year}',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: crm.accent, fontSize: 15)),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () =>
+                ref.read(timeboxMonthProvider.notifier).state = month.next,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Totals card ───────────────────────────────────────────────────────────────
 
 class _TotalsCard extends StatelessWidget {
   const _TotalsCard({required this.preview, required this.crm});
@@ -198,7 +279,8 @@ class _TotalsCard extends StatelessWidget {
             _pill('Full base', _money(preview.totalBase), crm.textSecondary, crm),
             _pill('Absence cut', '- ${_money(preview.totalAbsenceDeduction)}', crm.destructive, crm),
             _pill('Matched', '${preview.matched}', crm.success, crm),
-            if (preview.unmatched > 0) _pill('Unmatched', '${preview.unmatched}', crm.warning, crm),
+            if (preview.unmatched > 0)
+              _pill('Unmatched', '${preview.unmatched}', crm.warning, crm),
           ]),
         ],
       ),
@@ -221,6 +303,8 @@ class _TotalsCard extends StatelessWidget {
   }
 }
 
+// ── Unmatched warning ─────────────────────────────────────────────────────────
+
 class _UnmatchedNote extends StatelessWidget {
   const _UnmatchedNote({required this.count, required this.crm});
   final int count;
@@ -239,8 +323,8 @@ class _UnmatchedNote extends StatelessWidget {
         10.w,
         Expanded(
           child: Text(
-            '$count Timebox employees could not be linked to a CRM staff record '
-            '(by email or name), so they have no base salary and are excluded from generation.',
+            '$count Timebox employees could not be linked to a CRM staff record. '
+            'Tap "Sync Timebox → CRM" (↺ icon) to establish ID bindings, then refresh.',
             style: TextStyle(fontSize: 12, color: crm.textSecondary),
           ),
         ),
@@ -249,46 +333,106 @@ class _UnmatchedNote extends StatelessWidget {
   }
 }
 
+// ── Match confidence badge ────────────────────────────────────────────────────
+
+/// Returns (color, label, icon) for a matchedBy value.
+(Color, String, IconData) _matchBadge(String matchedBy, CrmTheme crm) {
+  switch (matchedBy) {
+    case 'id':
+      return (crm.success, 'ID', Icons.link);
+    case 'email':
+      return (crm.success, 'Email', Icons.email_outlined);
+    case 'name':
+      return (crm.warning, 'Name', Icons.person_outline);
+    default:
+      return (crm.destructive, 'None', Icons.link_off);
+  }
+}
+
+// ── Payroll card ──────────────────────────────────────────────────────────────
+
 class _PayrollCard extends StatelessWidget {
-  const _PayrollCard({required this.row, required this.crm});
+  const _PayrollCard({
+    required this.row,
+    required this.crm,
+    required this.onTapAttendance,
+  });
   final PayrollRow row;
   final CrmTheme crm;
+  final VoidCallback onTapAttendance;
 
   @override
   Widget build(BuildContext context) {
     final attColor = attendanceColor(row.attendancePercent, crm);
+    final (matchColor, matchLabel, matchIcon) = _matchBadge(row.matchedBy, crm);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: row.matched ? crm.border : crm.warning.withValues(alpha: 0.5)),
+        border: Border.all(
+          color: row.matched ? crm.border : crm.warning.withValues(alpha: 0.5),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header row ──
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(row.name.trim().isEmpty ? 'Unknown' : row.name.trim(),
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      row.name.trim().isEmpty ? 'Unknown' : row.name.trim(),
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     2.h,
-                    Text(row.department, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                    Text(row.department,
+                        style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
                   ],
                 ),
               ),
+              8.w,
+              // Match confidence badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
-                  color: attColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  color: matchColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: matchColor.withValues(alpha: 0.35)),
                 ),
-                child: Text('${row.attendancePercent}% · ${row.daysPresent}/${row.expectedDays}d',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: attColor)),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(matchIcon, size: 11, color: matchColor),
+                  4.w,
+                  Text('Match: $matchLabel',
+                      style: TextStyle(
+                          fontSize: 10.5, fontWeight: FontWeight.w700, color: matchColor)),
+                ]),
+              ),
+              8.w,
+              // Attendance chip — tappable to drill into detail
+              GestureDetector(
+                onTap: onTapAttendance,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: attColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(
+                      '${row.attendancePercent}% · ${row.daysPresent}/${row.expectedDays}d',
+                      style: TextStyle(
+                          fontSize: 11.5, fontWeight: FontWeight.w700, color: attColor),
+                    ),
+                    4.w,
+                    Icon(Icons.chevron_right, size: 13, color: attColor),
+                  ]),
+                ),
               ),
             ],
           ),
@@ -300,10 +444,34 @@ class _PayrollCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: _col('Base', _money(row.baseSalary), crm.textSecondary)),
-                Expanded(child: _col('Absence', '- ${_money(row.absenceDeduction)}', crm.destructive)),
-                Expanded(child: _col('Net payable', _money(row.netPayable), crm.accent, bold: true)),
+                Expanded(
+                    child: _col(
+                        'Absence', '- ${_money(row.absenceDeduction)}', crm.destructive)),
+                Expanded(
+                    child: _col('Net payable', _money(row.netPayable), crm.accent,
+                        bold: true)),
               ],
             ),
+          if (row.matchedBy == 'name') ...[
+            8.h,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: crm.warning.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Row(children: [
+                Icon(Icons.info_outline, size: 13, color: crm.warning),
+                6.w,
+                Expanded(
+                  child: Text(
+                    'Matched by name only — run Sync to lock in a stable ID binding.',
+                    style: TextStyle(fontSize: 11, color: crm.warning),
+                  ),
+                ),
+              ]),
+            ),
+          ],
         ],
       ),
     );
@@ -315,11 +483,17 @@ class _PayrollCard extends StatelessWidget {
       children: [
         Text(k, style: TextStyle(fontSize: 10.5, color: c.withValues(alpha: 0.9))),
         2.h,
-        Text(v, style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: c)),
+        Text(v,
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                color: c)),
       ],
     );
   }
 }
+
+// ── Generate bar ──────────────────────────────────────────────────────────────
 
 class _GenerateBar extends StatelessWidget {
   const _GenerateBar({
@@ -350,14 +524,18 @@ class _GenerateBar extends StatelessWidget {
               children: [
                 Text('Net payable', style: TextStyle(fontSize: 11, color: crm.textSecondary)),
                 Text(_money(preview.totalNetPayable),
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: crm.accent)),
+                    style: TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w800, color: crm.accent)),
               ],
             ),
           ),
           FilledButton.icon(
             onPressed: (busy || preview.matched == 0) ? null : onGenerate,
             icon: busy
-                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.receipt_long_outlined),
             label: Text(busy ? 'Generating…' : 'Generate slips'),
           ),

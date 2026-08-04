@@ -116,6 +116,17 @@ class TimeboxService {
       throw Exception(_err(e, 'Failed to generate payroll'));
     }
   }
+
+  /// Sync Timebox employee IDs back onto CRM Employee records so future
+  /// payroll matching uses stable integer IDs instead of email/name.
+  Future<TimeboxSyncResult> syncEmployees() async {
+    try {
+      final res = await _dio.post('/timebox/sync-employees');
+      return TimeboxSyncResult.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_err(e, 'Failed to sync Timebox employees'));
+    }
+  }
 }
 
 // ── Month selection state (drives summary + payroll) ──────────────────────────

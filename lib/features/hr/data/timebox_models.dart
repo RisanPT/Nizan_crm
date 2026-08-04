@@ -215,6 +215,10 @@ class PayrollRow {
   final String email;
   final String department;
   final bool matched;
+  /// How this row was matched to a CRM employee:
+  /// 'id' = Timebox ID binding, 'email' = email match,
+  /// 'name' = name match, 'none' = unmatched.
+  final String matchedBy;
   final String? crmEmployeeId;
   final double baseSalary;
   final double allowances;
@@ -234,6 +238,7 @@ class PayrollRow {
     required this.email,
     required this.department,
     required this.matched,
+    required this.matchedBy,
     required this.crmEmployeeId,
     required this.baseSalary,
     required this.allowances,
@@ -254,6 +259,7 @@ class PayrollRow {
         email: j['email'] as String? ?? '',
         department: j['department'] as String? ?? '',
         matched: j['matched'] as bool? ?? false,
+        matchedBy: j['matchedBy'] as String? ?? 'none',
         crmEmployeeId: j['crmEmployeeId'] as String?,
         baseSalary: _asDouble(j['baseSalary']),
         allowances: _asDouble(j['allowances']),
@@ -313,4 +319,29 @@ class PayrollPreview {
           .toList(),
     );
   }
+}
+
+/// Result from POST /api/timebox/sync-employees.
+class TimeboxSyncResult {
+  final int synced;
+  final int alreadySynced;
+  final int unmatched;
+  final int conflictCount;
+  final String message;
+
+  const TimeboxSyncResult({
+    required this.synced,
+    required this.alreadySynced,
+    required this.unmatched,
+    required this.conflictCount,
+    required this.message,
+  });
+
+  factory TimeboxSyncResult.fromJson(Map<String, dynamic> j) => TimeboxSyncResult(
+        synced: _asInt(j['synced']),
+        alreadySynced: _asInt(j['alreadySynced']),
+        unmatched: _asInt(j['unmatched']),
+        conflictCount: _asInt(j['conflictCount']),
+        message: j['message'] as String? ?? '',
+      );
 }
