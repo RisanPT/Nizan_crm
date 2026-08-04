@@ -67,12 +67,12 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
                 return RefreshIndicator(
                   onRefresh: () async => ref.invalidate(attendanceSummaryProvider),
                   child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                     children: [
                       _StatsHeader(rows: rows, crm: crm, theme: theme),
-                      12.h,
+                      16.h,
                       ...(_sorted(rows)).map((r) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.only(bottom: 12),
                             child: _SummaryCard(
                               row: r,
                               crm: crm,
@@ -114,27 +114,40 @@ class _MonthBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: () => onChanged(month.prev),
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                '${_months[month.month]} ${month.year}',
-                style: TextStyle(fontWeight: FontWeight.w700, color: crm.accent, fontSize: 15),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: crm.sidebar.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          children: [
+            IconButton(
+              icon: Icon(Icons.keyboard_arrow_left_rounded, color: crm.accent, size: 28),
+              onPressed: () => onChanged(month.prev),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '${_months[month.month]} ${month.year}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: crm.primary,
+                    fontSize: 16,
+                    letterSpacing: 0.5,
+                  ),
+                ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () => onChanged(month.next),
-          ),
-        ],
+            IconButton(
+              icon: Icon(Icons.keyboard_arrow_right_rounded, color: crm.accent, size: 28),
+              onPressed: () => onChanged(month.next),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -161,9 +174,9 @@ class _StatsHeader extends StatelessWidget {
         8.w,
         Expanded(child: _StatTile(label: 'Avg Attendance', value: '$avg%', icon: Icons.percent, color: attendanceColor(avg, crm))),
         8.w,
-        Expanded(child: _StatTile(label: 'Total Hours', value: totalHours.toStringAsFixed(0), icon: Icons.schedule, color: crm.primary)),
+        Expanded(child: _StatTile(label: 'Total Hours', value: totalHours.toStringAsFixed(0), icon: Icons.schedule_rounded, color: crm.primary)),
         8.w,
-        Expanded(child: _StatTile(label: 'No Data', value: '$noData', icon: Icons.help_outline, color: crm.textSecondary)),
+        Expanded(child: _StatTile(label: 'No Data', value: '$noData', icon: Icons.help_outline_rounded, color: crm.textSecondary)),
       ],
     );
   }
@@ -180,24 +193,60 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: crm.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: color),
-          6.h,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 16, color: color),
+              ),
+            ],
+          ),
+          12.h,
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: crm.textPrimary,
+                letterSpacing: -0.5,
+              ),
+            ),
           ),
-          2.h,
-          Text(label, style: TextStyle(fontSize: 10.5, color: crm.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+          4.h,
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: crm.textSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -214,50 +263,97 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = attendanceColor(row.attendancePercent, crm);
-    return Material(
-      color: crm.surface,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: crm.border),
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
-          child: Row(
-            children: [
-              _PercentRing(percent: row.attendancePercent, color: color),
-              12.w,
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      row.employeeName.trim().isEmpty ? 'Unknown' : row.employeeName.trim(),
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    2.h,
-                    Text(row.department, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
-                    8.h,
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _MiniChip(icon: Icons.event_available_outlined, label: '${row.daysPresent}/${row.expectedDays} days', color: crm.accent),
-                        _MiniChip(icon: Icons.schedule, label: '${row.hoursWorked.toStringAsFixed(1)} h', color: crm.primary),
-                        if (row.daysNoLogout > 0)
-                          _MiniChip(icon: Icons.logout, label: '${row.daysNoLogout} no-logout', color: crm.warning),
-                      ],
-                    ),
-                  ],
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _PercentRing(percent: row.attendancePercent, color: color),
+                16.w,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              row.employeeName.trim().isEmpty ? 'Unknown' : row.employeeName.trim(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                                letterSpacing: -0.2,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: crm.primary.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: crm.primary.withValues(alpha: 0.12)),
+                            ),
+                            child: Text(
+                              row.department.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: crm.primary,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      8.h,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _MiniChip(
+                            icon: Icons.event_available_rounded,
+                            label: '${row.daysPresent}/${row.expectedDays} days',
+                            color: crm.accent,
+                          ),
+                          _MiniChip(
+                            icon: Icons.schedule_rounded,
+                            label: '${row.hoursWorked.toStringAsFixed(1)} h',
+                            color: crm.primary,
+                          ),
+                          if (row.daysNoLogout > 0)
+                            _MiniChip(
+                              icon: Icons.error_outline_rounded,
+                              label: '${row.daysNoLogout} no-logout',
+                              color: crm.warning,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right, color: crm.textSecondary),
-            ],
+                12.w,
+                Icon(Icons.chevron_right_rounded, color: crm.textSecondary.withValues(alpha: 0.6), size: 24),
+              ],
+            ),
           ),
         ),
       ),
@@ -273,22 +369,30 @@ class _PercentRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 52,
-      height: 52,
+      width: 54,
+      height: 54,
       child: Stack(
         alignment: Alignment.center,
         children: [
           SizedBox(
-            width: 52,
-            height: 52,
+            width: 54,
+            height: 54,
             child: CircularProgressIndicator(
               value: (percent.clamp(0, 100)) / 100,
-              strokeWidth: 5,
-              backgroundColor: color.withValues(alpha: 0.15),
+              strokeWidth: 5.5,
+              backgroundColor: color.withValues(alpha: 0.1),
               valueColor: AlwaysStoppedAnimation(color),
             ),
           ),
-          Text('$percent%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: color)),
+          Text(
+            '$percent%',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w900,
+              color: color,
+              letterSpacing: -0.3,
+            ),
+          ),
         ],
       ),
     );
@@ -304,18 +408,27 @@ class _MiniChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.28)),
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 12, color: color),
-          4.w,
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
+          Icon(icon, size: 13, color: color),
+          6.w,
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              height: 1.1,
+            ),
+          ),
         ],
       ),
     );

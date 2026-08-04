@@ -140,9 +140,8 @@ class TimeboxMonth {
 }
 
 final timeboxMonthProvider = StateProvider<TimeboxMonth>((ref) {
-  // Default to July 2026 — the month the demo data covers — so the screen is
-  // populated on first open. Users can navigate to any month.
-  return const TimeboxMonth(2026, 7);
+  final now = DateTime.now();
+  return TimeboxMonth(now.year, now.month);
 });
 
 // ── Derived providers ─────────────────────────────────────────────────────────
