@@ -26,6 +26,8 @@ import 'package:nizan_crm/features/accounts/presentation/screens/administrative_
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_salaries_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_salaries_screen.dart';
 import '../../presentation/screens/hr_salaries_screen.dart';
+import '../../features/hr/presentation/screens/attendance_summary_screen.dart';
+import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
@@ -116,6 +118,7 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/subscriptions') return 'payables.subscriptions';
   if (path == '/accounts/admin-salaries') return 'payables.admin_salaries';
   if (path == '/accounts/operations-salaries') return 'payables.operations_salaries';
+  if (path == '/accounts/attendance-payroll') return 'payables.admin_salaries';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -140,6 +143,7 @@ String? subKeyForPath(String path) {
   // Staff / HR
   if (path == '/hr/salaries') return 'staff.salaries';
   if (path == '/hr/slots') return 'staff.slots';
+  if (path == '/hr/attendance') return 'staff.attendance';
   if (path.startsWith('/staff')) return 'staff.employees';
   return null;
 }
@@ -155,6 +159,7 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/booking')) return access.canSeeBookings;
   if (path.startsWith('/services')) return access.canSeeServices;
   if (path == '/hr/slots') return access.canSeeSub('staff.slots');
+  if (path == '/hr/attendance') return access.canSeeSub('staff.attendance');
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
   if (path.startsWith('/sales')) {
     final sub = subKeyForPath(path);
@@ -225,6 +230,7 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/accounts/artist-collections', '/accounts/fleet-expenses',
     '/accounts/admin-expenses', '/accounts/subscriptions',
     '/accounts/admin-salaries', '/accounts/operations-salaries',
+    '/accounts/attendance-payroll',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
@@ -497,6 +503,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/slots',
             builder: (context, state) => const SlotManagementScreen(),
+          ),
+          GoRoute(
+            path: '/hr/attendance',
+            builder: (context, state) => const AttendanceSummaryScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/attendance-payroll',
+            builder: (context, state) => const AttendancePayrollScreen(),
           ),
           GoRoute(
             path: '/sales',

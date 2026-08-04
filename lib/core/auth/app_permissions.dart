@@ -46,6 +46,7 @@ const List<AppFeature> kAppFeatures = [
   AppFeature('staff', 'Staff / HR', 'Employees, attendance and leave',
       Icons.badge_outlined, subs: [
     AppSubFeature('staff.employees', 'Staff Management'),
+    AppSubFeature('staff.attendance', 'Attendance (Timebox)'),
     AppSubFeature('staff.salaries', 'Salaries & Payroll'),
     AppSubFeature('staff.slots', 'Slot Management'),
   ]),

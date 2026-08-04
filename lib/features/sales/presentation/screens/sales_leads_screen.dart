@@ -1890,17 +1890,32 @@ class _LeadsTable extends ConsumerWidget {
       );
     }
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        mainAxisExtent: 360,
-      ),
-      itemCount: leads.length,
-      itemBuilder: (context, index) => buildCard(leads[index]),
+    // Multi-column: a content-sized masonry instead of a fixed-height grid.
+    // The old GridView locked every cell to 360px, which clipped rich leads
+    // (booked + follow-up + reminder note overflowed by ~26px) and left blank
+    // space on sparse ones. Distributing leads round-robin across N columns of
+    // content-sized cards keeps reading order (row-major) while letting each
+    // card be exactly as tall as its content.
+    final columns = List.generate(crossAxisCount, (_) => <Widget>[]);
+    for (var i = 0; i < leads.length; i++) {
+      final col = columns[i % crossAxisCount];
+      if (col.isNotEmpty) col.add(const SizedBox(height: 16));
+      col.add(buildCard(leads[i], flexible: true));
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var c = 0; c < crossAxisCount; c++) ...[
+          if (c > 0) const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: columns[c],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

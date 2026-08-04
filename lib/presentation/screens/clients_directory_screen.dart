@@ -123,7 +123,7 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
             final d = DateTime.tryParse(c.eventDate!);
             if (d == null) return false;
             final start = dateRange!.start;
-            final end = dateRange!.end.add(const Duration(hours: 23, minutes: 59, seconds: 59));
+            final end = dateRange.end.add(const Duration(hours: 23, minutes: 59, seconds: 59));
             return d.isAfter(start.subtract(const Duration(seconds: 1))) && d.isBefore(end);
           }).toList();
         }

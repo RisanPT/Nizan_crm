@@ -74,7 +74,8 @@ class Sidebar extends ConsumerWidget {
     // Administrative (Expenses / Subscriptions / Salaries) live under Accounts.
     final isAdministrativeRoute = currentPath == '/accounts/admin-expenses' ||
         currentPath == '/accounts/subscriptions' ||
-        currentPath == '/accounts/admin-salaries';
+        currentPath == '/accounts/admin-salaries' ||
+        currentPath == '/accounts/attendance-payroll';
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
@@ -376,6 +377,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/staff'),
                           ),
                         ),
+                      if (access.canSeeSub('staff.attendance'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.fingerprint_outlined,
+                            title: 'Attendance',
+                            isCollapsed: false,
+                            isSelected: currentPath.startsWith('/hr/attendance'),
+                            onTap: () => context.go('/hr/attendance'),
+                          ),
+                        ),
                       if (access.canSeeSub('staff.slots'))
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
@@ -617,6 +629,17 @@ class Sidebar extends ConsumerWidget {
                               isCollapsed: false,
                               isSelected: currentPath == '/accounts/admin-salaries',
                               onTap: () => context.go('/accounts/admin-salaries'),
+                            ),
+                          ),
+                        if (access.canSeeSub('payables.admin_salaries'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.fact_check_outlined,
+                              title: 'Attendance Payroll',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/attendance-payroll',
+                              onTap: () => context.go('/accounts/attendance-payroll'),
                             ),
                           ),
                       ],
