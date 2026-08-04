@@ -19,12 +19,18 @@ enum AppRole {
       case 'manager':
         return AppRole.manager;
       case 'crm':
+      case 'crm_manager':
         return AppRole.crm;
       case 'sales':
+      case 'sales_manager':
+      case 'sales_executive':
+      case 'salesmanager':
         return AppRole.sales;
       case 'artist':
         return AppRole.artist;
       case 'accounts':
+      case 'accounts_manager':
+      case 'accounts_executive':
         return AppRole.accounts;
       case 'fleet_manager':
       case 'fleetmanager':
@@ -36,6 +42,8 @@ enum AppRole {
         return AppRole.inventoryManager;
       case 'marketing_admin':
       case 'marketingadmin':
+      case 'marketing_manager':
+      case 'marketing_executive':
         return AppRole.marketingAdmin;
       default:
         return AppRole.unknown;
@@ -144,17 +152,17 @@ enum AppRole {
   Set<String> get allowedSubordinateRoles {
     switch (this) {
       case AppRole.sales:
-        return {'sales'};
+        return {'sales', 'sales_manager', 'sales_executive'};
       case AppRole.crm:
-        return {'crm'};
+        return {'crm', 'crm_manager'};
       case AppRole.accounts:
-        return {'accounts'};
+        return {'accounts', 'accounts_manager', 'accounts_executive'};
       case AppRole.fleetManager:
         return {'driver'};
       case AppRole.inventoryManager:
-        return {'inventoryManager'};
+        return {'inventory_manager', 'inventoryManager'};
       case AppRole.marketingAdmin:
-        return {'marketingAdmin'};
+        return {'marketing_admin', 'marketingadmin', 'marketing_manager', 'marketing_executive'};
       // Admin and Manager: empty = no restriction (all roles shown by caller)
       case AppRole.admin:
       case AppRole.manager:

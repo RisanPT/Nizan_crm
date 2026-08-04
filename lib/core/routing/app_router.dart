@@ -154,7 +154,7 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/client')) return access.canSeeClients;
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
-    return access.canSeeBookings || role == AppRole.fleetManager;
+    return access.canSeeBookings || access.canSeeCalendar || role == AppRole.fleetManager;
   }
   if (path.startsWith('/booking')) return access.canSeeBookings;
   if (path.startsWith('/services')) return access.canSeeServices;

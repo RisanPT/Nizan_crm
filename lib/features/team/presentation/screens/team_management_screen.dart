@@ -36,12 +36,14 @@ class TeamManagementScreen extends HookConsumerWidget {
       // not accidentally match a blank userId string.
       data: (users) {
         final myId = session?.userId ?? '';
+        final allowedRoles = access.creatableRoles;
         return myId.isEmpty
             ? <CrmUser>[]
             : users
-                .where((u) => u.managedBy.isNotEmpty && u.managedBy == myId)
+                .where((u) =>
+                    u.id != myId &&
+                    (u.managedBy == myId || allowedRoles.contains(u.role)))
                 .toList();
-
       },
       loading: () => <CrmUser>[],
       error: (e, _) => <CrmUser>[],
@@ -418,7 +420,7 @@ class _TeamMemberCard extends StatelessWidget {
             Text(
               user.email,
               style:
-                  theme.textTheme.bodySmall?.copyWith(color: crm.secondary),
+                  theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary),
             ),
             4.h,
             Row(
@@ -486,15 +488,15 @@ class _RoleChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: crm.accent.withValues(alpha: 0.1),
+        color: crm.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         role,
         style: TextStyle(
-          color: crm.accent,
+          color: crm.primary,
           fontSize: 11,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

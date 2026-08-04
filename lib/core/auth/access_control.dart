@@ -24,11 +24,16 @@ class Access {
 
   factory Access.of(AuthSession? session) {
     final role = AppRole.fromString(session?.role);
+    final isManager = session != null &&
+        (session.role.endsWith('_manager') ||
+         session.role.endsWith('manager') ||
+         session.role.endsWith('_admin') ||
+         session.role.endsWith('admin'));
     return Access(
       role,
       (session?.permissions ?? const []).toSet(),
       configuredHomeRoute: session?.homeRoute ?? '',
-      isDepartmentHead: session?.isDepartmentHead ?? false,
+      isDepartmentHead: (session?.isDepartmentHead ?? false) || isManager,
     );
   }
 
