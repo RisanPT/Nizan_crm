@@ -151,9 +151,11 @@ class TeamManagementScreen extends HookConsumerWidget {
                           if (asyncEmployees.isLoading) {
                             return const LinearProgressIndicator();
                           }
+                          final hasEmployee = employees.any((e) => e.id == selEmployeeId);
                           return DropdownButtonFormField<String>(
-                            initialValue:
-                                selEmployeeId.isEmpty ? null : selEmployeeId,
+                            initialValue: (selEmployeeId.isEmpty || !hasEmployee)
+                                ? ''
+                                : selEmployeeId,
                             isExpanded: true,
                             decoration: InputDecoration(
                               labelText: needsLink
@@ -259,6 +261,7 @@ class TeamManagementScreen extends HookConsumerWidget {
                         );
                       }
                       ref.invalidate(crmUsersProvider);
+                      ref.invalidate(employeesProvider);
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
                       if (ctx.mounted) {
@@ -354,6 +357,7 @@ class TeamManagementScreen extends HookConsumerWidget {
                           active: !user.active,
                         );
                     ref.invalidate(crmUsersProvider);
+                    ref.invalidate(employeesProvider);
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(

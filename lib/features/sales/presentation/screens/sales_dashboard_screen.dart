@@ -40,6 +40,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
   /// Calendar month being reported on; null shows the whole financial year.
   // ignore: prefer_final_fields — mutated by the month picker.
   int? _month = DateTime.now().month;
+  int _chartTab = 0; // 0: Trends, 1: Conversion Rate
 
   static int _currentFyStartYear() {
     final n = DateTime.now();
@@ -137,24 +138,26 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
         16.h,
         _kpiRow(crm, isMobile, data),
         16.h,
-        // Row 1 — day-wise trend + source donut + activities
+        // Row 1 — day-wise trend + source donut + conversion by source
         _responsiveRow(isWide, isMobile, [
-          (5, _leadConversionChart(crm, data)),
+          (6, _leadConversionChart(crm, data)),
           (3, _leadsBySource(crm, data)),
-          (3, _todaysActivities(crm, data)),
+          (3, _conversionBySource(crm, data)),
         ]),
         16.h,
-        // Row 2 — region + lead type + status + top performers
+        // Row 2 — follow-ups + priority + region + lead type
         _responsiveRow(isWide, isMobile, [
+          (3, _todaysActivities(crm, data)),
+          (3, _priorityCard(crm, data)),
           (3, _leadsByRegion(crm, data)),
           (3, _leadTypeDonut(crm, data)),
-          (3, _priorityCard(crm, data)),
-          (3, _leadStatus(crm, data)),
         ]),
         16.h,
+        // Row 3 — status + top performers + achievement
         _responsiveRow(isWide, isMobile, [
-          (4, _topPerformers(crm, data)),
-          (8, _achievement(crm, data)),
+          (3, _leadStatus(crm, data)),
+          (3, _topPerformers(crm, data)),
+          (6, _achievement(crm, data)),
         ]),
         16.h,
         _reportTableAnchor(crm, data, isMobile),
@@ -594,38 +597,69 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
     final maxCount = d.daily.fold<int>(
         1, (m, p) => [m, p.leads, p.converted].reduce((a, b) => a > b ? a : b));
     final maxY = (maxCount * 1.25).ceilToDouble();
-    // Reserved axis sizes are shared by both charts so the bar and line plot
-    // areas line up exactly when stacked.
     const leftRes = 34.0;
-    const rightRes = 42.0;
     const bottomRes = 28.0;
-
-    Widget hiddenAxis(double size) => const SizedBox.shrink();
 
     return _card(
       crm,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _cardTitle(crm, 'Lead & Conversion Overview'),
-          10.h,
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _legendDot(crm, 'Leads', _cLeads),
-              _legendDot(crm, 'Converted', _cConverted),
-              _legendDot(crm, 'Conversion Rate (%)', _cRate),
+              Text(
+                'Lead & Conversion Overview',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: crm.textPrimary,
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: crm.input,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(2),
+                child: Row(
+                  children: [
+                    _tabButton(crm, 'Trends', _chartTab == 0, () {
+                      setState(() => _chartTab = 0);
+                    }),
+                    _tabButton(crm, 'Conversion Rate', _chartTab == 1, () {
+                      setState(() => _chartTab = 1);
+                    }),
+                  ],
+                ),
+              ),
             ],
           ),
+          12.h,
+          if (_chartTab == 0)
+            Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              children: [
+                _legendDot(crm, 'Leads', _cLeads),
+                _legendDot(crm, 'Converted', _cConverted),
+              ],
+            )
+          else
+            Wrap(
+              spacing: 14,
+              runSpacing: 6,
+              children: [
+                _legendDot(crm, 'Conversion Rate (%)', _cRate),
+              ],
+            ),
           14.h,
           SizedBox(
             height: 240,
             child: d.daily.isEmpty
                 ? _empty(crm, 'No leads in this period')
-                : Stack(
-                    children: [
-                      BarChart(
+                : _chartTab == 0
+                    ? BarChart(
                         BarChartData(
                           maxY: maxY,
                           minY: 0,
@@ -673,21 +707,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                                 ),
                               ),
                             ),
-                            // Right axis is the 0–100% scale for the rate line.
-                            rightTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                reservedSize: rightRes,
-                                interval: maxY / 5,
-                                getTitlesWidget: (v, meta) {
-                                  final pct = (v / maxY) * 100;
-                                  return Text('${pct.toStringAsFixed(0)}%',
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          color: crm.textSecondary));
-                                },
-                              ),
-                            ),
+                            rightTitles: const AxisTitles(),
                             bottomTitles: AxisTitles(
                               sideTitles: SideTitles(
                                 showTitles: true,
@@ -697,7 +717,6 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                                   if (i < 0 || i >= d.daily.length) {
                                     return const SizedBox.shrink();
                                   }
-                                  // Thin out labels on long ranges.
                                   final step = (d.daily.length / 8).ceil();
                                   if (step > 1 && i % step != 0) {
                                     return const SizedBox.shrink();
@@ -739,73 +758,143 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                               ),
                           ],
                         ),
-                      ),
-                      // Conversion-rate line, scaled onto the same 0..maxY axis.
-                      IgnorePointer(
-                        child: LineChart(
-                          LineChartData(
-                            minY: 0,
-                            maxY: maxY,
-                            minX: -0.5,
-                            maxX: d.daily.length - 0.5,
-                            gridData: const FlGridData(show: false),
-                            borderData: FlBorderData(show: false),
-                            lineTouchData:
-                                const LineTouchData(enabled: false),
-                            titlesData: FlTitlesData(
-                              topTitles: const AxisTitles(),
-                              leftTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: leftRes,
-                                    getTitlesWidget: (_, _) =>
-                                        hiddenAxis(leftRes)),
-                              ),
-                              rightTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: rightRes,
-                                    getTitlesWidget: (_, _) =>
-                                        hiddenAxis(rightRes)),
-                              ),
-                              bottomTitles: AxisTitles(
-                                sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: bottomRes,
-                                    getTitlesWidget: (_, _) =>
-                                        hiddenAxis(bottomRes)),
-                              ),
+                      )
+                    : LineChart(
+                        LineChartData(
+                          minY: 0,
+                          maxY: 100,
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: false,
+                            getDrawingHorizontalLine: (_) => FlLine(
+                                color: crm.border.withValues(alpha: 0.6),
+                                strokeWidth: 1),
+                          ),
+                          borderData: FlBorderData(show: false),
+                          lineTouchData: LineTouchData(
+                            touchTooltipData: LineTouchTooltipData(
+                              getTooltipItems: (touchedSpots) {
+                                return touchedSpots.map((spot) {
+                                  final p = d.daily[spot.x.toInt()];
+                                  return LineTooltipItem(
+                                    '${p.label}\n',
+                                    const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11),
+                                    children: [
+                                      TextSpan(
+                                        text: 'Conversion Rate: ${spot.y.toStringAsFixed(1)}%',
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  );
+                                }).toList();
+                              },
                             ),
-                            lineBarsData: [
-                              LineChartBarData(
-                                spots: [
-                                  for (var i = 0; i < d.daily.length; i++)
-                                    FlSpot(i.toDouble(),
-                                        (d.daily[i].rate / 100) * maxY),
-                                ],
-                                isCurved: true,
-                                curveSmoothness: 0.25,
-                                color: _cRate,
-                                barWidth: 2.4,
-                                dotData: FlDotData(
-                                  show: d.daily.length <= 20,
-                                  getDotPainter: (_, _, _, _) =>
-                                      FlDotCirclePainter(
-                                    radius: 3,
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                    strokeColor: _cRate,
-                                  ),
+                          ),
+                          titlesData: FlTitlesData(
+                            topTitles: const AxisTitles(),
+                            rightTitles: const AxisTitles(),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: leftRes + 6,
+                                interval: 20,
+                                getTitlesWidget: (v, meta) => Text(
+                                  '${v.toInt()}%',
+                                  style: TextStyle(
+                                      fontSize: 10, color: crm.textSecondary),
                                 ),
                               ),
-                            ],
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: bottomRes,
+                                getTitlesWidget: (v, meta) {
+                                  final i = v.toInt();
+                                  if (i < 0 || i >= d.daily.length) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final step = (d.daily.length / 8).ceil();
+                                  if (step > 1 && i % step != 0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Text(d.daily[i].label,
+                                        style: TextStyle(
+                                            fontSize: 9.5,
+                                            color: crm.textSecondary)),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
+                          lineBarsData: [
+                            LineChartBarData(
+                              spots: [
+                                for (var i = 0; i < d.daily.length; i++)
+                                  FlSpot(i.toDouble(), d.daily[i].rate),
+                              ],
+                              isCurved: true,
+                              curveSmoothness: 0.25,
+                              color: _cRate,
+                              barWidth: 3,
+                              belowBarData: BarAreaData(
+                                show: true,
+                                color: _cRate.withValues(alpha: 0.15),
+                              ),
+                              dotData: FlDotData(
+                                show: d.daily.length <= 20,
+                                getDotPainter: (_, _, _, _) =>
+                                    FlDotCirclePainter(
+                                  radius: 4,
+                                  color: Colors.white,
+                                  strokeWidth: 3,
+                                  strokeColor: _cRate,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _tabButton(CrmTheme crm, String title, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: active ? crm.surface : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  )
+                ]
+              : null,
+        ),
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            color: active ? crm.textPrimary : crm.textSecondary,
+          ),
+        ),
       ),
     );
   }
@@ -827,6 +916,82 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
         child: Text(msg,
             style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
       );
+
+  Widget _conversionBySource(CrmTheme crm, _DashboardData d) {
+    return _card(
+      crm,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _cardTitle(crm, 'Conversion by Source'),
+          14.h,
+          if (d.conversionBySource.isEmpty)
+            SizedBox(height: 150, child: _empty(crm, 'No data'))
+          else ...[
+            SizedBox(
+              height: 150,
+              child: ListView.separated(
+                itemCount: d.conversionBySource.length,
+                separatorBuilder: (_, _) => 12.h,
+                itemBuilder: (context, index) {
+                  final item = d.conversionBySource[index];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: item.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              8.w,
+                              Text(
+                                item.source,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: crm.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '${item.conversionRate.toStringAsFixed(1)}% (${item.convertedLeads}/${item.totalLeads})',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: crm.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      6.h,
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: item.totalLeads == 0 ? 0 : item.conversionRate / 100,
+                          backgroundColor: crm.border.withValues(alpha: 0.5),
+                          valueColor: AlwaysStoppedAnimation<Color>(item.color),
+                          minHeight: 5,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   // ── Donut: leads by source ────────────────────────────────────────────────
   Widget _leadsBySource(CrmTheme crm, _DashboardData d) =>
@@ -1690,6 +1855,22 @@ class _RecentLead {
   const _RecentLead(this.lead, this.assignee);
 }
 
+class _SourceConversionSlice {
+  final String source;
+  final int totalLeads;
+  final int convertedLeads;
+  final double conversionRate;
+  final Color color;
+
+  const _SourceConversionSlice({
+    required this.source,
+    required this.totalLeads,
+    required this.convertedLeads,
+    required this.conversionRate,
+    required this.color,
+  });
+}
+
 /// All dashboard figures derived in one pass, keeping the widgets declarative.
 class _DashboardData {
   final int totalLeads;
@@ -1719,6 +1900,7 @@ class _DashboardData {
   /// Open (not converted/lost) leads marked Hot — the ones needing action now.
   final int hotOpen;
   final List<_Slice> byPincode;
+  final List<_SourceConversionSlice> conversionBySource;
   final List<_Performer> performers;
   final List<_RecentLead> recent;
   final List<Lead> todayFollowUps;
@@ -1752,6 +1934,7 @@ class _DashboardData {
     required this.byPriority,
     required this.hotOpen,
     required this.byPincode,
+    required this.conversionBySource,
     required this.performers,
     required this.recent,
     required this.todayFollowUps,
@@ -1930,6 +2113,33 @@ class _DashboardData {
 
     final total = windowLeads.length;
 
+    final sourceCounts = <String, (int, int)>{};
+    for (final l in windowLeads) {
+      final s = l.source.trim().isEmpty ? 'Others' : l.source.trim();
+      final current = sourceCounts[s] ?? (0, 0);
+      final isWon = isConverted(l) ? 1 : 0;
+      sourceCounts[s] = (current.$1 + 1, current.$2 + isWon);
+    }
+    final sortedSources = sourceCounts.entries.toList()
+      ..sort((a, b) => b.value.$1.compareTo(a.value.$1));
+
+    final conversionBySource = <_SourceConversionSlice>[];
+    var srcIdx = 0;
+    for (final entry in sortedSources) {
+      final sourceName = entry.key;
+      final totalLeads = entry.value.$1;
+      final convertedLeads = entry.value.$2;
+      final rate = totalLeads == 0 ? 0.0 : (convertedLeads / totalLeads) * 100;
+      conversionBySource.add(_SourceConversionSlice(
+        source: sourceName,
+        totalLeads: totalLeads,
+        convertedLeads: convertedLeads,
+        conversionRate: rate,
+        color: _palette[srcIdx % _palette.length],
+      ));
+      srcIdx++;
+    }
+
     return _DashboardData(
       totalLeads: total,
       newLeads: windowLeads
@@ -1958,6 +2168,7 @@ class _DashboardData {
               l.district.trim().isNotEmpty ? l.district : l.location),
           total),
       byStatus: _group(windowLeads.map((l) => l.status), total, limit: 6),
+      conversionBySource: conversionBySource,
       byPriority: [
         for (final p in LeadPriority.all)
           _Slice(
