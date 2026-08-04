@@ -18,6 +18,7 @@ class TimeboxEmployee {
   final bool active;
   final bool worksSaturday;
   final bool hasTimebox;
+  final String createdAt; // ISO date the employee joined
 
   const TimeboxEmployee({
     required this.id,
@@ -29,6 +30,7 @@ class TimeboxEmployee {
     required this.active,
     required this.worksSaturday,
     required this.hasTimebox,
+    required this.createdAt,
   });
 
   factory TimeboxEmployee.fromJson(Map<String, dynamic> j) => TimeboxEmployee(
@@ -41,6 +43,7 @@ class TimeboxEmployee {
         active: j['active'] as bool? ?? true,
         worksSaturday: j['works_saturday'] as bool? ?? false,
         hasTimebox: j['has_timebox'] as bool? ?? false,
+        createdAt: j['created_at'] as String? ?? '',
       );
 }
 

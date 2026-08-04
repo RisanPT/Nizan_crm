@@ -23,6 +23,8 @@ import '../../services/upload_service.dart';
 import '../../services/report_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/booking_print_service.dart';
+import '../../core/providers/trial_provider.dart';
+
 
 class ArtistFinanceScreen extends HookConsumerWidget {
   const ArtistFinanceScreen({super.key});
@@ -128,11 +130,18 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final canVerify = role.canVerifyFinance;
     final isScopedToOwn = role.isScopedToOwnEntries;
     final asyncBookings = ref.watch(bookingProvider);
+    final asyncTrials = ref.watch(allTrialsProvider);
 
     // Filter bookings for this artist if scoped
     final myBookings = (asyncBookings.value ?? []).where((b) {
       if (!isScopedToOwn) return true;
       return b.assignedStaff.any((s) => s.employeeId == myEmployeeId);
+    }).toList();
+
+    // Filter trials for this artist if scoped
+    final myTrials = (asyncTrials.value ?? []).where((t) {
+      if (!isScopedToOwn) return true;
+      return t.assignedStaff.any((s) => s.employeeId == myEmployeeId);
     }).toList();
 
     // ── Data providers (scoped or global) ───────────────────────────────────
@@ -291,7 +300,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       required String myEmployeeId,
       required AsyncValue<dynamic> asyncEmployees,
       required List<dynamic> myBookings,
+      required List<dynamic> myTrials,
       String? prefilledBookingId,
+      String? prefilledTrialId,
       String? prefilledEmployeeId,
       DateTime? prefilledDate,
     }) async {
@@ -301,6 +312,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       final notesCtrl = TextEditingController();
       var selEmployee = prefilledEmployeeId ?? (isScopedToOwn ? myEmployeeId : '');
       var selBooking = prefilledBookingId ?? '';
+      var selTrial = prefilledTrialId ?? '';
+      var collectType = prefilledTrialId != null ? 'trial' : 'booking';
       var payMode = 'cash';
       var selDate = prefilledDate ?? DateTime.now();
       XFile? attachmentFile;
@@ -364,6 +377,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 ],
                               ),
                             ),
+                          if (prefilledTrialId != null)
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: crm.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.call_split, color: crm.primary),
+                                  12.w,
+                                  const Expanded(child: Text("Split payment in progress. Recording a partial amount for the selected trial.")),
+                                ],
+                              ),
+                            ),
                           Row(
                             children: [
                               Container(
@@ -389,10 +418,46 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ),
                           16.h,
                           const Text(
-                            'Select the booking and enter the amount received from the client.',
+                            'Select the booking or trial and enter the amount received from the client.',
                             style: TextStyle(fontSize: 13, color: Colors.grey),
                           ),
                           24.h,
+                          if (prefilledBookingId == null && prefilledTrialId == null) ...[
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: const Center(child: Text('Booking Work', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    selected: collectType == 'booking',
+                                    selectedColor: crm.primary.withValues(alpha: 0.15),
+                                    checkmarkColor: crm.primary,
+                                    labelStyle: TextStyle(
+                                      color: collectType == 'booking' ? crm.primary : crm.textSecondary,
+                                    ),
+                                    onSelected: (val) {
+                                      if (val) setState(() => collectType = 'booking');
+                                    },
+                                  ),
+                                ),
+                                12.w,
+                                Expanded(
+                                  child: ChoiceChip(
+                                    label: const Center(child: Text('Trial Appointment', style: TextStyle(fontWeight: FontWeight.bold))),
+                                    selected: collectType == 'trial',
+                                    selectedColor: crm.primary.withValues(alpha: 0.15),
+                                    checkmarkColor: crm.primary,
+                                    labelStyle: TextStyle(
+                                      color: collectType == 'trial' ? crm.primary : crm.textSecondary,
+                                    ),
+                                    onSelected: (val) {
+                                      if (val) setState(() => collectType = 'trial');
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            16.h,
+                          ],
                           if (!isScopedToOwn) ...[
                             DropdownButtonFormField<String>(
                               isExpanded: true,
@@ -410,37 +475,71 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                             16.h,
                           ],
-                          DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            itemHeight: 80,
-                            decoration: InputDecoration(
-                              labelText: 'Select Booking / Client *',
-                              prefixIcon: const Icon(Icons.book_online_outlined),
-                              helperText: 'Only your assigned works are shown here',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            initialValue: selBooking.isEmpty ? null : selBooking,
-                            items: myBookings.map<DropdownMenuItem<String>>((b) {
-                              final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
-                              return DropdownMenuItem<String>(
-                                value: b.id,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(b.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
-                                    const SizedBox(height: 4),
-                                    Text('${b.service} • ₹${balance.toStringAsFixed(0)} Bal.', style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
-                                  ],
+                          if (collectType == 'booking') ...[
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              itemHeight: 80,
+                              decoration: InputDecoration(
+                                labelText: 'Select Booking / Client *',
+                                prefixIcon: const Icon(Icons.book_online_outlined),
+                                helperText: 'Only your assigned works are shown here',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              );
-                            }).toList(),
-                            validator: (v) => (v == null || v.isEmpty) ? 'Select a booking' : null,
-                            onChanged: (v) => setState(() => selBooking = v ?? ''),
-                          ),
+                              ),
+                              initialValue: selBooking.isEmpty ? null : selBooking,
+                              items: myBookings.map<DropdownMenuItem<String>>((b) {
+                                final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
+                                return DropdownMenuItem<String>(
+                                  value: b.id,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(b.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
+                                      const SizedBox(height: 4),
+                                      Text('${b.service} • ₹${balance.toStringAsFixed(0)} Bal.', style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              validator: (v) => (v == null || v.isEmpty) ? 'Select a booking' : null,
+                              onChanged: (v) => setState(() => selBooking = v ?? ''),
+                            ),
+                          ] else ...[
+                            DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              itemHeight: 80,
+                              decoration: InputDecoration(
+                                labelText: 'Select Trial / Client *',
+                                prefixIcon: const Icon(Icons.star_outline),
+                                helperText: 'Only your assigned trials are shown here',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              initialValue: selTrial.isEmpty ? null : selTrial,
+                              items: myTrials.map<DropdownMenuItem<String>>((t) {
+                                final total = t.trialItems.fold<double>(0, (s, i) => s + i.price);
+                                return DropdownMenuItem<String>(
+                                  value: t.id,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(t.clientName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
+                                      const SizedBox(height: 4),
+                                      Text('${t.trialNumber} • ₹${total.toStringAsFixed(0)} Price', style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              validator: (v) => (v == null || v.isEmpty) ? 'Select a trial' : null,
+                              onChanged: (v) => setState(() => selTrial = v ?? ''),
+                            ),
+                          ],
                           16.h,
                           if (payMode == 'split') ...[
                             Row(
@@ -611,7 +710,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                             await ref
                                                 .read(collectionServiceProvider)
                                                 .createCollection(
-                                                  bookingId: selBooking.isNotEmpty ? selBooking : '000000000000000000000000',
+                                                  bookingId: collectType == 'booking'
+                                                      ? (selBooking.isNotEmpty ? selBooking : '000000000000000000000000')
+                                                      : null,
+                                                  trialId: collectType == 'trial'
+                                                      ? (selTrial.isNotEmpty ? selTrial : '000000000000000000000000')
+                                                      : null,
                                                   employeeId: selEmployee.isNotEmpty ? selEmployee : myEmployeeId,
                                                   amount: cashAmt,
                                                   date: selDate,
@@ -624,7 +728,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                             await ref
                                                 .read(collectionServiceProvider)
                                                 .createCollection(
-                                                  bookingId: selBooking.isNotEmpty ? selBooking : '000000000000000000000000',
+                                                  bookingId: collectType == 'booking'
+                                                      ? (selBooking.isNotEmpty ? selBooking : '000000000000000000000000')
+                                                      : null,
+                                                  trialId: collectType == 'trial'
+                                                      ? (selTrial.isNotEmpty ? selTrial : '000000000000000000000000')
+                                                      : null,
                                                   employeeId: selEmployee.isNotEmpty ? selEmployee : myEmployeeId,
                                                   amount: upiAmt,
                                                   date: selDate,
@@ -637,15 +746,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                           await ref
                                               .read(collectionServiceProvider)
                                               .createCollection(
-                                                bookingId: selBooking.isNotEmpty
-                                                    ? selBooking
-                                                    : '000000000000000000000000',
-                                                employeeId: selEmployee.isNotEmpty
-                                                    ? selEmployee
-                                                    : myEmployeeId,
-                                                amount: double.tryParse(
-                                                        amountCtrl.text.trim()) ??
-                                                    0,
+                                                bookingId: collectType == 'booking'
+                                                    ? (selBooking.isNotEmpty ? selBooking : '000000000000000000000000')
+                                                    : null,
+                                                trialId: collectType == 'trial'
+                                                    ? (selTrial.isNotEmpty ? selTrial : '000000000000000000000000')
+                                                    : null,
+                                                employeeId: selEmployee.isNotEmpty ? selEmployee : myEmployeeId,
+                                                amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
                                                 date: selDate,
                                                 paymentMode: payMode,
                                                 notes: notesCtrl.text.trim(),
@@ -658,49 +766,50 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
                                         if (ctx.mounted) {
                                           if (payMode == 'split') {
-                                            Navigator.pop(ctx);
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Split collection logged successfully!')),
-                                            );
+                                            final savedBookingId =
+                                                collectType == 'booking' && selBooking.isNotEmpty
+                                                    ? selBooking
+                                                    : null;
+                                            final savedTrialId =
+                                                collectType == 'trial' && selTrial.isNotEmpty
+                                                    ? selTrial
+                                                    : null;
+                                            final savedEmployeeId =
+                                                selEmployee.isNotEmpty
+                                                    ? selEmployee
+                                                    : myEmployeeId;
+                                            final savedDate = selDate;
+
+                                            final addMore =
+                                                await showSplitPaymentDialog(ctx);
+                                            if (ctx.mounted) Navigator.pop(ctx);
+
+                                            if (addMore == true &&
+                                                context.mounted) {
+                                              await Future.delayed(const Duration(
+                                                  milliseconds: 350));
+                                              if (context.mounted) {
+                                                addCollectionDialogSplit(
+                                                  context: context,
+                                                  ref: ref,
+                                                  theme: theme,
+                                                  crm: crm,
+                                                  isScopedToOwn: isScopedToOwn,
+                                                  myEmployeeId: myEmployeeId,
+                                                  asyncEmployees: asyncEmployees,
+                                                  myBookings: myBookings,
+                                                  myTrials: myTrials,
+                                                  prefilledBookingId: savedBookingId,
+                                                  prefilledTrialId: savedTrialId,
+                                                  prefilledEmployeeId: savedEmployeeId,
+                                                  prefilledDate: savedDate,
+                                                );
+                                              }
+                                            }
                                             return;
                                           }
 
-                                          final savedBookingId =
-                                              selBooking.isNotEmpty
-                                                  ? selBooking
-                                                  : '000000000000000000000000';
-                                          final savedEmployeeId =
-                                              selEmployee.isNotEmpty
-                                                  ? selEmployee
-                                                  : myEmployeeId;
-                                          final savedDate = selDate;
-
-                                          final addMore =
-                                              await showSplitPaymentDialog(ctx);
-                                          if (ctx.mounted) Navigator.pop(ctx);
-
-                                          if (addMore == true &&
-                                              context.mounted) {
-                                            await Future.delayed(const Duration(
-                                                milliseconds: 350));
-                                            if (context.mounted) {
-                                              addCollectionDialogSplit(
-                                                context: context,
-                                                ref: ref,
-                                                theme: theme,
-                                                crm: crm,
-                                                isScopedToOwn: isScopedToOwn,
-                                                myEmployeeId: myEmployeeId,
-                                                asyncEmployees: asyncEmployees,
-                                                myBookings: myBookings,
-                                                prefilledBookingId:
-                                                    savedBookingId,
-                                                prefilledEmployeeId:
-                                                    savedEmployeeId,
-                                                prefilledDate: savedDate,
-                                              );
-                                            }
-                                          }
+                                          Navigator.pop(ctx);
                                         }
                                       } catch (e) {
                                         setState(() => isUploading = false);
@@ -742,6 +851,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         myEmployeeId: myEmployeeId,
         asyncEmployees: asyncEmployees,
         myBookings: myBookings,
+        myTrials: myTrials,
       );
     }
 
