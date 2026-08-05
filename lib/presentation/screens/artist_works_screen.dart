@@ -17,6 +17,10 @@ import '../../core/utils/booking_print_service.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../services/upload_service.dart';
 
 // Opens a Google Maps URL in the default browser/maps app.
 Future<void> _openMapUrl(String url, BuildContext context) async {
@@ -717,6 +721,7 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
   final _notesCtrl = TextEditingController();
   String _mode = 'cash';
   bool _saving = false;
+  XFile? _attachmentFile;
 
   @override
   void dispose() {
@@ -733,8 +738,18 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
       );
       return;
     }
+    if (_mode == 'upi' && _attachmentFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload the UPI payment screenshot')),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
+      String? uploadedUrl;
+      if (_attachmentFile != null) {
+        uploadedUrl = await ref.read(uploadServiceProvider).uploadImage(_attachmentFile!);
+      }
       await ref.read(collectionServiceProvider).createCollection(
             trialId: widget.trial.id,
             employeeId: widget.employeeId,
@@ -742,6 +757,7 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
             date: DateTime.now(),
             paymentMode: _mode,
             notes: _notesCtrl.text.trim(),
+            attachmentUrl: uploadedUrl,
           );
       ref.invalidate(artistCollectionsProvider);
       if (mounted) {
@@ -822,6 +838,40 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
                 alignLabelWithHint: true,
               ),
             ),
+            if (_mode == 'upi') ...[
+              const SizedBox(height: 12),
+              const Text('UPI Payment Screenshot *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final picker = ImagePicker();
+                  final picked = await picker.pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 50,
+                    maxWidth: 1080,
+                  );
+                  if (picked != null) setState(() => _attachmentFile = picked);
+                },
+                child: Container(
+                  height: 120,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: _attachmentFile == null ? Colors.grey.shade300 : crm.success),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey.shade50,
+                  ),
+                  child: _attachmentFile == null
+                      ? const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [Icon(Icons.add_a_photo_outlined, color: Colors.grey), Text('Tap to add screenshot', style: TextStyle(color: Colors.grey, fontSize: 12))],
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(11),
+                          child: kIsWeb ? Image.network(_attachmentFile!.path, fit: BoxFit.cover) : Image.file(File(_attachmentFile!.path), fit: BoxFit.cover),
+                        ),
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,

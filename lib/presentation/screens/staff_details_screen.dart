@@ -6,7 +6,12 @@ import 'dart:typed_data';
 import '../../core/models/employee.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../services/employee_service.dart';
+import '../../core/models/salary_increment.dart';
 import '../../providers/dio_provider.dart';
+
+final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
+  return ref.watch(employeeServiceProvider).getIncrements(employeeId);
+});
 
 class StaffDetailsScreen extends ConsumerStatefulWidget {
   final Employee employee;
@@ -101,6 +106,65 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
         });
       }
     }
+  }
+
+  Future<void> _showAddIncrementDialog() async {
+    final amountCtrl = TextEditingController();
+    final reasonCtrl = TextEditingController();
+    
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Salary Increment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'New Base Salary', prefixText: '₹'),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonCtrl,
+              decoration: const InputDecoration(labelText: 'Reason (e.g. Annual Review)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final newSalary = double.tryParse(amountCtrl.text);
+              if (newSalary == null || newSalary <= 0) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid salary amount')));
+                return;
+              }
+              try {
+                await ref.read(employeeServiceProvider).addIncrement(
+                  _employee.id,
+                  newSalary: newSalary,
+                  reason: reasonCtrl.text,
+                );
+                
+                final updatedEmp = await ref.read(employeeServiceProvider).getEmployeeById(_employee.id);
+                setState(() => _employee = updatedEmp);
+                ref.invalidate(employeesProvider);
+                ref.invalidate(paginatedEmployeesProvider);
+                ref.invalidate(staffIncrementsProvider(_employee.id));
+                
+                if (ctx.mounted) Navigator.pop(ctx);
+              } catch (e) {
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -299,6 +363,64 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 32),
+            if (isAdmin)
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: crmColors.border),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Salary History',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _showAddIncrementDialog,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Increment'),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 32),
+                      _buildInfoRow(Icons.payments_outlined, 'Current Base Salary', '₹${_employee.baseSalary.toStringAsFixed(0)}', crmColors),
+                      const SizedBox(height: 24),
+                      Consumer(
+                        builder: (context, ref, child) {
+                          final asyncIncrements = ref.watch(staffIncrementsProvider(_employee.id));
+                          return asyncIncrements.when(
+                            data: (increments) {
+                              if (increments.isEmpty) {
+                                return const Text('No salary increments recorded.');
+                              }
+                              return Column(
+                                children: increments.map((inc) => ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text('Increment to ₹${inc.newSalary.toStringAsFixed(0)}'),
+                                  subtitle: Text('Previous: ₹${inc.previousSalary.toStringAsFixed(0)} • ${inc.reason}'),
+                                  trailing: Text(inc.effectiveDate.toLocal().toString().split(' ')[0]),
+                                )).toList(),
+                              );
+                            },
+                            loading: () => const CircularProgressIndicator(),
+                            error: (err, stack) => Text('Error: $err'),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

@@ -29,8 +29,11 @@ class StaffManagementScreen extends HookConsumerWidget {
     'Finance',
     'Accounts',
     'IT',
+    'Management',
+    'Manager',
     'Sales',
     'Marketing',
+    'Operations',
     'HR',
     'General',
   ];
@@ -52,6 +55,10 @@ class StaffManagementScreen extends HookConsumerWidget {
         return Colors.purple;
       case 'HR':
         return Colors.pink;
+      case 'MANAGEMENT':
+        return Colors.deepPurple;
+      case 'MANAGER':
+        return Colors.brown;
       case 'OPERATIONS':
         return crm.accent;
       default:
@@ -191,6 +198,9 @@ class StaffManagementScreen extends HookConsumerWidget {
 
       var category = initialCat;
       var type = employee?.type ?? 'in-house';
+      if (type == 'full-time') type = 'in-house';
+      if (type == 'contract') type = 'outsource';
+      if (!['in-house', 'outsource'].contains(type)) type = 'in-house';
       var artistRole = employee?.artistRole ?? 'artist';
       var salaryType = employee?.salaryType ??
           (initialCat == 'administrative' ? 'fixed_monthly' : 'per_booking');
@@ -1752,11 +1762,24 @@ class StaffManagementScreen extends HookConsumerWidget {
                           ),
                         );
                         if (confirm == true) {
-                          await ref
-                              .read(employeeServiceProvider)
-                              .deleteEmployee(employee.id);
-                          ref.invalidate(employeesProvider);
-                          ref.invalidate(paginatedEmployeesProvider);
+                          try {
+                            await ref
+                                .read(employeeServiceProvider)
+                                .deleteEmployee(employee.id);
+                            ref.invalidate(employeesProvider);
+                            ref.invalidate(paginatedEmployeesProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Staff member deleted')),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                              );
+                            }
+                          }
                         }
                       }
                     },

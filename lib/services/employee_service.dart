@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/employee.dart';
+import '../core/models/salary_increment.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
@@ -215,6 +216,29 @@ class EmployeeService {
       await _dio.delete('/employees/$id');
     } on DioException catch (e) {
       throw Exception('Failed to delete employee: ${e.message}');
+    }
+  }
+
+  Future<List<SalaryIncrement>> getIncrements(String employeeId) async {
+    try {
+      final response = await _dio.get('/employees/$employeeId/increments');
+      final data = response.data as List;
+      return data.map((item) => SalaryIncrement.fromJson(item as Map<String, dynamic>)).toList();
+    } on DioException catch (e) {
+      throw Exception('Failed to load increments: ${e.message}');
+    }
+  }
+
+  Future<SalaryIncrement> addIncrement(String employeeId, {required double newSalary, required String reason, DateTime? effectiveDate}) async {
+    try {
+      final response = await _dio.post('/employees/$employeeId/increments', data: {
+        'newSalary': newSalary,
+        'reason': reason,
+        if (effectiveDate != null) 'effectiveDate': effectiveDate.toIso8601String(),
+      });
+      return SalaryIncrement.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception('Failed to add increment: ${e.message}');
     }
   }
 }

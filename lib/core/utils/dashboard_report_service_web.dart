@@ -425,6 +425,7 @@ pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
             booking.status.toUpperCase(),
             'INR ${booking.advanceAmount.toStringAsFixed(0)}',
             'INR ${booking.discountAmount.toStringAsFixed(0)}',
+            'INR ${booking.addons.fold<double>(0.0, (s, a) => s + a.amount * a.persons).toStringAsFixed(0)}',
             'INR ${booking.totalPrice.toStringAsFixed(0)}',
             'INR ${((booking.totalPrice - booking.advanceAmount - booking.discountAmount).clamp(0, double.infinity)).toStringAsFixed(0)}',
           ];
@@ -435,6 +436,7 @@ pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
   if (rows.isNotEmpty) {
     final totalAdvance = rows.fold<double>(0.0, (sum, row) => sum + row.advanceAmount);
     final totalDiscount = rows.fold<double>(0.0, (sum, row) => sum + row.discountAmount);
+    final totalAddons = rows.fold<double>(0.0, (sum, row) => sum + row.addons.fold<double>(0.0, (s, a) => s + a.amount * a.persons));
     final totalPrice = rows.fold<double>(0.0, (sum, row) => sum + row.totalPrice);
     final totalBalance = rows.fold<double>(0.0, (sum, row) => sum + (row.totalPrice - row.advanceAmount - row.discountAmount).clamp(0, double.infinity));
     dataList.add(<dynamic>[
@@ -447,6 +449,7 @@ pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
       '',
       pw.Text('INR ${totalAdvance.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('INR ${totalDiscount.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+      pw.Text('INR ${totalAddons.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('INR ${totalPrice.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('INR ${totalBalance.toStringAsFixed(0)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
     ]);
@@ -463,6 +466,7 @@ pw.Widget _bookingTable(List<Booking> rows, List<District> districts) {
       'Status',
       'Advance',
       'Discount',
+      'Add-ons',
       'Total',
       'Balance',
     ],

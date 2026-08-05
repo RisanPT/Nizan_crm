@@ -775,11 +775,24 @@ class FleetDriversScreen extends HookConsumerWidget {
                           ),
                         );
                         if (confirm == true) {
-                          await ref
-                              .read(employeeServiceProvider)
-                              .deleteEmployee(employee.id);
-                          ref.invalidate(employeesProvider);
-                          ref.invalidate(paginatedEmployeesProvider);
+                          try {
+                            await ref
+                                .read(employeeServiceProvider)
+                                .deleteEmployee(employee.id);
+                            ref.invalidate(employeesProvider);
+                            ref.invalidate(paginatedEmployeesProvider);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Driver deleted')),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                              );
+                            }
+                          }
                         }
                       }
                     },

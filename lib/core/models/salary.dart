@@ -5,6 +5,10 @@ class SalaryStats {
   final double totalPending;
   final double totalNet;
   final int count;
+  final int draftCount;
+  final double draftAmount;
+  final int approvedCount;
+  final double approvedAmount;
 
   const SalaryStats({
     this.totalAdministrative = 0,
@@ -13,6 +17,10 @@ class SalaryStats {
     this.totalPending = 0,
     this.totalNet = 0,
     this.count = 0,
+    this.draftCount = 0,
+    this.draftAmount = 0,
+    this.approvedCount = 0,
+    this.approvedAmount = 0,
   });
 
   factory SalaryStats.fromJson(Map<String, dynamic> json) {
@@ -23,6 +31,10 @@ class SalaryStats {
       totalPending: (json['totalPending'] as num?)?.toDouble() ?? 0,
       totalNet: (json['totalNet'] as num?)?.toDouble() ?? 0,
       count: (json['count'] as num?)?.toInt() ?? 0,
+      draftCount: (json['draftCount'] as num?)?.toInt() ?? 0,
+      draftAmount: (json['draftAmount'] as num?)?.toDouble() ?? 0,
+      approvedCount: (json['approvedCount'] as num?)?.toInt() ?? 0,
+      approvedAmount: (json['approvedAmount'] as num?)?.toDouble() ?? 0,
     );
   }
 }

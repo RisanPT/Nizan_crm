@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
 import 'package:nizan_crm/core/utils/gst_calculator.dart';
+import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 class AccountsInvoicesScreen extends ConsumerStatefulWidget {
@@ -28,7 +29,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   int _currentPage = 1;
   static const int _itemsPerPage = 15;
 
-  String _currency(double v) => '₹${v.toStringAsFixed(2)}';
+  /// Payment summary starts collapsed so the invoice list is the hero of the
+  /// screen; a compact totals strip + toggle keeps the key figures at a glance.
+  bool _summaryExpanded = false;
+
+  String _currency(double v) => NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(v);
 
   static const _monthAbbr = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -392,37 +397,17 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               _buildSummaryHeader(filteredInvoices, allBookings, theme, crm),
               const Divider(height: 1),
 
-              // Split View
+              // Full View: Invoice List
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Left Pane: Invoice List
-                    Expanded(
-                      flex: 4,
-                      child: Container(
-                        color: crm.surface,
-                        child: Column(
-                          children: [
-                            Expanded(child: _buildInvoiceList(paginatedInvoices, theme, crm, trialIds)),
-                            if (totalPages > 1)
-                              _buildPagination(totalPages, theme, crm),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_selectedInvoice != null) const VerticalDivider(width: 1),
-                    // Right Pane: Detail View
-                    if (_selectedInvoice != null)
-                      Expanded(
-                        flex: 6,
-                        child: Container(
-                          color: crm.background,
-                          child: _buildInvoiceDetail(_selectedInvoice!, theme, crm,
-                              trialIds.contains(_selectedInvoice!.id)),
-                        ),
-                      ),
-                  ],
+                child: Container(
+                  color: crm.surface,
+                  child: Column(
+                    children: [
+                      Expanded(child: _buildInvoiceList(paginatedInvoices, theme, crm, trialIds)),
+                      if (totalPages > 1)
+                        _buildPagination(totalPages, theme, crm),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -558,7 +543,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
             ),
             if (bucketTotal > 0)
               Text(
-                '${pct.toStringAsFixed(0)}% of outstanding',
+                (pct > 0 && pct < 1) ? '<1% of outstanding' : '${pct.toStringAsFixed(0)}% of outstanding',
                 style: TextStyle(fontSize: 10, color: crm.textSecondary),
               ),
           ],
@@ -566,16 +551,66 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
       );
     }
 
+    Widget miniStat(String label, String value, Color color) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('$label ', style: theme.textTheme.labelSmall?.copyWith(color: crm.textSecondary)),
+          Text(value, style: theme.textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w800)),
+        ]),
+      );
+    }
+
     return Container(
       color: crm.surface,
-      padding: EdgeInsets.all(isMobile ? 16 : 24),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: isMobile ? 10 : 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('PAYMENT SUMMARY', style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: crm.textSecondary)),
-          16.h,
-          // ── Hero: outstanding vs collected ──────────────────────────────
-          Flex(
+          // Compact, collapsible header — keeps the invoice list visible.
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => setState(() => _summaryExpanded = !_summaryExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Text('PAYMENT SUMMARY',
+                      style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 1.2, color: crm.textSecondary)),
+                  12.w,
+                  if (!_summaryExpanded)
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          miniStat('Outstanding', _currency(outstanding), crm.primary),
+                          miniStat('Advance', _currency(advanceCollected), Colors.green.shade700),
+                          if (overdue > 0) miniStat('Overdue', _currency(overdue), Colors.red.shade700),
+                        ],
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                  6.w,
+                  Icon(_summaryExpanded ? Icons.expand_less : Icons.expand_more, color: crm.textSecondary, size: 20),
+                  4.w,
+                  Text(_summaryExpanded ? 'Hide' : 'Details',
+                      style: theme.textTheme.labelMedium?.copyWith(color: crm.primary, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+          ),
+          if (_summaryExpanded) ...[
+            16.h,
+            // ── Hero: outstanding vs collected ──────────────────────────────
+            Flex(
             direction: isMobile ? Axis.vertical : Axis.horizontal,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -859,6 +894,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               ),
             ],
           ),
+          ],
         ],
       ),
     );
@@ -910,8 +946,25 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
           selected: isSelected,
           selectedTileColor: crm.primary.withValues(alpha: 0.05),
           contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          onTap: () => setState(() => _selectedInvoice = b),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => Scaffold(
+                  backgroundColor: crm.background,
+                  appBar: AppBar(
+                    backgroundColor: crm.surface,
+                    foregroundColor: crm.textPrimary,
+                    title: const Text('Invoice Detail'),
+                    elevation: 0,
+                  ),
+                  body: _buildInvoiceDetail(b, theme, crm, isTrial),
+                ),
+              ),
+            );
+          },
           title: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
@@ -1143,11 +1196,6 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     icon: const Icon(Icons.print, size: 16),
                     label: Text(
                         isTrial ? 'Print Trial Invoice' : 'Print Full GST Invoice'),
-                  ),
-                  12.w,
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => setState(() => _selectedInvoice = null),
                   ),
                 ],
               )

@@ -157,4 +157,24 @@ class SalaryService {
       throw Exception('Failed to delete salary slip: ${e.message}');
     }
   }
+
+  Future<Map<String, dynamic>> submitToAccounts({
+    required int month,
+    required int year,
+  }) async {
+    try {
+      final response = await _dio.post('/salaries/submit', data: {
+        'month': month,
+        'year': year,
+      });
+      return response.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw Exception(
+        (data is Map && data['message'] != null)
+            ? data['message'].toString()
+            : 'Failed to submit payroll to accounts: ${e.message}',
+      );
+    }
+  }
 }

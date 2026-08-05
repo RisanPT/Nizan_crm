@@ -59,6 +59,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     });
   }
 
+  bool _isSubmitting = false;
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -162,6 +164,52 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       }
     } finally {
       if (mounted) setState(() => _isTimeboxGenerating = false);
+    }
+  }
+
+  Future<void> _submitPayroll(int month, int year, int draftCount) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Submit to Accounts'),
+        content: Text('Are you sure you want to submit $draftCount draft payroll records to Accounts for payment?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Submit')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      final res = await ref.read(salaryServiceProvider).submitToAccounts(
+            month: month,
+            year: year,
+          );
+      ref.invalidate(salariesProvider);
+      ref.invalidate(adminSalariesProvider);
+      ref.invalidate(opsSalariesProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message']?.toString() ?? 'Submitted successfully!'),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -693,6 +741,30 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                       label: Text(
                           _isGenerating ? 'Generating...' : 'Full Payroll'),
                     ),
+                    // ── Submit to Accounts ──
+                    salariesAsync.whenOrNull(
+                      data: (res) => res.stats.draftCount > 0
+                          ? ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange.shade600,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => _submitPayroll(filter.month, filter.year, res.stats.draftCount),
+                              icon: _isSubmitting
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.send, size: 16),
+                              label: Text(
+                                  _isSubmitting ? 'Submitting...' : 'Submit to Accounts'),
+                            )
+                          : const SizedBox.shrink(),
+                    ) ?? const SizedBox.shrink(),
                   ],
                 ),
               ],
@@ -798,22 +870,22 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                         Expanded(
                           child: _buildMetricCard(
                             crm,
-                            title: 'Administrative Staff',
-                            amount: _formatCurrency(stats.totalAdministrative),
-                            subtitle: 'Sales, IT, HR, Accounts',
-                            icon: Icons.business_center_outlined,
-                            color: const Color(0xFF6366F1),
+                            title: 'Drafts (Needs Review)',
+                            amount: _formatCurrency(stats.draftAmount),
+                            subtitle: '${stats.draftCount} slips pending',
+                            icon: Icons.edit_note,
+                            color: Colors.orange.shade600,
                           ),
                         ),
                         10.w,
                         Expanded(
                           child: _buildMetricCard(
                             crm,
-                            title: 'Operations Staff',
-                            amount: _formatCurrency(stats.totalOperations),
-                            subtitle: 'Artists, Fleet, Logistics',
-                            icon: Icons.brush_outlined,
-                            color: crm.accent,
+                            title: 'Submitted to Accounts',
+                            amount: _formatCurrency(stats.approvedAmount),
+                            subtitle: '${stats.approvedCount} slips approved',
+                            icon: Icons.outbox,
+                            color: Colors.blue.shade600,
                           ),
                         ),
                         10.w,
@@ -822,8 +894,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             crm,
                             title: 'Disbursed by Accounts',
                             amount: _formatCurrency(stats.totalPaid),
-                            subtitle:
-                                'Pending: ${_formatCurrency(stats.totalPending)}',
+                            subtitle: 'Fully Paid',
                             icon: Icons.check_circle_outline,
                             color: Colors.green,
                           ),
@@ -932,6 +1003,26 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                       ),
                     ),
                   ),
+                ),
+                10.w,
+                DropdownButton<String>(
+                  value: filter.department,
+                  underline: const SizedBox(),
+                  items: const [
+                    DropdownMenuItem(value: 'All', child: Text('All Departments')),
+                    DropdownMenuItem(value: 'HR', child: Text('HR')),
+                    DropdownMenuItem(value: 'IT', child: Text('IT')),
+                    DropdownMenuItem(value: 'Marketing', child: Text('Marketing')),
+                    DropdownMenuItem(value: 'Sales', child: Text('Sales')),
+                    DropdownMenuItem(value: 'Accounts', child: Text('Accounts')),
+                    DropdownMenuItem(value: 'Operations', child: Text('Operations')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      ref.read(salaryFilterProvider.notifier).state =
+                          filter.copyWith(department: val);
+                    }
+                  },
                 ),
                 10.w,
                 DropdownButton<String>(
@@ -1094,7 +1185,11 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
           : pct >= 75
               ? crm.warning
               : crm.destructive;
-      attLabel = '$pct% · ${payrollRow.daysPresent}/${payrollRow.expectedDays}d';
+      if (payrollRow.expectedDays == 0) {
+        attLabel = '$pct% · ${payrollRow.daysPresent}d present';
+      } else {
+        attLabel = '$pct% · ${payrollRow.daysPresent}/${payrollRow.expectedDays}d';
+      }
     }
 
     return Container(
@@ -1187,17 +1282,20 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
           // Breakdown (Base + Allowances + Bonus - Deductions)
           Expanded(
             flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 4,
               children: [
-                Text(
-                  'Base: ${_formatCurrency(s.baseSalary)} + Allow: ${_formatCurrency(s.allowances)}',
-                  style: TextStyle(fontSize: 11, color: crm.textSecondary),
-                ),
-                Text(
-                  'Bonus: +${_formatCurrency(s.bonus)} · Ded: -${_formatCurrency(s.deductions)}',
-                  style: TextStyle(fontSize: 11, color: crm.textSecondary),
-                ),
+                if (s.baseSalary > 0)
+                  Text('Base: ${_formatCurrency(s.baseSalary)}', style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+                if (s.allowances > 0)
+                  Text('Allow: +${_formatCurrency(s.allowances)}', style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
+                if (s.bonus > 0)
+                  Text('Bonus: +${_formatCurrency(s.bonus)}', style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
+                if (s.deductions > 0)
+                  Text('Ded: -${_formatCurrency(s.deductions)}', style: TextStyle(fontSize: 11, color: crm.destructive)),
+                if (s.baseSalary == 0 && s.allowances == 0 && s.bonus == 0 && s.deductions == 0)
+                  Text('No breakdown data', style: TextStyle(fontSize: 11, color: crm.textSecondary.withValues(alpha: 0.5), fontStyle: FontStyle.italic)),
               ],
             ),
           ),

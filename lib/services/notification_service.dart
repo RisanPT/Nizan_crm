@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -15,22 +16,28 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
-    tz.initializeTimeZones();
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    if (kIsWeb) return;
 
-    final DarwinInitializationSettings initializationSettingsDarwin =
-        DarwinInitializationSettings();
+    try {
+      tz.initializeTimeZones();
+      const AndroidInitializationSettings initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    final InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsDarwin,
-    );
+      final DarwinInitializationSettings initializationSettingsDarwin =
+          DarwinInitializationSettings();
 
-    await flutterLocalNotificationsPlugin.initialize(
-      settings: initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) async {},
-    );
+      final InitializationSettings initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid,
+        iOS: initializationSettingsDarwin,
+      );
+
+      await flutterLocalNotificationsPlugin.initialize(
+        settings: initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) async {},
+      );
+    } catch (e) {
+      debugPrint('Notification init failed: $e');
+    }
   }
 
   Future<void> scheduleFollowUpNotification({
@@ -39,28 +46,38 @@ class NotificationService {
     required String body,
     required DateTime scheduledDate,
   }) async {
+    if (kIsWeb) return;
     if (scheduledDate.isBefore(DateTime.now())) return;
     
-    await flutterLocalNotificationsPlugin.zonedSchedule(
-      id: id,
-      title: title,
-      body: body,
-      scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
-      notificationDetails: const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'follow_up_channel',
-          'Follow-ups',
-          channelDescription: 'Notifications for lead follow-ups',
-          importance: Importance.max,
-          priority: Priority.high,
+    try {
+      await flutterLocalNotificationsPlugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'follow_up_channel',
+            'Follow-ups',
+            channelDescription: 'Notifications for lead follow-ups',
+            importance: Importance.max,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(),
         ),
-        iOS: DarwinNotificationDetails(),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    );
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      );
+    } catch (e) {
+      debugPrint('Failed to schedule notification: $e');
+    }
   }
 
   Future<void> cancelNotification(int id) async {
-    await flutterLocalNotificationsPlugin.cancel(id: id);
+    if (kIsWeb) return;
+    try {
+      await flutterLocalNotificationsPlugin.cancel(id: id);
+    } catch (e) {
+      debugPrint('Failed to cancel notification: $e');
+    }
   }
 }
