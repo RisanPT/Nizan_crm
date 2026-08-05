@@ -66,13 +66,14 @@ class Sidebar extends ConsumerWidget {
     final currentPath = GoRouterState.of(context).uri.path;
     final isFleetRoute = currentPath.startsWith('/fleet');
     // Operations (Dashboard / Artist Finance / Artist Collection / Fleet Expenses / Operations Salaries) live under Accounts.
-    final isOperationsRoute = currentPath == '/accounts/dashboard' ||
+    final isOperationsRoute = currentPath == '/accounts/operations-dashboard' ||
         currentPath == '/finance' ||
         currentPath == '/accounts/artist-collections' ||
         currentPath == '/accounts/fleet-expenses' ||
         currentPath == '/accounts/operations-salaries';
     // Administrative (Expenses / Subscriptions / Salaries) live under Accounts.
-    final isAdministrativeRoute = currentPath == '/accounts/admin-expenses' ||
+    final isAdministrativeRoute = currentPath == '/accounts/administrative-dashboard' ||
+        currentPath == '/accounts/admin-expenses' ||
         currentPath == '/accounts/subscriptions' ||
         currentPath == '/accounts/admin-salaries' ||
         currentPath == '/accounts/attendance-payroll';
@@ -496,6 +497,17 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveAccountsExpanded) ...[
+                      if (access.canSeeSub('payables.dashboard'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.dashboard_outlined,
+                            title: 'Combined Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/dashboard',
+                            onTap: () => context.go('/accounts/dashboard'),
+                          ),
+                        ),
                       // Operations — nested expandable group.
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
@@ -523,8 +535,8 @@ class Sidebar extends ConsumerWidget {
                               icon: Icons.donut_small_outlined,
                               title: 'Dashboard',
                               isCollapsed: false,
-                              isSelected: currentPath == '/accounts/dashboard',
-                              onTap: () => context.go('/accounts/dashboard'),
+                              isSelected: currentPath == '/accounts/operations-dashboard',
+                              onTap: () => context.go('/accounts/operations-dashboard'),
                             ),
                           ),
                         if (access.canSeeFinance)
@@ -598,6 +610,17 @@ class Sidebar extends ConsumerWidget {
                         ),
                       ),
                       if (effectiveAdministrativeExpanded) ...[
+                        if (access.canSeeSub('payables.dashboard'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.donut_small_outlined,
+                              title: 'Dashboard',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/administrative-dashboard',
+                              onTap: () => context.go('/accounts/administrative-dashboard'),
+                            ),
+                          ),
                         if (access.canSeeSub('payables.admin_expenses'))
                           Padding(
                             padding: const EdgeInsets.only(left: 32),

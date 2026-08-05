@@ -52,7 +52,9 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../features/trials/presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
-import 'package:nizan_crm/features/accounts/presentation/screens/accounts_dashboard_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/combined_accounts_dashboard_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/operations_dashboard_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_dashboard_screen.dart';
@@ -110,6 +112,8 @@ String? subKeyForPath(String path) {
   if (path == '/sales') return 'sales.invoices';
   // Accounts (payables)
   if (path == '/accounts/dashboard') return 'payables.dashboard';
+  if (path == '/accounts/operations-dashboard') return 'payables.dashboard';
+  if (path == '/accounts/administrative-dashboard') return 'payables.dashboard';
   if (path == '/accounts/invoices') return 'payables.invoices';
   if (path.startsWith('/accounts/bills')) return 'payables.bills';
   if (path == '/accounts/artist-collections') return 'payables.collections';
@@ -388,6 +392,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'My Inventory';
           } else if (state.uri.path == '/accounts/dashboard') {
             title = 'Accounts Dashboard';
+          } else if (state.uri.path == '/accounts/operations-dashboard') {
+            title = 'Operations Dashboard';
+          } else if (state.uri.path == '/accounts/administrative-dashboard') {
+            title = 'Administrative Dashboard';
           } else if (state.uri.path == '/accounts/artist-collections') {
             title = 'Artist Collections';
           } else if (state.uri.path == '/accounts/invoices') {
@@ -582,7 +590,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/accounts/dashboard',
-            builder: (context, state) => const AccountsDashboardScreen(),
+            builder: (context, state) => const CombinedAccountsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/operations-dashboard',
+            builder: (context, state) => const OperationsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/administrative-dashboard',
+            builder: (context, state) => const AdministrativeDashboardScreen(),
           ),
           GoRoute(
             path: '/accounts/bills',

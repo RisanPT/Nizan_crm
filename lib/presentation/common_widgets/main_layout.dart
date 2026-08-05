@@ -9,6 +9,7 @@ import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
 import 'sidebar.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
+import '../../features/notifications/presentation/widgets/notification_watcher.dart';
 
 /// Tab-root screens that render their OWN AppBar — the mobile shell bar is
 /// suppressed for these so they don't show two stacked bars.
@@ -205,7 +206,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                 ],
               )
             : null,
-        body: SafeArea(child: widget.child),
+        body: SafeArea(child: NotificationWatcher(child: widget.child)),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _calculateSelectedIndex(context, role),
           onDestinationSelected: (index) => _onItemTapped(index, role),
@@ -498,7 +499,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(24.0),
-              child: widget.child,
+              child: NotificationWatcher(child: widget.child),
             ),
           ),
         ],
