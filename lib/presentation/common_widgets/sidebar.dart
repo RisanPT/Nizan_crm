@@ -688,6 +688,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/accounts/invoices'),
                           ),
                         ),
+                      if (access.canSeeSub('payables.dashboard'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.upload_file_outlined,
+                            title: 'Uploaded Reports',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/reports',
+                            onTap: () => context.go('/accounts/reports'),
+                          ),
+                        ),
                       if (access.canSeePayables)
                         Padding(
                           padding: const EdgeInsets.only(left: 14),

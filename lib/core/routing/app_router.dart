@@ -56,6 +56,7 @@ import 'package:nizan_crm/features/accounts/presentation/screens/combined_accoun
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/accounts_reports_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_dashboard_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_stock_screen.dart';
@@ -114,6 +115,7 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/dashboard') return 'payables.dashboard';
   if (path == '/accounts/operations-dashboard') return 'payables.dashboard';
   if (path == '/accounts/administrative-dashboard') return 'payables.dashboard';
+  if (path == '/accounts/reports') return 'payables.dashboard';
   if (path == '/accounts/invoices') return 'payables.invoices';
   if (path.startsWith('/accounts/bills')) return 'payables.bills';
   if (path == '/accounts/artist-collections') return 'payables.collections';
@@ -159,6 +161,9 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
     return access.canSeeBookings || access.canSeeCalendar || role == AppRole.fleetManager;
+  }
+  if (path.startsWith('/booking/add')) {
+    return access.canSeeBookings || access.canSeeSales;
   }
   if (path.startsWith('/booking')) return access.canSeeBookings;
   if (path.startsWith('/services')) return access.canSeeServices;
@@ -396,6 +401,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Operations Dashboard';
           } else if (state.uri.path == '/accounts/administrative-dashboard') {
             title = 'Administrative Dashboard';
+          } else if (state.uri.path == '/accounts/reports') {
+            title = 'Uploaded Reports';
           } else if (state.uri.path == '/accounts/artist-collections') {
             title = 'Artist Collections';
           } else if (state.uri.path == '/accounts/invoices') {
@@ -591,6 +598,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/dashboard',
             builder: (context, state) => const CombinedAccountsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/reports',
+            builder: (context, state) => const AccountsReportsScreen(),
           ),
           GoRoute(
             path: '/accounts/operations-dashboard',

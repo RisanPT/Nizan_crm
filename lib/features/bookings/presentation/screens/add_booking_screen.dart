@@ -8,6 +8,9 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/models/customer.dart';
 import 'package:nizan_crm/services/customer_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
@@ -512,17 +515,42 @@ class AddBookingScreen extends HookConsumerWidget {
         // on the backend during booking) appears in the Clients Directory.
         ref.invalidate(customersProvider);
 
+        final isConversion = (qParams['leadId'] ?? '').isNotEmpty;
+        if (isConversion) {
+          // The lead is now Converted on the backend — refresh the leads lists
+          // so the new status shows when the salesperson returns to them.
+          ref.invalidate(leadsProvider);
+          ref.invalidate(paginatedLeadsProvider);
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              bookingItems.length > 1
-                  ? 'Booking created with ${bookingItems.length} packages — one invoice.'
-                  : 'Booking created and added to calendar.',
+              isConversion
+                  ? 'Lead converted — booking created.'
+                  : bookingItems.length > 1
+                      ? 'Booking created with ${bookingItems.length} packages — one invoice.'
+                      : 'Booking created and added to calendar.',
             ),
             backgroundColor: const Color(0xFF10B981),
           ),
         );
-        context.go('/calendar?date=${formatDateForRoute(d)}');
+
+        // Navigate somewhere the current user can actually open. Salespeople and
+        // custom sales roles often lack calendar access, so blindly going to
+        // /calendar here trips the route guard and bounces them (the reported
+        // navigation bug). Return a converting salesperson to their leads;
+        // otherwise show the calendar when permitted, else fall back safely.
+        final access = Access.of(ref.read(authSessionProvider));
+        if (isConversion && context.canPop()) {
+          context.pop();
+        } else if (access.canSeeCalendar) {
+          context.go('/calendar?date=${formatDateForRoute(d)}');
+        } else if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(access.homeRoute.isNotEmpty ? access.homeRoute : '/');
+        }
       } catch (error) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

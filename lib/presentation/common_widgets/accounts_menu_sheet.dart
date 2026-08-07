@@ -16,6 +16,7 @@ class _Section {
 const _sections = <_Section>[
   _Section('Operations Dash', Icons.dashboard_customize_outlined, '/accounts/operations-dashboard'),
   _Section('Administrative Dash', Icons.admin_panel_settings_outlined, '/accounts/administrative-dashboard'),
+  _Section('Uploaded Reports', Icons.upload_file_outlined, '/accounts/reports'),
   _Section('Fleet Expenses', Icons.local_shipping_outlined, '/accounts/fleet-expenses'),
   _Section('Admin Expenses', Icons.payments_outlined, '/accounts/admin-expenses'),
   _Section('Subscriptions', Icons.cloud_sync_outlined, '/accounts/subscriptions'),
