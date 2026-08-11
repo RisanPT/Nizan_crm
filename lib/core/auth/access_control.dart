@@ -79,6 +79,8 @@ class Access {
         return role.canSeeSales;
       case 'finance':
         return role.canSeeFinance;
+      case 'company_finance':
+        return role.canSeeCompanyFinance;
       case 'payables':
         return role.canSeePayables;
       case 'fleet':
@@ -109,6 +111,10 @@ class Access {
   bool get canSeeStaff => has('staff', role.canSeeStaff);
   bool get canSeeSales => has('sales', role.canSeeSales);
   bool get canSeeFinance => has('finance', role.canSeeFinance);
+  // isFullAccess bypass so a brand-new section is never invisible to admin /
+  // manager before the `company_finance` key has been granted to their role.
+  bool get canSeeCompanyFinance =>
+      isFullAccess || has('company_finance', role.canSeeCompanyFinance);
   bool get canSeePayables => has('payables', role.canSeePayables);
   bool get canSeeFleet => has('fleet', role.canSeeFleet);
   bool get canManageInventory => has('inventory', role.canManageInventory);

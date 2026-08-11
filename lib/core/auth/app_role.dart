@@ -84,6 +84,9 @@ enum AppRole {
   bool get canSeeFinance =>
       isFullAccess || this == artist || this == accounts;
 
+  /// Company Finance (dashboard + asset register). Management + accounts.
+  bool get canSeeCompanyFinance => isFullAccess || this == accounts;
+
   /// Accounts payables (vendor bills / GST). Accounts team + inventory manager.
   bool get canSeePayables =>
       isFullAccess || this == accounts || this == inventoryManager;

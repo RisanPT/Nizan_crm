@@ -31,6 +31,9 @@ class Sidebar extends ConsumerWidget {
   final bool hrExpanded;
   final bool hrUserCollapsed;
   final ValueChanged<bool> onHrExpandToggle;
+  final bool financeExpanded;
+  final bool financeUserCollapsed;
+  final ValueChanged<bool> onFinanceExpandToggle;
 
   const Sidebar({
     super.key,
@@ -55,6 +58,9 @@ class Sidebar extends ConsumerWidget {
     required this.hrExpanded,
     required this.hrUserCollapsed,
     required this.onHrExpandToggle,
+    required this.financeExpanded,
+    required this.financeUserCollapsed,
+    required this.onFinanceExpandToggle,
   });
 
   @override
@@ -82,6 +88,7 @@ class Sidebar extends ConsumerWidget {
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
+    final isFinanceRoute = currentPath.startsWith('/company-finance');
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
@@ -100,6 +107,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (salesExpanded || (isSalesRoute && !salesUserCollapsed));
     final effectiveHrExpanded =
         !isCollapsed && (hrExpanded || (isHrRoute && !hrUserCollapsed));
+    final effectiveFinanceExpanded = !isCollapsed &&
+        (financeExpanded || (isFinanceRoute && !financeUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session
@@ -487,6 +496,48 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/sales/cancelled',
                             onTap: () => context.go('/sales/cancelled'),
+                          ),
+                        ),
+                    ],
+                  ],
+                  if (access.canSeeCompanyFinance) ...[
+                    _SidebarItem(
+                      icon: Icons.savings_outlined,
+                      title: 'Finance',
+                      isCollapsed: isCollapsed,
+                      isSelected: isFinanceRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveFinanceExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () => onFinanceExpandToggle(
+                          !financeExpanded || financeUserCollapsed),
+                    ),
+                    if (!isCollapsed && effectiveFinanceExpanded) ...[
+                      if (access.canSeeCompanyFinance)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.donut_small_outlined,
+                            title: 'Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/company-finance',
+                            onTap: () => context.go('/company-finance'),
+                          ),
+                        ),
+                      if (access.canSeeCompanyFinance)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.inventory_outlined,
+                            title: 'Assets',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/company-finance/assets',
+                            onTap: () => context.go('/company-finance/assets'),
                           ),
                         ),
                     ],

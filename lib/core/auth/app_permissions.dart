@@ -61,6 +61,11 @@ const List<AppFeature> kAppFeatures = [
   ]),
   AppFeature('finance', 'Artist Finance', 'Artist collections and expenses',
       Icons.account_balance_wallet_outlined),
+  AppFeature('company_finance', 'Finance', 'Company finance and asset register',
+      Icons.savings_outlined, subs: [
+    AppSubFeature('company_finance.dashboard', 'Finance Dashboard'),
+    AppSubFeature('company_finance.assets', 'Assets'),
+  ]),
   AppFeature('payables', 'Accounts', 'Vendor bills, GST and payables',
       Icons.receipt_long_outlined, subs: [
     AppSubFeature('payables.dashboard', 'Accounts Dashboard'),

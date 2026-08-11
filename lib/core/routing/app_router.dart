@@ -73,6 +73,8 @@ import 'package:nizan_crm/features/inventory/presentation/screens/artist_invento
 import 'package:nizan_crm/features/sales/presentation/screens/sales_workspace_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_person_dashboard_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/financial_analyst_report_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/finance_dashboard_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -131,6 +133,9 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/attendance-payroll') return 'payables.admin_salaries';
   if (path == '/accounts/sales-returns') return 'payables.sales_returns';
   if (path == '/accounts/hra') return 'payables.hra';
+  // Company Finance
+  if (path == '/company-finance') return 'company_finance.dashboard';
+  if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -179,6 +184,9 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/sales')) {
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canSeeSales;
+  }
+  if (path.startsWith('/company-finance')) {
+    return access.canSeeCompanyFinance;
   }
   if (path.startsWith('/finance')) return access.canSeeFinance;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
@@ -241,6 +249,7 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/clients',
     '/calendar',
     '/finance',
+    '/company-finance', '/company-finance/assets',
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
     '/accounts/artist-collections', '/accounts/fleet-expenses',
     '/accounts/admin-expenses', '/accounts/subscriptions',
@@ -359,6 +368,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Cancelled Works';
           } else if (state.uri.path == '/reports/analyst') {
             title = 'Financial Report';
+          } else if (state.uri.path == '/company-finance') {
+            title = 'Finance Dashboard';
+          } else if (state.uri.path == '/company-finance/assets') {
+            title = 'Company Assets';
           } else if (state.uri.path == '/sales/home') {
             title = 'My Dashboard';
           } else if (state.uri.path == '/sales/leads') {
@@ -763,6 +776,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/finance',
             builder: (context, state) => const ArtistFinanceScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance',
+            builder: (context, state) => const FinanceDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/assets',
+            builder: (context, state) => const AssetsScreen(),
           ),
           GoRoute(
             path: '/sales/dashboard',
