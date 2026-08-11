@@ -216,6 +216,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
   void _showEditSalaryDialog(Salary salary) {
     final baseCtrl =
         TextEditingController(text: salary.baseSalary.toStringAsFixed(0));
+    final incentivesCtrl =
+        TextEditingController(text: salary.incentives.toStringAsFixed(0));
+    final roomRentCtrl =
+        TextEditingController(text: salary.roomRent.toStringAsFixed(0));
     final allowCtrl =
         TextEditingController(text: salary.allowances.toStringAsFixed(0));
     final bonusCtrl =
@@ -258,7 +262,25 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     controller: baseCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Base Salary (₹)',
+                      labelText: 'Basic Salary (₹)',
+                      isDense: true,
+                    ),
+                  ),
+                  12.h,
+                  TextField(
+                    controller: incentivesCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Incentives (₹)',
+                      isDense: true,
+                    ),
+                  ),
+                  12.h,
+                  TextField(
+                    controller: roomRentCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Room Rent (₹)',
                       isDense: true,
                     ),
                   ),
@@ -267,7 +289,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     controller: allowCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'Monthly Allowances (₹)',
+                      labelText: 'Other Allowances (₹)',
                       isDense: true,
                     ),
                   ),
@@ -314,6 +336,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     salary.id,
                     {
                       'baseSalary': double.tryParse(baseCtrl.text.trim()) ?? 0,
+                      'incentives': double.tryParse(incentivesCtrl.text.trim()) ?? 0,
+                      'roomRent': double.tryParse(roomRentCtrl.text.trim()) ?? 0,
                       'allowances': double.tryParse(allowCtrl.text.trim()) ?? 0,
                       'bonus': double.tryParse(bonusCtrl.text.trim()) ?? 0,
                       'deductions': double.tryParse(dedCtrl.text.trim()) ?? 0,
@@ -346,6 +370,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     final filter = ref.read(salaryFilterProvider);
 
     final baseCtrl = TextEditingController(text: '0');
+    final incentivesCtrl = TextEditingController(text: '0');
+    final roomRentCtrl = TextEditingController(text: '0');
     final allowCtrl = TextEditingController(text: '0');
     final bonusCtrl = TextEditingController(text: '0');
     final dedCtrl = TextEditingController(text: '0');
@@ -425,6 +451,32 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                         children: [
                           Expanded(
                             child: TextField(
+                              controller: incentivesCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Incentives (₹)',
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          8.w,
+                          Expanded(
+                            child: TextField(
+                              controller: roomRentCtrl,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Room Rent (₹)',
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      12.h,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
                               controller: bonusCtrl,
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
@@ -473,6 +525,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                         'year': filter.year,
                         'baseSalary':
                             double.tryParse(baseCtrl.text.trim()) ?? 0,
+                        'incentives':
+                            double.tryParse(incentivesCtrl.text.trim()) ?? 0,
+                        'roomRent':
+                            double.tryParse(roomRentCtrl.text.trim()) ?? 0,
                         'allowances':
                             double.tryParse(allowCtrl.text.trim()) ?? 0,
                         'bonus': double.tryParse(bonusCtrl.text.trim()) ?? 0,
@@ -551,7 +607,13 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     ),
                   ),
                   16.h,
-                  _buildSlipRow('Base Salary', _formatCurrency(salary.baseSalary)),
+                  _buildSlipRow('Basic Salary', _formatCurrency(salary.baseSalary)),
+                  if (salary.incentives > 0)
+                    _buildSlipRow('Incentives', '+ ${_formatCurrency(salary.incentives)}',
+                        color: Colors.green),
+                  if (salary.roomRent > 0)
+                    _buildSlipRow('Room Rent', '+ ${_formatCurrency(salary.roomRent)}',
+                        color: Colors.green),
                   _buildSlipRow('Allowances', '+ ${_formatCurrency(salary.allowances)}',
                       color: Colors.green),
                   _buildSlipRow('Bonus / Incentive', '+ ${_formatCurrency(salary.bonus)}',

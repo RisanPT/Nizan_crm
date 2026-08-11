@@ -696,8 +696,18 @@ class _AdministrativeExpensesScreenState
                                       spacing: 12,
                                       runSpacing: 4,
                                       children: [
+                                        if (exp.source == 'hra')
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: crm.primary.withValues(alpha: 0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text('HRA',
+                                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: crm.primary)),
+                                          ),
                                         Text(
-                                          exp.categoryLabel,
+                                          exp.headLabel,
                                           style: TextStyle(
                                             fontSize: 12.5,
                                             color: crm.textSecondary,
@@ -738,6 +748,34 @@ class _AdministrativeExpensesScreenState
                                               color: crm.textSecondary,
                                             ),
                                           ),
+                                        ],
+                                        if (exp.vendor.isNotEmpty) ...[
+                                          Text('•', style: TextStyle(color: crm.textSecondary)),
+                                          Row(mainAxisSize: MainAxisSize.min, children: [
+                                            Icon(Icons.storefront_outlined, size: 14, color: crm.textSecondary),
+                                            4.w,
+                                            Text(exp.vendor, style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                                          ]),
+                                        ],
+                                        if (exp.costTag.isNotEmpty) ...[
+                                          Text('•', style: TextStyle(color: crm.textSecondary)),
+                                          Row(mainAxisSize: MainAxisSize.min, children: [
+                                            Icon(Icons.sell_outlined, size: 14, color: crm.accent),
+                                            4.w,
+                                            Text(exp.costTag, style: TextStyle(fontSize: 12.5, color: crm.accent, fontWeight: FontWeight.w600)),
+                                          ]),
+                                        ],
+                                        if (exp.isRecurring) ...[
+                                          Text('•', style: TextStyle(color: crm.textSecondary)),
+                                          Row(mainAxisSize: MainAxisSize.min, children: [
+                                            Icon(Icons.repeat_rounded, size: 14, color: crm.primary),
+                                            4.w,
+                                            Text('Recurring', style: TextStyle(fontSize: 12.5, color: crm.primary, fontWeight: FontWeight.w600)),
+                                          ]),
+                                        ],
+                                        if (exp.gstType == 'rcm') ...[
+                                          Text('•', style: TextStyle(color: crm.textSecondary)),
+                                          Text('GST · RCM', style: TextStyle(fontSize: 12.5, color: crm.warning, fontWeight: FontWeight.w600)),
                                         ],
                                       ],
                                     ),
@@ -891,12 +929,18 @@ class _AddEditAdminExpenseDialogState
   late TextEditingController _invoiceCtrl;
   late TextEditingController _receiptCtrl;
   late TextEditingController _paidByNameCtrl;
+  late TextEditingController _vendorCtrl;
+  late TextEditingController _costTagCtrl;
+  late TextEditingController _gstCtrl;
 
   late String _selectedDept;
   late String _selectedCategory;
   late String _selectedPaymentMethod;
   late DateTime _selectedDate;
   String? _selectedEmployeeId;
+  String? _selectedHead;
+  bool _isRecurring = false;
+  String _gstType = 'none';
   bool _isSubmitting = false;
 
   @override
@@ -911,12 +955,20 @@ class _AddEditAdminExpenseDialogState
     _invoiceCtrl = TextEditingController(text: e?.invoiceNumber ?? '');
     _receiptCtrl = TextEditingController(text: e?.receiptImage ?? '');
     _paidByNameCtrl = TextEditingController(text: e?.paidByName ?? '');
+    _vendorCtrl = TextEditingController(text: e?.vendor ?? '');
+    _costTagCtrl = TextEditingController(text: e?.costTag ?? '');
+    _gstCtrl = TextEditingController(
+      text: (e != null && e.gstAmount > 0) ? e.gstAmount.toStringAsFixed(0) : '',
+    );
 
     _selectedDept = e?.department ?? 'General';
     _selectedCategory = e?.category ?? 'office_supplies';
     _selectedPaymentMethod = e?.paymentMethod ?? 'bank_transfer';
     _selectedDate = e?.date ?? DateTime.now();
     _selectedEmployeeId = e?.paidBy?.id;
+    _selectedHead = (e?.expenseHead.isNotEmpty ?? false) ? e!.expenseHead : null;
+    _isRecurring = e?.isRecurring ?? false;
+    _gstType = e?.gstType ?? 'none';
   }
 
   @override
@@ -927,6 +979,9 @@ class _AddEditAdminExpenseDialogState
     _invoiceCtrl.dispose();
     _receiptCtrl.dispose();
     _paidByNameCtrl.dispose();
+    _vendorCtrl.dispose();
+    _costTagCtrl.dispose();
+    _gstCtrl.dispose();
     super.dispose();
   }
 
@@ -941,6 +996,12 @@ class _AddEditAdminExpenseDialogState
         'title': _titleCtrl.text.trim(),
         'department': _selectedDept,
         'category': _selectedCategory,
+        'expenseHead': _selectedHead ?? '',
+        'vendor': _vendorCtrl.text.trim(),
+        'costTag': _costTagCtrl.text.trim(),
+        'isRecurring': _isRecurring,
+        'gstType': _gstType,
+        'gstAmount': double.tryParse(_gstCtrl.text.trim()) ?? 0,
         'amount': double.tryParse(_amountCtrl.text.trim()) ?? 0,
         'date': _selectedDate.toIso8601String(),
         'paymentMethod': _selectedPaymentMethod,
@@ -1065,6 +1126,98 @@ class _AddEditAdminExpenseDialogState
                         },
                       ),
                     ),
+                  ],
+                ),
+                12.h,
+
+                // Expense Head — controlled ledger (doc: "no free-text heads").
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedHead,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Expense Head *'),
+                  items: kExpenseHeads
+                      .map((h) => DropdownMenuItem(
+                            value: h.code,
+                            child: Text(h.display, overflow: TextOverflow.ellipsis),
+                          ))
+                      .toList(),
+                  validator: (v) =>
+                      (v == null || v.isEmpty) ? 'Select an expense head' : null,
+                  onChanged: (val) => setState(() {
+                    _selectedHead = val;
+                    final h = expenseHeadByCode(val);
+                    if (h != null && !h.recurring) _isRecurring = false;
+                    if (h != null && h.foreign && _gstType == 'none') _gstType = 'rcm';
+                  }),
+                ),
+                12.h,
+
+                // Bride / event cost tag — mandatory for job-linked heads.
+                if (expenseHeadByCode(_selectedHead)?.jobLinked ?? false) ...[
+                  TextFormField(
+                    controller: _costTagCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Bride / Event (Cost Tag) *',
+                      hintText: 'e.g. Meghna Wedding — enables per-event costing',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty)
+                            ? 'Cost tag is required for job-linked heads'
+                            : null,
+                  ),
+                  12.h,
+                ],
+
+                // Vendor / Payee — who the money was paid to (mandatory).
+                TextFormField(
+                  controller: _vendorCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Vendor / Payee *',
+                    hintText: 'Shop / agency / person paid',
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Vendor / payee is required'
+                      : null,
+                ),
+                12.h,
+
+                // Recurring (for eligible heads) + tax / GST treatment.
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (expenseHeadByCode(_selectedHead)?.recurring ?? false)
+                      Expanded(
+                        child: CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          dense: true,
+                          title: const Text('Recurring monthly', style: TextStyle(fontSize: 13)),
+                          value: _isRecurring,
+                          onChanged: (v) => setState(() => _isRecurring = v ?? false),
+                        ),
+                      ),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _gstType,
+                        decoration: const InputDecoration(labelText: 'Tax / GST'),
+                        items: const [
+                          DropdownMenuItem(value: 'none', child: Text('No GST')),
+                          DropdownMenuItem(value: 'gst', child: Text('GST')),
+                          DropdownMenuItem(value: 'rcm', child: Text('GST · RCM (import)')),
+                        ],
+                        onChanged: (v) => setState(() => _gstType = v ?? 'none'),
+                      ),
+                    ),
+                    if (_gstType != 'none') ...[
+                      12.w,
+                      Expanded(
+                        child: TextFormField(
+                          controller: _gstCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(labelText: 'GST Amt (₹)'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 12.h,

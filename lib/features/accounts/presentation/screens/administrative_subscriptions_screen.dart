@@ -6,8 +6,13 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/subscription_controller.dart';
 import 'package:nizan_crm/features/accounts/data/subscription.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+
+// How many days ahead of a renewal we treat a subscription as "due soon" and
+// surface it in the on-open reminder popup.
+const _kSubscriptionDueSoonDays = 7;
 
 const _departments = [
   'All',
@@ -33,6 +38,52 @@ class AdministrativeSubscriptionsScreen extends ConsumerStatefulWidget {
 class _AdministrativeSubscriptionsScreenState
     extends ConsumerState<AdministrativeSubscriptionsScreen> {
   final _searchController = TextEditingController();
+  // Fleet-style: the urgent-renewals popup fires once per screen visit.
+  bool _remindersShown = false;
+
+  /// Overdue or due-soon active subscriptions, most urgent first.
+  List<Subscription> _urgentSubs(List<Subscription> subs) {
+    final urgent = subs
+        .where((s) =>
+            s.isActive &&
+            s.daysUntilRenewal <= _kSubscriptionDueSoonDays)
+        .toList()
+      ..sort((a, b) => a.daysUntilRenewal.compareTo(b.daysUntilRenewal));
+    return urgent;
+  }
+
+  void _maybeShowReminders(List<Subscription> subs) {
+    if (_remindersShown) return;
+    final urgent = _urgentSubs(subs);
+    if (urgent.isEmpty) return;
+    _remindersShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showReminderPopup(
+        context,
+        title: 'Subscription Renewals',
+        items: urgent.map((s) {
+          final plan = s.plan.isNotEmpty ? ' (${s.plan})' : '';
+          final days = s.daysUntilRenewal;
+          final String subtitle;
+          if (days < 0) {
+            subtitle = 'Renewal overdue since ${_date(s.renewalDate)}';
+          } else if (days == 0) {
+            subtitle = 'Renews today (${_date(s.renewalDate)})';
+          } else {
+            subtitle =
+                'Renews in $days ${days == 1 ? 'day' : 'days'} (${_date(s.renewalDate)})';
+          }
+          return ReminderItem(
+            icon: Icons.subscriptions_outlined,
+            title: '${s.name}$plan · ${_money(s.cost)}',
+            subtitle: subtitle,
+            overdue: s.isOverdue,
+          );
+        }).toList(),
+      );
+    });
+  }
 
   static String _money(double v) =>
       NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0)
@@ -146,6 +197,9 @@ class _AdministrativeSubscriptionsScreenState
     final filter = ref.watch(subscriptionFilterProvider);
     final asyncSubs = ref.watch(subscriptionsProvider);
     final asyncStats = ref.watch(subscriptionStatsProvider);
+
+    // Fleet-style on-open reminder popup for overdue / due-soon renewals.
+    if (asyncSubs.hasValue) _maybeShowReminders(asyncSubs.value!);
 
     return Scaffold(
       body: RefreshIndicator(

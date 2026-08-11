@@ -28,11 +28,14 @@ import 'package:nizan_crm/features/accounts/presentation/screens/operations_sala
 import '../../presentation/screens/hr_salaries_screen.dart';
 import '../../features/hr/presentation/screens/attendance_summary_screen.dart';
 import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
+import '../../features/accounts/presentation/screens/sales_returns_screen.dart';
+import '../../features/accounts/presentation/screens/hra_screen.dart';
 
 
 import '../../presentation/screens/login_screen.dart';
 import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
 import '../../features/sales/presentation/screens/sales_quarterly_screen.dart';
+import '../../features/sales/presentation/screens/monthly_bookings_screen.dart';
 import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
@@ -108,6 +111,7 @@ String? subKeyForPath(String path) {
   // Sales
   if (path.startsWith('/sales/leads')) return 'sales.leads';
   if (path.startsWith('/sales/dashboard')) return 'sales.dashboard';
+  if (path == '/sales/monthly') return 'sales.monthly';
   if (path == '/sales/quarterly') return 'sales.quarterly';
   if (path == '/sales/cancelled') return 'sales.cancelled';
   if (path == '/sales') return 'sales.invoices';
@@ -125,6 +129,8 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/admin-salaries') return 'payables.admin_salaries';
   if (path == '/accounts/operations-salaries') return 'payables.operations_salaries';
   if (path == '/accounts/attendance-payroll') return 'payables.admin_salaries';
+  if (path == '/accounts/sales-returns') return 'payables.sales_returns';
+  if (path == '/accounts/hra') return 'payables.hra';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -230,7 +236,7 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
   // it can reach (not the module's default sub-page it may lack).
   const candidates = <String>[
     '/',
-    '/sales/dashboard', '/sales/leads', '/sales', '/sales/quarterly', '/sales/cancelled',
+    '/sales/dashboard', '/sales/leads', '/sales', '/sales/monthly', '/sales/quarterly', '/sales/cancelled',
     '/booking/requests',
     '/clients',
     '/calendar',
@@ -239,7 +245,7 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/accounts/artist-collections', '/accounts/fleet-expenses',
     '/accounts/admin-expenses', '/accounts/subscriptions',
     '/accounts/admin-salaries', '/accounts/operations-salaries',
-    '/accounts/attendance-payroll',
+    '/accounts/attendance-payroll', '/accounts/sales-returns', '/accounts/hra',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
@@ -345,6 +351,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'This Week';
           } else if (state.uri.path == '/sales/dashboard/day') {
             title = 'Day Report';
+          } else if (state.uri.path == '/sales/monthly') {
+            title = 'Monthly Bookings';
           } else if (state.uri.path == '/sales/quarterly') {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/cancelled') {
@@ -415,6 +423,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Administrative Expenses';
           } else if (state.uri.path == '/accounts/subscriptions') {
             title = 'Software & Subscriptions';
+          } else if (state.uri.path == '/accounts/sales-returns') {
+            title = 'Sales Returns / Credit Notes';
+          } else if (state.uri.path == '/accounts/hra') {
+            title = 'HRA · House Rent Allowance';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
           } else if (state.uri.path == '/marketing/competitors') {
@@ -528,8 +540,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AttendancePayrollScreen(),
           ),
           GoRoute(
+            path: '/accounts/sales-returns',
+            builder: (context, state) => const SalesReturnsScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/hra',
+            builder: (context, state) => const HraScreen(),
+          ),
+          GoRoute(
             path: '/sales',
             builder: (context, state) => const SalesBookingsScreen(),
+          ),
+          GoRoute(
+            path: '/sales/monthly',
+            builder: (context, state) => const MonthlyBookingsScreen(),
           ),
           GoRoute(
             path: '/sales/quarterly',

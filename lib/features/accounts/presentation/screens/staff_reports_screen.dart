@@ -1,12 +1,26 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:nizan_crm/core/utils/file_saver.dart';
 import 'package:nizan_crm/features/accounts/data/account_report.dart';
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
+
+String _mimeFor(String fileType) {
+  switch (fileType) {
+    case 'pdf':
+      return 'application/pdf';
+    case 'excel':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'csv':
+      return 'text/csv';
+    default:
+      return 'application/octet-stream';
+  }
+}
 
 class StaffReportsScreen extends ConsumerStatefulWidget {
   final String staffName;
@@ -89,6 +103,99 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
           );
         }
       }
+    }
+  }
+
+  /// Download the file through the API (streamed with the correct content-type
+  /// and filename) so it always saves as a valid file — no Cloudinary raw
+  /// inline / missing-extension issues.
+  Future<void> _download(AccountReport report) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Downloading…')));
+    try {
+      final bytes = await ref.read(accountReportServiceProvider).downloadBytes(report.id);
+      if (bytes.isEmpty) throw Exception('Empty file');
+      await saveFileBytes(report.downloadName, bytes, mime: _mimeFor(report.fileType));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Download failed: $e')));
+    }
+  }
+
+  /// Modify a report — rename its title and/or replace the underlying file.
+  Future<void> _editReport(AccountReport report) async {
+    final crm = context.crmColors;
+    final titleCtrl = TextEditingController(text: report.title);
+    PlatformFile? picked;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          backgroundColor: crm.surface,
+          title: Text('Modify report', style: TextStyle(color: crm.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: titleCtrl,
+                style: TextStyle(color: crm.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Report title',
+                  labelStyle: TextStyle(color: crm.textSecondary),
+                  enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: crm.border)),
+                  focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: crm.accent)),
+                ),
+              ),
+              12.h,
+              OutlinedButton.icon(
+                icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+                label: Text(picked == null ? 'Replace file (optional)' : 'Selected: ${picked!.name}',
+                    overflow: TextOverflow.ellipsis),
+                onPressed: () async {
+                  final res = await FilePicker.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: const ['pdf', 'xls', 'xlsx', 'csv'],
+                    withData: true,
+                  );
+                  if (res != null) setLocal(() => picked = res.files.single);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Cancel', style: TextStyle(color: crm.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: crm.primary),
+              child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+    final newTitle = titleCtrl.text.trim();
+    if (newTitle.isEmpty || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Updating report…')));
+    try {
+      await ref.read(accountReportServiceProvider).updateReport(
+            id: report.id,
+            title: newTitle,
+            bytes: picked?.bytes,
+            filePath: picked?.path,
+            filename: picked?.name,
+          );
+      ref.invalidate(accountReportsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Report updated')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
     }
   }
 
@@ -234,18 +341,13 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
                     children: [
                       IconButton(
                         icon: Icon(Icons.download_rounded, color: crm.primary),
-                        tooltip: 'Download / View',
-                        onPressed: () async {
-                          final messenger = ScaffoldMessenger.of(context);
-                          final uri = Uri.parse(report.fileUrl);
-                          if (await canLaunchUrl(uri)) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
-                          } else {
-                            messenger.showSnackBar(
-                              const SnackBar(content: Text('Could not open the file.')),
-                            );
-                          }
-                        },
+                        tooltip: 'Download',
+                        onPressed: () => _download(report),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.edit_outlined, color: crm.accent),
+                        tooltip: 'Rename / Replace',
+                        onPressed: () => _editReport(report),
                       ),
                       IconButton(
                         icon: Icon(Icons.delete_outline, color: crm.destructive),
@@ -254,12 +356,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
                       ),
                     ],
                   ),
-                  onTap: () async {
-                    final uri = Uri.parse(report.fileUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri);
-                    }
-                  },
+                  onTap: () => _download(report),
                 ),
               );
             },

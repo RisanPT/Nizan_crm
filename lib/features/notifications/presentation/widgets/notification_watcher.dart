@@ -29,11 +29,12 @@ class NotificationWatcher extends ConsumerStatefulWidget {
 
 class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
   static const _prefsKey = 'popped_notification_ids';
-  static const _recentWindow = Duration(minutes: 10);
+  static const _primedKey = 'notif_watcher_primed';
   static const _maxRemembered = 500;
 
   final Set<String> _popped = {};
   bool _loaded = false;
+  bool _primed = false; // baseline established (persisted across reloads)
   SharedPreferences? _prefs;
 
   @override
@@ -48,6 +49,7 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
     try {
       _prefs = await SharedPreferences.getInstance();
       _popped.addAll(_prefs?.getStringList(_prefsKey) ?? const []);
+      _primed = _prefs?.getBool(_primedKey) ?? false;
     } catch (_) {
       // No persistence available — fall back to in-memory only.
     }
@@ -60,21 +62,30 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
       final trimmed =
           list.length > _maxRemembered ? list.sublist(list.length - _maxRemembered) : list;
       await _prefs?.setStringList(_prefsKey, trimmed);
+      await _prefs?.setBool(_primedKey, true);
     } catch (_) {}
   }
 
   void _onPage(NotificationPage page) {
-    // Wait until the persisted "already popped" set is loaded so we don't
-    // replay old notifications on the first tick. The recent-window guard means
-    // skipping one early tick can't lose a genuinely new notification.
+    // Wait until the persisted "already popped" set is loaded first.
     if (!_loaded) return;
 
-    final cutoff = DateTime.now().subtract(_recentWindow);
+    // First run ever on this device: record the existing inbox as a baseline so
+    // we don't flood with the backlog. Everything that arrives AFTER this pops.
+    // (Persisted, so a page reload doesn't re-baseline and swallow new items.)
+    if (!_primed) {
+      for (final n in page.items) {
+        _popped.add(n.id);
+      }
+      _primed = true;
+      _persist();
+      return;
+    }
+
+    // Pop any unread notification we haven't popped before — no time-window, so
+    // client/server clock skew can't hide a fresh notification.
     final fresh = page.items
-        .where((n) =>
-            !n.read &&
-            !_popped.contains(n.id) &&
-            n.createdAt.isAfter(cutoff))
+        .where((n) => !n.read && !_popped.contains(n.id))
         .toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     if (fresh.isEmpty) return;

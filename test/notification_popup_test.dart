@@ -31,7 +31,7 @@ Widget _harness(List<AppNotification> items) => ProviderScope(
 
 void main() {
   testWidgets('pops a toast for a fresh unread notification', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'notif_watcher_primed': true});
 
     await tester.pumpWidget(_harness([
       AppNotification(
@@ -55,23 +55,27 @@ void main() {
     await tester.pump(const Duration(seconds: 7));
   });
 
-  testWidgets('does NOT pop an old or already-read notification', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+  testWidgets('does NOT pop an already-seen or already-read notification', (tester) async {
+    // 'seen1' is already in the persisted popped-set; primed so no baseline.
+    SharedPreferences.setMockInitialValues({
+      'notif_watcher_primed': true,
+      'popped_notification_ids': ['seen1'],
+    });
 
     await tester.pumpWidget(_harness([
       AppNotification(
-        id: 'old',
+        id: 'seen1',
         type: 'payment_received',
-        title: 'Old payment',
-        body: 'Way in the past.',
+        title: 'Already popped',
+        body: 'Should not pop again.',
         read: false,
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+        createdAt: DateTime.now(),
       ),
       AppNotification(
         id: 'read1',
         type: 'expense_recorded',
         title: 'Read expense',
-        body: 'Already seen.',
+        body: 'Already read.',
         read: true,
         createdAt: DateTime.now(),
       ),
@@ -81,7 +85,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 80));
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('Old payment'), findsNothing);
+    expect(find.text('Already popped'), findsNothing);
     expect(find.text('Read expense'), findsNothing);
+  });
+
+  testWidgets('first run establishes a baseline (no flood), then pops new ones', (tester) async {
+    // Not primed: the first page becomes the baseline and must NOT pop.
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(_harness([
+      AppNotification(
+        id: 'backlog',
+        type: 'payment_received',
+        title: 'Backlog item',
+        body: 'Existed before app opened.',
+        read: false,
+        createdAt: DateTime.now(),
+      ),
+    ]));
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('Backlog item'), findsNothing);
   });
 }

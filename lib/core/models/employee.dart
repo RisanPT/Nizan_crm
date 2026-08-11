@@ -26,6 +26,12 @@ class Employee {
   final double baseSalary;
   final double allowances;
   final double deductions;
+  // Monthly House Rent Allowance configured for this employee. Paid via the
+  // separate HRA screen (Accounts) — NOT bundled into the salary slip.
+  final double hra;
+  // Recurring day-of-month (1–31) the HRA is due; auto-fills the HRA screen date.
+  // 0 = not set.
+  final int hraDay;
   final String bankName;
   final String accountNumber;
   final String ifscCode;
@@ -60,6 +66,8 @@ class Employee {
     this.baseSalary = 0,
     this.allowances = 0,
     this.deductions = 0,
+    this.hra = 0,
+    this.hraDay = 0,
     this.bankName = '',
     this.accountNumber = '',
     this.ifscCode = '',
@@ -125,6 +133,8 @@ class Employee {
       baseSalary: (json['baseSalary'] as num?)?.toDouble() ?? 0,
       allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
       deductions: (json['deductions'] as num?)?.toDouble() ?? 0,
+      hra: (json['hra'] as num?)?.toDouble() ?? 0,
+      hraDay: (json['hraDay'] as num?)?.toInt() ?? 0,
       bankName: json['bankName'] as String? ?? '',
       accountNumber: json['accountNumber'] as String? ?? '',
       ifscCode: json['ifscCode'] as String? ?? '',
@@ -156,6 +166,8 @@ class Employee {
       'baseSalary': baseSalary,
       'allowances': allowances,
       'deductions': deductions,
+      'hra': hra,
+      'hraDay': hraDay,
       'bankName': bankName,
       'accountNumber': accountNumber,
       'ifscCode': ifscCode,

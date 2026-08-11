@@ -76,7 +76,9 @@ class Sidebar extends ConsumerWidget {
         currentPath == '/accounts/admin-expenses' ||
         currentPath == '/accounts/subscriptions' ||
         currentPath == '/accounts/admin-salaries' ||
-        currentPath == '/accounts/attendance-payroll';
+        currentPath == '/accounts/attendance-payroll' ||
+        currentPath == '/accounts/sales-returns' ||
+        currentPath == '/accounts/hra';
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
@@ -465,6 +467,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/sales/leads'),
                           ),
                         ),
+                      if (access.canSeeSub('sales.monthly'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.calendar_month_outlined,
+                            title: 'Monthly Bookings',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/monthly',
+                            onTap: () => context.go('/sales/monthly'),
+                          ),
+                        ),
                       if (access.canSeeSub('sales.cancelled'))
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
@@ -663,6 +676,28 @@ class Sidebar extends ConsumerWidget {
                               isCollapsed: false,
                               isSelected: currentPath == '/accounts/attendance-payroll',
                               onTap: () => context.go('/accounts/attendance-payroll'),
+                            ),
+                          ),
+                        if (access.canSeeSub('payables.sales_returns'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.assignment_return_outlined,
+                              title: 'Sales Returns',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/sales-returns',
+                              onTap: () => context.go('/accounts/sales-returns'),
+                            ),
+                          ),
+                        if (access.canSeeSub('payables.hra'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.home_work_outlined,
+                              title: 'HRA',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/hra',
+                              onTap: () => context.go('/accounts/hra'),
                             ),
                           ),
                       ],
@@ -1009,12 +1044,46 @@ class Sidebar extends ConsumerWidget {
           const Divider(height: 1, color: Colors.white12),
           Padding(
             padding: 16.p,
-            child: _SidebarItem(
-              icon: Icons.account_circle_outlined,
-              title: 'My Profile',
-              isCollapsed: isCollapsed,
-              isSelected: currentPath == '/profile',
-              onTap: () => context.go('/profile'),
+            child: Column(
+              children: [
+                _SidebarItem(
+                  icon: Icons.account_circle_outlined,
+                  title: 'My Profile',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath == '/profile',
+                  onTap: () => context.go('/profile'),
+                ),
+                8.h,
+                _SidebarItem(
+                  icon: Icons.logout_rounded,
+                  title: 'Logout',
+                  isCollapsed: isCollapsed,
+                  isSelected: false,
+                  onTap: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Confirm Logout'),
+                        content: const Text('Are you sure you want to log out?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await ref.read(authControllerProvider).logout();
+                    }
+                  },
+                ),
+              ],
             ),
           ),
           16.h,

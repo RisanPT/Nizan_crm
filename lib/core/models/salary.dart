@@ -49,7 +49,10 @@ class Salary {
   final int month;
   final int year;
   final String salaryType;
-  final double baseSalary;
+  final double baseSalary; // Basic
+  final double incentives;
+  final double roomRent;
+  final double hra;
   final double allowances;
   final double bonus;
   final double deductions;
@@ -83,6 +86,9 @@ class Salary {
     required this.year,
     this.salaryType = 'fixed_monthly',
     this.baseSalary = 0,
+    this.incentives = 0,
+    this.roomRent = 0,
+    this.hra = 0,
     this.allowances = 0,
     this.bonus = 0,
     this.deductions = 0,
@@ -141,6 +147,9 @@ class Salary {
       year: (json['year'] as num?)?.toInt() ?? 2026,
       salaryType: json['salaryType'] as String? ?? 'fixed_monthly',
       baseSalary: (json['baseSalary'] as num?)?.toDouble() ?? 0,
+      incentives: (json['incentives'] as num?)?.toDouble() ?? 0,
+      roomRent: (json['roomRent'] as num?)?.toDouble() ?? 0,
+      hra: (json['hra'] as num?)?.toDouble() ?? 0,
       allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
       bonus: (json['bonus'] as num?)?.toDouble() ?? 0,
       deductions: (json['deductions'] as num?)?.toDouble() ?? 0,

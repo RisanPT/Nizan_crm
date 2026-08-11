@@ -189,6 +189,11 @@ class StaffManagementScreen extends HookConsumerWidget {
             ? employee.deductions.toStringAsFixed(0)
             : '',
       );
+      final hraCtrl = TextEditingController(
+        text: employee != null && employee.hra > 0
+            ? employee.hra.toStringAsFixed(0)
+            : '',
+      );
       final bankNameCtrl = TextEditingController(text: employee?.bankName ?? '');
       final accountNumberCtrl =
           TextEditingController(text: employee?.accountNumber ?? '');
@@ -205,6 +210,9 @@ class StaffManagementScreen extends HookConsumerWidget {
       var salaryType = employee?.salaryType ??
           (initialCat == 'administrative' ? 'fixed_monthly' : 'per_booking');
       var status = employee?.status ?? 'active';
+      // Recurring day-of-month the HRA is due (0 = not set). Auto-fills the HRA
+      // screen date when this employee is picked there.
+      var hraDay = employee?.hraDay ?? 0;
       var department = employee?.department ??
           (initialCat == 'administrative' ? 'HR' : 'Operations');
       var regionId = employee?.regionId ?? '';
@@ -773,6 +781,50 @@ class StaffManagementScreen extends HookConsumerWidget {
                                   ),
                                 ],
                               ),
+                              10.h,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: TextField(
+                                      controller: hraCtrl,
+                                      keyboardType: TextInputType.number,
+                                      decoration: const InputDecoration(
+                                        labelText: 'HRA — House Rent Allowance (₹)',
+                                        hintText: 'e.g. 5000',
+                                        isDense: true,
+                                        helperMaxLines: 2,
+                                        helperText:
+                                            'Paid separately via the HRA screen — not added to the salary slip.',
+                                      ),
+                                    ),
+                                  ),
+                                  8.w,
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<int>(
+                                      initialValue: hraDay,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                        labelText: 'HRA day',
+                                        isDense: true,
+                                        helperMaxLines: 2,
+                                        helperText: 'Due every month on this day.',
+                                      ),
+                                      items: [
+                                        const DropdownMenuItem(
+                                            value: 0, child: Text('Not set')),
+                                        for (var d = 1; d <= 31; d++)
+                                          DropdownMenuItem(
+                                              value: d, child: Text('$d')),
+                                      ],
+                                      onChanged: (val) => setModalState(
+                                          () => hraDay = val ?? 0),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           ),
                         ),
@@ -908,6 +960,8 @@ class StaffManagementScreen extends HookConsumerWidget {
                             baseSalary: double.tryParse(baseSalaryCtrl.text.trim()) ?? 0,
                             allowances: double.tryParse(allowancesCtrl.text.trim()) ?? 0,
                             deductions: double.tryParse(deductionsCtrl.text.trim()) ?? 0,
+                            hra: double.tryParse(hraCtrl.text.trim()) ?? 0,
+                            hraDay: hraDay,
                             bankName: bankNameCtrl.text.trim(),
                             accountNumber: accountNumberCtrl.text.trim(),
                             ifscCode: ifscCodeCtrl.text.trim(),
