@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/staff_reports_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/report_access_picker.dart';
 
 /// Human-readable file size.
 String _fmtSize(int bytes) {
@@ -54,45 +55,74 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
     if (!mounted) return;
 
     {
-      // Ask for title
+      // Ask for title + optional access list (private by default).
       final titleController = TextEditingController(text: fileName);
+      final List<String> shareIds = [];
       final confirm = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: crm.surface,
-          title: Text('Upload Report', style: TextStyle(color: crm.textPrimary)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('$fileName · ${_fmtSize(file.size)}', style: TextStyle(color: crm.textSecondary)),
-              16.h,
-              TextField(
-                controller: titleController,
-                style: TextStyle(color: crm.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Report Title',
-                  labelStyle: TextStyle(color: crm.textSecondary),
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide(color: crm.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: crm.border),
+        builder: (context) => StatefulBuilder(
+          builder: (context, setLocal) => AlertDialog(
+            backgroundColor: crm.surface,
+            title: Text('Upload Report', style: TextStyle(color: crm.textPrimary)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$fileName · ${_fmtSize(file.size)}', style: TextStyle(color: crm.textSecondary)),
+                16.h,
+                TextField(
+                  controller: titleController,
+                  style: TextStyle(color: crm.textPrimary),
+                  decoration: InputDecoration(
+                    labelText: 'Report Title',
+                    labelStyle: TextStyle(color: crm.textSecondary),
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide(color: crm.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: crm.border),
+                    ),
                   ),
                 ),
+                12.h,
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.lock_person_outlined, size: 18),
+                  label: Text(
+                    shareIds.isEmpty
+                        ? 'Private — only you (set who can view)'
+                        : 'Shared with ${shareIds.length} ${shareIds.length == 1 ? 'person' : 'people'}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onPressed: () async {
+                    final picked = await showReportAccessPicker(
+                      context,
+                      ref,
+                      initial: shareIds.toSet(),
+                      title: 'Who can view this report',
+                    );
+                    if (picked != null) {
+                      setLocal(() {
+                        shareIds
+                          ..clear()
+                          ..addAll(picked);
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text('Cancel', style: TextStyle(color: crm.textSecondary)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: ElevatedButton.styleFrom(backgroundColor: crm.primary),
+                child: const Text('Upload', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text('Cancel', style: TextStyle(color: crm.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: ElevatedButton.styleFrom(backgroundColor: crm.primary),
-              child: const Text('Upload', style: TextStyle(color: Colors.white)),
-            ),
-          ],
         ),
       );
 
@@ -111,6 +141,7 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
             filename: fileName,
             filePath: file.path,
             bytes: file.bytes,
+            sharedWith: shareIds,
           );
 
           if (mounted) {

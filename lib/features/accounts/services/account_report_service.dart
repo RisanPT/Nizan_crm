@@ -17,11 +17,14 @@ class AccountReportService {
     String? filePath,
     List<int>? bytes,
     required String filename,
+    List<String> sharedWith = const [],
   }) async {
-    final formData = FormData.fromMap({
-      'title': title,
-    });
-    
+    final formData = FormData.fromMap({'title': title});
+    // Repeated 'sharedWith' fields → parsed into an array by the backend.
+    for (final id in sharedWith) {
+      formData.fields.add(MapEntry('sharedWith', id));
+    }
+
     if (bytes != null) {
       formData.files.add(MapEntry(
         'file',
@@ -80,5 +83,14 @@ class AccountReportService {
 
   Future<void> deleteReport(String id) async {
     await _dio.delete('/account-reports/$id');
+  }
+
+  /// Replace the set of users allowed to view a report (owner/admin only).
+  Future<AccountReport> updateAccess(String id, List<String> sharedWith) async {
+    final res = await _dio.put(
+      '/account-reports/$id/access',
+      data: {'sharedWith': sharedWith},
+    );
+    return AccountReport.fromJson(res.data as Map<String, dynamic>);
   }
 }

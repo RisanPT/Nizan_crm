@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
@@ -6,6 +7,7 @@ import 'package:nizan_crm/features/inventory/data/staff_kit.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
+import 'package:nizan_crm/features/inventory/utils/inventory_import.dart';
 import 'barcode_scanner_page.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_dialogs.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
@@ -101,6 +103,137 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
     }
   }
 
+  /// Bulk-import existing stock from an Excel (.xlsx) or CSV file. Parses the
+  /// file locally, previews the result, then posts to the bulk endpoint.
+  Future<void> _importStock() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx', 'xls', 'csv'],
+      withData: true,
+    );
+    if (picked == null || !mounted) return;
+
+    final file = picked.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Could not read the selected file.')),
+      );
+      return;
+    }
+
+    final result = parseInventoryImport(bytes, file.name);
+    if (!mounted) return;
+
+    final confirmed = await _showImportPreview(file.name, result);
+    if (confirmed != true || !mounted) return;
+
+    messenger.showSnackBar(
+      SnackBar(content: Text('Importing ${result.items.length} products…')),
+    );
+    try {
+      final inserted =
+          await ref.read(inventoryServiceProvider).bulkCreateProducts(result.items);
+      ref.invalidate(inventoryProductsProvider);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Imported $inserted product${inserted == 1 ? '' : 's'}.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+    }
+  }
+
+  Future<bool?> _showImportPreview(String fileName, InventoryImportResult r) {
+    final crm = context.crmColors;
+    final sample = r.items.take(5).toList();
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: crm.surface,
+        title: const Text('Import stock'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(fileName,
+                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                10.h,
+                if (r.hasItems)
+                  Text('${r.items.length} product${r.items.length == 1 ? '' : 's'} ready to import'
+                      '${r.skipped > 0 ? ' · ${r.skipped} skipped' : ''}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, color: crm.textPrimary))
+                else
+                  Text('Nothing to import',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, color: crm.destructive)),
+                for (final w in r.warnings) ...[
+                  6.h,
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Icon(Icons.info_outline, size: 14, color: crm.warning),
+                    6.w,
+                    Expanded(
+                      child: Text(w,
+                          style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                    ),
+                  ]),
+                ],
+                if (sample.isNotEmpty) ...[
+                  12.h,
+                  Text('Preview',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: crm.textSecondary)),
+                  6.h,
+                  for (final it in sample)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '• ${it['name']}'
+                        '${it['brand'] != null ? ' · ${it['brand']}' : ''}'
+                        '${it['quantity'] != null ? ' · qty ${it['quantity']}' : ''}'
+                        '${it['price'] != null ? ' · ₹${it['price']}' : ''}',
+                        style: TextStyle(fontSize: 12.5, color: crm.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  if (r.items.length > sample.length)
+                    Text('…and ${r.items.length - sample.length} more',
+                        style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                ],
+                12.h,
+                Text(
+                  'Expected columns (first row = header): ${kInventoryImportColumns.join(', ')}. '
+                  'Only "name" is required.',
+                  style: TextStyle(fontSize: 11, color: crm.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(r.hasItems ? 'Cancel' : 'Close'),
+          ),
+          if (r.hasItems)
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: crm.primary),
+              child: Text('Import ${r.items.length}',
+                  style: const TextStyle(color: Colors.white)),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
@@ -167,17 +300,35 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
               InvHeader(
                 title: 'Stock List',
                 subtitle: '${products.length} products',
-                trailing: IconButton(
-                  onPressed: _scanCheck,
-                  icon: const Icon(Icons.qr_code_scanner, size: 22),
-                  tooltip: 'Scan to check stock',
-                  style: IconButton.styleFrom(
-                    foregroundColor: crm.primary,
-                    backgroundColor: crm.primary.withValues(alpha: 0.10),
-                    minimumSize: const Size(40, 40),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: _importStock,
+                      icon: const Icon(Icons.upload_file, size: 22),
+                      tooltip: 'Import stock from Excel / CSV',
+                      style: IconButton.styleFrom(
+                        foregroundColor: crm.primary,
+                        backgroundColor: crm.primary.withValues(alpha: 0.10),
+                        minimumSize: const Size(40, 40),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    8.w,
+                    IconButton(
+                      onPressed: _scanCheck,
+                      icon: const Icon(Icons.qr_code_scanner, size: 22),
+                      tooltip: 'Scan to check stock',
+                      style: IconButton.styleFrom(
+                        foregroundColor: crm.primary,
+                        backgroundColor: crm.primary.withValues(alpha: 0.10),
+                        minimumSize: const Size(40, 40),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ],
                 ),
                 actionLabel: 'Add',
                 onAction: () => showProductDialog(context, ref),

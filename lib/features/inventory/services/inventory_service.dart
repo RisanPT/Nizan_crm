@@ -89,6 +89,19 @@ class InventoryService {
     }
   }
 
+  /// Bulk-import products (e.g. from an uploaded Excel/CSV of existing stock).
+  /// Each map is one product row; the backend cleans + validates each. Returns
+  /// the number of rows actually inserted.
+  Future<int> bulkCreateProducts(List<Map<String, dynamic>> items) async {
+    try {
+      final res = await _dio.post('/inventory/products/bulk', data: {'items': items});
+      final data = res.data as Map<String, dynamic>;
+      return (data['inserted'] as num?)?.toInt() ?? 0;
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to import products'));
+    }
+  }
+
   /// Look up a product by scanned barcode. Returns null when not registered.
   Future<InventoryProduct?> lookupBarcode(String code) async {
     try {

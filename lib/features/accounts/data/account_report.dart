@@ -1,3 +1,10 @@
+/// A user who has been granted view access to a report.
+class ReportViewer {
+  final String id;
+  final String name;
+  const ReportViewer({required this.id, required this.name});
+}
+
 class AccountReport {
   final String id;
   final String title;
@@ -5,6 +12,9 @@ class AccountReport {
   final String fileType;
   final String fileName;
   final String uploadedByName;
+  final String uploadedById;
+  /// Users (besides the owner + admins) allowed to view this report.
+  final List<ReportViewer> sharedWith;
   final DateTime createdAt;
 
   const AccountReport({
@@ -14,6 +24,8 @@ class AccountReport {
     required this.fileType,
     this.fileName = '',
     required this.uploadedByName,
+    this.uploadedById = '',
+    this.sharedWith = const [],
     required this.createdAt,
   });
 
@@ -39,6 +51,24 @@ class AccountReport {
     return 'Unknown';
   }
 
+  static String _id(dynamic v) {
+    if (v is Map) return v['_id'] as String? ?? v['id'] as String? ?? '';
+    return v as String? ?? '';
+  }
+
+  static List<ReportViewer> _viewers(dynamic v) {
+    if (v is! List) return const [];
+    return v
+        .map((e) => e is Map
+            ? ReportViewer(
+                id: e['_id'] as String? ?? e['id'] as String? ?? '',
+                name: e['name'] as String? ?? 'Unknown',
+              )
+            : ReportViewer(id: e as String? ?? '', name: 'Unknown'))
+        .where((r) => r.id.isNotEmpty)
+        .toList();
+  }
+
   factory AccountReport.fromJson(Map<String, dynamic> json) {
     return AccountReport(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
@@ -47,6 +77,8 @@ class AccountReport {
       fileType: json['fileType'] as String? ?? 'other',
       fileName: json['fileName'] as String? ?? '',
       uploadedByName: _uploaderName(json['uploadedBy']),
+      uploadedById: _id(json['uploadedBy']),
+      sharedWith: _viewers(json['sharedWith']),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String).toLocal()
           : DateTime.now(),

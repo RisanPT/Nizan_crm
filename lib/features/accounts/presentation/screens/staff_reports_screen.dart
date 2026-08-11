@@ -6,8 +6,10 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/accounts/data/account_report.dart';
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/report_access_picker.dart';
 
 String _mimeFor(String fileType) {
   switch (fileType) {
@@ -199,11 +201,40 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
     }
   }
 
+  /// Owner/admin only — change which users may view this report.
+  Future<void> _manageAccess(AccountReport report) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picked = await showReportAccessPicker(
+      context,
+      ref,
+      initial: report.sharedWith.map((v) => v.id).toSet(),
+      ownerId: report.uploadedById,
+      title: 'Who can view “${report.title}”',
+    );
+    if (picked == null) return;
+    try {
+      await ref.read(accountReportServiceProvider).updateAccess(report.id, picked);
+      ref.invalidate(accountReportsProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(picked.isEmpty
+              ? 'Report is now private to you'
+              : 'Shared with ${picked.length} ${picked.length == 1 ? 'person' : 'people'}'),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncReports = ref.watch(accountReportsProvider);
+    final session = ref.watch(authSessionProvider);
+    final myId = session?.userId ?? '';
+    final isAdmin = session?.role == 'admin';
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -297,6 +328,13 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
             itemBuilder: (context, index) {
               final report = reports[index];
               final isPdf = report.fileType.toLowerCase() == 'pdf';
+              // Only the uploader (or an admin) may rename/replace, delete, or
+              // change who can view a report.
+              final canManage = isAdmin || report.uploadedById == myId;
+              final shareCount = report.sharedWith.length;
+              final accessLabel = shareCount == 0
+                  ? 'Private'
+                  : 'Shared with $shareCount ${shareCount == 1 ? 'person' : 'people'}';
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -328,12 +366,25 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4.0),
-                    child: Text(
-                      'Uploaded on ${DateFormat('MMM d, yyyy h:mm a').format(report.createdAt)}',
-                      style: TextStyle(
-                        color: crm.textSecondary,
-                        fontSize: 13,
-                      ),
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Uploaded on ${DateFormat('MMM d, yyyy h:mm a').format(report.createdAt)}',
+                            style: TextStyle(color: crm.textSecondary, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        8.w,
+                        Icon(
+                          shareCount == 0 ? Icons.lock_outline : Icons.group_outlined,
+                          size: 13,
+                          color: crm.textSecondary,
+                        ),
+                        4.w,
+                        Text(accessLabel,
+                            style: TextStyle(color: crm.textSecondary, fontSize: 12)),
+                      ],
                     ),
                   ),
                   trailing: Row(
@@ -344,16 +395,24 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
                         tooltip: 'Download',
                         onPressed: () => _download(report),
                       ),
-                      IconButton(
-                        icon: Icon(Icons.edit_outlined, color: crm.accent),
-                        tooltip: 'Rename / Replace',
-                        onPressed: () => _editReport(report),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.delete_outline, color: crm.destructive),
-                        tooltip: 'Delete',
-                        onPressed: () => _deleteReport(report),
-                      ),
+                      if (canManage)
+                        IconButton(
+                          icon: Icon(Icons.lock_person_outlined, color: crm.primary),
+                          tooltip: 'Manage access',
+                          onPressed: () => _manageAccess(report),
+                        ),
+                      if (canManage)
+                        IconButton(
+                          icon: Icon(Icons.edit_outlined, color: crm.accent),
+                          tooltip: 'Rename / Replace',
+                          onPressed: () => _editReport(report),
+                        ),
+                      if (canManage)
+                        IconButton(
+                          icon: Icon(Icons.delete_outline, color: crm.destructive),
+                          tooltip: 'Delete',
+                          onPressed: () => _deleteReport(report),
+                        ),
                     ],
                   ),
                   onTap: () => _download(report),
