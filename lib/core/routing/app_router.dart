@@ -75,6 +75,16 @@ import 'package:nizan_crm/features/sales/presentation/screens/sales_person_dashb
 import 'package:nizan_crm/features/reports/presentation/screens/financial_analyst_report_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/finance_dashboard_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/chart_of_accounts_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/journal_voucher_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/trial_balance_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/ledger_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/profit_loss_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/balance_sheet_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/aging_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/bank_reconciliation_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/gst_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -136,6 +146,16 @@ String? subKeyForPath(String path) {
   // Company Finance
   if (path == '/company-finance') return 'company_finance.dashboard';
   if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
+  if (path.startsWith('/company-finance/depreciation')) return 'company_finance.depreciation';
+  if (path.startsWith('/company-finance/chart')) return 'company_finance.chart';
+  if (path.startsWith('/company-finance/journal')) return 'company_finance.journal';
+  if (path.startsWith('/company-finance/trial-balance')) return 'company_finance.trial_balance';
+  if (path.startsWith('/company-finance/ledger')) return 'company_finance.ledger';
+  if (path.startsWith('/company-finance/profit-loss')) return 'company_finance.pnl';
+  if (path.startsWith('/company-finance/balance-sheet')) return 'company_finance.balance_sheet';
+  if (path.startsWith('/company-finance/aging')) return 'company_finance.aging';
+  if (path.startsWith('/company-finance/reconciliation')) return 'company_finance.reconciliation';
+  if (path.startsWith('/company-finance/gst')) return 'company_finance.gst';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
   if (path.startsWith('/inventory/stock')) return 'inventory.stock';
@@ -372,6 +392,26 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Finance Dashboard';
           } else if (state.uri.path == '/company-finance/assets') {
             title = 'Company Assets';
+          } else if (state.uri.path == '/company-finance/depreciation') {
+            title = 'Depreciation';
+          } else if (state.uri.path == '/company-finance/chart') {
+            title = 'Chart of Accounts';
+          } else if (state.uri.path == '/company-finance/journal') {
+            title = 'Journal';
+          } else if (state.uri.path == '/company-finance/trial-balance') {
+            title = 'Trial Balance';
+          } else if (state.uri.path == '/company-finance/ledger') {
+            title = 'General Ledger';
+          } else if (state.uri.path == '/company-finance/profit-loss') {
+            title = 'Profit & Loss';
+          } else if (state.uri.path == '/company-finance/balance-sheet') {
+            title = 'Balance Sheet';
+          } else if (state.uri.path == '/company-finance/aging') {
+            title = 'Receivables & Payables';
+          } else if (state.uri.path == '/company-finance/reconciliation') {
+            title = 'Bank Reconciliation';
+          } else if (state.uri.path == '/company-finance/gst') {
+            title = 'GST';
           } else if (state.uri.path == '/sales/home') {
             title = 'My Dashboard';
           } else if (state.uri.path == '/sales/leads') {
@@ -784,6 +824,47 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/assets',
             builder: (context, state) => const AssetsScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/depreciation',
+            builder: (context, state) => const DepreciationScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/chart',
+            builder: (context, state) => const ChartOfAccountsScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/journal',
+            builder: (context, state) => const JournalVoucherScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/trial-balance',
+            builder: (context, state) => const TrialBalanceScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/ledger',
+            builder: (context, state) =>
+                LedgerScreen(initialAccountId: state.uri.queryParameters['account']),
+          ),
+          GoRoute(
+            path: '/company-finance/profit-loss',
+            builder: (context, state) => const ProfitLossScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/balance-sheet',
+            builder: (context, state) => const BalanceSheetScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/aging',
+            builder: (context, state) => const AgingScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/reconciliation',
+            builder: (context, state) => const BankReconciliationScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/gst',
+            builder: (context, state) => const GstScreen(),
           ),
           GoRoute(
             path: '/sales/dashboard',

@@ -352,12 +352,19 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
   // physical
   late final TextEditingController _location;
   late final TextEditingController _serial;
+  // depreciation
+  late final TextEditingController _depRate;
+  late final TextEditingController _life;
+  late final TextEditingController _salvage;
 
   late String _category;
   late String _status;
   String _condition = '';
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
+  bool _depreciable = false;
+  String _depMethod = 'straight_line';
+  DateTime? _depStart;
   bool _saving = false;
 
   bool get _isDigital => widget.type == 'digital';
@@ -375,17 +382,34 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
     _url = TextEditingController(text: a?.url ?? '');
     _location = TextEditingController(text: a?.location ?? '');
     _serial = TextEditingController(text: a?.serialNumber ?? '');
+    _depRate = TextEditingController(
+        text: a != null && a.depreciationRate > 0 ? _trimNum(a.depreciationRate) : '');
+    _life = TextEditingController(
+        text: a != null && a.usefulLifeYears > 0 ? _trimNum(a.usefulLifeYears) : '');
+    _salvage = TextEditingController(
+        text: a != null && a.salvageValue > 0 ? a.salvageValue.toStringAsFixed(0) : '');
     final cats = _isDigital ? kDigitalAssetCategories : kPhysicalAssetCategories;
     _category = (a != null && cats.contains(a.category)) ? a.category : cats.first;
     _status = (a != null && kAssetStatuses.contains(a.status)) ? a.status : 'active';
     _condition = a?.condition ?? '';
     _purchaseDate = a?.purchaseDate;
     _expiryDate = a?.expiryDate;
+    _depreciable = a?.depreciable ?? false;
+    _depMethod = (a != null && kDepreciationMethods.contains(a.depreciationMethod))
+        ? a.depreciationMethod
+        : 'straight_line';
+    _depStart = a?.depreciationStart;
   }
+
+  static String _trimNum(double v) =>
+      v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
   @override
   void dispose() {
-    for (final c in [_name, _value, _qty, _custodian, _notes, _provider, _url, _location, _serial]) {
+    for (final c in [
+      _name, _value, _qty, _custodian, _notes, _provider, _url, _location, _serial,
+      _depRate, _life, _salvage,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -428,6 +452,14 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
           'location': _location.text.trim(),
           'condition': _condition,
           'serialNumber': _serial.text.trim(),
+        },
+        'depreciable': _depreciable,
+        if (_depreciable) ...{
+          'depreciationMethod': _depMethod,
+          'depreciationRate': double.tryParse(_depRate.text.trim()) ?? 0,
+          'usefulLifeYears': double.tryParse(_life.text.trim()) ?? 0,
+          'salvageValue': double.tryParse(_salvage.text.trim()) ?? 0,
+          'depreciationStart': _depStart?.toIso8601String(),
         },
       };
       await ref.read(assetServiceProvider).save(body, id: widget.existing?.id);
@@ -582,6 +614,8 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
                   maxLines: 2,
                   decoration: const InputDecoration(labelText: 'Notes'),
                 ),
+                12.h,
+                _depreciationSection(crm),
                 18.h,
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
@@ -606,6 +640,111 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _pickDepStart() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _depStart ?? _purchaseDate ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(now.year + 15),
+    );
+    if (picked != null) setState(() => _depStart = picked);
+  }
+
+  Widget _depreciationSection(CrmTheme crm) {
+    final byLife = _depMethod == 'straight_line';
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.background.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Column(children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          value: _depreciable,
+          onChanged: (v) => setState(() => _depreciable = v),
+          title: Text('Depreciate this asset',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+          subtitle: Text('Write its value off over time in the ledger',
+              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+        ),
+        if (_depreciable) ...[
+          8.h,
+          DropdownButtonFormField<String>(
+            initialValue: _depMethod,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Method', isDense: true),
+            items: [
+              for (final m in kDepreciationMethods)
+                DropdownMenuItem(value: m, child: Text(depreciationMethodLabel(m))),
+            ],
+            onChanged: (v) => setState(() => _depMethod = v ?? _depMethod),
+          ),
+          12.h,
+          Row(children: [
+            Expanded(
+              child: TextFormField(
+                controller: _depRate,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: byLife ? 'Rate %/yr' : 'Rate %/yr *',
+                  isDense: true,
+                  suffixText: '%',
+                ),
+                validator: (v) {
+                  if (!_depreciable) return null;
+                  final rate = double.tryParse(v?.trim() ?? '') ?? 0;
+                  final life = double.tryParse(_life.text.trim()) ?? 0;
+                  if (byLife) {
+                    if (rate <= 0 && life <= 0) return 'Set a rate or life';
+                    return null;
+                  }
+                  return rate > 0 ? null : 'Required for WDV';
+                },
+              ),
+            ),
+            12.w,
+            Expanded(
+              child: TextFormField(
+                controller: _life,
+                enabled: byLife,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Useful life', isDense: true, suffixText: 'yrs'),
+              ),
+            ),
+          ]),
+          12.h,
+          Row(children: [
+            Expanded(
+              child: TextFormField(
+                controller: _salvage,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                    labelText: 'Salvage value', isDense: true, prefixText: '₹ '),
+              ),
+            ),
+            12.w,
+            Expanded(
+              child: _dateField(
+                  crm, 'Start (else purchase)', _depStart ?? _purchaseDate, _pickDepStart),
+            ),
+          ]),
+          8.h,
+          Text(
+              byLife
+                  ? 'Straight line: equal charge each year. Uses the useful life, or the rate if no life is set.'
+                  : 'Written-down value: a fixed % of the reducing book value each year (a rate is required).',
+              style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+          6.h,
+        ],
+      ]),
     );
   }
 

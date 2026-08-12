@@ -21,6 +21,15 @@ class Asset {
   final String url;
   final DateTime? expiryDate;
   final String notes;
+  // Depreciation
+  final bool depreciable;
+  final String depreciationMethod; // 'straight_line' | 'wdv'
+  final double depreciationRate;
+  final double usefulLifeYears;
+  final double salvageValue;
+  final DateTime? depreciationStart;
+  final double accumulatedDepreciation;
+  final DateTime? lastDepreciatedOn;
   final DateTime createdAt;
 
   const Asset({
@@ -42,11 +51,22 @@ class Asset {
     this.url = '',
     this.expiryDate,
     this.notes = '',
+    this.depreciable = false,
+    this.depreciationMethod = 'straight_line',
+    this.depreciationRate = 0,
+    this.usefulLifeYears = 0,
+    this.salvageValue = 0,
+    this.depreciationStart,
+    this.accumulatedDepreciation = 0,
+    this.lastDepreciatedOn,
     required this.createdAt,
   });
 
   bool get isDigital => assetType == 'digital';
   double get totalValue => value * (quantity <= 0 ? 1 : quantity);
+
+  /// Cost minus depreciation written off so far.
+  double get bookValue => (totalValue - accumulatedDepreciation).clamp(0, double.infinity);
 
   /// Days until a digital asset's renewal/expiry (null when no date). Negative
   /// means already expired.
@@ -89,10 +109,23 @@ class Asset {
       url: json['url'] as String? ?? '',
       expiryDate: _date(json['expiryDate']),
       notes: json['notes'] as String? ?? '',
+      depreciable: json['depreciable'] as bool? ?? false,
+      depreciationMethod: json['depreciationMethod'] as String? ?? 'straight_line',
+      depreciationRate: (json['depreciationRate'] as num?)?.toDouble() ?? 0,
+      usefulLifeYears: (json['usefulLifeYears'] as num?)?.toDouble() ?? 0,
+      salvageValue: (json['salvageValue'] as num?)?.toDouble() ?? 0,
+      depreciationStart: _date(json['depreciationStart']),
+      accumulatedDepreciation: (json['accumulatedDepreciation'] as num?)?.toDouble() ?? 0,
+      lastDepreciatedOn: _date(json['lastDepreciatedOn']),
       createdAt: _date(json['createdAt']) ?? DateTime.now(),
     );
   }
 }
+
+const kDepreciationMethods = <String>['straight_line', 'wdv'];
+
+String depreciationMethodLabel(String m) =>
+    m == 'wdv' ? 'Written-down value' : 'Straight line';
 
 /// A count + value pair (per category / per type).
 class AssetBucket {

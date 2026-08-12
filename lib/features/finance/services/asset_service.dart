@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
+import 'package:nizan_crm/features/finance/data/depreciation.dart';
 
 class AssetService {
   final Dio _dio;
@@ -51,6 +52,38 @@ class AssetService {
       await _dio.delete('/assets/$id');
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to delete asset'));
+    }
+  }
+
+  // ── Depreciation ──
+  Future<DepreciationSchedule> getDepreciationSchedule({DateTime? asOf}) async {
+    try {
+      final res = await _dio.get('/assets/depreciation/schedule',
+          queryParameters: {if (asOf != null) 'asOf': asOf.toIso8601String()});
+      return DepreciationSchedule.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to load depreciation schedule'));
+    }
+  }
+
+  Future<DepreciationRunResult> runDepreciation({DateTime? asOf}) async {
+    try {
+      final res = await _dio.post('/assets/depreciation/run',
+          data: {if (asOf != null) 'asOf': asOf.toIso8601String()});
+      return DepreciationRunResult.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to run depreciation'));
+    }
+  }
+
+  Future<List<DepreciationRunSummary>> getDepreciationRuns() async {
+    try {
+      final res = await _dio.get('/assets/depreciation/runs');
+      return (res.data as List)
+          .map((e) => DepreciationRunSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_msg(e, 'Failed to load depreciation runs'));
     }
   }
 }
