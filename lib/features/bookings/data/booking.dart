@@ -424,6 +424,8 @@ class Booking {
   final String hsnCode; // HSN/SAC code, default 998361 for beauty services
   // Multiple outfit looks (replaces / supersedes outfitDetails)
   final List<OutfitLook> outfitLooks;
+  /// Denormalized name of the user who created this booking (from the backend).
+  final String createdByName;
 
   const Booking({
     required this.id,
@@ -480,6 +482,7 @@ class Booking {
     this.paymentMode = '',
     this.hsnCode = '998361',
     this.outfitLooks = const [],
+    this.createdByName = '',
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -794,6 +797,7 @@ class Booking {
       paymentMode: json['paymentMode'] as String? ?? '',
       hsnCode: json['hsnCode'] as String? ?? '998361',
       outfitLooks: _parseOutfitLooks(json),
+      createdByName: json['createdByName'] as String? ?? '',
     );
   }
 

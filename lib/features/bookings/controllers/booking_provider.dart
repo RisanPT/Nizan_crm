@@ -242,6 +242,10 @@ class BookingNotifier extends _$BookingNotifier {
       if (ref.mounted) {
         state = AsyncData([...state.value ?? [], createdBooking]);
         ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+        // Invalidate ALL family instances of paginatedBookingsProvider so every
+        // list/summary screen (sales invoices, sales dashboard, accounts, etc.)
+        // reflects the newly created booking immediately — mirrors removeBooking.
+        ref.invalidate(paginatedBookingsProvider);
       }
       return createdBooking;
     } catch (err, stack) {

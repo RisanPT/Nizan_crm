@@ -1084,6 +1084,18 @@ class ManageBookingScreen extends HookConsumerWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  if (booking.createdByName.isNotEmpty) ...[ 
+                    12.w,
+                    Chip(
+                      avatar: const Icon(Icons.person_outline, size: 14),
+                      label: Text(
+                        'By ${booking.createdByName}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      side: BorderSide(color: crmColors.border),
+                    ),
+                  ],
                   12.w,
                   OutlinedButton.icon(
                     onPressed: () async {
