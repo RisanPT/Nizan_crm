@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Accounts → Operations → Fleet Expenses. Driver-submitted fleet expenses
 /// (with the uploaded bill) surfaced in Accounts, reviewable/approvable here.
@@ -250,6 +251,16 @@ class _AccountsFleetExpensesScreenState
                   const Expanded(
                       child: Text('Expense Bill',
                           style: TextStyle(fontWeight: FontWeight.bold))),
+                  IconButton(
+                    icon: const Icon(Icons.download),
+                    tooltip: 'Download Bill',
+                    onPressed: () async {
+                      final uri = Uri.parse(url);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
                   IconButton(
                       icon: const Icon(Icons.close),
                       onPressed: () => Navigator.pop(ctx)),

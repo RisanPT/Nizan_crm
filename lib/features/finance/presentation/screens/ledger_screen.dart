@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/account_ledger.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 
 String _money(num v) =>
@@ -25,11 +26,26 @@ class LedgerScreen extends ConsumerStatefulWidget {
 
 class _LedgerScreenState extends ConsumerState<LedgerScreen> {
   String? _accountId;
+  DateTime? _from;
+  DateTime? _to;
+
+  String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
 
   @override
   void initState() {
     super.initState();
     _accountId = widget.initialAccountId;
+  }
+
+  Future<void> _pick(bool from) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (from ? _from : _to) ?? now,
+      firstDate: DateTime(2015),
+      lastDate: DateTime(now.year + 1),
+    );
+    if (picked != null) setState(() => from ? _from = picked : _to = picked);
   }
 
   @override
@@ -62,6 +78,14 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
             },
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Row(children: [
+            DateFilterChip(label: 'From', date: _from, onTap: () => _pick(true), onClear: () => setState(() => _from = null)),
+            8.w,
+            DateFilterChip(label: 'To', date: _to, onTap: () => _pick(false), onClear: () => setState(() => _to = null)),
+          ]),
+        ),
         Expanded(
           child: _accountId == null
               ? Center(child: Text('Pick an account', style: TextStyle(color: crm.textSecondary)))
@@ -72,9 +96,10 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
   }
 
   Widget _statement(CrmTheme crm, String accountId) {
-    final async = ref.watch(ledgerProvider(accountId));
+    final key = (accountId: accountId, from: _iso(_from), to: _iso(_to));
+    final async = ref.watch(ledgerProvider(key));
     return RefreshIndicator(
-      onRefresh: () async => ref.invalidate(ledgerProvider(accountId)),
+      onRefresh: () async => ref.invalidate(ledgerProvider(key)),
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ListView(children: [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive))))]),

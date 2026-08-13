@@ -60,10 +60,19 @@ class AccountingService {
   }
 
   // ── Journal ──
-  Future<List<JournalEntry>> getJournal({String type = 'all'}) async {
+  Future<List<JournalEntry>> getJournal({
+    String type = 'all',
+    String status = 'all',
+    String? from,
+    String? to,
+  }) async {
     try {
-      final res = await _dio.get('/accounting/journal',
-          queryParameters: {if (type != 'all') 'type': type});
+      final res = await _dio.get('/accounting/journal', queryParameters: {
+        if (type != 'all') 'type': type,
+        if (status != 'all') 'status': status,
+        'from': ?from,
+        'to': ?to,
+      });
       return (res.data as List)
           .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -218,9 +227,12 @@ class AccountingService {
     }
   }
 
-  Future<AccountLedger> getLedger(String accountId) async {
+  Future<AccountLedger> getLedger(String accountId, {String? from, String? to}) async {
     try {
-      final res = await _dio.get('/accounting/ledger/$accountId');
+      final res = await _dio.get('/accounting/ledger/$accountId', queryParameters: {
+        'from': ?from,
+        'to': ?to,
+      });
       return AccountLedger.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to load ledger'));

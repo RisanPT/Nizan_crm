@@ -52,14 +52,98 @@ class AssetsScreen extends ConsumerWidget {
   }
 }
 
-class _AssetList extends ConsumerWidget {
+class _AssetList extends ConsumerStatefulWidget {
   const _AssetList({required this.type});
   final String type; // 'digital' | 'physical'
 
-  bool get _isDigital => type == 'digital';
+  @override
+  ConsumerState<_AssetList> createState() => _AssetListState();
+}
+
+class _AssetListState extends ConsumerState<_AssetList> {
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+  String _status = 'all';
+  String _category = 'all';
+
+  String get type => widget.type;
+  bool get _isDigital => widget.type == 'digital';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Asset> _applyFilters(List<Asset> all) {
+    final q = _search.trim().toLowerCase();
+    return all.where((a) {
+      if (_status != 'all' && a.status != _status) return false;
+      if (_category != 'all' && a.category != _category) return false;
+      if (q.isNotEmpty) {
+        final hay = [a.name, a.provider, a.location, a.serialNumber, a.custodian, a.notes]
+            .join(' ')
+            .toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  Widget _filterBar(CrmTheme crm) {
+    final cats = _isDigital ? kDigitalAssetCategories : kPhysicalAssetCategories;
+    return Column(children: [
+      TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _search = v),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Search name, provider, serial, owner…',
+          prefixIcon: const Icon(Icons.search, size: 18),
+          suffixIcon: _search.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 16),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _search = '');
+                  },
+                ),
+        ),
+      ),
+      10.h,
+      Row(children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: _status,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Status', isDense: true),
+            items: [
+              const DropdownMenuItem(value: 'all', child: Text('All statuses')),
+              for (final s in kAssetStatuses) DropdownMenuItem(value: s, child: Text(_pretty(s))),
+            ],
+            onChanged: (v) => setState(() => _status = v ?? 'all'),
+          ),
+        ),
+        10.w,
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            initialValue: _category,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Category', isDense: true),
+            items: [
+              const DropdownMenuItem(value: 'all', child: Text('All categories')),
+              for (final c in cats) DropdownMenuItem(value: c, child: Text(_pretty(c))),
+            ],
+            onChanged: (v) => setState(() => _category = v ?? 'all'),
+          ),
+        ),
+      ]),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final crm = context.crmColors;
     final async = ref.watch(assetsProvider(type));
 
@@ -87,17 +171,21 @@ class _AssetList extends ConsumerWidget {
                       style: TextStyle(color: crm.destructive))),
             ),
           ]),
-          data: (assets) {
+          data: (all) {
+            final assets = _applyFilters(all);
             final count = assets.length;
             final value = assets.fold<double>(0, (a, x) => a + x.totalValue);
+            final filtering = _search.isNotEmpty || _status != 'all' || _category != 'all';
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
                 Row(children: [
-                  Expanded(child: _summary(crm, '$count', 'Items', crm.primary)),
+                  Expanded(child: _summary(crm, '$count', filtering ? 'Matches' : 'Items', crm.primary)),
                   10.w,
                   Expanded(child: _summary(crm, _money(value), 'Total value', crm.accent)),
                 ]),
+                12.h,
+                _filterBar(crm),
                 16.h,
                 if (assets.isEmpty)
                   Padding(
@@ -107,7 +195,10 @@ class _AssetList extends ConsumerWidget {
                         Icon(_isDigital ? Icons.cloud_off_outlined : Icons.inventory_2_outlined,
                             size: 54, color: crm.border),
                         12.h,
-                        Text('No ${_isDigital ? 'digital' : 'physical'} assets yet',
+                        Text(
+                            all.isEmpty
+                                ? 'No ${_isDigital ? 'digital' : 'physical'} assets yet'
+                                : 'No assets match your filters',
                             style: TextStyle(color: crm.textSecondary)),
                       ]),
                     ),

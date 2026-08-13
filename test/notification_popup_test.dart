@@ -31,7 +31,8 @@ Widget _harness(List<AppNotification> items) => ProviderScope(
 
 void main() {
   testWidgets('pops a toast for a fresh unread notification', (tester) async {
-    SharedPreferences.setMockInitialValues({'notif_watcher_primed': true});
+    // Keys are scoped to the logged-in user; tests have no auth session → 'anon'.
+    SharedPreferences.setMockInitialValues({'notif_watcher_primed_anon': true});
 
     await tester.pumpWidget(_harness([
       AppNotification(
@@ -57,9 +58,10 @@ void main() {
 
   testWidgets('does NOT pop an already-seen or already-read notification', (tester) async {
     // 'seen1' is already in the persisted popped-set; primed so no baseline.
+    // Keys are user-scoped; tests have no auth session → 'anon'.
     SharedPreferences.setMockInitialValues({
-      'notif_watcher_primed': true,
-      'popped_notification_ids': ['seen1'],
+      'notif_watcher_primed_anon': true,
+      'popped_notification_ids_anon': ['seen1'],
     });
 
     await tester.pumpWidget(_harness([

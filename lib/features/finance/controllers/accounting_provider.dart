@@ -20,9 +20,16 @@ final chartAccountsProvider =
   return ref.watch(accountingServiceProvider).getAccounts(nature: nature);
 });
 
-final journalEntriesProvider =
-    FutureProvider.family<List<JournalEntry>, String>((ref, type) async {
-  return ref.watch(accountingServiceProvider).getJournal(type: type);
+/// Journal vouchers filtered by type/status and an optional date window
+/// (from/to ISO strings; '' = open-ended). Status 'all' includes void.
+final journalEntriesProvider = FutureProvider.family<List<JournalEntry>,
+    ({String type, String status, String from, String to})>((ref, f) async {
+  return ref.watch(accountingServiceProvider).getJournal(
+        type: f.type,
+        status: f.status,
+        from: f.from.isEmpty ? null : f.from,
+        to: f.to.isEmpty ? null : f.to,
+      );
 });
 
 /// Trial balance as-of a date (ISO string; '' = all-time closing).
@@ -88,10 +95,15 @@ final accountingSettingsProvider = FutureProvider<AccountingSettings>((ref) asyn
   return ref.watch(accountingServiceProvider).getAccountingSettings();
 });
 
-/// Ledger statement for one account id.
-final ledgerProvider =
-    FutureProvider.family<AccountLedger, String>((ref, accountId) async {
-  return ref.watch(accountingServiceProvider).getLedger(accountId);
+/// Ledger statement for one account, optionally bounded by a date window
+/// (from/to ISO strings; '' = open-ended).
+final ledgerProvider = FutureProvider.family<AccountLedger,
+    ({String accountId, String from, String to})>((ref, k) async {
+  return ref.watch(accountingServiceProvider).getLedger(
+        k.accountId,
+        from: k.from.isEmpty ? null : k.from,
+        to: k.to.isEmpty ? null : k.to,
+      );
 });
 
 /// Bank/cash accounts eligible for reconciliation.

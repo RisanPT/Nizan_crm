@@ -7,19 +7,74 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(v);
 String _fmtDate(DateTime d) => DateFormat('d MMM yyyy').format(d);
 
 /// Finance → Journal. Post and review double-entry vouchers.
-class JournalVoucherScreen extends ConsumerWidget {
+class JournalVoucherScreen extends ConsumerStatefulWidget {
   const JournalVoucherScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JournalVoucherScreen> createState() => _JournalVoucherScreenState();
+}
+
+class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
+  String _type = 'all';
+  String _status = 'posted'; // hide void by default
+  DateTime? _from;
+  DateTime? _to;
+  final _searchCtrl = TextEditingController();
+  String _search = '';
+
+  String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
+  ({String type, String status, String from, String to}) get _filter =>
+      (type: _type, status: _status, from: _iso(_from), to: _iso(_to));
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Client-side text match over voucher no, narration, type and the accounts
+  /// on each line — instant, within the current type/status/date selection.
+  bool _matchesSearch(JournalEntry e) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final hay = StringBuffer()
+      ..write(e.voucherNo)
+      ..write(' ')
+      ..write(e.narration)
+      ..write(' ')
+      ..write(voucherTypeLabel(e.voucherType));
+    for (final l in e.lines) {
+      hay
+        ..write(' ')
+        ..write(l.accountCode)
+        ..write(' ')
+        ..write(l.accountName);
+    }
+    return hay.toString().toLowerCase().contains(q);
+  }
+
+  Future<void> _pick(bool from) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: (from ? _from : _to) ?? now,
+      firstDate: DateTime(2015),
+      lastDate: DateTime(now.year + 1),
+    );
+    if (picked != null) setState(() => from ? _from = picked : _to = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final async = ref.watch(journalEntriesProvider('all'));
+    final async = ref.watch(journalEntriesProvider(_filter));
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -47,26 +102,34 @@ class JournalVoucherScreen extends ConsumerWidget {
       ),
       body: Column(children: [
         _lockBanner(context, ref, crm),
+        _filterBar(crm),
         Expanded(
           child: RefreshIndicator(
-            onRefresh: () async => ref.invalidate(journalEntriesProvider('all')),
+            onRefresh: () async => ref.invalidate(journalEntriesProvider(_filter)),
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
             Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
           ]),
-          data: (entries) {
+          data: (all) {
+            final entries = all.where(_matchesSearch).toList();
             if (entries.isEmpty) {
+              final searchingOrFiltering =
+                  _search.isNotEmpty || _type != 'all' || _status != 'posted' || _from != null || _to != null;
               return ListView(children: [
                 SizedBox(
                   height: MediaQuery.of(context).size.height * 0.6,
                   child: Center(
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.receipt_long_outlined, size: 56, color: crm.border),
+                      Icon(searchingOrFiltering ? Icons.search_off : Icons.receipt_long_outlined, size: 56, color: crm.border),
                       12.h,
-                      Text('No vouchers posted yet', style: TextStyle(color: crm.textSecondary)),
+                      Text(searchingOrFiltering ? 'No vouchers match your filters' : 'No vouchers posted yet',
+                          style: TextStyle(color: crm.textSecondary)),
                       6.h,
-                      Text('Tap "New Voucher" to post your first journal entry.',
+                      Text(
+                          searchingOrFiltering
+                              ? 'Try clearing the search or widening the date range.'
+                              : 'Tap "New Voucher" to post your first journal entry.',
                           style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
                     ]),
                   ),
@@ -81,6 +144,68 @@ class JournalVoucherScreen extends ConsumerWidget {
             ),
           ),
         ),
+      ]),
+    );
+  }
+
+  Widget _filterBar(CrmTheme crm) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Column(children: [
+        TextField(
+          controller: _searchCtrl,
+          onChanged: (v) => setState(() => _search = v),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: 'Search voucher no, narration, account…',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            suffixIcon: _search.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      setState(() => _search = '');
+                    },
+                  ),
+          ),
+        ),
+        10.h,
+        Row(children: [
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: _type,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Type', isDense: true),
+              items: [
+                const DropdownMenuItem(value: 'all', child: Text('All types')),
+                for (final t in kVoucherTypes)
+                  DropdownMenuItem(value: t, child: Text(voucherTypeLabel(t))),
+              ],
+              onChanged: (v) => setState(() => _type = v ?? 'all'),
+            ),
+          ),
+          10.w,
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: _status,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Status', isDense: true),
+              items: const [
+                DropdownMenuItem(value: 'posted', child: Text('Posted')),
+                DropdownMenuItem(value: 'all', child: Text('All (incl. void)')),
+                DropdownMenuItem(value: 'void', child: Text('Void')),
+              ],
+              onChanged: (v) => setState(() => _status = v ?? 'posted'),
+            ),
+          ),
+        ]),
+        8.h,
+        Row(children: [
+          DateFilterChip(label: 'From', date: _from, onTap: () => _pick(true), onClear: () => setState(() => _from = null)),
+          8.w,
+          DateFilterChip(label: 'To', date: _to, onTap: () => _pick(false), onClear: () => setState(() => _to = null)),
+        ]),
       ]),
     );
   }
@@ -294,7 +419,7 @@ class JournalVoucherScreen extends ConsumerWidget {
     try {
       final posted = await ref.read(accountingServiceProvider).backfill();
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-      ref.invalidate(journalEntriesProvider('all'));
+      ref.invalidate(journalEntriesProvider);
       ref.invalidate(trialBalanceProvider);
       messenger.showSnackBar(SnackBar(content: Text('Posted $posted voucher${posted == 1 ? '' : 's'} from operations')));
     } catch (e) {
@@ -322,7 +447,7 @@ class JournalVoucherScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(accountingServiceProvider).voidJournal(e.id);
-      ref.invalidate(journalEntriesProvider('all'));
+      ref.invalidate(journalEntriesProvider);
       ref.invalidate(trialBalanceProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Voucher voided')));
     } catch (err) {
@@ -398,7 +523,7 @@ class _VoucherDialogState extends ConsumerState<_VoucherDialog> {
         'narration': _narration.text.trim(),
         'lines': lines,
       });
-      ref.invalidate(journalEntriesProvider('all'));
+      ref.invalidate(journalEntriesProvider);
       ref.invalidate(trialBalanceProvider);
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Voucher posted')));
