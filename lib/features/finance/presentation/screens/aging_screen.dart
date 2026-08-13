@@ -6,7 +6,10 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/aging_report.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/party_statement_sheet.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 
 String _money(num v) =>
@@ -23,19 +26,48 @@ class AgingScreen extends ConsumerStatefulWidget {
 
 class _AgingScreenState extends ConsumerState<AgingScreen> {
   String _kind = 'receivables';
+  String _search = '';
+  int _visible = kFinancePageSize;
+  DateTime? _asOf; // null = today
 
   bool get _isReceivable => _kind == 'receivables';
+
+  String get _asOfIso => _asOf == null ? '' : DateFormat('yyyy-MM-dd').format(_asOf!);
+
+  ({String kind, String asOf}) get _key => (kind: _kind, asOf: _asOfIso);
+
+  List<AgingParty> _filteredParties(AgingReport r) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return r.parties;
+    return r.parties.where((p) => '${p.name} ${p.phone}'.toLowerCase().contains(q)).toList();
+  }
+
+  Future<void> _pickAsOf() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _asOf ?? now,
+      firstDate: DateTime(2015),
+      lastDate: DateTime(now.year + 2, 12, 31),
+    );
+    if (picked != null) {
+      setState(() {
+        _asOf = picked;
+        _visible = kFinancePageSize;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final async = ref.watch(agingProvider(_kind));
+    final async = ref.watch(agingProvider(_key));
     final accent = _isReceivable ? const Color(0xFF0D9488) : const Color(0xFFB44A2C);
 
     return Scaffold(
       backgroundColor: crm.background,
       body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(agingProvider(_kind)),
+        onRefresh: () async => ref.invalidate(agingProvider(_key)),
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
@@ -46,7 +78,9 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
             children: [
               _toggle(crm, accent),
-              16.h,
+              12.h,
+              _asOfRow(crm),
+              14.h,
               _totalBanner(crm, r, accent),
               14.h,
               _bucketRow(crm, r),
@@ -64,10 +98,18 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
                   ),
                 )
               else ...[
+                ReportSearchField(
+                  hint: _isReceivable ? 'Search a client…' : 'Search a vendor…',
+                  onChanged: (v) => setState(() {
+                    _search = v;
+                    _visible = kFinancePageSize;
+                  }),
+                ),
+                10.h,
                 Padding(
                   padding: const EdgeInsets.only(left: 4, bottom: 6),
                   child: Row(children: [
-                    Text('${_isReceivable ? 'CLIENTS' : 'VENDORS'} · ${r.parties.length}',
+                    Text('${_isReceivable ? 'CLIENTS' : 'VENDORS'} · ${_filteredParties(r).length}',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: crm.textSecondary)),
                     const Spacer(),
                     TextButton.icon(
@@ -78,7 +120,11 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
                     ),
                   ]),
                 ),
-                for (final p in r.parties) _partyRow(crm, p),
+                for (final p in _filteredParties(r).take(_visible)) _partyRow(crm, p),
+                ShowMoreButton(
+                  remaining: _filteredParties(r).length - _visible,
+                  onPressed: () => setState(() => _visible += kFinancePageSize),
+                ),
               ],
             ],
           ),
@@ -92,7 +138,10 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
       final on = _kind == kind;
       return Expanded(
         child: GestureDetector(
-          onTap: () => setState(() => _kind = kind),
+          onTap: () => setState(() {
+            _kind = kind;
+            _visible = kFinancePageSize;
+          }),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
             decoration: BoxDecoration(
@@ -123,6 +172,25 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
     );
   }
 
+  Widget _asOfRow(CrmTheme crm) {
+    return Row(children: [
+      Text('Aged as on', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: crm.textSecondary)),
+      8.w,
+      DateFilterChip(
+        label: 'As on',
+        date: _asOf,
+        onTap: _pickAsOf,
+        onClear: _asOf == null ? null : () => setState(() {
+          _asOf = null;
+          _visible = kFinancePageSize;
+        }),
+      ),
+      const Spacer(),
+      if (_asOf == null)
+        Text('Today', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: crm.textSecondary)),
+    ]);
+  }
+
   Widget _totalBanner(CrmTheme crm, AgingReport r, Color accent) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -131,71 +199,103 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
-      child: Row(children: [
-        Icon(_isReceivable ? Icons.account_balance_wallet_outlined : Icons.request_quote_outlined, color: accent, size: 26),
-        14.w,
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_isReceivable ? 'Total owed to us' : 'Total we owe',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: crm.textSecondary)),
-          2.h,
-          Text(_money(r.totalOutstanding),
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: accent)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(_isReceivable ? Icons.account_balance_wallet_outlined : Icons.request_quote_outlined, color: accent, size: 26),
+          14.w,
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_isReceivable ? 'Total owed to us' : 'Total we owe',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: crm.textSecondary)),
+            2.h,
+            Text(_money(r.totalOutstanding),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: accent)),
+          ]),
         ]),
-        const Spacer(),
-        if (r.days90 > 0)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(color: crm.destructive.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-            child: Text('${_money(r.days90)} · 90+ overdue',
-                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: crm.destructive)),
-          ),
+        14.h,
+        Row(children: [
+          Expanded(child: _totalChip(crm, 'Overdue', r.totalOverdue, crm.destructive, emphasize: true)),
+          10.w,
+          Expanded(child: _totalChip(crm, 'Not yet due', r.totalNotYetDue, crm.textSecondary)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _totalChip(CrmTheme crm, String label, double value, Color color, {bool emphasize = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: emphasize ? color.withValues(alpha: 0.12) : crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: emphasize ? color.withValues(alpha: 0.35) : crm.border.withValues(alpha: 0.6)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+        4.h,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(_money(value),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: emphasize ? color : crm.textPrimary)),
+        ),
       ]),
     );
   }
 
   Widget _bucketRow(CrmTheme crm, AgingReport r) {
     final items = [
-      ('Current', r.current, crm.success),
+      ('0–30', r.current, crm.success),
       ('31–60', r.days30, const Color(0xFFB45309)),
       ('61–90', r.days60, const Color(0xFFC2410C)),
       ('90+', r.days90, crm.destructive),
     ];
-    return Row(children: [
-      for (var i = 0; i < items.length; i++) ...[
-        if (i > 0) 10.w,
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: crm.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: crm.border.withValues(alpha: 0.6)),
-            ),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(items[i].$1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: items[i].$3)),
-              6.h,
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(_money(items[i].$2),
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 6),
+        child: Text('OVERDUE — DAYS PAST DUE',
+            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: crm.textSecondary)),
+      ),
+      Row(children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) 10.w,
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: crm.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: crm.border.withValues(alpha: 0.6)),
               ),
-            ]),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(items[i].$1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: items[i].$3)),
+                6.h,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(_money(items[i].$2),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+                ),
+              ]),
+            ),
           ),
-        ),
-      ],
+        ],
+      ]),
     ]);
   }
 
   Widget _partyRow(CrmTheme crm, AgingParty p) {
     final overdue = p.oldestDays > 90;
-    final ageColor = p.oldestDays > 90
-        ? crm.destructive
-        : p.oldestDays > 60
-            ? const Color(0xFFC2410C)
-            : p.oldestDays > 30
-                ? const Color(0xFFB45309)
-                : crm.success;
+    final notDue = p.overdue <= 0.5; // nothing past due — balance is still upcoming
+    final ageColor = notDue
+        ? crm.textSecondary
+        : p.oldestDays > 90
+            ? crm.destructive
+            : p.oldestDays > 60
+                ? const Color(0xFFC2410C)
+                : p.oldestDays > 30
+                    ? const Color(0xFFB45309)
+                    : crm.success;
+    final ageLabel = notDue ? 'Not due' : '${p.oldestDays}d';
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -224,7 +324,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(color: ageColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-                child: Text('${p.oldestDays}d', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ageColor)),
+                child: Text(ageLabel, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: ageColor)),
               ),
               10.w,
               Text(_money(p.outstanding), style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary)),
@@ -240,12 +340,14 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
   Future<void> _exportCsv(AgingReport r) async {
     final label = _isReceivable ? 'Receivables' : 'Payables';
     final partyLabel = _isReceivable ? 'Client' : 'Vendor';
+    final asOn = DateFormat('d MMM yyyy').format(r.asOf ?? _asOf ?? DateTime.now());
     final rows = <List<Object?>>[
       ['$label Aging'],
-      [partyLabel, 'Phone', 'Current', '31-60', '61-90', '90+', 'Outstanding', 'Oldest (days)'],
+      ['As on', asOn],
+      [partyLabel, 'Phone', 'Not yet due', '0-30', '31-60', '61-90', '90+', 'Overdue', 'Outstanding', 'Oldest overdue (days)'],
       for (final p in r.parties)
-        [p.name, p.phone, csvNum(p.current), csvNum(p.days30), csvNum(p.days60), csvNum(p.days90), csvNum(p.outstanding), p.oldestDays],
-      ['TOTAL', '', csvNum(r.current), csvNum(r.days30), csvNum(r.days60), csvNum(r.days90), csvNum(r.totalOutstanding), ''],
+        [p.name, p.phone, csvNum(p.notYetDue), csvNum(p.current), csvNum(p.days30), csvNum(p.days60), csvNum(p.days90), csvNum(p.overdue), csvNum(p.outstanding), p.oldestDays],
+      ['TOTAL', '', csvNum(r.totalNotYetDue), csvNum(r.current), csvNum(r.days30), csvNum(r.days60), csvNum(r.days90), csvNum(r.totalOverdue), csvNum(r.totalOutstanding), ''],
     ];
     try {
       await downloadCsv('${_kind}_aging.csv', rows);

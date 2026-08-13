@@ -57,10 +57,12 @@ final balanceSheetProvider =
       .getBalanceSheet(to: asOfIso.isEmpty ? null : asOfIso);
 });
 
-/// Aging by kind: 'receivables' | 'payables'.
-final agingProvider =
-    FutureProvider.family<AgingReport, String>((ref, kind) async {
-  return ref.watch(accountingServiceProvider).getAging(kind);
+/// Aging by kind ('receivables' | 'payables'), as on a given date (ISO, '' = today).
+final agingProvider = FutureProvider.family<AgingReport,
+    ({String kind, String asOf})>((ref, p) async {
+  return ref
+      .watch(accountingServiceProvider)
+      .getAging(p.kind, asOf: p.asOf.isEmpty ? null : p.asOf);
 });
 
 /// Statement of account for one party (key: kind + name + phone).

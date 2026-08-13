@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -38,6 +39,7 @@ class ChartOfAccountsScreen extends ConsumerStatefulWidget {
 
 class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
   bool _showArchived = false;
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +69,12 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
           data: (all) {
             if (all.isEmpty) return _emptySeed(context, ref, crm);
             final archivedCount = all.where((a) => a.status == 'archived').length;
-            final accounts = _showArchived ? all : all.where((a) => a.status != 'archived').toList();
+            final q = _search.trim().toLowerCase();
+            final accounts = all.where((a) {
+              if (!_showArchived && a.status == 'archived') return false;
+              if (q.isNotEmpty && !'${a.code} ${a.name} ${a.group}'.toLowerCase().contains(q)) return false;
+              return true;
+            }).toList();
             final byNature = <String, List<ChartAccount>>{};
             for (final a in accounts) {
               byNature.putIfAbsent(a.nature, () => []).add(a);
@@ -75,6 +82,11 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
+                ReportSearchField(
+                  hint: 'Search code, name or group…',
+                  onChanged: (v) => setState(() => _search = v),
+                ),
+                10.h,
                 if (archivedCount > 0) ...[
                   Align(
                     alignment: Alignment.centerRight,

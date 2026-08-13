@@ -7,7 +7,8 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
-import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 
 String _money(num v) => v == 0
@@ -25,8 +26,42 @@ class TrialBalanceScreen extends ConsumerStatefulWidget {
 
 class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
   DateTime? _asOf;
+  DateRangePreset _preset = DateRangePreset.allTime;
+  String _search = '';
+  TrialBalance? _last;
+
+  bool _matches(TrialBalanceRow r) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    return '${r.code} ${r.name} ${r.group} ${r.nature}'.toLowerCase().contains(q);
+  }
+
   String get _asOfIso =>
       _asOf == null ? '' : DateTime(_asOf!.year, _asOf!.month, _asOf!.day).toIso8601String();
+
+  Future<void> _applyPreset(DateRangePreset p) async {
+    if (p == DateRangePreset.custom) {
+      final now = DateTime.now();
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: _asOf ?? now,
+        firstDate: DateTime(2015),
+        lastDate: DateTime(now.year + 1),
+      );
+      if (picked != null) {
+        setState(() {
+          _preset = p;
+          _asOf = picked;
+        });
+      }
+      return;
+    }
+    final r = rangeForPreset(p, DateTime.now());
+    setState(() {
+      _preset = p;
+      _asOf = r.to;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,21 +70,16 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
 
     return Scaffold(
       backgroundColor: crm.background,
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: DateFilterChip(
-              label: 'As of',
-              date: _asOf,
-              onTap: _pickAsOf,
-              onClear: () => setState(() => _asOf = null),
-            ),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
+      body: ReportChrome(
+        category: 'Business Overview',
+        title: 'Trial Balance',
+        asOf: true,
+        preset: _preset,
+        to: _asOf,
+        onPreset: _applyPreset,
+        onExport: _last == null ? null : () => _exportCsv(context, _last!),
+        onRefresh: () async => ref.invalidate(trialBalanceProvider(_asOfIso)),
+        child: RefreshIndicator(
             onRefresh: () async => ref.invalidate(trialBalanceProvider(_asOfIso)),
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -57,6 +87,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
                 Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
               ]),
               data: (tb) {
+                _last = tb;
                 if (tb.rows.isEmpty) {
                   return ListView(children: [
                     SizedBox(
@@ -77,14 +108,12 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   children: [
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () => _exportCsv(context, tb),
-                        icon: const Icon(Icons.download_outlined, size: 18),
-                        label: const Text('Export CSV'),
-                      ),
+                    ReportTitleBlock(title: 'Trial Balance', asOf: true, to: _asOf),
+                    ReportSearchField(
+                      hint: 'Search an account…',
+                      onChanged: (v) => setState(() => _search = v),
                     ),
+                    12.h,
                     _statusBar(crm, tb),
                     14.h,
                     _table(context, crm, tb),
@@ -94,19 +123,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
             ),
           ),
         ),
-      ]),
     );
-  }
-
-  Future<void> _pickAsOf() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _asOf ?? now,
-      firstDate: DateTime(2015),
-      lastDate: DateTime(now.year + 1),
-    );
-    if (picked != null) setState(() => _asOf = picked);
   }
 
   Future<void> _exportCsv(BuildContext context, TrialBalance tb) async {
@@ -172,7 +189,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
             SizedBox(width: 110, child: Text('CREDIT', textAlign: TextAlign.right, style: _hdr(crm))),
           ]),
         ),
-        for (final r in tb.rows)
+        for (final r in tb.rows.where(_matches))
           InkWell(
             onTap: r.accountId.isEmpty
                 ? null

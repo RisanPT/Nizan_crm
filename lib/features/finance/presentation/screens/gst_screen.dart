@@ -11,6 +11,8 @@ import 'package:nizan_crm/core/utils/file_saver.dart';
 import 'package:nizan_crm/features/finance/data/gst_models.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -29,6 +31,8 @@ class GstScreen extends ConsumerStatefulWidget {
 class _GstScreenState extends ConsumerState<GstScreen> {
   DateTime? _from;
   DateTime? _to;
+  String _search = '';
+  int _visible = kFinancePageSize;
 
   String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
   ({String from, String to}) get _range => (from: _iso(_from), to: _iso(_to));
@@ -220,48 +224,62 @@ class _GstScreenState extends ConsumerState<GstScreen> {
       if (r.rows.isEmpty)
         Padding(padding: const EdgeInsets.all(16), child: Text('No outward supplies in this period.', style: TextStyle(color: crm.textSecondary)))
       else ...[
-        // Register (cap the on-screen list; CSV has everything)
-        Container(
-          decoration: BoxDecoration(
-            color: crm.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: crm.border.withValues(alpha: 0.8)),
-          ),
-          child: Column(children: [
+        ReportSearchField(
+          hint: 'Search customer or invoice…',
+          onChanged: (v) => setState(() {
+            _search = v;
+            _visible = kFinancePageSize;
+          }),
+        ),
+        12.h,
+        Builder(builder: (context) {
+          final q = _search.trim().toLowerCase();
+          final filtered = q.isEmpty
+              ? r.rows
+              : r.rows.where((row) => '${row.customer} ${row.invoiceNo}'.toLowerCase().contains(q)).toList();
+          return Column(children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: crm.background.withValues(alpha: 0.4), borderRadius: const BorderRadius.vertical(top: Radius.circular(12))),
-              child: Row(children: [
-                Expanded(flex: 3, child: Text('INVOICE', style: _hdr(crm))),
-                Expanded(flex: 2, child: Text('TAXABLE', textAlign: TextAlign.right, style: _hdr(crm))),
-                Expanded(flex: 2, child: Text('TAX', textAlign: TextAlign.right, style: _hdr(crm))),
-              ]),
-            ),
-            for (final row in r.rows.take(100))
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
-                child: Row(children: [
-                  Expanded(
-                    flex: 3,
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(row.customer.isEmpty ? (row.invoiceNo.isEmpty ? 'Booking' : row.invoiceNo) : row.customer,
-                          style: TextStyle(fontSize: 12.5, color: crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text('${row.invoiceNo}${row.date != null ? ' · ${_date(row.date)}' : ''}',
-                          style: TextStyle(fontSize: 10.5, color: crm.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+              decoration: BoxDecoration(
+                color: crm.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+              ),
+              child: Column(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(color: crm.background.withValues(alpha: 0.4), borderRadius: const BorderRadius.vertical(top: Radius.circular(12))),
+                  child: Row(children: [
+                    Expanded(flex: 3, child: Text('INVOICE', style: _hdr(crm))),
+                    Expanded(flex: 2, child: Text('TAXABLE', textAlign: TextAlign.right, style: _hdr(crm))),
+                    Expanded(flex: 2, child: Text('TAX', textAlign: TextAlign.right, style: _hdr(crm))),
+                  ]),
+                ),
+                for (final row in filtered.take(_visible))
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+                    child: Row(children: [
+                      Expanded(
+                        flex: 3,
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(row.customer.isEmpty ? (row.invoiceNo.isEmpty ? 'Booking' : row.invoiceNo) : row.customer,
+                              style: TextStyle(fontSize: 12.5, color: crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text('${row.invoiceNo}${row.date != null ? ' · ${_date(row.date)}' : ''}',
+                              style: TextStyle(fontSize: 10.5, color: crm.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        ]),
+                      ),
+                      Expanded(flex: 2, child: Text(_money(row.taxable), textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: crm.textPrimary))),
+                      Expanded(flex: 2, child: Text(_money(row.cgst + row.sgst + row.igst), textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: const Color(0xFF0D9488), fontWeight: FontWeight.w600))),
                     ]),
                   ),
-                  Expanded(flex: 2, child: Text(_money(row.taxable), textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: crm.textPrimary))),
-                  Expanded(flex: 2, child: Text(_money(row.cgst + row.sgst + row.igst), textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: const Color(0xFF0D9488), fontWeight: FontWeight.w600))),
-                ]),
-              ),
-          ]),
-        ),
-        if (r.rows.length > 100)
-          Padding(
-            padding: const EdgeInsets.only(top: 8, left: 4),
-            child: Text('Showing 100 of ${r.rows.length} — export CSV for the full register.', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
-          ),
+              ]),
+            ),
+            ShowMoreButton(
+              remaining: filtered.length - _visible,
+              onPressed: () => setState(() => _visible += kFinancePageSize),
+            ),
+          ]);
+        }),
       ],
     ]);
   }

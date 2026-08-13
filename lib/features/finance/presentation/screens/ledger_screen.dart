@@ -7,6 +7,9 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/account_ledger.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 
 String _money(num v) =>
@@ -17,8 +20,10 @@ String _isoDate(DateTime? d) => d == null ? '' : DateFormat('yyyy-MM-dd').format
 /// Finance → General Ledger. Any account's statement with a running balance —
 /// use it as the cash book, bank book, or a party/expense ledger.
 class LedgerScreen extends ConsumerStatefulWidget {
-  const LedgerScreen({super.key, this.initialAccountId});
+  const LedgerScreen({super.key, this.initialAccountId, this.initialFrom, this.initialTo});
   final String? initialAccountId;
+  final DateTime? initialFrom;
+  final DateTime? initialTo;
 
   @override
   ConsumerState<LedgerScreen> createState() => _LedgerScreenState();
@@ -28,13 +33,25 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
   String? _accountId;
   DateTime? _from;
   DateTime? _to;
+  String _search = '';
+  int _visible = kFinancePageSize;
 
   String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
+
+  List<LedgerRow> _filteredRows(AccountLedger l) {
+    final q = _search.trim().toLowerCase();
+    if (q.isEmpty) return l.rows;
+    return l.rows
+        .where((r) => '${r.narration} ${r.voucherNo} ${r.voucherType}'.toLowerCase().contains(q))
+        .toList();
+  }
 
   @override
   void initState() {
     super.initState();
     _accountId = widget.initialAccountId;
+    _from = widget.initialFrom;
+    _to = widget.initialTo;
   }
 
   Future<void> _pick(bool from) async {
@@ -73,7 +90,10 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                   for (final a in sorted)
                     DropdownMenuItem(value: a.id, child: Text('${a.code} · ${a.name}', overflow: TextOverflow.ellipsis)),
                 ],
-                onChanged: (v) => setState(() => _accountId = v),
+                onChanged: (v) => setState(() {
+                  _accountId = v;
+                  _visible = kFinancePageSize;
+                }),
               );
             },
           ),
@@ -114,6 +134,12 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                 label: const Text('Export CSV'),
               ),
             ),
+            ReportTitleBlock(
+              title: 'Account Transactions',
+              subtitle: l.name.isEmpty ? null : '${l.code} · ${l.name}',
+              from: _from,
+              to: _to,
+            ),
             // Closing summary
             Container(
               padding: const EdgeInsets.all(16),
@@ -139,29 +165,46 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
               ]),
             ),
             12.h,
-            Container(
-              decoration: BoxDecoration(
-                color: crm.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: crm.border.withValues(alpha: 0.8)),
-              ),
-              child: Column(children: [
-                // header
+            ReportSearchField(
+              hint: 'Search particulars or voucher…',
+              onChanged: (v) => setState(() {
+                _search = v;
+                _visible = kFinancePageSize;
+              }),
+            ),
+            12.h,
+            Builder(builder: (context) {
+              final filtered = _filteredRows(l);
+              return Column(children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(color: crm.background.withValues(alpha: 0.4), borderRadius: const BorderRadius.vertical(top: Radius.circular(12))),
-                  child: Row(children: [
-                    Expanded(flex: 4, child: Text('PARTICULARS', style: _hdr(crm))),
-                    Expanded(flex: 2, child: Text('DEBIT', textAlign: TextAlign.right, style: _hdr(crm))),
-                    Expanded(flex: 2, child: Text('CREDIT', textAlign: TextAlign.right, style: _hdr(crm))),
-                    Expanded(flex: 3, child: Text('BALANCE', textAlign: TextAlign.right, style: _hdr(crm))),
+                  decoration: BoxDecoration(
+                    color: crm.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+                  ),
+                  child: Column(children: [
+                    // header
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(color: crm.background.withValues(alpha: 0.4), borderRadius: const BorderRadius.vertical(top: Radius.circular(12))),
+                      child: Row(children: [
+                        Expanded(flex: 4, child: Text('PARTICULARS', style: _hdr(crm))),
+                        Expanded(flex: 2, child: Text('DEBIT', textAlign: TextAlign.right, style: _hdr(crm))),
+                        Expanded(flex: 2, child: Text('CREDIT', textAlign: TextAlign.right, style: _hdr(crm))),
+                        Expanded(flex: 3, child: Text('BALANCE', textAlign: TextAlign.right, style: _hdr(crm))),
+                      ]),
+                    ),
+                    // opening (only when not searching, so the running balance stays meaningful)
+                    if (_search.isEmpty) _openingRow(crm, l),
+                    for (final r in filtered.take(_visible)) _entryRow(crm, r),
                   ]),
                 ),
-                // opening
-                _openingRow(crm, l),
-                for (final r in l.rows) _entryRow(crm, r),
-              ]),
-            ),
+                ShowMoreButton(
+                  remaining: filtered.length - _visible,
+                  onPressed: () => setState(() => _visible += kFinancePageSize),
+                ),
+              ]);
+            }),
           ],
         ),
       ),

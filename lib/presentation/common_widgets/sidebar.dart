@@ -533,99 +533,11 @@ class Sidebar extends ConsumerWidget {
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
                           child: _SidebarItem(
-                            icon: Icons.account_tree_outlined,
-                            title: 'Chart of Accounts',
+                            icon: Icons.assessment_outlined,
+                            title: 'Reports',
                             isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/chart',
-                            onTap: () => context.go('/company-finance/chart'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.post_add_outlined,
-                            title: 'Journal',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/journal',
-                            onTap: () => context.go('/company-finance/journal'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.balance_outlined,
-                            title: 'Trial Balance',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/trial-balance',
-                            onTap: () => context.go('/company-finance/trial-balance'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.menu_book_outlined,
-                            title: 'General Ledger',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/ledger',
-                            onTap: () => context.go('/company-finance/ledger'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.trending_up_outlined,
-                            title: 'Profit & Loss',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/profit-loss',
-                            onTap: () => context.go('/company-finance/profit-loss'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.account_balance_outlined,
-                            title: 'Balance Sheet',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/balance-sheet',
-                            onTap: () => context.go('/company-finance/balance-sheet'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.receipt_long_outlined,
-                            title: 'Receivables & Payables',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/aging',
-                            onTap: () => context.go('/company-finance/aging'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.rule_outlined,
-                            title: 'Bank Reconciliation',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/reconciliation',
-                            onTap: () => context.go('/company-finance/reconciliation'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.percent_outlined,
-                            title: 'GST',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/gst',
-                            onTap: () => context.go('/company-finance/gst'),
+                            isSelected: currentPath == '/company-finance/reports',
+                            onTap: () => context.go('/company-finance/reports'),
                           ),
                         ),
                       if (access.canSeeCompanyFinance)
@@ -637,17 +549,6 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/company-finance/assets',
                             onTap: () => context.go('/company-finance/assets'),
-                          ),
-                        ),
-                      if (access.canSeeCompanyFinance)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.trending_down_outlined,
-                            title: 'Depreciation',
-                            isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/depreciation',
-                            onTap: () => context.go('/company-finance/depreciation'),
                           ),
                         ),
                     ],

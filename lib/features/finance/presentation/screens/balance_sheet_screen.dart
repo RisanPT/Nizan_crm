@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/report_models.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
-import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 
 String _money(num v) =>
@@ -22,8 +23,41 @@ class BalanceSheetScreen extends ConsumerStatefulWidget {
 
 class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
   DateTime? _asOf;
+  DateRangePreset _preset = DateRangePreset.allTime;
+  BalanceSheetReport? _last;
+
   String get _asOfIso =>
       _asOf == null ? '' : DateTime(_asOf!.year, _asOf!.month, _asOf!.day).toIso8601String();
+
+  Future<void> _applyPreset(DateRangePreset p) async {
+    if (p == DateRangePreset.custom) {
+      final now = DateTime.now();
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: _asOf ?? now,
+        firstDate: DateTime(2015),
+        lastDate: DateTime(now.year + 1),
+      );
+      if (picked != null) {
+        setState(() {
+          _preset = p;
+          _asOf = picked;
+        });
+      }
+      return;
+    }
+    final r = rangeForPreset(p, DateTime.now());
+    setState(() {
+      _preset = p;
+      _asOf = r.to; // balance sheet is "as of" the end of the range
+    });
+  }
+
+  List<ReportLine> _equityLines(BalanceSheetReport r) => [
+        ...r.equity,
+        if (r.retainedEarnings != 0)
+          ReportLine(code: '—', name: 'Retained Earnings (current)', amount: r.retainedEarnings),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -32,21 +66,16 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
 
     return Scaffold(
       backgroundColor: crm.background,
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: DateFilterChip(
-              label: 'As of',
-              date: _asOf,
-              onTap: _pickAsOf,
-              onClear: () => setState(() => _asOf = null),
-            ),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
+      body: ReportChrome(
+        category: 'Business Overview',
+        title: 'Balance Sheet',
+        asOf: true,
+        preset: _preset,
+        to: _asOf,
+        onPreset: _applyPreset,
+        onExport: _last == null ? null : () => _exportCsv(context, _last!, _equityLines(_last!)),
+        onRefresh: () async => ref.invalidate(balanceSheetProvider(_asOfIso)),
+        child: RefreshIndicator(
             onRefresh: () async => ref.invalidate(balanceSheetProvider(_asOfIso)),
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -54,23 +83,13 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
           ]),
           data: (r) {
+            _last = r;
             final color = r.balanced ? crm.success : crm.destructive;
-            final equityLines = [
-              ...r.equity,
-              if (r.retainedEarnings != 0)
-                ReportLine(code: '—', name: 'Retained Earnings (current)', amount: r.retainedEarnings),
-            ];
+            final equityLines = _equityLines(r);
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => _exportCsv(context, r, equityLines),
-                    icon: const Icon(Icons.download_outlined, size: 18),
-                    label: const Text('Export CSV'),
-                  ),
-                ),
+                ReportTitleBlock(title: 'Balance Sheet', asOf: true, to: _asOf),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
@@ -110,23 +129,11 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                 ),
               ],
             );
-              },
-            ),
-          ),
+          },
         ),
-      ]),
+        ),
+      ),
     );
-  }
-
-  Future<void> _pickAsOf() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _asOf ?? now,
-      firstDate: DateTime(2015),
-      lastDate: DateTime(now.year + 1),
-    );
-    if (picked != null) setState(() => _asOf = picked);
   }
 
   Future<void> _exportCsv(
@@ -163,6 +170,16 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     ]);
   }
 
+  /// Drill into an account's transactions up to the as-of date.
+  void _openLedger(ReportLine l) {
+    final q = <String, String>{'account': l.accountId};
+    if (_asOf != null) {
+      q['to'] = DateTime(_asOf!.year, _asOf!.month, _asOf!.day).toIso8601String();
+    }
+    final qs = q.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    context.go('/company-finance/ledger?$qs');
+  }
+
   Widget _section(CrmTheme crm, String title, List<ReportLine> lines, double total, Color color) {
     return Container(
       decoration: BoxDecoration(
@@ -187,16 +204,26 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
           )
         else
           for (final l in lines)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-              child: Row(children: [
-                Expanded(
-                  child: Text(l.code == '—' ? l.name : '${l.code} · ${l.name}',
-                      style: TextStyle(fontSize: 13, color: crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-                Text(_money(l.amount),
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: crm.textPrimary)),
-              ]),
+            InkWell(
+              onTap: l.accountId.isEmpty ? null : () => _openLedger(l),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(children: [
+                  Expanded(
+                    child: Text(l.code == '—' ? l.name : '${l.code} · ${l.name}',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: l.accountId.isEmpty ? crm.textPrimary : crm.primary,
+                            fontWeight: l.accountId.isEmpty ? FontWeight.w400 : FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  Text(_money(l.amount),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: crm.textPrimary)),
+                  if (l.accountId.isNotEmpty)
+                    Icon(Icons.chevron_right, size: 16, color: crm.textSecondary),
+                ]),
+              ),
             ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

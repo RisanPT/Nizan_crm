@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/controllers/asset_provider.dart';
+import 'package:nizan_crm/services/upload_service.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -313,16 +315,18 @@ class _AssetCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: crm.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(11),
-                ),
-                child: Icon(asset.isDigital ? Icons.language : Icons.category_outlined,
-                    color: crm.primary, size: 20),
-              ),
+              asset.imageUrl.isNotEmpty
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: Image.network(
+                        asset.imageUrl,
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => _iconBox(crm),
+                      ),
+                    )
+                  : _iconBox(crm),
               12.w,
               Expanded(
                 child: Column(
@@ -403,6 +407,17 @@ class _AssetCard extends StatelessWidget {
     ].join(' · ');
   }
 
+  Widget _iconBox(CrmTheme crm) => Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: crm.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Icon(asset.isDigital ? Icons.language : Icons.category_outlined,
+            color: crm.primary, size: 20),
+      );
+
   Widget _statusPill(CrmTheme crm, String status) {
     final color = switch (status) {
       'active' || 'in_use' => crm.success,
@@ -456,6 +471,8 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
   bool _depreciable = false;
   String _depMethod = 'straight_line';
   DateTime? _depStart;
+  String _imageUrl = '';
+  bool _uploadingImage = false;
   bool _saving = false;
 
   bool get _isDigital => widget.type == 'digital';
@@ -473,6 +490,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
     _url = TextEditingController(text: a?.url ?? '');
     _location = TextEditingController(text: a?.location ?? '');
     _serial = TextEditingController(text: a?.serialNumber ?? '');
+    _imageUrl = a?.imageUrl ?? '';
     _depRate = TextEditingController(
         text: a != null && a.depreciationRate > 0 ? _trimNum(a.depreciationRate) : '');
     _life = TextEditingController(
@@ -543,6 +561,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
           'location': _location.text.trim(),
           'condition': _condition,
           'serialNumber': _serial.text.trim(),
+          'imageUrl': _imageUrl,
         },
         'depreciable': _depreciable,
         if (_depreciable) ...{
@@ -686,6 +705,8 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
                     controller: _serial,
                     decoration: const InputDecoration(labelText: 'Serial number'),
                   ),
+                  12.h,
+                  _imagePicker(crm),
                 ],
                 12.h,
                 Row(children: [
@@ -743,6 +764,112 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
       lastDate: DateTime(now.year + 15),
     );
     if (picked != null) setState(() => _depStart = picked);
+  }
+
+  Widget _imagePicker(CrmTheme crm) {
+    final has = _imageUrl.isNotEmpty;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('PHOTO',
+          style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.textSecondary)),
+      6.h,
+      if (has)
+        Stack(children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              _imageUrl,
+              height: 150,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                height: 150,
+                color: crm.background,
+                child: Icon(Icons.broken_image_outlined, color: crm.textSecondary),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Row(children: [
+              _imgIconBtn(Icons.edit_outlined, _uploadingImage ? null : _pickImage),
+              6.w,
+              _imgIconBtn(Icons.close, _uploadingImage ? null : () => setState(() => _imageUrl = '')),
+            ]),
+          ),
+          if (_uploadingImage)
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(12)),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            ),
+        ])
+      else
+        InkWell(
+          onTap: _uploadingImage ? null : _pickImage,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            height: 96,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: crm.background.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: crm.border),
+            ),
+            child: _uploadingImage
+                ? const Center(child: CircularProgressIndicator())
+                : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Icon(Icons.add_a_photo_outlined, color: crm.textSecondary),
+                    6.h,
+                    Text('Add a photo', style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                  ]),
+          ),
+        ),
+    ]);
+  }
+
+  Widget _imgIconBtn(IconData icon, VoidCallback? onTap) => Material(
+        color: Colors.black54,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(padding: const EdgeInsets.all(6), child: Icon(icon, size: 16, color: Colors.white)),
+        ),
+      );
+
+  Future<void> _pickImage() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.camera_alt_outlined),
+            title: const Text('Take a photo'),
+            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          ),
+        ]),
+      ),
+    );
+    if (source == null || !mounted) return;
+    final img = await ImagePicker().pickImage(source: source, imageQuality: 70, maxWidth: 1600);
+    if (img == null) return;
+    setState(() => _uploadingImage = true);
+    try {
+      final url = await ref.read(uploadServiceProvider).uploadImage(img);
+      if (mounted) setState(() => _imageUrl = url);
+    } catch (e) {
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
+    } finally {
+      if (mounted) setState(() => _uploadingImage = false);
+    }
   }
 
   Widget _depreciationSection(CrmTheme crm) {

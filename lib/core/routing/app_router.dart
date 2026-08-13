@@ -74,6 +74,9 @@ import 'package:nizan_crm/features/sales/presentation/screens/sales_workspace_sc
 import 'package:nizan_crm/features/sales/presentation/screens/sales_person_dashboard_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/financial_analyst_report_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/finance_dashboard_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/reports_center_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/sales_report_screen.dart';
+import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/chart_of_accounts_screen.dart';
@@ -145,6 +148,8 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/hra') return 'payables.hra';
   // Company Finance
   if (path == '/company-finance') return 'company_finance.dashboard';
+  if (path.startsWith('/company-finance/sales')) return 'company_finance.sales_reports';
+  if (path.startsWith('/company-finance/reports')) return 'company_finance.reports';
   if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
   if (path.startsWith('/company-finance/depreciation')) return 'company_finance.depreciation';
   if (path.startsWith('/company-finance/chart')) return 'company_finance.chart';
@@ -390,6 +395,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Financial Report';
           } else if (state.uri.path == '/company-finance') {
             title = 'Finance Dashboard';
+          } else if (state.uri.path == '/company-finance/reports') {
+            title = 'Reports Center';
+          } else if (state.uri.path.startsWith('/company-finance/sales/')) {
+            title = 'Sales Reports';
           } else if (state.uri.path == '/company-finance/assets') {
             title = 'Company Assets';
           } else if (state.uri.path == '/company-finance/depreciation') {
@@ -822,6 +831,30 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const FinanceDashboardScreen(),
           ),
           GoRoute(
+            path: '/company-finance/reports',
+            builder: (context, state) => const ReportsCenterScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/sales/by-customer',
+            builder: (context, state) => SalesReportScreen(spec: kSalesReportSpecs[kSalesByCustomer]!),
+          ),
+          GoRoute(
+            path: '/company-finance/sales/by-package',
+            builder: (context, state) => SalesReportScreen(spec: kSalesReportSpecs[kSalesByPackage]!),
+          ),
+          GoRoute(
+            path: '/company-finance/sales/by-salesperson',
+            builder: (context, state) => SalesReportScreen(spec: kSalesReportSpecs[kSalesBySalesperson]!),
+          ),
+          GoRoute(
+            path: '/company-finance/sales/summary',
+            builder: (context, state) => SalesReportScreen(spec: kSalesReportSpecs[kSalesSummary]!),
+          ),
+          GoRoute(
+            path: '/company-finance/sales/payments',
+            builder: (context, state) => SalesReportScreen(spec: kSalesReportSpecs[kPaymentsByMode]!),
+          ),
+          GoRoute(
             path: '/company-finance/assets',
             builder: (context, state) => const AssetsScreen(),
           ),
@@ -843,8 +876,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/company-finance/ledger',
-            builder: (context, state) =>
-                LedgerScreen(initialAccountId: state.uri.queryParameters['account']),
+            builder: (context, state) {
+              final q = state.uri.queryParameters;
+              return LedgerScreen(
+                initialAccountId: q['account'],
+                initialFrom: DateTime.tryParse(q['from'] ?? ''),
+                initialTo: DateTime.tryParse(q['to'] ?? ''),
+              );
+            },
           ),
           GoRoute(
             path: '/company-finance/profit-loss',

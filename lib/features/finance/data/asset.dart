@@ -16,6 +16,7 @@ class Asset {
   final String location;
   final String condition;
   final String serialNumber;
+  final String imageUrl;
   // Digital
   final String provider;
   final String url;
@@ -47,6 +48,7 @@ class Asset {
     this.location = '',
     this.condition = '',
     this.serialNumber = '',
+    this.imageUrl = '',
     this.provider = '',
     this.url = '',
     this.expiryDate,
@@ -105,6 +107,7 @@ class Asset {
       location: json['location'] as String? ?? '',
       condition: json['condition'] as String? ?? '',
       serialNumber: json['serialNumber'] as String? ?? '',
+      imageUrl: json['imageUrl'] as String? ?? '',
       provider: json['provider'] as String? ?? '',
       url: json['url'] as String? ?? '',
       expiryDate: _date(json['expiryDate']),

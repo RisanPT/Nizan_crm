@@ -1,13 +1,21 @@
 /// A single line in a financial statement (one ledger account's total).
 class ReportLine {
+  final String accountId; // for drill-through to the account's ledger
   final String code;
   final String name;
   final String group;
   final double amount;
 
-  const ReportLine({required this.code, required this.name, this.group = '', this.amount = 0});
+  const ReportLine({
+    this.accountId = '',
+    required this.code,
+    required this.name,
+    this.group = '',
+    this.amount = 0,
+  });
 
   factory ReportLine.fromJson(Map<String, dynamic> j) => ReportLine(
+        accountId: j['accountId'] as String? ?? '',
         code: j['code'] as String? ?? '',
         name: j['name'] as String? ?? '',
         group: j['group'] as String? ?? '',

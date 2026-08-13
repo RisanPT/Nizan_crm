@@ -152,10 +152,14 @@ class AccountingService {
     }
   }
 
-  /// [kind] = 'receivables' | 'payables'.
-  Future<AgingReport> getAging(String kind) async {
+  /// [kind] = 'receivables' | 'payables'. [asOf] (ISO date) ages balances as on
+  /// that day — obligations still ahead of it count as "not yet due".
+  Future<AgingReport> getAging(String kind, {String? asOf}) async {
     try {
-      final res = await _dio.get('/accounting/$kind');
+      final res = await _dio.get(
+        '/accounting/$kind',
+        queryParameters: {if (asOf != null && asOf.isNotEmpty) 'asOf': asOf},
+      );
       return AgingReport.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to load $kind'));

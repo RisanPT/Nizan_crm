@@ -8,6 +8,7 @@ import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/date_filter_chip.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 2).format(v);
@@ -28,6 +29,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
   DateTime? _to;
   final _searchCtrl = TextEditingController();
   String _search = '';
+  int _visible = kFinancePageSize;
 
   String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
   ({String type, String status, String from, String to}) get _filter =>
@@ -138,7 +140,13 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
             }
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: [for (final e in entries) _entryCard(context, ref, crm, e)],
+              children: [
+                for (final e in entries.take(_visible)) _entryCard(context, ref, crm, e),
+                ShowMoreButton(
+                  remaining: entries.length - _visible,
+                  onPressed: () => setState(() => _visible += kFinancePageSize),
+                ),
+              ],
             );
               },
             ),
