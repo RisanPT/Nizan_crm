@@ -5,6 +5,8 @@ class CrmUser {
   final String role;
   final bool active;
   final bool inventoryAccess;
+  /// Artist who also runs the studio inventory (workspace-switcher dual role).
+  final bool inventoryManage;
   final String employeeId;
   final String zoneId;
   final String stateId;
@@ -25,6 +27,7 @@ class CrmUser {
     required this.role,
     required this.active,
     this.inventoryAccess = false,
+    this.inventoryManage = false,
     this.employeeId = '',
     this.zoneId = '',
     this.stateId = '',
@@ -45,6 +48,7 @@ class CrmUser {
       role: json['role'] as String? ?? 'manager',
       active: json['active'] as bool? ?? true,
       inventoryAccess: json['inventoryAccess'] as bool? ?? false,
+      inventoryManage: json['inventoryManage'] as bool? ?? false,
       employeeId: json['employeeId'] as String? ?? '',
       zoneId: json['zoneId'] as String? ?? '',
       stateId: json['stateId'] as String? ?? '',
@@ -65,6 +69,7 @@ class CrmUser {
     String? role,
     bool? active,
     bool? inventoryAccess,
+    bool? inventoryManage,
     String? employeeId,
     String? zoneId,
     String? stateId,
@@ -83,6 +88,7 @@ class CrmUser {
       role: role ?? this.role,
       active: active ?? this.active,
       inventoryAccess: inventoryAccess ?? this.inventoryAccess,
+      inventoryManage: inventoryManage ?? this.inventoryManage,
       employeeId: employeeId ?? this.employeeId,
       zoneId: zoneId ?? this.zoneId,
       stateId: stateId ?? this.stateId,

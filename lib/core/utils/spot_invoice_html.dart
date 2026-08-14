@@ -1,6 +1,6 @@
 import 'package:nizan_crm/core/models/spot_invoice.dart';
 
-/// Builds the printable **spot quotation/invoice** HTML — the Team N Makeovers
+/// Builds the printable **spot quotation/invoice** HTML — the Team N ERP
 /// invoice look, WITHOUT GST (this is a quotation, not a tax invoice).
 ///
 /// Pure Dart (no platform imports) so it can be unit-tested.
@@ -61,7 +61,7 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
 <body>
   <div class="brandbar">
     <div class="logo">N</div>
-    <div class="brand">TEAM N MAKEOVERS</div>
+    <div class="brand">TEAM N ERP</div>
     <div class="sub">QUOTATION</div>
   </div>
   <hr class="rule">
@@ -86,7 +86,7 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
   <div class="terms">
     This is a quotation for makeup services and is not a tax invoice. Prices are subject to confirmation.
   </div>
-  <div class="foot">Team N Makeovers — Quotation</div>
+  <div class="foot">Team N ERP — Quotation</div>
 </body>
 </html>''';
 }

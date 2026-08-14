@@ -117,7 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                             48.h,
                             Text(
-                              'TEAM N MAKEOVERS',
+                              'TEAM N ERP',
                               style: theme.textTheme.displaySmall?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
@@ -213,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 24.h,
                 Text(
-                  'TEAM N MAKEOVERS',
+                  'TEAM N ERP',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 12,

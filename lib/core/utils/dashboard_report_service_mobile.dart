@@ -61,13 +61,13 @@ Future<void> downloadDashboardReport({
       ),
       build: (context) {
         final title = switch (reportType) {
-          'sales' => 'Team N CRM Sales Report',
-          'marketing' => 'Team N CRM Marketing Report',
-          'crm' => 'Team N CRM Client Relations Report',
-          'finance' => 'Team N CRM Finance Report',
-          'ceo_daily' => 'DAILY SALES REPORT | Team N Makeovers',
-          'forecast' => 'Team N CRM Sales Forecast Report',
-          _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N CRM Executive Overview',
+          'sales' => 'Team N ERP Sales Report',
+          'marketing' => 'Team N ERP Marketing Report',
+          'crm' => 'Team N ERP Client Relations Report',
+          'finance' => 'Team N ERP Finance Report',
+          'ceo_daily' => 'DAILY SALES REPORT | Team N ERP',
+          'forecast' => 'Team N ERP Sales Forecast Report',
+          _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N ERP Executive Overview',
         };
 
         return [
@@ -917,7 +917,7 @@ Future<void> downloadLeadsReport({
               pw.Image(logoImage, width: 40, height: 40),
               pw.SizedBox(width: 12),
               pw.Text(
-                'Team N CRM Leads Report',
+                'Team N ERP Leads Report',
                 style: pw.TextStyle(
                   fontSize: 24,
                   fontWeight: pw.FontWeight.bold,

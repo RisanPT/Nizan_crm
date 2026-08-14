@@ -82,7 +82,7 @@ String buildFinancialReportHtml(FinancialAnalystReport r) {
 <body>
   <div class="brand">
     <div class="logo">N</div>
-    <h1>Team N Makeovers</h1>
+    <h1>Team N ERP</h1>
     <div class="sub">Monthly Financial-Analyst Report · ${_esc(r.month)}</div>
   </div>
   <hr>
@@ -122,6 +122,6 @@ String buildFinancialReportHtml(FinancialAnalystReport r) {
   </div>
   <div class="note">Cash = verified collections this month. GST, bank balances, loans and full expense exports come from the accounting system (Zoho), not the CRM.</div>
 
-  <div class="foot">Team N Makeovers — Confidential · for internal financial analysis</div>
+  <div class="foot">Team N ERP — Confidential · for internal financial analysis</div>
 </body></html>''';
 }

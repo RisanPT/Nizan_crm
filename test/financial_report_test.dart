@@ -89,7 +89,7 @@ void main() {
 
     test('is a self-contained branded document', () {
       expect(html, contains('<!DOCTYPE html>'));
-      expect(html, contains('Team N Makeovers'));
+      expect(html, contains('Team N ERP'));
       expect(html, contains('2026-07'));
     });
 

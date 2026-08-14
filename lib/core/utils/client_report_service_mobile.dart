@@ -115,7 +115,7 @@ Future<void> printClientsReport(List<Customer> clients) async {
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('TEAM N MAKEOVERS',
+                  pw.Text('TEAM N ERP',
                       style: pw.TextStyle(
                           fontSize: 17,
                           fontWeight: pw.FontWeight.bold,
@@ -188,7 +188,7 @@ Future<void> printClientsReport(List<Customer> clients) async {
           ),
         pw.SizedBox(height: 16),
         pw.Center(
-          child: pw.Text('Team N Makeovers · Confidential client report',
+          child: pw.Text('Team N ERP · Confidential client report',
               style: pw.TextStyle(fontSize: 8, color: muted)),
         ),
       ],

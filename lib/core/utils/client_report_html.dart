@@ -63,7 +63,7 @@ String buildClientsReportHtml(List<Customer> clients, {DateTime? generatedAt}) {
 <body>
   <div class="head">
     <div>
-      <div class="brand">TEAM N MAKEOVERS</div>
+      <div class="brand">TEAM N ERP</div>
       <div class="subtitle">Clients Directory — Full Report</div>
     </div>
     <div class="meta">
@@ -92,7 +92,7 @@ String buildClientsReportHtml(List<Customer> clients, {DateTime? generatedAt}) {
     </tbody>
   </table>'''}
 
-  <div class="footer">Team N Makeovers · Confidential client report</div>
+  <div class="footer">Team N ERP · Confidential client report</div>
 </body>
 </html>
 ''';

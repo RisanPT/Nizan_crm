@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
-import '../../core/auth/access_control.dart';
+import '../../core/auth/workspace.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 
 class Sidebar extends ConsumerWidget {
@@ -111,13 +112,14 @@ class Sidebar extends ConsumerWidget {
         (financeExpanded || (isFinanceRoute && !financeUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
-    // Resolve current role from session
+    // Resolve current role from session, honouring the active workspace so a
+    // dual-role artist who switched to the inventory workspace sees the
+    // inventory-manager sidebar (and vice-versa).
     final session = ref.watch(authSessionProvider);
-    final role = session != null
-        ? AppRole.fromString(session.role)
-        : AppRole.artist;
-    // Feature visibility comes from the role's editable permission set.
-    final access = Access.of(session);
+    final role = ref.watch(effectiveRoleProvider);
+    // Feature visibility comes from the role's editable permission set (or the
+    // built-in inventory-manager matrix when in the inventory workspace).
+    final access = ref.watch(effectiveAccessProvider);
 
     return Container(
       width: width,
@@ -127,6 +129,13 @@ class Sidebar extends ConsumerWidget {
         children: [
           24.h,
           _buildLogo(context, isCollapsed: isCollapsed),
+          if (ref.watch(isDualRoleProvider)) ...[
+            16.h,
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
+              child: WorkspaceSwitchTile(collapsed: isCollapsed),
+            ),
+          ],
           32.h,
           Expanded(
             child: ListView(
@@ -1183,7 +1192,7 @@ class Sidebar extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Team N\nMakeovers',
+                  'Team N\nERP',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: crmColors.sidebarForeground,
                     fontWeight: FontWeight.w900,

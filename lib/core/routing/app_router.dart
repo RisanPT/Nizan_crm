@@ -190,7 +190,8 @@ String? subKeyForPath(String path) {
   return null;
 }
 
-bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) {
+bool isRouteAllowed(String path, Access access,
+    {bool inventoryAccess = false, bool inventoryManage = false}) {
   final role = access.role;
   if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
   if (path.startsWith('/client')) return access.canSeeClients;
@@ -216,17 +217,22 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
   if (path.startsWith('/finance')) return access.canSeeFinance;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
   // need the inventory-manager (or full-access) role. Artists with inventory
-  // access reach their own inventory + their own kit.
+  // access reach their own inventory + their own kit. A dual-role artist
+  // (inventoryManage) may reach every inventory route regardless of the active
+  // workspace, so switching between workspaces never trips the guard.
   if (path == '/inventory/my') {
     return access.canManageInventory ||
+        inventoryManage ||
         (role == AppRole.artist && inventoryAccess);
   }
   if (path == '/inventory/kits') {
     return access.canSeeSub('inventory.kits') ||
+        inventoryManage ||
         (role == AppRole.artist && inventoryAccess);
   }
   if (path.startsWith('/inventory')) {
     final sub = subKeyForPath(path);
+    if (inventoryManage) return true;
     return sub != null ? access.canSeeSub(sub) : access.canManageInventory;
   }
   if (path.startsWith('/accounts')) {
@@ -258,10 +264,12 @@ bool isRouteAllowed(String path, Access access, {bool inventoryAccess = false}) 
 /// this check the guard would redirect '/' → '/', which go_router treats as a
 /// no-op, so the dashboard would render despite being unticked. Here we fall
 /// back to the first section the role can actually reach.
-String landingRouteFor(Access access, {bool inventoryAccess = false}) {
+String landingRouteFor(Access access,
+    {bool inventoryAccess = false, bool inventoryManage = false}) {
   final configured = access.homeRoute;
   if (configured.isNotEmpty &&
-      isRouteAllowed(configured, access, inventoryAccess: inventoryAccess)) {
+      isRouteAllowed(configured, access,
+          inventoryAccess: inventoryAccess, inventoryManage: inventoryManage)) {
     return configured;
   }
   // Fall back to the first route the role can actually open. Each module lists
@@ -288,7 +296,8 @@ String landingRouteFor(Access access, {bool inventoryAccess = false}) {
     '/staff', '/hr/slots', '/hr/salaries',
   ];
   for (final route in candidates) {
-    if (isRouteAllowed(route, access, inventoryAccess: inventoryAccess)) {
+    if (isRouteAllowed(route, access,
+        inventoryAccess: inventoryAccess, inventoryManage: inventoryManage)) {
       return route;
     }
   }
@@ -312,7 +321,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       }
       final access = Access.of(auth.session);
       final inventoryAccess = auth.session?.inventoryAccess ?? false;
-      router.go(landingRouteFor(access, inventoryAccess: inventoryAccess));
+      final inventoryManage = auth.session?.inventoryManage ?? false;
+      router.go(landingRouteFor(access,
+          inventoryAccess: inventoryAccess, inventoryManage: inventoryManage));
     },
     redirect: (context, state) {
       final path = state.uri.path;
@@ -329,16 +340,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
 
       final access = Access.of(auth.session);
       final inventoryAccess = auth.session?.inventoryAccess ?? false;
+      final inventoryManage = auth.session?.inventoryManage ?? false;
 
       // After login, land on a page the role can actually open (respecting its
       // configured home when accessible, else the first reachable section).
       if (isLoadingRoute || isLoginRoute) {
-        return landingRouteFor(access, inventoryAccess: inventoryAccess);
+        return landingRouteFor(access,
+            inventoryAccess: inventoryAccess, inventoryManage: inventoryManage);
       }
 
       // Role-based route guards.
-      if (!isRouteAllowed(path, access, inventoryAccess: inventoryAccess)) {
-        return landingRouteFor(access, inventoryAccess: inventoryAccess);
+      if (!isRouteAllowed(path, access,
+          inventoryAccess: inventoryAccess, inventoryManage: inventoryManage)) {
+        return landingRouteFor(access,
+            inventoryAccess: inventoryAccess, inventoryManage: inventoryManage);
       }
 
       return null;
@@ -356,7 +371,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         navigatorKey: shellNavigatorKey,
         builder: (context, state, child) {
           // Provide appropriate title based on route
-          String title = 'Team N Makeovers';
+          String title = 'Team N ERP';
           if (state.uri.path == '/') {
             title = 'Dashboard Overview';
           } else if (state.uri.path == '/clients') {

@@ -865,20 +865,20 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!custom) ...[
-                  DropdownButtonFormField<InventoryProduct>(
-                    initialValue: selected,
-                    isExpanded: true,
-                    decoration:
-                        const InputDecoration(labelText: 'Pick from stock *'),
-                    items: [
+                  DropdownMenu<InventoryProduct>(
+                    initialSelection: selected,
+                    expandedInsets: EdgeInsets.zero,
+                    enableFilter: true,
+                    enableSearch: true,
+                    label: const Text('Pick from stock *'),
+                    dropdownMenuEntries: [
                       for (final p in inStock)
-                        DropdownMenuItem(
+                        DropdownMenuEntry<InventoryProduct>(
                           value: p,
-                          child: Text(label(p),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          label: label(p),
                         ),
                     ],
-                    onChanged: (v) => setState(() => selected = v),
+                    onSelected: (v) => setState(() => selected = v),
                   ),
                   if (inStock.isEmpty)
                     Padding(

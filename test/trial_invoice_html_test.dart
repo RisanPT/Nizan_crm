@@ -20,7 +20,7 @@ void main() {
     ]));
 
     expect(html, contains('TRIAL INVOICE'));
-    expect(html, contains('TEAM N MAKEOVERS'));
+    expect(html, contains('TEAM N ERP'));
     expect(html, contains('TR-1001'));
     expect(html, contains('Asha'));
     expect(html, contains('Bridal Look'));

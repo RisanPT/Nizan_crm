@@ -79,7 +79,7 @@ String buildCancelledWorksReportHtml(
 <body>
   <div class="head">
     <div>
-      <div class="brand">TEAM N MAKEOVERS</div>
+      <div class="brand">TEAM N ERP</div>
       <div class="subtitle">Cancelled Works Report · ${_esc(periodLabel)}</div>
     </div>
     <div class="meta">
@@ -114,7 +114,7 @@ String buildCancelledWorksReportHtml(
     </tbody>
   </table>'''}
 
-  <div class="footer">Team N Makeovers · Confidential sales report</div>
+  <div class="footer">Team N ERP · Confidential sales report</div>
 </body>
 </html>
 ''';

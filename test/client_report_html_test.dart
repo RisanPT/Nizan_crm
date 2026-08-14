@@ -16,7 +16,7 @@ void main() {
     expect(html, contains('Kollam'));
     expect(html, contains('Meera'));
     expect(html, contains('Total clients: <b>2</b>'));
-    expect(html, contains('TEAM N MAKEOVERS'));
+    expect(html, contains('TEAM N ERP'));
   });
 
   test('hides placeholder emails and shows a dash for blanks', () {

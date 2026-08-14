@@ -88,7 +88,7 @@ Future<void> printSpotInvoice(SpotInvoiceData data) async {
                         fontSize: 26)),
               ),
               pw.SizedBox(height: 6),
-              pw.Text('TEAM N MAKEOVERS',
+              pw.Text('TEAM N ERP',
                   style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -186,7 +186,7 @@ Future<void> printSpotInvoice(SpotInvoiceData data) async {
               style: pw.TextStyle(fontSize: 9, color: muted)),
           pw.Spacer(),
           pw.Center(
-            child: pw.Text('Team N Makeovers — Quotation',
+            child: pw.Text('Team N ERP — Quotation',
                 style: pw.TextStyle(fontSize: 8, color: muted)),
           ),
         ],

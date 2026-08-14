@@ -37,7 +37,7 @@ void main() {
 
     test('is a self-contained HTML document', () {
       expect(html, contains('<!DOCTYPE html>'));
-      expect(html, contains('TEAM N MAKEOVERS'));
+      expect(html, contains('TEAM N ERP'));
       expect(html, contains('QUOTATION'));
     });
 

@@ -108,7 +108,7 @@ Future<void> printBookingDetails(
                 ),
               pw.SizedBox(height: 8),
               pw.Text(
-                'TEAM N MAKEOVERS',
+                'TEAM N ERP',
                 style: pw.TextStyle(
                   fontSize: 22,
                   fontWeight: pw.FontWeight.bold,

@@ -20,7 +20,7 @@ class MyApp extends ConsumerWidget {
     final goRouter = ref.watch(goRouterProvider);
 
     return MaterialApp.router(
-      title: 'Team N ',
+      title: 'Team N ERP',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: goRouter,

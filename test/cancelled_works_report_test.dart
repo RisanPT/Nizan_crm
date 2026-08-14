@@ -50,7 +50,7 @@ void main() {
       expect(html, contains('Cancelled works: <b>2</b>'));
       expect(html, contains('₹44500')); // value lost 24500+20000
       expect(html, contains('₹6000')); // advance 3000+3000
-      expect(html, contains('TEAM N MAKEOVERS'));
+      expect(html, contains('TEAM N ERP'));
     });
 
     test('carries the period label', () {

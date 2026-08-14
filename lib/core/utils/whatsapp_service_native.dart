@@ -27,7 +27,7 @@ String _buildInvoiceMessage(Booking booking) {
   return '''
 Hi *${booking.customerName}*,
 
-Greetings from *Team N Makeovers*! 🌸
+Greetings from *Team N ERP*! 🌸
 
 We are pleased to inform you that your booking *#${booking.displayBookingNumber}* for *${booking.service}* has been successfully completed.
 

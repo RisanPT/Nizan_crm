@@ -6,7 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 
 /// Company name printed on report headers. Set this to your registered business
 /// name (shown centered above each statement, like Zoho Books).
-const String kReportCompanyName = 'Team N Makeovers';
+const String kReportCompanyName = 'Team N ERP';
 
 /// The books are kept on an accrual basis (posted double-entry vouchers).
 const String kReportBasis = 'Accrual';

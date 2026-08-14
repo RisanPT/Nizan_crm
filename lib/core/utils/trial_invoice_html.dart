@@ -1,6 +1,6 @@
 import 'package:nizan_crm/core/models/trial.dart';
 
-/// Builds the printable **trial invoice** HTML — the same Team N Makeovers
+/// Builds the printable **trial invoice** HTML — the same Team N ERP
 /// invoice look as a booking, but WITHOUT GST (trials aren't taxed).
 ///
 /// Pure Dart (no platform imports) so it can be unit-tested; the web service
@@ -91,7 +91,7 @@ String buildTrialInvoiceHtml(Trial trial, {DateTime? generatedAt}) {
 <body>
   <div class="brandbar">
     <div class="logo">N</div>
-    <div class="brand">TEAM N MAKEOVERS</div>
+    <div class="brand">TEAM N ERP</div>
     <div class="doc-type">TRIAL INVOICE</div>
   </div>
   <hr class="rule">
@@ -130,7 +130,7 @@ String buildTrialInvoiceHtml(Trial trial, {DateTime? generatedAt}) {
     <li>Any additional looks requested on the day are charged extra as per actuals.</li>
   </ol>
 
-  <div class="foot">Team N Makeovers · Trial invoice</div>
+  <div class="foot">Team N ERP · Trial invoice</div>
 </body>
 </html>
 ''';

@@ -12,7 +12,7 @@ Future<void> shareArtistOnWhatsApp({
   if (normalizedPhone.isEmpty) return;
 
   final lines = <String>[
-    'Team N Makeovers artist work sheet',
+    'Team N ERP artist work sheet',
     if (artistName.trim().isNotEmpty) 'Artist: ${artistName.trim()}',
     'Booking Ref: #$bookingNumber',
     '',

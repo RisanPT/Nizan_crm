@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/auth/workspace.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import 'workspace_switcher.dart';
 
 class _Section {
   final String label;
@@ -86,6 +88,15 @@ Future<void> showInventoryMenuSheet(BuildContext context, WidgetRef ref) {
                 ],
               ),
               const SizedBox(height: 16),
+              if (ref.read(isDualRoleProvider)) ...[
+                _row(context, sheetCtx, crmColors, Icons.swap_horiz_rounded,
+                    'Switch to ${workspaceLabel(Workspace.primary)}',
+                    color: crmColors.primary, onTap: () {
+                  Navigator.of(sheetCtx).pop();
+                  switchToWorkspace(context, ref, Workspace.primary);
+                }),
+                Divider(color: crmColors.border, height: 24),
+              ],
               for (final s in _sections)
                 _row(context, sheetCtx, crmColors, s.icon, s.label,
                     selected: currentPath == s.route,

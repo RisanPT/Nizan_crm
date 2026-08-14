@@ -1,4 +1,4 @@
-/// GST calculation utilities for Team N Makeovers invoices.
+/// GST calculation utilities for Team N ERP invoices.
 ///
 /// The business uses **GST Inclusive @ 5%** (CGST 2.5% + SGST 2.5%).
 /// This means the price paid by the customer ALREADY contains GST inside it.

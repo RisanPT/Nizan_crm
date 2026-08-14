@@ -51,6 +51,7 @@ class SettingsScreen extends HookConsumerWidget {
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
       var inventoryAccess = user?.inventoryAccess ?? false;
+      var inventoryManage = user?.inventoryManage ?? false;
       var isDepartmentHead = user?.isDepartmentHead ?? false;
       var selEmployeeId = user?.employeeId ?? '';
       var selZoneId = user?.zoneId ?? '';
@@ -192,6 +193,28 @@ class SettingsScreen extends HookConsumerWidget {
                                   style: TextStyle(fontSize: 12)),
                               secondary:
                                   const Icon(Icons.inventory_2_outlined),
+                            ),
+                          ),
+                          8.h,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: crmColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: SwitchListTile(
+                              value: inventoryManage,
+                              onChanged: (v) => setState(() {
+                                inventoryManage = v;
+                                // Managing implies access — keep them consistent.
+                                if (v) inventoryAccess = true;
+                              }),
+                              title: const Text('Also Inventory Manager'),
+                              subtitle: const Text(
+                                  'Adds the full studio inventory-manager workspace (stock, purchases, vendors, all kits). A workspace switcher lets them move between Artist and Inventory Manager.',
+                                  style: TextStyle(fontSize: 12)),
+                              secondary:
+                                  const Icon(Icons.swap_horiz_rounded),
                             ),
                           ),
                         ],
@@ -425,6 +448,7 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             inventoryAccess: inventoryAccess,
+                            inventoryManage: inventoryManage,
                             isDepartmentHead: isDepartmentHead,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,
@@ -442,6 +466,7 @@ class SettingsScreen extends HookConsumerWidget {
                             role: role,
                             active: active,
                             inventoryAccess: inventoryAccess,
+                            inventoryManage: inventoryManage,
                             isDepartmentHead: isDepartmentHead,
                             password: password.isEmpty ? null : password,
                             employeeId:

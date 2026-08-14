@@ -14,6 +14,9 @@ class AuthSession {
   final String homeRoute;
   /// Whether this account may access the Inventory feature (artist opt-in).
   final bool inventoryAccess;
+  /// Whether this artist ALSO runs the studio inventory — grants the full
+  /// inventory-manager toolset and enables the in-app workspace switcher.
+  final bool inventoryManage;
   /// The Employee record linked to this user (set for artist accounts).
   final String employeeId;
   final String zoneId;
@@ -33,6 +36,7 @@ class AuthSession {
     this.permissions = const [],
     this.homeRoute = '',
     this.inventoryAccess = false,
+    this.inventoryManage = false,
     this.employeeId = '',
     this.zoneId = '',
     this.stateId = '',
@@ -52,6 +56,7 @@ class AuthSession {
       'permissions': permissions,
       'homeRoute': homeRoute,
       'inventoryAccess': inventoryAccess,
+      'inventoryManage': inventoryManage,
       'employeeId': employeeId,
       'zoneId': zoneId,
       'stateId': stateId,
@@ -78,6 +83,7 @@ class AuthSession {
           .toList(),
       homeRoute: user['homeRoute'] as String? ?? '',
       inventoryAccess: user['inventoryAccess'] as bool? ?? false,
+      inventoryManage: user['inventoryManage'] as bool? ?? false,
       employeeId: user['employeeId'] as String? ?? '',
       zoneId: user['zoneId'] as String? ?? '',
       stateId: user['stateId'] as String? ?? '',

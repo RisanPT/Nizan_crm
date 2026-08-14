@@ -1286,7 +1286,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     ),
                   ),
                   8.h,
-                  Text('TEAM N MAKEOVERS', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: maroon, letterSpacing: 1.2)),
+                  Text('TEAM N ERP', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: maroon, letterSpacing: 1.2)),
                   Text(isAdvanceRow ? 'ADVANCE RECEIPT' : 'GST INVOICE', style: theme.textTheme.bodySmall?.copyWith(letterSpacing: 1, color: Colors.grey.shade700)),
                 ],
               ),
@@ -1360,7 +1360,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                         children: [
                           Text('COMPANY DETAILS', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 1)),
                           12.h,
-                          Text('TEAM N MAKEOVERS', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: maroon)),
+                          Text('TEAM N ERP', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: maroon)),
                           8.h,
                           Text('Kozhikode Kerala 673014\nIndia', style: theme.textTheme.bodySmall?.copyWith(color: const Color(0xFF1f2937), height: 1.5)),
                           8.h,

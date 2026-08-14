@@ -127,7 +127,7 @@ String buildAttendanceReportHtml(AttendanceReportData d) {
 </style></head>
 <body>
   <div class="head">
-    <div class="brand">TEAM N MAKEOVERS</div>
+    <div class="brand">TEAM N ERP</div>
     <div class="sub">HR · Attendance Report &middot; ${_esc(d.periodLabel)} &middot; ${_esc(d.modeLabel)}</div>
   </div>
   <div class="kpis">$kpiHtml</div>

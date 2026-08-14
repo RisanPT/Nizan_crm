@@ -38,7 +38,7 @@ Future<void> printAttendanceReport(AttendanceReportData d) async {
       build: (context) => [
         pw.Center(
           child: pw.Column(children: [
-            pw.Text('TEAM N MAKEOVERS',
+            pw.Text('TEAM N ERP',
                 style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: primary)),
             pw.Text('HR · Attendance Report · ${d.periodLabel} · ${d.modeLabel}',
                 style: pw.TextStyle(fontSize: 10, color: muted)),

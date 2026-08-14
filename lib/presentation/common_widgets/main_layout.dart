@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
+import '../../core/auth/workspace.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
 import 'sidebar.dart';
+import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 import '../../features/notifications/presentation/widgets/notification_watcher.dart';
 
@@ -182,9 +184,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   Widget build(BuildContext context) {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final session = ref.watch(authSessionProvider);
-    final role = session != null
-        ? AppRole.fromString(session.role)
-        : AppRole.artist;
+    // Honour the active workspace: a dual-role artist who has switched to the
+    // inventory workspace drives the inventory-manager shell, and vice-versa.
+    final role = ref.watch(effectiveRoleProvider);
     final invAccess = session?.inventoryAccess ?? false;
 
     if (isMobile) {
@@ -201,6 +203,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
             ? AppBar(
                 title: Text(widget.title),
                 actions: [
+                  const WorkspaceSwitchAction(),
                   _MobileBell(
                     count: unread,
                     onPressed: () => context.go('/notifications'),
