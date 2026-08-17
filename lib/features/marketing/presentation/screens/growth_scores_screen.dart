@@ -8,6 +8,7 @@ import '../../data/marketing_models.dart';
 import '../../services/marketing_service.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Marketing → Weekly Growth Score board. Overall ranking (with signal evidence)
 /// plus the Top-25 Reels / Websites / Collaborations leaderboards (FR-2.4), and
@@ -36,7 +37,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load rankings:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -521,7 +522,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                     'Weights saved — new version applies to future entries')));
           } catch (e) {
             setLocal(() => saving = false);
-            messenger.showSnackBar(SnackBar(content: Text('$e')));
+            messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
           }
         }
 

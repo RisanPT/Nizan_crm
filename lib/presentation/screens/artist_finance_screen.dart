@@ -24,6 +24,7 @@ import '../../services/report_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/providers/trial_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 
 class ArtistFinanceScreen extends HookConsumerWidget {
@@ -815,7 +816,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         setState(() => isUploading = false);
                                         if (ctx.mounted) {
                                           ScaffoldMessenger.of(ctx).showSnackBar(
-                                            SnackBar(content: Text(e.toString())),
+                                            SnackBar(content: Text(friendlyErrorMessage(e))),
                                           );
                                         }
                                       }
@@ -1297,7 +1298,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                             ctx,
                                           ).showSnackBar(
                                             SnackBar(
-                                              content: Text(e.toString()),
+                                              content: Text(friendlyErrorMessage(e)),
                                             ),
                                           );
                                         }
@@ -1350,7 +1351,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(e.toString())));
+          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
         }
       }
     }
@@ -1400,7 +1401,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text(e.toString())));
+          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
         }
       }
     }
@@ -1557,7 +1558,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 } catch (e) {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Error downloading GST Invoice: $e')),
+                                      SnackBar(content: Text(friendlyErrorMessage(e))),
                                     );
                                   }
                                 }
@@ -2453,7 +2454,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 } catch (e) {
                                   if (ctx.mounted) {
                                     ScaffoldMessenger.of(ctx).showSnackBar(
-                                      SnackBar(content: Text('Error generating report: $e')),
+                                      SnackBar(content: Text(friendlyErrorMessage(e))),
                                     );
                                   }
                                 }
@@ -2812,14 +2813,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
             asyncCollections.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(
-                child: Text('Error: $e', style: TextStyle(color: crm.destructive)),
+                child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
               ),
               data: (_) => collectionsTab(filteredCollections),
             ),
             asyncExpenses.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(
-                child: Text('Error: $e', style: TextStyle(color: crm.destructive)),
+                child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
               ),
               data: (_) => expensesTab(filteredExpenses),
             ),
@@ -3234,7 +3235,7 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Download failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -3263,7 +3264,7 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Share failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),

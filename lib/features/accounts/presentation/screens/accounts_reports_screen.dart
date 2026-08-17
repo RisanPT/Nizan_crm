@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/staff_reports_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/report_access_picker.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Human-readable file size.
 String _fmtSize(int bytes) {
@@ -153,7 +154,7 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload failed: $e')),
+              SnackBar(content: Text(friendlyErrorMessage(e))),
             );
           }
         }
@@ -180,7 +181,7 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
         child: asyncReports.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => Center(
-            child: Text('Error loading reports: $error', style: TextStyle(color: crm.destructive)),
+            child: Text(friendlyErrorMessage(error), style: TextStyle(color: crm.destructive)),
           ),
           data: (reports) {
             if (reports.isEmpty) {

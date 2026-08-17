@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -68,13 +69,13 @@ class _GstScreenState extends ConsumerState<GstScreen> {
             12.h,
             summary.when(
               loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+              error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
               data: (s) => _summaryCard(crm, s),
             ),
             18.h,
             gstr1.when(
               loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+              error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
               data: (r) => _gstr1Section(context, crm, r),
             ),
           ],
@@ -314,7 +315,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
     try {
       await saveFileBytes('gstr1.csv', Uint8List.fromList(utf8.encode(b.toString())), mime: 'text/csv');
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 }
@@ -365,7 +366,7 @@ class _GstSettingsDialogState extends ConsumerState<_GstSettingsDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('GST settings saved — re-sync the ledger to re-split existing sales.')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -383,7 +384,7 @@ class _GstSettingsDialogState extends ConsumerState<_GstSettingsDialog> {
         padding: const EdgeInsets.all(22),
         child: async.when(
           loading: () => const SizedBox(height: 120, child: Center(child: CircularProgressIndicator())),
-          error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+          error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
           data: (loaded) {
             _seed(loaded);
             final s = _s!;

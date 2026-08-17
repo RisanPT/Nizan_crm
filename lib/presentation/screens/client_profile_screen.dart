@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/kerala_pincodes.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Last 10 digits of a phone number, ignoring spaces/dashes/country codes —
 /// the reliable key for matching a booking to a client.
@@ -184,7 +185,7 @@ class ClientProfileScreen extends HookConsumerWidget {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to update: $e')),
+                        SnackBar(content: Text(friendlyErrorMessage(e))),
                       );
                     }
                   }
@@ -225,7 +226,7 @@ class ClientProfileScreen extends HookConsumerWidget {
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to delete: $e')),
+              SnackBar(content: Text(friendlyErrorMessage(e))),
             );
           }
         }

@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/finance/presentation/widgets/report_search_fi
 import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/sort_header.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -196,7 +197,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ListView(children: [
-              Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+              Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
             ]),
             data: (rep) {
               _last = rep;
@@ -360,7 +361,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
       await downloadCsv('${spec.csvName}.csv', rows);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${spec.title} exported')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 }

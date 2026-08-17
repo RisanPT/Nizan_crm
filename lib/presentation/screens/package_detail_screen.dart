@@ -14,6 +14,7 @@ import '../../core/models/geographic_state.dart';
 import '../../core/models/service_region.dart';
 import '../../core/models/district.dart';
 import '../../core/models/service_package.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class PackageDetailScreen extends HookConsumerWidget {
   final String packageId;
@@ -348,7 +349,7 @@ class PackageDetailScreen extends HookConsumerWidget {
                                   } catch (e) {
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Failed to save: $e')),
+                                        SnackBar(content: Text(friendlyErrorMessage(e))),
                                       );
                                     }
                                   }
@@ -405,7 +406,7 @@ class PackageDetailScreen extends HookConsumerWidget {
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to delete: $e')),
+              SnackBar(content: Text(friendlyErrorMessage(e))),
             );
           }
         }

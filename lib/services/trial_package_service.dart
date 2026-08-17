@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../core/models/trial_package.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class TrialPackageService {
   final Dio _dio;
@@ -48,11 +49,5 @@ class TrialPackageService {
     }
   }
 
-  Exception _handleError(dynamic error) {
-    if (error is DioException) {
-      final message = error.response?.data?['message'] ?? error.message;
-      return Exception(message);
-    }
-    return Exception(error.toString());
-  }
+  Exception _handleError(dynamic error) => Exception(friendlyErrorMessage(error));
 }

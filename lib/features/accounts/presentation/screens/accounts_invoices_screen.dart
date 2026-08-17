@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
@@ -414,7 +415,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
           );
         },
         loading: () => Center(child: CircularProgressIndicator(color: crm.primary)),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => AppErrorView(error: err),
       ),
     );
   }

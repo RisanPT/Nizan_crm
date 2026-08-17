@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
@@ -53,9 +54,8 @@ class InventoryDashboardScreen extends ConsumerWidget {
       isMobile: isMobile,
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-            child: Text('Failed to load inventory: $e',
-                style: TextStyle(color: crm.textSecondary))),
+        error: (e, _) => AppErrorView(
+            error: e, onRetry: () => ref.invalidate(inventoryProductsProvider)),
         data: (products) {
           final totalUnits = products.fold<int>(0, (a, p) => a + p.quantity);
           final out = products.where((p) => p.isOut).toList();

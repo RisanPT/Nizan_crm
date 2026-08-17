@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class AccidentReportScreen extends ConsumerStatefulWidget {
   final String jobId;
@@ -187,7 +188,7 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to report accident: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     } finally {

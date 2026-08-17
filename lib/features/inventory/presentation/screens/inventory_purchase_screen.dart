@@ -13,6 +13,7 @@ import 'package:nizan_crm/services/upload_service.dart';
 import 'barcode_scanner_page.dart';
 import 'inventory_vendors_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// New Purchase composer — scan or type a barcode to add items, adjust
 /// quantities and cost, then save. Saving increments studio stock.
@@ -102,7 +103,7 @@ class _InventoryPurchaseScreenState
           // Real failure (couldn't reach the lookup service) — tell the user.
           if (mounted) {
             ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text('$e')));
+                .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
           }
         }
         if (!mounted) return;
@@ -118,7 +119,7 @@ class _InventoryPurchaseScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     } finally {
       if (mounted) {
@@ -167,7 +168,7 @@ class _InventoryPurchaseScreenState
       if (mounted) {
         setState(() => _uploadingBill = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Bill upload failed: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }
@@ -263,7 +264,7 @@ class _InventoryPurchaseScreenState
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }

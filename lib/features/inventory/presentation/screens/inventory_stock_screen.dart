@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/inventory/utils/inventory_import.dart';
 import 'barcode_scanner_page.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_dialogs.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 enum StockView { all, kits, remaining }
 
@@ -48,7 +49,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
       return;
     }
@@ -140,7 +141,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
         SnackBar(content: Text('Imported $inserted product${inserted == 1 ? '' : 's'}.')),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -258,7 +259,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load stock: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (products) {
           final q = _search.trim().toLowerCase();

@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/accounts/data/account_report.dart';
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/report_access_picker.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _mimeFor(String fileType) {
   switch (fileType) {
@@ -101,7 +102,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Delete failed: $e')),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       }
@@ -119,7 +120,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
       if (bytes.isEmpty) throw Exception('Empty file');
       await saveFileBytes(report.downloadName, bytes, mime: _mimeFor(report.fileType));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Download failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -197,7 +198,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
       ref.invalidate(accountReportsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Report updated')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -223,7 +224,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
         ),
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -278,7 +279,7 @@ class _StaffReportsScreenState extends ConsumerState<StaffReportsScreen> {
       body: asyncReports.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
-          child: Text('Error loading reports: $error', style: TextStyle(color: crm.destructive)),
+          child: Text(friendlyErrorMessage(error), style: TextStyle(color: crm.destructive)),
         ),
         data: (allReports) {
           // Filter by staff name and date range

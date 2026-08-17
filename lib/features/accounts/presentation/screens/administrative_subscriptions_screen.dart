@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/accounts/data/subscription.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // How many days ahead of a renewal we treat a subscription as "due soon" and
 // surface it in the on-open reminder popup.
@@ -183,7 +184,7 @@ class _AdministrativeSubscriptionsScreenState
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
           );
         }
       }
@@ -912,7 +913,7 @@ class _AddEditSubscriptionDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
         );
       }
     } finally {

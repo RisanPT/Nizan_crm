@@ -6,6 +6,7 @@ import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../data/timebox_models.dart';
 import '../../service/timebox_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _months = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -89,7 +90,7 @@ class AttendanceDetailScreen extends HookConsumerWidget {
         error: (e, _) => Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('$e', textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
+            child: Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
           ),
         ),
         data: (records) {

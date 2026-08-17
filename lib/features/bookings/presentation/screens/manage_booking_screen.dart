@@ -26,6 +26,7 @@ import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
 import 'package:nizan_crm/core/utils/whatsapp_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
@@ -4250,7 +4251,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       if (context.mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Failed to remove package: $error'),
+            content: Text(friendlyErrorMessage(error)),
             backgroundColor: Colors.red,
           ),
         );
@@ -4416,7 +4417,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       if (context.mounted) {
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Failed to add package: $error'),
+            content: Text(friendlyErrorMessage(error)),
             backgroundColor: Colors.red,
           ),
         );

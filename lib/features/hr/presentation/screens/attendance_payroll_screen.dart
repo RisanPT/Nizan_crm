@@ -9,6 +9,7 @@ import '../../data/timebox_models.dart';
 import '../../service/timebox_service.dart';
 import 'attendance_summary_screen.dart' show attendanceColor;
 import 'attendance_detail_screen.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _months = [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -49,7 +50,7 @@ class AttendancePayrollScreen extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$e'), backgroundColor: crm.destructive),
+            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
           );
         }
       } finally {
@@ -91,7 +92,7 @@ class AttendancePayrollScreen extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$e'), backgroundColor: crm.destructive),
+            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
           );
         }
       } finally {
@@ -145,7 +146,7 @@ class AttendancePayrollScreen extends HookConsumerWidget {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.cloud_off_outlined, size: 48, color: crm.destructive),
                     12.h,
-                    Text('$e', textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
+                    Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
                     16.h,
                     FilledButton.icon(
                       onPressed: () => ref.invalidate(payrollPreviewProvider),

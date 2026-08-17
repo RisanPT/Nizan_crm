@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -78,7 +79,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: accountsAsync.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
             data: (accounts) {
               final sorted = [...accounts]..sort((a, b) => a.code.compareTo(b.code));
               _accountId ??= sorted.isNotEmpty ? sorted.first.id : null;
@@ -122,7 +123,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       onRefresh: () async => ref.invalidate(ledgerProvider(key)),
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ListView(children: [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive))))]),
+        error: (e, _) => ListView(children: [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))))]),
         data: (l) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
@@ -240,7 +241,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }

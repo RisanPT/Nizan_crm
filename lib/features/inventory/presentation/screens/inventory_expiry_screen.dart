@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class InventoryExpiryScreen extends ConsumerWidget {
   const InventoryExpiryScreen({super.key});
@@ -21,7 +22,7 @@ class InventoryExpiryScreen extends ConsumerWidget {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load expiry data: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (products) {
           final withExp = products.where((p) => p.expiry != null).toList()

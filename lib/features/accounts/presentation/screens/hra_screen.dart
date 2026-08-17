@@ -9,6 +9,7 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/accounts/data/hra_record.dart';
 import 'package:nizan_crm/features/accounts/controllers/hra_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -125,7 +126,7 @@ class _HraScreenState extends ConsumerState<HraScreen> {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text('Error: $e', style: TextStyle(color: crm.destructive))),
+                child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
               ),
               data: (records) {
                 if (records.isEmpty) {
@@ -186,7 +187,7 @@ class _HraScreenState extends ConsumerState<HraScreen> {
       _refresh(ref);
       messenger.showSnackBar(const SnackBar(content: Text('HRA record deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -402,7 +403,7 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('HRA saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -433,7 +434,7 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
                 // Employee picker
                 employeesAsync.when(
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Failed to load employees: $e', style: TextStyle(color: crm.destructive)),
+                  error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
                   data: (staff) => DropdownButtonFormField<String>(
                     initialValue: _employeeId,
                     isExpanded: true,

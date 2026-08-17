@@ -36,7 +36,7 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Error: $err')),
+      error: (err, _) => AppErrorView(error: err),
       data: (allBookings) {
         bool bookingMatchesGeoFilters(Booking b) {
           if (districtId != null && districtId!.isNotEmpty && b.districtId != districtId) {
@@ -717,7 +717,7 @@ Future<void> _runWithReportLoader({
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to generate report: $e'),
+          content: Text(friendlyErrorMessage(e)),
           backgroundColor: crmColors.destructive,
         ),
       );
@@ -728,3 +728,4 @@ Future<void> _runWithReportLoader({
     }
   }
 }
+

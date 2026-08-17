@@ -8,6 +8,7 @@ import 'package:nizan_crm/features/accounts/data/sales_return.dart';
 import 'package:nizan_crm/features/accounts/controllers/sales_return_provider.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -74,7 +75,7 @@ class SalesReturnsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text('Error: $e', style: TextStyle(color: crm.destructive))),
+                child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
               ),
               data: (returns) {
                 if (returns.isEmpty) {
@@ -119,7 +120,7 @@ class SalesReturnsScreen extends ConsumerWidget {
       _refresh(ref);
       messenger.showSnackBar(SnackBar(content: Text('Credit note $status')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -144,7 +145,7 @@ class SalesReturnsScreen extends ConsumerWidget {
       _refresh(ref);
       messenger.showSnackBar(const SnackBar(content: Text('Credit note deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -383,7 +384,7 @@ class _CreditNoteDialogState extends ConsumerState<_CreditNoteDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Credit note saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

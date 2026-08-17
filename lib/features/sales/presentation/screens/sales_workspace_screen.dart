@@ -10,6 +10,7 @@ import 'package:nizan_crm/services/package_service.dart';
 import 'package:nizan_crm/services/addon_service_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'sales_leads_screen.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// The salesperson's main workspace: Leads · Calculator · Spot Invoice.
 /// The Calculator feeds a total into the Spot Invoice tab, which generates a
@@ -216,7 +217,7 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
           // Package (price shown reflects the selected district)
           asyncPackages.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('Could not load packages: $e',
+            error: (e, _) => Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.destructive)),
             data: (packages) => DropdownButtonFormField<String>(
               isExpanded: true,
@@ -442,7 +443,7 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not generate invoice: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     } finally {

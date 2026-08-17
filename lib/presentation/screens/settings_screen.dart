@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
@@ -536,7 +537,7 @@ class SettingsScreen extends HookConsumerWidget {
           }
         } catch (e) {
           if (context.mounted) {
-            _showMessage(context, 'Failed to delete user: $e');
+            _showMessage(context, friendlyErrorMessage(e));
           }
         }
       }

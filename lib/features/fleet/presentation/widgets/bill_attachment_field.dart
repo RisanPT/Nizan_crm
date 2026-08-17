@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Bill / receipt screenshot attachment for a fleet expense.
 ///
@@ -73,7 +74,7 @@ class _BillAttachmentFieldState extends ConsumerState<BillAttachmentField> {
       widget.onChanged(url);
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Bill upload failed: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     } finally {
       if (mounted) setState(() => _uploading = false);

@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/cancelled_works_report_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Indian financial year (Apr–Mar) label for a date, e.g. "FY 2026-27".
 String financialYearLabel(DateTime d) {
@@ -37,7 +38,7 @@ class CancelledWorksScreen extends HookConsumerWidget {
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load bookings:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -78,7 +79,7 @@ class CancelledWorksScreen extends HookConsumerWidget {
             );
           } catch (e) {
             messenger.showSnackBar(
-              SnackBar(content: Text('Failed to export report: $e')),
+              SnackBar(content: Text(friendlyErrorMessage(e))),
             );
           } finally {
             isExporting.value = false;

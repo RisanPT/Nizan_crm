@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Full-screen viewer for a reference look, with swipe between images.
 class ReferenceImageViewer extends StatefulWidget {
@@ -143,7 +144,7 @@ class _ReferenceImagesPanelState extends ConsumerState<ReferenceImagesPanel> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

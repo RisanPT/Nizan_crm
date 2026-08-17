@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class DriverReviewWidget extends ConsumerStatefulWidget {
   final String driverId;
@@ -53,7 +54,7 @@ class _DriverReviewWidgetState extends ConsumerState<DriverReviewWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit review: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     } finally {

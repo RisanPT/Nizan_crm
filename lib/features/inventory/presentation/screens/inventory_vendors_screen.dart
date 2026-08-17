@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class InventoryVendorsScreen extends ConsumerWidget {
   const InventoryVendorsScreen({super.key});
@@ -21,7 +22,7 @@ class InventoryVendorsScreen extends ConsumerWidget {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load vendors: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (vendors) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +150,7 @@ class InventoryVendorsScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }
@@ -250,7 +251,7 @@ Future<void> showVendorDialog(BuildContext context, WidgetRef ref,
                       setState(() => saving = false);
                       if (dialogContext.mounted) {
                         ScaffoldMessenger.of(dialogContext)
-                            .showSnackBar(SnackBar(content: Text('$e')));
+                            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                       }
                     }
                   },

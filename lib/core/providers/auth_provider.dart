@@ -5,6 +5,7 @@ import '../models/auth_session.dart';
 import '../models/employee.dart';
 import '../../services/auth_service.dart';
 import '../../services/employee_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 
@@ -140,7 +141,7 @@ class AuthController extends ChangeNotifier {
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(_sessionKey, session.toStorageValue());
     } catch (error) {
-      _errorMessage = error.toString().replaceFirst('Exception: ', '');
+      _errorMessage = friendlyErrorMessage(error);
       rethrow;
     } finally {
       _isSubmitting = false;

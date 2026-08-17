@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/lead_priority.dart';
 import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:flutter/services.dart';
@@ -319,7 +320,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                 padding: EdgeInsets.all(32.0),
                 child: CircularProgressIndicator(),
               )),
-              error: (err, stack) => Center(child: Text('Error: $err')),
+              error: (err, stack) => AppErrorView(error: err),
               data: (paginated) {
                 final leads = paginated.items;
 
@@ -1121,7 +1122,7 @@ class _LeadForm extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       } finally {
@@ -1831,7 +1832,7 @@ Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) asyn
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text(friendlyErrorMessage(e))),
       );
     }
   }
@@ -2411,7 +2412,7 @@ Future<void> _runWithReportLoader({
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to generate report: $e'),
+          content: Text(friendlyErrorMessage(e)),
           backgroundColor: crmColors.destructive,
         ),
       );
@@ -2617,7 +2618,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       } finally {
@@ -2650,7 +2651,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       } finally {
@@ -2707,7 +2708,7 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e')),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       } finally {

@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'inventory_purchase_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// One ledger line = one purchase item, carrying its parent purchase (for date,
 /// supplier and payment status).
@@ -39,7 +40,7 @@ class InventoryPurchasesScreen extends ConsumerWidget {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load ledger: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (purchases) {
           // Flatten to ledger rows (backend already sorts purchases by date desc).
@@ -251,7 +252,7 @@ class InventoryPurchasesScreen extends ConsumerWidget {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }
@@ -311,7 +312,7 @@ class InventoryPurchasesScreen extends ConsumerWidget {
         } catch (e) {
           if (context.mounted) {
             ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text('$e')));
+                .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
           }
         }
       },

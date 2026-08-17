@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/utils/image_download_service.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class CollectionImageViewerDialog extends StatefulWidget {
   final String url;
@@ -73,7 +74,7 @@ class _CollectionImageViewerDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Download failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -96,7 +97,7 @@ class _CollectionImageViewerDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Share failed: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),

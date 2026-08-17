@@ -6,6 +6,7 @@ import '../../../core/extensions/space_extension.dart';
 import '../../../core/theme/crm_theme.dart';
 import '../../../core/utils/responsive_builder.dart';
 import '../../../services/role_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Settings → Roles & Permissions.
 ///
@@ -38,7 +39,7 @@ class _RolesPermissionsScreenState
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load roles:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -480,7 +481,7 @@ class _RolesPermissionsScreenState
       );
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -546,7 +547,7 @@ class _RolesPermissionsScreenState
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-            content: Text('Could not create role: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red),
       );
     }
@@ -581,7 +582,7 @@ class _RolesPermissionsScreenState
       messenger.showSnackBar(const SnackBar(content: Text('Role deleted.')));
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
       );
     }
   }

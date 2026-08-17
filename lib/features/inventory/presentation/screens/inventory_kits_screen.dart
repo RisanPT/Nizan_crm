@@ -11,6 +11,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class InventoryKitsScreen extends ConsumerStatefulWidget {
   const InventoryKitsScreen({super.key});
@@ -259,7 +260,7 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                   const SnackBar(content: Text('Allocation updated')));
             } catch (e) {
               setSheet(() => busy = false);
-              messenger.showSnackBar(SnackBar(content: Text('$e')));
+              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
             }
           }
 
@@ -437,7 +438,7 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }
@@ -469,7 +470,7 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load kits: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (kits) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -810,7 +811,7 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
                         setState(() => saving = false);
                         if (dialogContext.mounted) {
                           ScaffoldMessenger.of(dialogContext)
-                              .showSnackBar(SnackBar(content: Text('$e')));
+                              .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                         }
                       }
                     },

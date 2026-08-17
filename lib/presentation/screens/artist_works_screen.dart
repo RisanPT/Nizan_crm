@@ -21,6 +21,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // Opens a Google Maps URL in the default browser/maps app.
 Future<void> _openMapUrl(String url, BuildContext context) async {
@@ -463,7 +464,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
             asyncUpcoming.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _ErrorView(
-                error: error.toString(),
+                error: friendlyErrorMessage(error),
                 onRetry: () => ref.invalidate(paginatedBookingsProvider(upcomingParams)),
               ),
               data: (upcomingResponse) {
@@ -490,7 +491,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
             asyncCompleted.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _ErrorView(
-                error: error.toString(),
+                error: friendlyErrorMessage(error),
                 onRetry: () => ref.invalidate(paginatedBookingsProvider(completedParams)),
               ),
               data: (completedResponse) {
@@ -518,7 +519,7 @@ class ArtistWorksScreen extends HookConsumerWidget {
             asyncTrials.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => _ErrorView(
-                error: error.toString(),
+                error: friendlyErrorMessage(error),
                 onRetry: () => ref.invalidate(artistTrialsProvider),
               ),
               data: (trials) {
@@ -772,7 +773,7 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     } finally {
@@ -2442,7 +2443,7 @@ class _ExpandedDetails extends ConsumerWidget {
                     } catch (e) {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error downloading PDF: $e')),
+                          SnackBar(content: Text(friendlyErrorMessage(e))),
                         );
                       }
                     }
@@ -2559,7 +2560,7 @@ class _ExpandedDetails extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete add-on: $e'),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -2806,7 +2807,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
             ),
             error: (err, _) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 20.0),
-              child: Text('Error loading services: $err'),
+              child: Text(friendlyErrorMessage(err)),
             ),
           ),
         ],
@@ -3354,7 +3355,7 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating status: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     }

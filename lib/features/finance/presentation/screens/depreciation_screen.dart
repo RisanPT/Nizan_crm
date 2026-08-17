@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/data/depreciation.dart';
 import 'package:nizan_crm/features/finance/controllers/asset_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -42,7 +43,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
           ]),
           data: (s) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -307,7 +308,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
         ));
       }
     } catch (e) {
-      if (mounted) messenger.showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

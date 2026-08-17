@@ -17,6 +17,7 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class CombinedAccountsDashboardScreen extends ConsumerStatefulWidget {
   const CombinedAccountsDashboardScreen({super.key});
@@ -74,7 +75,7 @@ class _CombinedAccountsDashboardScreenState
     if (error != null) {
       return Scaffold(
         body: Center(
-          child: Text('Failed to load dashboard: $error',
+          child: Text(friendlyErrorMessage(error),
               style: TextStyle(color: crm.textSecondary)),
         ),
       );

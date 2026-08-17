@@ -11,6 +11,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 enum AssignmentFilter { all, unassigned, assigned }
 
@@ -123,7 +124,7 @@ class _FleetAssignmentsScreenState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save assignment: $error'),
+            content: Text(friendlyErrorMessage(error)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -153,7 +154,7 @@ class _FleetAssignmentsScreenState
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(child: Text('Error loading assignments: $err')),
+      error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
       data: (bookings) {
         // Only show confirmed/completed bookings that have artists assigned
         final baseFilteredBookings = bookings.where((b) {

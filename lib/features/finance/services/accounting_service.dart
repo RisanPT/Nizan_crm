@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/data/report_models.dart';
@@ -12,11 +13,8 @@ class AccountingService {
   final Dio _dio;
   AccountingService(this._dio);
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return '$fallback: ${e.message}';
-  }
+  String _msg(DioException e, String fallback) =>
+      friendlyErrorMessage(e, fallback: fallback);
 
   // ── Chart of Accounts ──
   Future<List<ChartAccount>> getAccounts({String nature = 'all'}) async {

@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/trial.dart';
 import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // ── Status helpers ─────────────────────────────────────────────────────────
 extension TrialStatusX on String {
@@ -110,7 +111,7 @@ class _TrialsScreenState extends ConsumerState<TrialsScreen> {
             child: trialsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(
-                child: Text('Error: $e',
+                child: Text(friendlyErrorMessage(e),
                     style: TextStyle(color: crmColors.textSecondary)),
               ),
               data: (trials) => _buildContent(context, crmColors, trials),

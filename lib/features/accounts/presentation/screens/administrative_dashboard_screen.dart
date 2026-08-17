@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/accounts/controllers/admin_expense_controller
 import 'package:nizan_crm/features/accounts/controllers/subscription_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/sales_return_provider.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _monthNames = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -184,7 +185,7 @@ class _AdministrativeDashboardScreenState
                   child: Column(children: [
                     Icon(Icons.cloud_off_outlined, size: 44, color: crm.destructive),
                     12.h,
-                    Text('$e', textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
+                    Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
                     16.h,
                     FilledButton.icon(
                       onPressed: () => ref.invalidate(_adminMonthProvider(_key)),

@@ -12,6 +12,7 @@ import '../../services/marketing_service.dart';
 import '../widgets/csv_upload.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Marketing → Competitor master database. Track competitors, enter weekly data
 /// manually, or bulk-import from CSV. Scores are computed server-side.
@@ -48,7 +49,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load competitors:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -391,7 +392,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                 SnackBar(content: Text(existing == null ? 'Added' : 'Updated')));
           } catch (e) {
             setLocal(() => saving = false);
-            messenger.showSnackBar(SnackBar(content: Text('$e')));
+            messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
           }
         }
 
@@ -524,7 +525,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
       ref.invalidate(competitorsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 

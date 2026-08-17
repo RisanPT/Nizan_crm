@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
@@ -91,7 +92,7 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => AppErrorView(error: err),
       ),
     );
   }
@@ -181,7 +182,7 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Failed to start trip: $e')),
+              SnackBar(content: Text(friendlyErrorMessage(e))),
             );
           }
         }

@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/accounts/controllers/admin_expense_controller
 import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _departments = [
   'All',
@@ -225,7 +226,7 @@ class _AdministrativeExpensesScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
         );
       }
     }
@@ -267,7 +268,7 @@ class _AdministrativeExpensesScreenState
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
           );
         }
       }
@@ -1035,7 +1036,7 @@ class _AddEditAdminExpenseDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
         );
       }
     } finally {

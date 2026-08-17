@@ -17,6 +17,7 @@ import 'package:nizan_crm/features/accounts/controllers/collection_controller.da
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -228,7 +229,7 @@ class _AccountsDashboardScreenState
       body = const Center(child: CircularProgressIndicator());
     } else if (error != null) {
       body = Center(
-        child: Text('Failed to load dashboard: $error',
+        child: Text(friendlyErrorMessage(error),
             style: TextStyle(color: crm.textSecondary)),
       );
     } else {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/auth/access_control.dart';
@@ -308,7 +309,7 @@ class TeamManagementScreen extends HookConsumerWidget {
       ),
       body: asyncUsers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => AppErrorView(error: e),
         data: (_) {
           if (myTeam.isEmpty) {
             return Center(
@@ -361,7 +362,7 @@ class TeamManagementScreen extends HookConsumerWidget {
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(e.toString())),
+                        SnackBar(content: Text(friendlyErrorMessage(e))),
                       );
                     }
                   }

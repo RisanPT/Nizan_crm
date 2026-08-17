@@ -20,6 +20,7 @@ import '../../services/state_service.dart';
 import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
 import 'staff_details_screen.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
   const StaffManagementScreen({super.key});
@@ -1830,7 +1831,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                                SnackBar(content: Text(friendlyErrorMessage(e))),
                               );
                             }
                           }

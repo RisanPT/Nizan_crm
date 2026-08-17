@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/inventory/data/inventory_product.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/data/staff_kit.dart';
@@ -417,11 +418,6 @@ class InventoryService {
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map<String, dynamic>) {
-      return data['message'] as String? ?? fallback;
-    }
-    return e.message ?? fallback;
-  }
+  String _msg(DioException e, String fallback) =>
+      friendlyErrorMessage(e, fallback: fallback);
 }

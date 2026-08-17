@@ -11,6 +11,7 @@ import '../../core/utils/client_report_service.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/customer_service.dart';
 import '../../models/customer.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class ClientsDirectoryScreen extends HookConsumerWidget {
   const ClientsDirectoryScreen({super.key});
@@ -147,7 +148,7 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
         await printClientsReport(clients);
       } catch (e) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Failed to export report: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       } finally {
         isExporting.value = false;
@@ -485,7 +486,7 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
           if (context.mounted) {
             ScaffoldMessenger.of(
               context,
-            ).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+            ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
           }
         }
       }

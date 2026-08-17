@@ -17,6 +17,7 @@ import 'package:nizan_crm/services/package_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/district.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
@@ -556,7 +557,7 @@ class AddBookingScreen extends HookConsumerWidget {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              error.toString().replaceFirst('Exception: ', ''),
+              friendlyErrorMessage(error),
             ),
             backgroundColor: Colors.redAccent,
           ),

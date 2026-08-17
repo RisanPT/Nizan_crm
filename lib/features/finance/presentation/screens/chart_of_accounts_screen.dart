@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -64,7 +65,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
           ]),
           data: (all) {
             if (all.isEmpty) return _emptySeed(context, ref, crm);
@@ -230,7 +231,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       ref.invalidate(chartAccountsProvider('all'));
       messenger.showSnackBar(SnackBar(content: Text('Seeded $n accounts')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -255,7 +256,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       ref.invalidate(chartAccountsProvider('all'));
       messenger.showSnackBar(const SnackBar(content: Text('Account deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -268,7 +269,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       ref.invalidate(chartAccountsProvider('all'));
       messenger.showSnackBar(SnackBar(content: Text(archived ? 'Account archived' : 'Account restored')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -350,7 +351,7 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Account saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _saving = false);
     }

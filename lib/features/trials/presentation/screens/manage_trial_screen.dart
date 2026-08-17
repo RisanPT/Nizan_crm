@@ -11,6 +11,7 @@ import 'package:nizan_crm/core/providers/trial_package_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/trial_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // ── Outcome config ─────────────────────────────────────────────────────────
 const _outcomes = [
@@ -215,7 +216,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -257,7 +258,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -333,7 +334,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
                 loading: () => Center(
                     child: CircularProgressIndicator(color: crmColors.primary)),
                 error: (err, _) => Center(
-                    child: Text('Error: $err',
+                    child: Text(friendlyErrorMessage(err),
                         style: TextStyle(color: crmColors.destructive))),
               ),
             ),

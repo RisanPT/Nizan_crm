@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../providers/dio_provider.dart';
+import '../../../core/error/error_message.dart';
 import '../data/marketing_models.dart';
 
 final marketingServiceProvider = Provider<MarketingService>((ref) {
@@ -140,9 +141,6 @@ class MarketingService {
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] is String) return data['message'];
-    return e.message ?? fallback;
-  }
+  String _msg(DioException e, String fallback) =>
+      friendlyErrorMessage(e, fallback: fallback);
 }

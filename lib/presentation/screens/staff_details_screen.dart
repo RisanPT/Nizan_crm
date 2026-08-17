@@ -8,6 +8,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../services/employee_service.dart';
 import '../../core/models/salary_increment.dart';
 import '../../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
@@ -96,7 +97,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload image: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     } finally {
@@ -156,7 +157,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 if (ctx.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                 }
               }
             },
@@ -413,7 +414,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                               );
                             },
                             loading: () => const CircularProgressIndicator(),
-                            error: (err, stack) => Text('Error: $err'),
+                            error: (err, stack) => Text(friendlyErrorMessage(err)),
                           );
                         },
                       ),

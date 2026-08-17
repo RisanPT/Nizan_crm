@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
@@ -37,7 +38,7 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
         body: Center(child: CircularProgressIndicator(color: Color(0xFF4A1942))),
       ),
       error: (err, _) => Scaffold(
-        body: Center(child: Text('Error: $err')),
+        body: AppErrorView(error: err),
       ),
     );
   }
@@ -488,7 +489,7 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
         setState(() => _isCompleting = false);
         messenger.showSnackBar(
           SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            content: Text(friendlyErrorMessage(e)),
             backgroundColor: Colors.red[700],
             behavior: SnackBarBehavior.floating,
           ),

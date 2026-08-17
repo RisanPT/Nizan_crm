@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../core/extensions/space_extension.dart';
@@ -558,7 +559,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                 ),
                 error: (err, stack) => SizedBox(
                   height: 200,
-                  child: Center(child: Text('Error: $err')),
+                  child: AppErrorView(error: err),
                 ),
                 data: (_) {
                   if (filteredArtists.isEmpty) {

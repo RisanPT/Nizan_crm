@@ -15,6 +15,7 @@ import '../../services/zone_service.dart';
 import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class AddServiceScreen extends HookConsumerWidget {
   final String? packageId;
@@ -156,7 +157,7 @@ class AddServiceScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Failed to save package: $e')));
+          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
         }
       } finally {
         isSaving.value = false;

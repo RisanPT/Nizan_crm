@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/models/trial_package.dart';
 import 'package:nizan_crm/core/providers/trial_package_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class TrialPackagesScreen extends ConsumerWidget {
   const TrialPackagesScreen({super.key});
@@ -85,7 +86,7 @@ class TrialPackagesScreen extends ConsumerWidget {
         },
         loading: () => Center(child: CircularProgressIndicator(color: crmColors.primary)),
         error: (error, stack) => Center(
-          child: Text('Error: $error', style: TextStyle(color: crmColors.destructive)),
+          child: Text(friendlyErrorMessage(error), style: TextStyle(color: crmColors.destructive)),
         ),
       ),
     );
@@ -182,7 +183,7 @@ class TrialPackagesScreen extends ConsumerWidget {
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: $e')),
+                                SnackBar(content: Text(friendlyErrorMessage(e))),
                               );
                             }
                             setState(() => isSaving = false);
@@ -226,7 +227,7 @@ class TrialPackagesScreen extends ConsumerWidget {
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error deleting: $e')),
+                    SnackBar(content: Text(friendlyErrorMessage(e))),
                   );
                 }
               }

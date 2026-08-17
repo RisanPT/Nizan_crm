@@ -19,6 +19,7 @@ import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class GeographicManagementScreen extends HookConsumerWidget {
   const GeographicManagementScreen({super.key});
@@ -753,7 +754,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
           }
           return asyncZones.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error loading zones: $err')),
+            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -863,7 +864,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'States':
           return asyncStates.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error loading states: $err')),
+            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -938,7 +939,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Regions':
           return asyncRegions.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error loading regions: $err')),
+            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -1036,7 +1037,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Districts':
           return asyncDistricts.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error loading districts: $err')),
+            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -1134,7 +1135,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Pincodes':
           return asyncPincodes.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text('Error loading pincodes: $err')),
+            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items

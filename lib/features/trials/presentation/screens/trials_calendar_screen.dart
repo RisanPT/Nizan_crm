@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/services/trial_service.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Trials calendar — mirrors the booking calendar's UI/UX (Month / Week / Day)
 /// but bound to studio trials. Isolated from the booking calendar.
@@ -768,7 +769,7 @@ class TrialsCalendarScreen extends HookConsumerWidget {
                   const SnackBar(content: Text('Trial updated')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
             }
           }
 

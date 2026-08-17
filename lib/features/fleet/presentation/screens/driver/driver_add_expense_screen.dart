@@ -6,6 +6,7 @@ import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
 import 'package:nizan_crm/features/fleet/presentation/widgets/bill_attachment_field.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Extracts the vehicle id out of a job's `vehicleId`, which the API returns
 /// either as a raw id string or as a populated vehicle object.
@@ -169,7 +170,7 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
         if (context.mounted) {
           ScaffoldMessenger.of(
             context,
-          ).showSnackBar(SnackBar(content: Text('Failed: $e')));
+          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
         }
       } finally {
         isSaving.value = false;

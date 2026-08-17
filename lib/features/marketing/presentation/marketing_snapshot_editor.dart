@@ -6,6 +6,7 @@ import '../../../core/theme/crm_theme.dart';
 import '../data/marketing_models.dart';
 import '../services/marketing_service.dart';
 import 'widgets/marketing_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Weekly snapshot metrics. (key, label)
 const marketingMetricFields = <(String, String)>[
@@ -184,7 +185,7 @@ Future<bool> showSnapshotEditor(
               const SnackBar(content: Text('Weekly score saved')));
         } catch (e) {
           setLocal(() => saving = false);
-          messenger.showSnackBar(SnackBar(content: Text('$e')));
+          messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
         }
       }
 

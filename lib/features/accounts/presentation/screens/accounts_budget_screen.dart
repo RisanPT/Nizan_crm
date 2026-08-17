@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/budget_controller.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class AccountsBudgetScreen extends ConsumerStatefulWidget {
   const AccountsBudgetScreen({super.key});
@@ -240,7 +241,7 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
     if (error != null) {
       return SizedBox(
         height: 300,
-        child: Center(child: Text('Failed to load financials: $error', style: TextStyle(color: crm.textSecondary))),
+        child: Center(child: Text(friendlyErrorMessage(error), style: TextStyle(color: crm.textSecondary))),
       );
     }
 

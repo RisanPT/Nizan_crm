@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Accounts → Bills / Payables. Vendor bills (from inventory purchases) with
 /// paid/unpaid + GST tracking, bill viewing, and payment recording — Zoho-style.
@@ -69,7 +70,7 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load bills:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -575,7 +576,7 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
                   const SnackBar(content: Text('Payment recorded')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text('$e')));
+              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
             }
           }
 
@@ -706,7 +707,7 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
                   .showSnackBar(const SnackBar(content: Text('Bill updated')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text('$e')));
+              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
             }
           }
 
@@ -853,7 +854,7 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
       messenger.showSnackBar(
           SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 

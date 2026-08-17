@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/controllers/asset_provider.dart';
 import 'package:nizan_crm/services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -169,7 +170,7 @@ class _AssetListState extends ConsumerState<_AssetList> {
             Padding(
               padding: const EdgeInsets.all(40),
               child: Center(
-                  child: Text('$e',
+                  child: Text(friendlyErrorMessage(e),
                       style: TextStyle(color: crm.destructive))),
             ),
           ]),
@@ -272,7 +273,7 @@ class _AssetListState extends ConsumerState<_AssetList> {
       ref.invalidate(assetStatsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Asset deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -578,7 +579,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Asset saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -866,7 +867,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
       final url = await ref.read(uploadServiceProvider).uploadImage(img);
       if (mounted) setState(() => _imageUrl = url);
     } catch (e) {
-      if (mounted) messenger.showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     } finally {
       if (mounted) setState(() => _uploadingImage = false);
     }

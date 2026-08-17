@@ -12,6 +12,7 @@ import 'package:nizan_crm/services/user_service.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:nizan_crm/presentation/screens/staff_details_screen.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class FleetDriversScreen extends HookConsumerWidget {
   const FleetDriversScreen({super.key});
@@ -320,7 +321,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                             setState(() => savingDriver = false);
                             if (dialogContext.mounted) {
                               ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                SnackBar(content: Text('Failed to save: $e')),
+                                SnackBar(content: Text(friendlyErrorMessage(e))),
                               );
                             }
                           }
@@ -789,7 +790,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                           } catch (e) {
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
+                                SnackBar(content: Text(friendlyErrorMessage(e))),
                               );
                             }
                           }

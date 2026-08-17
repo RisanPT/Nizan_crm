@@ -6,6 +6,7 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mode_sheet.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class BookingRequestsScreen extends ConsumerStatefulWidget {
   const BookingRequestsScreen({super.key});
@@ -40,7 +41,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to confirm booking: $error')),
+          SnackBar(content: Text(friendlyErrorMessage(error))),
         );
       }
     }
@@ -79,7 +80,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to reject booking: $error')),
+          SnackBar(content: Text(friendlyErrorMessage(error))),
         );
       }
     }
@@ -110,7 +111,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to confirm bookings: $error')),
+          SnackBar(content: Text(friendlyErrorMessage(error))),
         );
       }
     } finally {
@@ -128,7 +129,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
       child: asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) =>
-          Center(child: Text('Failed to load booking requests: $error')),
+          Center(child: Text(friendlyErrorMessage(error))),
       data: (bookings) {
         final pendingBookings =
             bookings
@@ -850,7 +851,7 @@ class _BookingApprovalDialogState
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update booking: $error')),
+          SnackBar(content: Text(friendlyErrorMessage(error))),
         );
       }
     } finally {

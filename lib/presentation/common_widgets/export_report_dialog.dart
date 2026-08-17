@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/export_utils.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class ExportReportDialog<T> extends HookWidget {
   final String title;
@@ -62,7 +63,7 @@ class ExportReportDialog<T> extends HookWidget {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Export failed: $e')),
+            SnackBar(content: Text(friendlyErrorMessage(e))),
           );
         }
       } finally {

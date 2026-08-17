@@ -24,6 +24,7 @@ import 'package:nizan_crm/services/region_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class CalendarScreen extends HookConsumerWidget {
   const CalendarScreen({super.key, this.initialFocusDate});
@@ -1003,7 +1004,7 @@ class CalendarScreen extends HookConsumerWidget {
                   if (dialogContext.mounted) {
                     ScaffoldMessenger.of(dialogContext).showSnackBar(
                       SnackBar(
-                        content: Text('Failed to save blocked date: $error'),
+                        content: Text(friendlyErrorMessage(error)),
                       ),
                     );
                   }
@@ -3040,7 +3041,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
         artistName: widget.title,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('PDF error: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     } finally {
       if (mounted) setState(() => _pdfBusy = false);
     }
@@ -3094,7 +3095,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => f.saving = false);
-      messenger.showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 

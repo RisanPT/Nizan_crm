@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -46,7 +47,7 @@ class _BankReconciliationScreenState
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: accountsAsync.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
             data: (accounts) {
               if (accounts.isEmpty) {
                 return Text('No bank or cash accounts found. Mark an account as bank/cash in the Chart of Accounts.',
@@ -116,7 +117,7 @@ class _BankReconciliationScreenState
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ListView(children: [
-          Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+          Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
         ]),
         data: (r) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
@@ -616,7 +617,7 @@ class _BankReconciliationScreenState
       final msg = okMsg ?? (result is String ? result : null);
       if (mounted && msg != null) messenger.showSnackBar(SnackBar(content: Text(msg)));
     } catch (e) {
-      if (mounted) messenger.showSnackBar(SnackBar(content: Text('$e')));
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

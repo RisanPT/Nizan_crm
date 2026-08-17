@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/reports/data/financial_analyst_report.dart';
 import 'package:nizan_crm/features/reports/services/financial_report_service.dart';
 import 'package:nizan_crm/core/utils/financial_report_service.dart' as export_svc;
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) {
   final s = v.round().toString();
@@ -105,7 +106,7 @@ class _FinancialAnalystReportScreenState
               error: (e, _) => Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Could not load report:\n$e',
+                  child: Text(friendlyErrorMessage(e),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: crm.textSecondary)),
                 ),

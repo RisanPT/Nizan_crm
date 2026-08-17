@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -205,7 +206,7 @@ class _AdministrativeSalariesScreenState
                     } catch (e) {
                       if (ctx.mounted) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
+                          SnackBar(content: Text(friendlyErrorMessage(e))),
                         );
                       }
                     }
@@ -410,7 +411,7 @@ class _AdministrativeSalariesScreenState
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text('Error loading salaries: $err'),
+                child: Text(friendlyErrorMessage(err)),
               ),
               data: (result) {
                 final stats = result.stats;
@@ -594,7 +595,7 @@ class _AdministrativeSalariesScreenState
               child: salariesAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (err, _) =>
-                    Center(child: Text('Failed to load salaries: $err')),
+                    Center(child: Text(friendlyErrorMessage(err))),
                 data: (result) {
                   final list = result.salaries;
                   if (list.isEmpty) {

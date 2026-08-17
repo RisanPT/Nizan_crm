@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/finance/data/report_models.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -80,7 +81,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
           ]),
           data: (r) {
             _last = r;
@@ -158,7 +159,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }

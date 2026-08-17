@@ -9,6 +9,7 @@ import '../../../../core/providers/trial_provider.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Sales → Quarterly performance inner page. Overall Q1–Q4 view for the
 /// selected financial year: works, revenue, advance, and a month breakdown.
@@ -66,7 +67,7 @@ class SalesQuarterlyScreen extends ConsumerWidget {
     return async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-          child: Text('Failed to load: $e',
+          child: Text(friendlyErrorMessage(e),
               style: TextStyle(color: crm.textSecondary)),
         ),
         data: (all) {

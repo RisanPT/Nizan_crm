@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
@@ -50,7 +51,7 @@ class _AccountsFleetExpensesScreenState
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text('Failed to load fleet expenses:\n$e',
+          child: Text(friendlyErrorMessage(e),
               textAlign: TextAlign.center,
               style: TextStyle(color: crm.textSecondary)),
         ),
@@ -230,7 +231,7 @@ class _AccountsFleetExpensesScreenState
       ref.invalidate(fuelExpensesProvider);
       messenger.showSnackBar(SnackBar(content: Text('Marked $status')));
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(err))));
     }
   }
 

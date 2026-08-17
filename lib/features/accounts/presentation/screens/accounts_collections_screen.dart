@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
 import '../../../../core/extensions/space_extension.dart';
@@ -201,7 +202,7 @@ class _AccountsCollectionsScreenState
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) =>
-                    Center(child: Text('Error loading collections: $e')),
+                    Center(child: Text(friendlyErrorMessage(e))),
               ),
 
               // Tab 2: Invoice Balances
@@ -724,7 +725,7 @@ class _AccountsCollectionsScreenState
               setLocal(() => busy = false);
               if (ctx.mounted) {
                 ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text('Could not open report: $e')));
+                    SnackBar(content: Text(friendlyErrorMessage(e))));
               }
             }
           }
@@ -978,7 +979,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Error: $e')),
+      error: (e, _) => AppErrorView(error: e),
       data: (all) {
         if (all.isEmpty) {
           return _empty(crm, 'No bookings with verified collections yet.');
@@ -1372,7 +1373,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Download failed: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }

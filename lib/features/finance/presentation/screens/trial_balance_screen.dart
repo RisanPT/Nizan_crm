@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart'
 import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/report_search_field.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) => v == 0
     ? ''
@@ -84,7 +85,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ListView(children: [
-                Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+                Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
               ]),
               data: (tb) {
                 _last = tb;
@@ -143,7 +144,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
       }
     }
   }

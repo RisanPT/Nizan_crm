@@ -10,6 +10,7 @@ import '../../../../core/utils/attendance_report_service.dart';
 import '../../data/timebox_models.dart';
 import '../../service/timebox_service.dart';
 import 'attendance_detail_screen.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Colour ramp for an attendance percentage.
 Color attendanceColor(int percent, CrmTheme crm) {
@@ -85,7 +86,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
       body: summaryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => _ErrorView(
-          message: '$e',
+          message: friendlyErrorMessage(e),
           onRetry: () => ref.invalidate(attendanceSummaryProvider),
         ),
         data: (rows) {
@@ -143,7 +144,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
             } catch (e) {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Export failed: $e'), backgroundColor: crm.destructive),
+                  SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
                 );
               }
             } finally {

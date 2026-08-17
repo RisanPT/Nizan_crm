@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -111,7 +112,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('$e', style: TextStyle(color: crm.destructive)))),
+            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
           ]),
           data: (all) {
             final entries = all.where(_matchesSearch).toList();
@@ -276,7 +277,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
       ref.invalidate(accountingSettingsProvider);
       messenger.showSnackBar(SnackBar(content: Text('Books closed through ${DateFormat('d MMM yyyy').format(picked)}')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -306,7 +307,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
       ref.invalidate(accountingSettingsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Books reopened')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -432,7 +433,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
       messenger.showSnackBar(SnackBar(content: Text('Posted $posted voucher${posted == 1 ? '' : 's'} from operations')));
     } catch (e) {
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -459,7 +460,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
       ref.invalidate(trialBalanceProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Voucher voided')));
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text('$err')));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(err))));
     }
   }
 }
@@ -536,7 +537,7 @@ class _VoucherDialogState extends ConsumerState<_VoucherDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Voucher posted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -581,7 +582,7 @@ class _VoucherDialogState extends ConsumerState<_VoucherDialog> {
           14.h,
           accountsAsync.when(
             loading: () => const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text('$e', style: TextStyle(color: crm.destructive)),
+            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
             data: (accounts) {
               if (accounts.isEmpty) {
                 return Padding(

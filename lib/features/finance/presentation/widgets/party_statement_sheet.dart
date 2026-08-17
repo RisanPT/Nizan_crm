@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/aging_report.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -75,7 +76,7 @@ class _PartyStatementSheet extends ConsumerWidget {
           Expanded(
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('$e', style: TextStyle(color: crm.destructive)))),
+              error: (e, _) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
               data: (s) => _body(crm, accent, s, scrollController),
             ),
           ),

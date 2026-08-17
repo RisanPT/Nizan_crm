@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/services/user_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Shows a dialog to choose which users may view a report. Returns the selected
 /// user ids, or null if cancelled. The owner is never listed (they always have
@@ -93,7 +94,7 @@ class _ReportAccessPickerState extends ConsumerState<_ReportAccessPicker> {
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (e, _) => Text('Failed to load users: $e',
+                error: (e, _) => Text(friendlyErrorMessage(e),
                     style: TextStyle(color: crm.destructive)),
                 data: (users) {
                   final people = users

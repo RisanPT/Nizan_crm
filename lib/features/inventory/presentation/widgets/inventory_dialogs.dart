@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/barcode_scanner_page.dart';
 import 'inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Add / edit a single inventory product. Used by Stock List and by the
 /// artist "My Inventory" screen.
@@ -370,7 +371,7 @@ Future<void> showProductDialog(
                       setState(() => saving = false);
                       if (dialogContext.mounted) {
                         ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text('$e')),
+                          SnackBar(content: Text(friendlyErrorMessage(e))),
                         );
                       }
                     }

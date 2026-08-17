@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/controllers/asset_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -37,7 +38,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
           error: (e, _) => ListView(children: [
             Padding(
               padding: const EdgeInsets.all(40),
-              child: Center(child: Text('$e', style: TextStyle(color: crm.destructive))),
+              child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
             ),
           ]),
           data: (stats) {

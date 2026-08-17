@@ -7,6 +7,7 @@ import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 enum _Urgency { completed, overdue, dueSoon, upcoming }
 
@@ -464,7 +465,7 @@ class _FleetServiceRemindersScreenState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     }
@@ -558,7 +559,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
       if (mounted) {
         setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(content: Text(friendlyErrorMessage(e))),
         );
       }
     }
@@ -602,7 +603,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                     );
                   },
                   loading: () => const CircularProgressIndicator(),
-                  error: (err, _) => Text('Error loading vehicles: $err'),
+                  error: (err, _) => Text(friendlyErrorMessage(err)),
                 ),
                 16.h,
                 DropdownButtonFormField<String>(

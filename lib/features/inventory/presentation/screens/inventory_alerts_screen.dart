@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_dialogs.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class InventoryAlertsScreen extends ConsumerWidget {
   const InventoryAlertsScreen({super.key});
@@ -22,7 +23,7 @@ class InventoryAlertsScreen extends ConsumerWidget {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
-            child: Text('Failed to load alerts: $e',
+            child: Text(friendlyErrorMessage(e),
                 style: TextStyle(color: crm.textSecondary))),
         data: (products) {
           final out = products.where((p) => p.isOut).toList();

@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 const _months = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -72,7 +73,7 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Icon(Icons.cloud_off_outlined, size: 48, color: crm.destructive),
               12.h,
-              Text('$e', textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
+              Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
               16.h,
               FilledButton.icon(
                 onPressed: () => ref.invalidate(bookingProvider),

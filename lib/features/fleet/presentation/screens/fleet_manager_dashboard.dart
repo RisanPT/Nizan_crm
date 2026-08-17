@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 
@@ -75,7 +76,7 @@ class _DriverReviewsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Error: $e')),
+      error: (e, st) => AppErrorView(error: e),
     );
   }
 }
@@ -114,7 +115,7 @@ class _AccidentsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => Center(child: Text('Error: $e')),
+      error: (e, st) => AppErrorView(error: e),
     );
   }
 }

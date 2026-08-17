@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/data/depreciation.dart';
 
@@ -6,11 +7,8 @@ class AssetService {
   final Dio _dio;
   AssetService(this._dio);
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return '$fallback: ${e.message}';
-  }
+  String _msg(DioException e, String fallback) =>
+      friendlyErrorMessage(e, fallback: fallback);
 
   /// [type] = 'digital' | 'physical' | 'all'.
   Future<List<Asset>> getAssets({String type = 'all', String? search}) async {

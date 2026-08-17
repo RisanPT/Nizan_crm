@@ -14,6 +14,7 @@ import 'package:nizan_crm/services/lead_activity_service.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // Formatting helpers
 String _fmtDate(DateTime d) {
@@ -111,7 +112,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
       ),
       body: asyncLeads.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error loading lead: $err')),
+        error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
         data: (leads) {
           final leadIndex = leads.indexWhere((l) => l.id == leadId);
           if (leadIndex == -1) {
@@ -150,7 +151,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (err, stack) =>
-                      Center(child: Text('Error loading logs: $err')),
+                      Center(child: Text(friendlyErrorMessage(err))),
                   data: (activities) {
                     final filtered = activities
                         .where((act) => act.type == selectedTab.value)
@@ -780,7 +781,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(
                     context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                 }
               }
             },
@@ -854,7 +855,7 @@ class _TransferLeadDialog extends HookConsumerWidget {
           height: 100,
           child: Center(child: CircularProgressIndicator()),
         ),
-        error: (err, stack) => Text('Error loading users: $err'),
+        error: (err, stack) => Text(friendlyErrorMessage(err)),
         data: (users) {
           final salesStaff = users.where((u) => u.role == 'sales').toList();
           return DropdownButtonFormField<String?>(
@@ -905,7 +906,7 @@ class _TransferLeadDialog extends HookConsumerWidget {
                     if (context.mounted) {
                       ScaffoldMessenger.of(
                         context,
-                      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                     }
                   } finally {
                     isSaving.value = false;
@@ -1131,7 +1132,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                     if (context.mounted) {
                       ScaffoldMessenger.of(
                         context,
-                      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                     }
                   } finally {
                     isSaving.value = false;
