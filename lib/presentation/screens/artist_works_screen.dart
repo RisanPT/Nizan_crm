@@ -23,16 +23,24 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/upload_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
-// Opens a Google Maps URL in the default browser/maps app.
 Future<void> _openMapUrl(String url, BuildContext context) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null) return;
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } else if (context.mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not open Google Maps link.')),
-    );
+  try {
+    if (kIsWeb) {
+      await launchUrl(uri);
+    } else {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open Google Maps link.')),
+      );
+    }
   }
 }
 
@@ -154,7 +162,6 @@ void _showWhatsAppSelectionBottomSheet(BuildContext context, Booking booking, St
   );
 }
 
-// Shows a selection sheet for calling primary or alternative number.
 void _showCallSelectionBottomSheet(BuildContext context, Booking booking, String primary, String secondary) {
   final crm = context.crmColors;
   showModalBottomSheet(
@@ -231,6 +238,81 @@ void _showCallSelectionBottomSheet(BuildContext context, Booking booking, String
                 _makePhoneCall(secondary, context);
               },
             ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+void _showMapSelectionBottomSheet(BuildContext context, Booking booking, List<OutfitLook> mapLooks) {
+  final crm = context.crmColors;
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 10,
+              offset: Offset(0, -4),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Location',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: crm.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      booking.customerName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            ...mapLooks.map((look) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _PhoneOptionTile(
+                number: 'Open Map',
+                label: look.lookLabel,
+                icon: Icons.location_on_rounded,
+                color: const Color(0xFF34A853),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openMapUrl(look.mapUrl, context);
+                },
+              ),
+            )),
           ],
         ),
       );
@@ -1535,7 +1617,7 @@ class _AnimatedWorkCard extends ConsumerWidget {
                                 ],
                               ),
                             ],
-                            if (booking.phone.trim().isNotEmpty || booking.mapUrl.isNotEmpty) ...[
+                            if (booking.phone.trim().isNotEmpty || booking.mapUrl.isNotEmpty || booking.outfitLooks.any((l) => l.mapUrl.isNotEmpty)) ...[
                               8.h,
                               Row(
                                 children: [
@@ -1596,45 +1678,68 @@ class _AnimatedWorkCard extends ConsumerWidget {
                                       ),
                                     ),
                                   ],
-                                  if (booking.mapUrl.isNotEmpty) ...[
-                                    if (booking.phone.trim().isNotEmpty) 8.w,
-                                    GestureDetector(
-                                      onTap: () => _openMapUrl(booking.mapUrl, context),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF34A853).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: const Color(0xFF34A853).withValues(alpha: 0.4),
+                                  ...() {
+                                    final mapLooks = <OutfitLook>[];
+                                    if (booking.mapUrl.trim().isNotEmpty) {
+                                      mapLooks.add(OutfitLook(lookLabel: 'Primary Location', mapUrl: booking.mapUrl.trim()));
+                                    }
+                                    for (int i = 0; i < booking.outfitLooks.length; i++) {
+                                      final look = booking.outfitLooks[i];
+                                      if (look.mapUrl.trim().isNotEmpty && look.mapUrl.trim() != booking.mapUrl.trim()) {
+                                        mapLooks.add(OutfitLook(
+                                          lookLabel: look.lookLabel.isNotEmpty ? look.lookLabel : 'Look ${i + 1} Location',
+                                          mapUrl: look.mapUrl.trim()
+                                        ));
+                                      }
+                                    }
+                                    if (mapLooks.isEmpty) return <Widget>[];
+
+                                    return <Widget>[
+                                      if (booking.phone.trim().isNotEmpty) 8.w,
+                                      GestureDetector(
+                                        onTap: () {
+                                          if (mapLooks.length == 1) {
+                                            _openMapUrl(mapLooks.first.mapUrl, context);
+                                          } else {
+                                            _showMapSelectionBottomSheet(context, booking, mapLooks);
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF34A853).withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(20),
+                                            border: Border.all(
+                                              color: const Color(0xFF34A853).withValues(alpha: 0.4),
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.location_on_rounded,
+                                                size: 10,
+                                                color: Color(0xFF34A853),
+                                              ),
+                                              SizedBox(width: 3),
+                                              Text(
+                                                'MAP',
+                                                style: TextStyle(
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: Color(0xFF34A853),
+                                                  letterSpacing: 0.5,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
-                                        child: const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.location_on_rounded,
-                                              size: 10,
-                                              color: Color(0xFF34A853),
-                                            ),
-                                            SizedBox(width: 3),
-                                            Text(
-                                              'MAP',
-                                              style: TextStyle(
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.w800,
-                                                color: Color(0xFF34A853),
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ];
+                                  }(),
                                 ],
                               ),
                             ],

@@ -17,7 +17,7 @@ void main() {
   testWidgets('Reports Center: lists, filters by category, favorites, search',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
-    tester.view.physicalSize = const Size(1200, 1100);
+    tester.view.physicalSize = const Size(1200, 1900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -50,7 +50,7 @@ void main() {
     await tester.tap(find.text('Favorites').first);
     await tester.pumpAndSettle();
     expect(find.text('No favorites yet'), findsNothing);
-    expect(find.text('Profit and Loss'), findsOneWidget); // first catalog entry
+    expect(find.text('Month-End Review'), findsOneWidget); // first catalog entry
 
     // Search narrows the list.
     await tester.tap(find.text('All Reports').first);

@@ -76,6 +76,10 @@ import 'package:nizan_crm/features/reports/presentation/screens/financial_analys
 import 'package:nizan_crm/features/finance/presentation/screens/finance_dashboard_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/reports_center_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/sales_report_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/month_end_review_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/monthly_planning_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/ceo_decisions_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/financial_glossary_screen.dart';
 import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
@@ -148,6 +152,10 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/hra') return 'payables.hra';
   // Company Finance
   if (path == '/company-finance') return 'company_finance.dashboard';
+  if (path.startsWith('/company-finance/month-end')) return 'company_finance.month_end';
+  if (path.startsWith('/company-finance/planning')) return 'company_finance.month_end';
+  if (path.startsWith('/company-finance/decisions')) return 'company_finance.month_end';
+  if (path.startsWith('/company-finance/glossary')) return 'company_finance.month_end';
   if (path.startsWith('/company-finance/sales')) return 'company_finance.sales_reports';
   if (path.startsWith('/company-finance/reports')) return 'company_finance.reports';
   if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
@@ -410,6 +418,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Financial Report';
           } else if (state.uri.path == '/company-finance') {
             title = 'Finance Dashboard';
+          } else if (state.uri.path == '/company-finance/month-end') {
+            title = 'Month-End Review';
+          } else if (state.uri.path == '/company-finance/planning') {
+            title = 'Monthly Planning';
+          } else if (state.uri.path == '/company-finance/decisions') {
+            title = 'CEO Decisions';
+          } else if (state.uri.path == '/company-finance/glossary') {
+            title = 'Financial Glossary';
           } else if (state.uri.path == '/company-finance/reports') {
             title = 'Reports Center';
           } else if (state.uri.path.startsWith('/company-finance/sales/')) {
@@ -848,6 +864,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/reports',
             builder: (context, state) => const ReportsCenterScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/month-end',
+            builder: (context, state) => const MonthEndReviewScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/planning',
+            builder: (context, state) => const MonthlyPlanningScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/decisions',
+            builder: (context, state) => const CeoDecisionsScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/glossary',
+            builder: (context, state) => const FinancialGlossaryScreen(),
           ),
           GoRoute(
             path: '/company-finance/sales/by-customer',

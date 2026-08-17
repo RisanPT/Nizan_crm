@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -650,8 +651,17 @@ class CalendarScreen extends HookConsumerWidget {
   // Open a Google-Maps (or any) link in the device's default app.
   static Future<void> _openMapUrl(String url) async {
     final uri = Uri.tryParse(url.trim());
-    if (uri != null && await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (uri != null) {
+      try {
+        if (kIsWeb) {
+          await launchUrl(uri);
+        } else {
+          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (!launched) {
+            await launchUrl(uri, mode: LaunchMode.platformDefault);
+          }
+        }
+      } catch (_) {}
     }
   }
 

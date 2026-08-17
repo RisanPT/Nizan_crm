@@ -22,6 +22,7 @@ class FinanceReport {
 
 /// Category display order for the Reports Center rail.
 const kReportCategories = <String>[
+  'CEO Review',
   'Business Overview',
   'Sales',
   'Accountant',
@@ -34,6 +35,38 @@ const kReportCategories = <String>[
 /// Every finance report, grouped by category. Add new reports here and they
 /// appear in the Reports Center automatically.
 const kFinanceReports = <FinanceReport>[
+  FinanceReport(
+    key: 'month_end',
+    name: 'Month-End Review',
+    category: 'CEO Review',
+    description: 'The 90-minute finance review — revenue, profit, cash, AR/AP, KPIs vs plan.',
+    route: '/company-finance/month-end',
+    icon: Icons.fact_check_outlined,
+  ),
+  FinanceReport(
+    key: 'planning',
+    name: 'Monthly Planning',
+    category: 'CEO Review',
+    description: 'Set the month’s revenue/profit/collection targets and budget allocation.',
+    route: '/company-finance/planning',
+    icon: Icons.flag_outlined,
+  ),
+  FinanceReport(
+    key: 'decisions',
+    name: 'CEO Decisions & Action Items',
+    category: 'CEO Review',
+    description: 'Approvals, hiring, CapEx and action items with owner, deadline and status.',
+    route: '/company-finance/decisions',
+    icon: Icons.gavel_outlined,
+  ),
+  FinanceReport(
+    key: 'glossary',
+    name: 'Financial Glossary',
+    category: 'CEO Review',
+    description: 'Key financial terms in plain English, each with this month’s live value.',
+    route: '/company-finance/glossary',
+    icon: Icons.menu_book_outlined,
+  ),
   FinanceReport(
     key: 'pnl',
     name: 'Profit and Loss',
