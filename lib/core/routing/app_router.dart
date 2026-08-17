@@ -80,6 +80,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/month_end_review
 import 'package:nizan_crm/features/finance/presentation/screens/monthly_planning_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/ceo_decisions_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/financial_glossary_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/department_report_screen.dart';
 import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
@@ -156,6 +157,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/company-finance/planning')) return 'company_finance.month_end';
   if (path.startsWith('/company-finance/decisions')) return 'company_finance.month_end';
   if (path.startsWith('/company-finance/glossary')) return 'company_finance.month_end';
+  if (path.startsWith('/company-finance/department')) return 'company_finance.dept_reviews';
   if (path.startsWith('/company-finance/sales')) return 'company_finance.sales_reports';
   if (path.startsWith('/company-finance/reports')) return 'company_finance.reports';
   if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
@@ -426,6 +428,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'CEO Decisions';
           } else if (state.uri.path == '/company-finance/glossary') {
             title = 'Financial Glossary';
+          } else if (state.uri.path.startsWith('/company-finance/department')) {
+            title = 'Departmental Review';
           } else if (state.uri.path == '/company-finance/reports') {
             title = 'Reports Center';
           } else if (state.uri.path.startsWith('/company-finance/sales/')) {
@@ -880,6 +884,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/glossary',
             builder: (context, state) => const FinancialGlossaryScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/department/:dept',
+            builder: (context, state) =>
+                DepartmentReportScreen(dept: state.pathParameters['dept'] ?? 'sales'),
           ),
           GoRoute(
             path: '/company-finance/sales/by-customer',

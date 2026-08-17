@@ -66,6 +66,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('company_finance.dashboard', 'Finance Dashboard'),
     AppSubFeature('company_finance.reports', 'Reports Center'),
     AppSubFeature('company_finance.month_end', 'Month-End Review & Planning'),
+    AppSubFeature('company_finance.dept_reviews', 'Departmental Reviews'),
     AppSubFeature('company_finance.sales_reports', 'Sales Reports'),
     AppSubFeature('company_finance.chart', 'Chart of Accounts'),
     AppSubFeature('company_finance.journal', 'Journal'),
