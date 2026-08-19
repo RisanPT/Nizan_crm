@@ -176,3 +176,21 @@ class Employee {
     };
   }
 }
+
+/// Selection helpers for assignment/picker dropdowns. Assignment lists should
+/// only ever offer ACTIVE staff of the right role. `artistRole` is the real
+/// classifier — `role`/`type` are free-text labels ("MUA", "Fleet Driver").
+extension EmployeeSelection on Employee {
+  /// Currently employed (case-insensitive; `status` defaults to 'active').
+  bool get isActive => status.toLowerCase() == 'active';
+
+  /// A fleet driver.
+  bool get isDriver => artistRole.toLowerCase() == 'driver';
+
+  /// A makeup artist or their assistant — the creative staff assignable to
+  /// bookings and trials.
+  bool get isArtist {
+    final r = artistRole.toLowerCase();
+    return r == 'artist' || r == 'assistant';
+  }
+}

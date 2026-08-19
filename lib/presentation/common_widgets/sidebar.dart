@@ -1105,6 +1105,14 @@ class Sidebar extends ConsumerWidget {
                             currentPath.startsWith('/settings/roles'),
                         onTap: () => context.go('/settings/roles'),
                       ),
+                      _SidebarItem(
+                        icon: Icons.apartment_outlined,
+                        title: 'Departments',
+                        isCollapsed: isCollapsed,
+                        isSelected:
+                            currentPath.startsWith('/settings/departments'),
+                        onTap: () => context.go('/settings/departments'),
+                      ),
                     ],
                   ],
                 ],

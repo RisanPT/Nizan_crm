@@ -42,6 +42,7 @@ import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
+import '../../features/org/presentation/screens/departments_screen.dart';
 import '../../features/team/presentation/screens/team_management_screen.dart';
 import '../../features/sales/presentation/screens/sales_dashboard_screen.dart';
 import '../../features/sales/presentation/screens/sales_period_detail_screen.dart';
@@ -540,6 +541,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Notifications';
           } else if (state.uri.path == '/profile') {
             title = 'My Profile';
+          } else if (state.uri.path == '/settings/departments') {
+            title = 'Departments';
           } else if (state.uri.path == '/settings') {
             title = 'Settings';
           } else if (state.uri.path == '/trials') {
@@ -990,6 +993,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings/roles',
             builder: (context, state) => const RolesPermissionsScreen(),
+          ),
+          GoRoute(
+            path: '/settings/departments',
+            builder: (context, state) => const DepartmentsScreen(),
           ),
           GoRoute(
             path: '/team/manage',

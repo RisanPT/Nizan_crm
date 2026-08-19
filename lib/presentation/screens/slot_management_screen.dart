@@ -33,7 +33,7 @@ class SlotManagementScreen extends HookConsumerWidget {
 
     // Extract bookings and artists
     final bookings = asyncBookings.value ?? [];
-    final artists = asyncEmployees.value?.where((e) => e.artistRole == 'artist').toList() ?? [];
+    final artists = asyncEmployees.value?.where((e) => e.isActive && e.artistRole == 'artist').toList() ?? [];
 
     // Filter artists based on selected region and district
     final filteredArtists = artists.where((artist) {

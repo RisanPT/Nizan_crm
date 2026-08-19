@@ -219,7 +219,7 @@ class _FleetAssignmentsScreenState
 
         final allEmployees = asyncEmployees.value ?? const <Employee>[];
         final drivers = allEmployees
-            .where((emp) => emp.artistRole.toLowerCase() == 'driver')
+            .where((emp) => emp.isDriver && emp.isActive)
             .toList();
         if (_selectedDriverId != null && _selectedDriverId!.isNotEmpty) {
           final isPresent = drivers.any((d) => d.id == _selectedDriverId);

@@ -12,6 +12,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
+import '../../core/models/employee.dart';
 import '../../services/user_service.dart';
 import '../../services/zone_service.dart';
 import '../../services/state_service.dart';
@@ -67,11 +68,10 @@ class SettingsScreen extends HookConsumerWidget {
           return StatefulBuilder(
             builder: (context, setState) {
               // employees already fetched at build level — safe to use here
-              final employees = asyncEmployees.value ?? [];
-              employees
-                  .where((e) => e.artistRole != 'driver')
+              final employees = (asyncEmployees.value ?? [])
+                  .where((e) => e.isActive || e.id == selEmployeeId)
                   .toList();
-                  
+
               final zones = asyncZones.value ?? [];
               final allStates = asyncStates.value ?? [];
               final allRegions = asyncRegions.value ?? [];

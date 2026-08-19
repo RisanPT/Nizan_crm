@@ -366,7 +366,9 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
   }
 
   void _showAddCustomSlipDialog() {
-    final employees = ref.read(employeesProvider).value ?? const <Employee>[];
+    final employees = (ref.read(employeesProvider).value ?? const <Employee>[])
+        .where((e) => e.isActive)
+        .toList();
     String? selectedEmpId = employees.isNotEmpty ? employees.first.id : null;
     final filter = ref.read(salaryFilterProvider);
 

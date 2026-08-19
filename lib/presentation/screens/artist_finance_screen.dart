@@ -17,6 +17,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 import '../../services/employee_service.dart';
+import '../../core/models/employee.dart';
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../services/upload_service.dart';
@@ -329,7 +330,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           builder: (ctx, setState) {
             final employees = asyncEmployees.value ?? [];
             final artists = employees
-                .where((e) => e.artistRole != 'driver')
+                .where((e) => (e.isActive && e.artistRole != 'driver') || e.id == selEmployee)
                 .toList();
             return Container(
               padding: EdgeInsets.only(
@@ -882,7 +883,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           builder: (ctx, setState) {
             final employees = asyncEmployees.value ?? [];
             final artists = employees
-                .where((e) => e.artistRole != 'driver')
+                .where((e) => (e.isActive && e.artistRole != 'driver') || e.id == selEmployee)
                 .toList();
             return Container(
               padding: EdgeInsets.only(

@@ -10,6 +10,7 @@ import '../../../../core/theme/crm_theme.dart';
 import '../../../../services/role_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../services/employee_service.dart';
+import '../../../../core/models/employee.dart';
 
 /// Scoped user-management screen for Department Heads.
 ///
@@ -148,7 +149,9 @@ class TeamManagementScreen extends HookConsumerWidget {
                           final needsLink = selectedRole == 'artist' ||
                               selectedRole == 'driver';
                           final asyncEmployees = ref.watch(employeesProvider);
-                          final employees = asyncEmployees.value ?? [];
+                          final employees = (asyncEmployees.value ?? [])
+                              .where((e) => e.isActive || e.id == selEmployeeId)
+                              .toList();
                           if (asyncEmployees.isLoading) {
                             return const LinearProgressIndicator();
                           }

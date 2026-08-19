@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/accounts/controllers/admin_expense_controller
 import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 const _departments = [
@@ -1298,7 +1299,9 @@ class _AddEditAdminExpenseDialogState
                       },
                       items: [
                         const DropdownMenuItem(value: null, child: Text('None / Company Direct')),
-                        ...staffList.map((emp) => DropdownMenuItem(
+                        ...staffList
+                            .where((emp) => emp.isActive || emp.id == _selectedEmployeeId)
+                            .map((emp) => DropdownMenuItem(
                               value: emp.id,
                               child: Text('${emp.name} (${emp.department ?? emp.role ?? 'Staff'})'),
                             )),

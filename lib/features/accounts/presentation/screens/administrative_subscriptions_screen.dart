@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/accounts/data/subscription.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 // How many days ahead of a renewal we treat a subscription as "due soon" and
@@ -1087,7 +1088,9 @@ class _AddEditSubscriptionDialogState
                       ),
                       items: [
                         const DropdownMenuItem(value: null, child: Text('None / Organization-wide')),
-                        ...staffList.map((emp) => DropdownMenuItem(
+                        ...staffList
+                            .where((emp) => emp.isActive || emp.id == _selectedEmployeeId)
+                            .map((emp) => DropdownMenuItem(
                               value: emp.id,
                               child: Text('${emp.name} (${emp.department ?? emp.role ?? 'Staff'})'),
                             )),

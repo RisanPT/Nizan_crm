@@ -171,7 +171,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
         builder: (dialogContext) {
           final vehicles = asyncVehicles.value ?? const <Vehicle>[];
           final drivers = (asyncEmployees.value ?? const <Employee>[])
-              .where((employee) => employee.artistRole == 'driver')
+              .where((employee) => employee.isDriver && (employee.isActive || employee.id == selectedDriverId))
               .toList();
           final vehicleOptions = vehicles
               .map(

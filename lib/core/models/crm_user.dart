@@ -8,6 +8,8 @@ class CrmUser {
   /// Artist who also runs the studio inventory (workspace-switcher dual role).
   final bool inventoryManage;
   final String employeeId;
+  /// The Department this user belongs to (Department entity id), or ''.
+  final String departmentId;
   final String zoneId;
   final String stateId;
   final String regionId;
@@ -29,6 +31,7 @@ class CrmUser {
     this.inventoryAccess = false,
     this.inventoryManage = false,
     this.employeeId = '',
+    this.departmentId = '',
     this.zoneId = '',
     this.stateId = '',
     this.regionId = '',
@@ -50,6 +53,7 @@ class CrmUser {
       inventoryAccess: json['inventoryAccess'] as bool? ?? false,
       inventoryManage: json['inventoryManage'] as bool? ?? false,
       employeeId: json['employeeId'] as String? ?? '',
+      departmentId: json['departmentId'] as String? ?? '',
       zoneId: json['zoneId'] as String? ?? '',
       stateId: json['stateId'] as String? ?? '',
       regionId: json['regionId'] as String? ?? '',
@@ -71,6 +75,7 @@ class CrmUser {
     bool? inventoryAccess,
     bool? inventoryManage,
     String? employeeId,
+    String? departmentId,
     String? zoneId,
     String? stateId,
     String? regionId,
@@ -90,6 +95,7 @@ class CrmUser {
       inventoryAccess: inventoryAccess ?? this.inventoryAccess,
       inventoryManage: inventoryManage ?? this.inventoryManage,
       employeeId: employeeId ?? this.employeeId,
+      departmentId: departmentId ?? this.departmentId,
       zoneId: zoneId ?? this.zoneId,
       stateId: stateId ?? this.stateId,
       regionId: regionId ?? this.regionId,

@@ -61,7 +61,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         context: context,
         builder: (dialogContext) {
           final drivers = (asyncEmployees.value ?? const <Employee>[])
-              .where((employee) => employee.artistRole == 'driver')
+              .where((employee) => employee.isDriver && (employee.isActive || employee.id == driverId))
               .toList();
           final driverOptions = [
             const DropdownMenuItem(

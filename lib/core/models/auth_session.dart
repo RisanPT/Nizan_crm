@@ -19,6 +19,8 @@ class AuthSession {
   final bool inventoryManage;
   /// The Employee record linked to this user (set for artist accounts).
   final String employeeId;
+  /// The Department this user belongs to (Department entity id), or ''.
+  final String departmentId;
   final String zoneId;
   final String stateId;
   final String regionId;
@@ -38,6 +40,7 @@ class AuthSession {
     this.inventoryAccess = false,
     this.inventoryManage = false,
     this.employeeId = '',
+    this.departmentId = '',
     this.zoneId = '',
     this.stateId = '',
     this.regionId = '',
@@ -58,6 +61,7 @@ class AuthSession {
       'inventoryAccess': inventoryAccess,
       'inventoryManage': inventoryManage,
       'employeeId': employeeId,
+      'departmentId': departmentId,
       'zoneId': zoneId,
       'stateId': stateId,
       'regionId': regionId,
@@ -85,6 +89,7 @@ class AuthSession {
       inventoryAccess: user['inventoryAccess'] as bool? ?? false,
       inventoryManage: user['inventoryManage'] as bool? ?? false,
       employeeId: user['employeeId'] as String? ?? '',
+      departmentId: user['departmentId'] as String? ?? '',
       zoneId: user['zoneId'] as String? ?? '',
       stateId: user['stateId'] as String? ?? '',
       regionId: user['regionId'] as String? ?? '',

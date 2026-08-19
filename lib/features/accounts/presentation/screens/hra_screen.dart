@@ -440,6 +440,7 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'Employee *'),
                     items: staff
+                        .where((emp) => emp.isActive || emp.id == _employeeId)
                         .map((emp) => DropdownMenuItem(
                               value: emp.id,
                               child: Text('${emp.name} (${emp.department ?? emp.role ?? 'Staff'})',

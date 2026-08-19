@@ -8,6 +8,7 @@ import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
 import '../../../../services/employee_service.dart';
+import '../../../../core/models/employee.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_filters_provider.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
@@ -557,7 +558,9 @@ class _AccountsCollectionsScreenState
                       value: null,
                       child: Text('All Artists'),
                     ),
-                    ...(asyncEmployees.value ?? []).map(
+                    ...(asyncEmployees.value ?? [])
+                        .where((e) => (e.isActive && e.isArtist) || e.id == filters.employeeId)
+                        .map(
                       (e) => DropdownMenuItem(value: e.id, child: Text(e.name)),
                     ),
                   ],
@@ -871,7 +874,9 @@ class _AccountsCollectionsScreenState
                     items: [
                       const DropdownMenuItem(
                           value: 'all', child: Text('All Artists')),
-                      ...(asyncEmployees.value ?? []).map((e) =>
+                      ...(asyncEmployees.value ?? [])
+                          .where((e) => e.isActive && e.isArtist)
+                          .map((e) =>
                           DropdownMenuItem(value: e.id, child: Text(e.name))),
                     ],
                     onChanged:
