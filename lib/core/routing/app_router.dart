@@ -11,6 +11,7 @@ import '../../presentation/screens/client_profile_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/calendar_screen.dart';
 import '../../presentation/screens/staff_management_screen.dart';
 import '../../presentation/screens/slot_management_screen.dart';
+import '../../features/slots/presentation/screens/slot_capacity_screen.dart';
 import '../../presentation/screens/services_management_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/add_booking_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/manage_booking_screen.dart';
@@ -195,6 +196,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
   if (path == '/hr/salaries') return 'staff.salaries';
+  if (path == '/hr/slot-capacity') return 'staff.slots';
   if (path == '/hr/slots') return 'staff.slots';
   if (path == '/hr/attendance') return 'staff.attendance';
   if (path.startsWith('/staff')) return 'staff.employees';
@@ -304,7 +306,7 @@ String landingRouteFor(Access access,
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
     '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
-    '/staff', '/hr/slots', '/hr/salaries',
+    '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries',
   ];
   for (final route in candidates) {
     if (isRouteAllowed(route, access,
@@ -630,6 +632,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/slots',
             builder: (context, state) => const SlotManagementScreen(),
+          ),
+          GoRoute(
+            path: '/hr/slot-capacity',
+            builder: (context, state) => const SlotCapacityScreen(),
           ),
           GoRoute(
             path: '/hr/attendance',

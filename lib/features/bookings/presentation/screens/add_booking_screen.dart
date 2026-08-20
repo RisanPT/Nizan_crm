@@ -306,8 +306,10 @@ class AddBookingScreen extends HookConsumerWidget {
       final picked = await showDatePicker(
         context: context,
         initialDate: DateTime.now(),
-        firstDate: DateTime.now().subtract(const Duration(days: 365)),
-        lastDate: DateTime.now().add(const Duration(days: 365)),
+        // Bridal dates are often booked 1–2+ years ahead; keep a wide window
+        // (and allow older dates for legacy bookings) — matches the edit screen.
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2035),
         builder: (ctx, child) => Theme(
           data: ThemeData.light().copyWith(
             colorScheme: ColorScheme.light(

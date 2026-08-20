@@ -17,7 +17,6 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
-import 'package:nizan_crm/services/blocked_date_service.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/zone_service.dart';
 import 'package:nizan_crm/services/state_service.dart';
@@ -767,8 +766,6 @@ class CalendarScreen extends HookConsumerWidget {
             )
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name));
-    final asyncBlockedDates = ref.watch(blockedDatesProvider);
-    final blockedDates = asyncBlockedDates.value ?? [];
 
     final now = initialFocusDate ?? DateTime.now();
     final currentWeekMonday = useMemoized(
@@ -971,167 +968,6 @@ class CalendarScreen extends HookConsumerWidget {
       districtFilter: districtFilter,
     );
 
-    Future<void> manageBlockedDates() async {
-      final reasonCtrl = TextEditingController();
-      DateTime? pickedDate;
-
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              Future<void> pickBlockedDate() async {
-                final selected = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime.now(),
-                  lastDate: DateTime.now().add(const Duration(days: 365)),
-                );
-                if (selected != null) {
-                  setState(() {
-                    pickedDate = DateTime(
-                      selected.year,
-                      selected.month,
-                      selected.day,
-                    );
-                  });
-                }
-              }
-
-              Future<void> saveBlockedDate() async {
-                if (pickedDate == null) return;
-
-                try {
-                  await ref
-                      .read(blockedDateServiceProvider)
-                      .saveBlockedDate(
-                        date: pickedDate!,
-                        reason: reasonCtrl.text.trim(),
-                      );
-                  ref.invalidate(blockedDatesProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
-                } catch (error) {
-                  if (dialogContext.mounted) {
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(
-                        content: Text(friendlyErrorMessage(error)),
-                      ),
-                    );
-                  }
-                }
-              }
-
-              return AlertDialog(
-                title: const Text('Manage Blocked Dates'),
-                content: SizedBox(
-                  width: 520,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: pickBlockedDate,
-                            icon: const Icon(Icons.calendar_month_outlined),
-                            label: Text(
-                              pickedDate == null
-                                  ? 'Choose date'
-                                  : '${pickedDate!.year}-${pickedDate!.month.toString().padLeft(2, '0')}-${pickedDate!.day.toString().padLeft(2, '0')}',
-                            ),
-                          ),
-                          SizedBox(
-                            width: 260,
-                            child: TextField(
-                              controller: reasonCtrl,
-                              decoration: const InputDecoration(
-                                labelText: 'Reason (optional)',
-                                border: OutlineInputBorder(),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      18.h,
-                      const Text(
-                        'Blocked dates',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      12.h,
-                      if (asyncBlockedDates.isLoading)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: CircularProgressIndicator(),
-                        )
-                      else if (blockedDates.isEmpty)
-                        const Text('No blocked dates yet.')
-                      else
-                        SizedBox(
-                          height: 220,
-                          child: ListView.separated(
-                            shrinkWrap: true,
-                            itemCount: blockedDates.length,
-                            separatorBuilder: (_, _) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              final item = blockedDates[index];
-                              final formatted =
-                                  '${item.date.year}-${item.date.month.toString().padLeft(2, '0')}-${item.date.day.toString().padLeft(2, '0')}';
-                              return ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(formatted),
-                                subtitle: item.reason.isEmpty
-                                    ? null
-                                    : Text(item.reason),
-                                trailing: IconButton(
-                                  onPressed: () async {
-                                    try {
-                                      await ref
-                                          .read(blockedDateServiceProvider)
-                                          .deleteBlockedDate(item.id);
-                                      ref.invalidate(blockedDatesProvider);
-                                    } catch (error) {
-                                      if (dialogContext.mounted) {
-                                        ScaffoldMessenger.of(
-                                          dialogContext,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Failed to remove blocked date: $error',
-                                            ),
-                                          ),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: const Text('Close'),
-                  ),
-                  ElevatedButton(
-                    onPressed: pickedDate == null ? null : saveBlockedDate,
-                    child: const Text('Save Blocked Date'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    }
-
     Future<void> openMonthPicker() async {
       final pickedMonth = await showDialog<DateTime>(
         context: context,
@@ -1299,15 +1135,6 @@ class CalendarScreen extends HookConsumerWidget {
                     ),
                   ),
                   if (!isArtist) ...[
-                    OutlinedButton.icon(
-                      onPressed: manageBlockedDates,
-                      icon: const Icon(Icons.calendar_month_outlined, size: 18),
-                      label: const Text('Blocked Dates'),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: crmColors.surface,
-                      ),
-                    ),
-                    16.w,
                     ElevatedButton.icon(
                       onPressed: () => showAddBookingModeChooser(context),
                       icon: const Icon(Icons.add, size: 18),
@@ -1321,25 +1148,6 @@ class CalendarScreen extends HookConsumerWidget {
                 ],
               ),
               24.h,
-            ] else if (!isArtist) ...[
-              Row(
-                children: [
-                  const Spacer(),
-                  IconButton(
-                    onPressed: manageBlockedDates,
-                    icon: Icon(
-                      Icons.calendar_today_outlined,
-                      color: crmColors.textPrimary,
-                    ),
-                    tooltip: 'Blocked Dates',
-                    style: IconButton.styleFrom(
-                      backgroundColor: crmColors.surface,
-                      side: BorderSide(color: crmColors.border),
-                    ),
-                  ),
-                ],
-              ),
-              12.h,
             ],
             // ── Calendar card ─────────────────────────────────────────────--
             Expanded(

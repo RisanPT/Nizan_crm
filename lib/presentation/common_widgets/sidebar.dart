@@ -420,6 +420,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/hr/slots'),
                           ),
                         ),
+                      if (access.canSeeSub('staff.slots'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.tune_outlined,
+                            title: 'Slot Capacity',
+                            isCollapsed: false,
+                            isSelected: currentPath.startsWith('/hr/slot-capacity'),
+                            onTap: () => context.go('/hr/slot-capacity'),
+                          ),
+                        ),
                       if (access.canSeeSub('staff.salaries'))
                         Padding(
                           padding: const EdgeInsets.only(left: 14),

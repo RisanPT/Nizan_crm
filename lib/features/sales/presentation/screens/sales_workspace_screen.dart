@@ -11,6 +11,8 @@ import 'package:nizan_crm/services/addon_service_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'sales_leads_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/slots/data/slot_models.dart';
+import 'package:nizan_crm/features/slots/services/slot_service.dart';
 
 /// The salesperson's main workspace: Leads · Calculator · Spot Invoice.
 /// The Calculator feeds a total into the Spot Invoice tab, which generates a
@@ -25,7 +27,7 @@ class SalesWorkspaceScreen extends ConsumerStatefulWidget {
 
 class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   // Handoff from Calculator → Spot Invoice.
   List<SpotInvoiceLine> _prefillLines = const [];
@@ -47,7 +49,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
       _prefillLines = lines;
       _prefillNonce++;
     });
-    _tabs.animateTo(2);
+    _tabs.animateTo(3);
   }
 
   @override
@@ -67,6 +69,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               tabs: const [
                 Tab(icon: Icon(Icons.people_alt_outlined), text: 'Leads'),
                 Tab(icon: Icon(Icons.calculate_outlined), text: 'Calculator'),
+                Tab(icon: Icon(Icons.event_available_outlined), text: 'Availability'),
                 Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Spot Invoice'),
               ],
             ),
@@ -77,6 +80,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               children: [
                 const SalesLeadsScreen(),
                 _CalculatorTab(onCreateInvoice: _sendToInvoice),
+                const _AvailabilityTab(),
                 _SpotInvoiceTab(
                   key: ValueKey(_prefillNonce),
                   initialCustomer: _prefillCustomer,
@@ -589,6 +593,174 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Availability tab ─────────────────────────────────────────────────────
+// Read-only view of this month's morning/evening slot availability so a
+// salesperson can see which days still have room before promising a date.
+const _monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+const _weekdays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+class _AvailabilityTab extends ConsumerStatefulWidget {
+  const _AvailabilityTab();
+  @override
+  ConsumerState<_AvailabilityTab> createState() => _AvailabilityTabState();
+}
+
+class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
+  late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+
+  void _shift(int delta) =>
+      setState(() => _month = DateTime(_month.year, _month.month + delta));
+
+  @override
+  Widget build(BuildContext context) {
+    final key = (year: _month.year, month: _month.month);
+    final async = ref.watch(monthAvailabilityProvider(key));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+          child: Row(
+            children: [
+              IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
+              Expanded(
+                child: Text('${_monthNames[_month.month]} ${_month.year}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              ),
+              IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
+            ],
+          ),
+        ),
+        Expanded(
+          child: async.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => AppErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(monthAvailabilityProvider(key)),
+            ),
+            data: (m) => RefreshIndicator(
+              onRefresh: () async => ref.invalidate(monthAvailabilityProvider(key)),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+                children: [
+                  _summary(context, m),
+                  const SizedBox(height: 14),
+                  for (final d in m.days) _dayRow(context, d),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summary(BuildContext context, MonthAvailability m) {
+    final crm = context.crmColors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: crm.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.primary.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('${m.totalAvailable}',
+              style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, color: crm.primary, height: 1)),
+          const SizedBox(height: 2),
+          Text('slots open in ${_monthNames[m.month]}',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+          const SizedBox(height: 6),
+          Text('${m.totalBooked} booked · ${m.totalCapacity} total capacity  ·  ${m.defaultMorning + m.defaultEvening} slots/day (${m.defaultMorning} AM + ${m.defaultEvening} PM)',
+              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _dayRow(BuildContext context, DaySlot d) {
+    final crm = context.crmColors;
+    final today = DateTime.now();
+    final isPast = d.date.isBefore(DateTime(today.year, today.month, today.day));
+    return Opacity(
+      opacity: isPast ? 0.45 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: d.unavailable ? crm.destructive.withValues(alpha: 0.35) : crm.border),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 46,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${d.date.day}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text(_weekdays[d.date.weekday],
+                      style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+                ],
+              ),
+            ),
+            Expanded(child: _totalCell(context, d)),
+            if (d.isOverride)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Tooltip(
+                  message: 'HR set a custom limit for this day',
+                  child: Icon(Icons.push_pin_outlined, size: 15, color: crm.textSecondary),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _totalCell(BuildContext context, DaySlot d) {
+    final crm = context.crmColors;
+    final color = d.unavailable ? crm.destructive : crm.success;
+    final label = d.blocked
+        ? 'BLOCKED'
+        : (d.total.isFull ? 'FULL' : '${d.total.available} of ${d.total.capacity} left');
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            d.blocked
+                ? 'Blocked by HR — no bookings'
+                : '${d.total.booked}/${d.total.capacity} booked  ·  ${d.morning.booked} AM · ${d.evening.booked} PM',
+            style: TextStyle(fontSize: 11, color: crm.textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }
