@@ -85,6 +85,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/financial_glossa
 import 'package:nizan_crm/features/finance/presentation/screens/department_report_screen.dart';
 import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/chart_of_accounts_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/journal_voucher_screen.dart';
@@ -162,6 +163,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/company-finance/department')) return 'company_finance.dept_reviews';
   if (path.startsWith('/company-finance/sales')) return 'company_finance.sales_reports';
   if (path.startsWith('/company-finance/reports')) return 'company_finance.reports';
+  if (path.startsWith('/company-finance/bank-balance')) return 'company_finance.bank_balance';
   if (path.startsWith('/company-finance/assets')) return 'company_finance.assets';
   if (path.startsWith('/company-finance/depreciation')) return 'company_finance.depreciation';
   if (path.startsWith('/company-finance/chart')) return 'company_finance.chart';
@@ -922,6 +924,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/assets',
             builder: (context, state) => const AssetsScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/bank-balance',
+            builder: (context, state) => const BankBalanceScreen(),
           ),
           GoRoute(
             path: '/company-finance/depreciation',

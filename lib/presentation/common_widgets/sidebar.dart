@@ -571,6 +571,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/company-finance/assets'),
                           ),
                         ),
+                      if (access.canSeeCompanyFinance)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.account_balance_outlined,
+                            title: 'Bank Balance',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/company-finance/bank-balance',
+                            onTap: () => context.go('/company-finance/bank-balance'),
+                          ),
+                        ),
                     ],
                   ],
                   if (access.canSeeFinance || access.canSeePayables) ...[

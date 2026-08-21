@@ -75,6 +75,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('company_finance.pnl', 'Profit & Loss'),
     AppSubFeature('company_finance.balance_sheet', 'Balance Sheet'),
     AppSubFeature('company_finance.aging', 'Receivables & Payables'),
+    AppSubFeature('company_finance.bank_balance', 'Bank Balance'),
     AppSubFeature('company_finance.reconciliation', 'Bank Reconciliation'),
     AppSubFeature('company_finance.gst', 'GST'),
     AppSubFeature('company_finance.assets', 'Assets'),
