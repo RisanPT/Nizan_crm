@@ -937,44 +937,54 @@ class StaffManagementScreen extends HookConsumerWidget {
                           ? roleOrDesignationCtrl.text.trim()
                           : (isAdministrative ? 'Staff' : (artistRole == 'driver' ? 'Driver' : 'Artist'));
 
-                      await ref
-                          .read(employeeServiceProvider)
-                          .saveEmployee(
-                            id: employee?.id,
-                            name: nameCtrl.text.trim(),
-                            email: emailCtrl.text.trim(),
-                            type: type,
-                            artistRole: isAdministrative ? 'staff' : artistRole,
-                            specialization: effectiveRole,
-                            phone: phoneCtrl.text.trim(),
-                            status: status,
-                            regionId: isAdministrative ? '' : regionId,
-                            category: category,
-                            department: department,
-                            role: effectiveRole,
-                            works: isAdministrative ? null : effectiveWorks,
-                            zoneId: isAdministrative ? '' : zoneId,
-                            stateId: isAdministrative ? '' : stateId,
-                            districtId: isAdministrative ? '' : districtId,
-                            pincodeId: isAdministrative ? '' : pincodeId,
-                            salaryType: salaryType,
-                            baseSalary: double.tryParse(baseSalaryCtrl.text.trim()) ?? 0,
-                            allowances: double.tryParse(allowancesCtrl.text.trim()) ?? 0,
-                            deductions: double.tryParse(deductionsCtrl.text.trim()) ?? 0,
-                            hra: double.tryParse(hraCtrl.text.trim()) ?? 0,
-                            hraDay: hraDay,
-                            bankName: bankNameCtrl.text.trim(),
-                            accountNumber: accountNumberCtrl.text.trim(),
-                            ifscCode: ifscCodeCtrl.text.trim(),
-                            upiId: upiIdCtrl.text.trim(),
-                            panNumber: panNumberCtrl.text.trim(),
+                      try {
+                        await ref
+                            .read(employeeServiceProvider)
+                            .saveEmployee(
+                              id: employee?.id,
+                              name: nameCtrl.text.trim(),
+                              email: emailCtrl.text.trim(),
+                              type: type,
+                              artistRole: isAdministrative ? 'staff' : artistRole,
+                              specialization: effectiveRole,
+                              phone: phoneCtrl.text.trim(),
+                              status: status,
+                              regionId: isAdministrative ? '' : regionId,
+                              category: category,
+                              department: department,
+                              role: effectiveRole,
+                              works: isAdministrative ? null : effectiveWorks,
+                              zoneId: isAdministrative ? '' : zoneId,
+                              stateId: isAdministrative ? '' : stateId,
+                              districtId: isAdministrative ? '' : districtId,
+                              pincodeId: isAdministrative ? '' : pincodeId,
+                              salaryType: salaryType,
+                              baseSalary: double.tryParse(baseSalaryCtrl.text.trim()) ?? 0,
+                              allowances: double.tryParse(allowancesCtrl.text.trim()) ?? 0,
+                              deductions: double.tryParse(deductionsCtrl.text.trim()) ?? 0,
+                              hra: double.tryParse(hraCtrl.text.trim()) ?? 0,
+                              hraDay: hraDay,
+                              bankName: bankNameCtrl.text.trim(),
+                              accountNumber: accountNumberCtrl.text.trim(),
+                              ifscCode: ifscCodeCtrl.text.trim(),
+                              upiId: upiIdCtrl.text.trim(),
+                              panNumber: panNumberCtrl.text.trim(),
+                            );
+
+                        ref.invalidate(employeesProvider);
+                        ref.invalidate(paginatedEmployeesProvider);
+
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                      } catch (e) {
+                        if (dialogContext.mounted) {
+                          ScaffoldMessenger.of(dialogContext).showSnackBar(
+                            SnackBar(
+                                content: Text(friendlyErrorMessage(e,
+                                    fallback: 'Failed to save staff'))),
                           );
-
-                      ref.invalidate(employeesProvider);
-                      ref.invalidate(paginatedEmployeesProvider);
-
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop();
+                        }
                       }
                     },
                     child: Text(isEditing ? 'Save Changes' : 'Create Staff'),

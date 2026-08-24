@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -23,12 +24,69 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final pageState = useState(1);
     const pageSize = 20;
+    final searchCtrl = useTextEditingController();
+    final search = useState('');
+    final status = useState('All');
+    final sortKey = useState('newest');
+    final debounce = useRef<Timer?>(null);
+
+    void goPage1() => pageState.value = 1;
+
     final asyncCustomers = ref.watch(
       paginatedCustomersProvider(
-        ListPageParams(page: pageState.value, limit: pageSize),
+        ListPageParams(
+          page: pageState.value,
+          limit: pageSize,
+          search: search.value.trim().isEmpty ? null : search.value.trim(),
+          status: status.value == 'All' ? null : status.value,
+          sort: sortKey.value,
+        ),
       ),
     );
     final isExporting = useState(false);
+
+    const sortLabels = {
+      'newest': 'Newest first',
+      'oldest': 'Oldest first',
+      'name_asc': 'Name A–Z',
+      'name_desc': 'Name Z–A',
+    };
+    const statuses = ['All', 'Active', 'Inactive', 'Prospect'];
+
+    Widget menuChip(IconData icon, String label, {bool active = false}) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          decoration: BoxDecoration(
+            color: active ? crmColors.primary.withValues(alpha: 0.08) : crmColors.background,
+            border: Border.all(color: active ? crmColors.primary : crmColors.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 18, color: active ? crmColors.primary : crmColors.textSecondary),
+            8.w,
+            Text(label, style: TextStyle(color: active ? crmColors.primary : crmColors.textPrimary, fontWeight: FontWeight.w600)),
+            Icon(Icons.arrow_drop_down, size: 18, color: crmColors.textSecondary),
+          ]),
+        );
+
+    Widget filterMenu() => PopupMenuButton<String>(
+          tooltip: 'Filter by status',
+          onSelected: (v) { status.value = v; goPage1(); },
+          itemBuilder: (_) => [
+            for (final s in statuses)
+              CheckedPopupMenuItem(value: s, checked: status.value == s, child: Text(s)),
+          ],
+          child: menuChip(Icons.filter_list, status.value == 'All' ? 'Filter' : status.value, active: status.value != 'All'),
+        );
+
+    Widget sortMenu() => PopupMenuButton<String>(
+          tooltip: 'Sort',
+          onSelected: (v) { sortKey.value = v; goPage1(); },
+          itemBuilder: (_) => [
+            for (final e in sortLabels.entries)
+              CheckedPopupMenuItem(value: e.key, checked: sortKey.value == e.key, child: Text(e.value)),
+          ],
+          child: menuChip(Icons.sort, sortLabels[sortKey.value]!),
+        );
 
     // Pulls the FULL client list (not just the current page) and renders a
     // printable PDF report.
@@ -238,33 +296,45 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
                       Expanded(
                         flex: 2,
                         child: TextField(
+                          controller: searchCtrl,
+                          onChanged: (v) {
+                            debounce.value?.cancel();
+                            debounce.value = Timer(const Duration(milliseconds: 400), () {
+                              search.value = v;
+                              goPage1();
+                            });
+                          },
                           decoration: InputDecoration(
                             hintText:
                                 'Search clients by name, phone, or email...',
                             prefixIcon: const Icon(Icons.search),
+                            suffixIcon: search.value.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.close, size: 18),
+                                    tooltip: 'Clear',
+                                    onPressed: () {
+                                      searchCtrl.clear();
+                                      debounce.value?.cancel();
+                                      search.value = '';
+                                      goPage1();
+                                    },
+                                  ),
                             filled: true,
                             fillColor: crmColors.background,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(8),
                               borderSide: BorderSide.none,
                             ),
-                            contentPadding: EdgeInsets.zero,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 4),
                           ),
                         ),
                       ),
                       if (!isMobile) ...[
                         const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: () {},
-                          icon: const Icon(Icons.filter_list, size: 18),
-                          label: const Text('Filter'),
-                        ),
+                        filterMenu(),
                         16.w,
-                        OutlinedButton.icon(
-                          onPressed: () {},
-                          icon: const Icon(Icons.sort, size: 18),
-                          label: const Text('Sort: Newest'),
-                        ),
+                        sortMenu(),
                       ],
                     ],
                   ),
@@ -272,21 +342,9 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
                     16.h,
                     Row(
                       children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {},
-                            icon: const Icon(Icons.filter_list, size: 18),
-                            label: const Text('Filter'),
-                          ),
-                        ),
+                        Expanded(child: filterMenu()),
                         16.w,
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {},
-                            icon: const Icon(Icons.sort, size: 18),
-                            label: const Text('Sort: Newest'),
-                          ),
-                        ),
+                        Expanded(child: sortMenu()),
                       ],
                     ),
                   ],
@@ -351,6 +409,14 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
                   asyncCustomers.when(
                         data: (response) {
                           final customers = response.items;
+                          final hasFilters = search.value.trim().isNotEmpty || status.value != 'All';
+                          void clearFilters() {
+                            searchCtrl.clear();
+                            debounce.value?.cancel();
+                            search.value = '';
+                            status.value = 'All';
+                            goPage1();
+                          }
                           if (customers.isEmpty) {
                             return Padding(
                               padding: const EdgeInsets.all(32.0),
@@ -363,28 +429,65 @@ class ClientsDirectoryScreen extends HookConsumerWidget {
                                   ),
                                   16.h,
                                   Text(
-                                    'No clients yet.\nCreate a booking to auto-register a client.',
+                                    hasFilters
+                                        ? 'No clients match your search or filter.'
+                                        : 'No clients yet.\nCreate a booking to auto-register a client.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: crmColors.textSecondary,
                                     ),
                                   ),
                                   16.h,
-                                  ElevatedButton.icon(
-                                    onPressed: () => showAddBookingModeChooser(context),
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Create First Booking'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: crmColors.primary,
-                                      foregroundColor: Colors.white,
+                                  if (hasFilters)
+                                    OutlinedButton.icon(
+                                      onPressed: clearFilters,
+                                      icon: const Icon(Icons.clear_all),
+                                      label: const Text('Clear filters'),
+                                    )
+                                  else
+                                    ElevatedButton.icon(
+                                      onPressed: () => showAddBookingModeChooser(context),
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Create First Booking'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: crmColors.primary,
+                                        foregroundColor: Colors.white,
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             );
                           }
                           return Column(
                             children: [
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      '${response.totalItems} client${response.totalItems == 1 ? '' : 's'}',
+                                      style: TextStyle(fontWeight: FontWeight.w700, color: crmColors.textPrimary),
+                                    ),
+                                    if (hasFilters) ...[
+                                      8.w,
+                                      TextButton.icon(
+                                        onPressed: clearFilters,
+                                        icon: const Icon(Icons.clear_all, size: 16),
+                                        label: const Text('Clear'),
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    if (!isMobile)
+                                      Text('Sorted: ${sortLabels[sortKey.value]}',
+                                          style: TextStyle(fontSize: 12, color: crmColors.textSecondary)),
+                                  ],
+                                ),
+                              ),
                               ...customers.map(
                                 (c) => Column(
                                   children: [

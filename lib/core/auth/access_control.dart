@@ -81,6 +81,8 @@ class Access {
         return role.canSeeFinance;
       case 'company_finance':
         return role.canSeeCompanyFinance;
+      case 'company_reports':
+        return role.canSeeCompanyReports;
       case 'payables':
         return role.canSeePayables;
       case 'fleet':
@@ -115,6 +117,8 @@ class Access {
   // manager before the `company_finance` key has been granted to their role.
   bool get canSeeCompanyFinance =>
       isFullAccess || has('company_finance', role.canSeeCompanyFinance);
+  bool get canSeeCompanyReports =>
+      isFullAccess || has('company_reports', role.canSeeCompanyReports);
   bool get canSeePayables => has('payables', role.canSeePayables);
   bool get canSeeFleet => has('fleet', role.canSeeFleet);
   bool get canManageInventory => has('inventory', role.canManageInventory);

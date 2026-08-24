@@ -352,7 +352,20 @@ class ManageBookingScreen extends HookConsumerWidget {
             return baseAmount < 0 ? 0.0 : baseAmount;
           })();
           customPackagePriceCtrl.text = basePackageAmount.value.toStringAsFixed(0);
-          mapUrlCtrl.text = booking.mapUrl;
+          // When editing a specific bookingItem, load per-item overrides
+          // (outfitDetails, mapUrl) from that item — not from the booking level.
+          // This prevents details saved for Item 1 from pre-filling Item 2's form.
+          final editingSpecificItem = selectedBookingItemIndex >= 0 &&
+              selectedBookingItemIndex < booking.bookingItems.length;
+          final selectedItem = editingSpecificItem
+              ? booking.bookingItems[selectedBookingItemIndex]
+              : null;
+
+          // mapUrl: prefer per-item mapUrl if set, else booking-level
+          mapUrlCtrl.text = (selectedItem != null &&
+                  selectedItem.mapUrl.isNotEmpty)
+              ? selectedItem.mapUrl
+              : booking.mapUrl;
           travelModeCtrl.text = booking.travelMode;
           travelTimeCtrl.text = booking.travelTime;
           travelDistanceCtrl.text = booking.travelDistanceKm == 0
@@ -363,7 +376,15 @@ class ManageBookingScreen extends HookConsumerWidget {
           );
           roomCtrl.text = booking.requiredRoomDetail;
           secondaryPhoneCtrl.text = booking.secondaryContact;
-          outfitLooks.value = _migrateOutfitLooks(booking);
+          // outfitLooks: prefer per-item outfitDetails if set, else booking-level
+          if (selectedItem != null && selectedItem.outfitDetails.isNotEmpty) {
+            outfitLooks.value = [OutfitLook(
+              outfitDetails: selectedItem.outfitDetails,
+              mapUrl: selectedItem.mapUrl,
+            )];
+          } else {
+            outfitLooks.value = _migrateOutfitLooks(booking);
+          }
           captureStaffCtrl.text = booking.captureStaffDetails;
           temporaryStaffCtrl.text = booking.temporaryStaffDetails;
           staffNeedsCtrl.text = booking.staffInstructions;
@@ -843,6 +864,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                 return entry.value;
               }
 
+              // Serialize the time back to HH:mm so it is stored
+              // per-item and doesn't bleed across other items.
+              final parsedStart = _parseTime(startTimeCtrl.text.trim());
+              final parsedEnd = _parseTime(endTimeCtrl.text.trim());
+
               return entry.value.copyWith(
                 packageId: selectedPackageId.value.trim(),
                 service: packageCtrl.text.trim().isEmpty
@@ -859,6 +885,18 @@ class ManageBookingScreen extends HookConsumerWidget {
                     double.tryParse(advanceCtrl.text.trim()) ??
                     entry.value.advanceAmount,
                 assignedStaff: assignments.value,
+                // Per-item overrides — save what the user entered for
+                // this specific package/date independently.
+                outfitDetails: outfitLooks.value.isNotEmpty
+                    ? outfitLooks.value.map((l) => l.outfitDetails).join(' | ')
+                    : '',
+                mapUrl: mapUrlCtrl.text.trim(),
+                startTime: parsedStart != null
+                    ? _timeToHhmm(parsedStart)
+                    : entry.value.startTime,
+                endTime: parsedEnd != null
+                    ? _timeToHhmm(parsedEnd)
+                    : entry.value.endTime,
               );
             }).toList()
           : booking.bookingItems;
@@ -966,7 +1004,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                 ?.artistName ??
             '',
         status: statusState.value,
-        mapUrl: mapUrlCtrl.text.trim(),
+        mapUrl: isMultiItem ? booking.mapUrl : mapUrlCtrl.text.trim(),
         travelMode: travelModeCtrl.text.trim(),
         travelTime: travelTimeCtrl.text.trim(),
         travelDistanceKm: travelDistanceCtrl.text.trim().isEmpty
@@ -980,7 +1018,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             : eventSlots.value.join(' | '),
         requiredRoomDetail: roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
-        outfitLooks: outfitLooks.value,
+        outfitLooks: isMultiItem ? booking.outfitLooks : outfitLooks.value,
         referenceImages: referenceImages.value,
         captureStaffDetails: captureStaffCtrl.text.trim(),
         temporaryStaffDetails: temporaryStaffCtrl.text.trim(),
@@ -996,14 +1034,14 @@ class ManageBookingScreen extends HookConsumerWidget {
           useItemAggregates && mergedItemDates.isNotEmpty
               ? mergedItemDates.first
               : parsedBookingDate,
-          startTimeCtrl.text.trim(),
+          isMultiItem ? '' : startTimeCtrl.text.trim(),
           booking.serviceStart,
         ),
         serviceEnd: _mergeDateAndTime(
           useItemAggregates && mergedItemDates.isNotEmpty
               ? mergedItemDates.last
               : lastBookingDate,
-          endTimeCtrl.text.trim(),
+          isMultiItem ? '' : endTimeCtrl.text.trim(),
           booking.serviceEnd,
         ),
         totalPrice: useItemAggregates ? aggregateTotalPrice : subtotal,
@@ -4072,6 +4110,13 @@ class ManageBookingScreen extends HookConsumerWidget {
     }
 
     return TimeOfDay(hour: hour, minute: minute);
+  }
+
+  /// Formats a [TimeOfDay] back to a 24-h "HH:mm" string for per-item storage.
+  static String _timeToHhmm(TimeOfDay t) {
+    final h = t.hour.toString().padLeft(2, '0');
+    final m = t.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   static List<DateTime> _replaceBookingDate(

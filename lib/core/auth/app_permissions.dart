@@ -61,6 +61,8 @@ const List<AppFeature> kAppFeatures = [
   ]),
   AppFeature('finance', 'Artist Finance', 'Artist collections and expenses',
       Icons.account_balance_wallet_outlined),
+  AppFeature('company_reports', 'Company Reports', 'Per-department report document library',
+      Icons.folder_shared_outlined),
   AppFeature('company_finance', 'Finance', 'Company finance, ledger and assets',
       Icons.savings_outlined, subs: [
     AppSubFeature('company_finance.dashboard', 'Finance Dashboard'),

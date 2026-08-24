@@ -1851,6 +1851,9 @@ class _LeadsTable extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final double width = MediaQuery.of(context).size.width;
+    final session = ref.watch(authSessionProvider);
+    final users = ref.watch(crmUsersProvider).value ?? [];
+    final isSalesManager = session?.role == 'sales_manager';
 
     if (leads.isEmpty) {
       return Center(
@@ -1867,15 +1870,24 @@ class _LeadsTable extends ConsumerWidget {
             ? 2
             : (width < 1400 ? 3 : 4));
 
-    _LeadCard buildCard(Lead lead, {bool flexible = false}) => _LeadCard(
-          lead: lead,
-          flexible: flexible,
-          onEdit: () => _showEditDialog(context, ref, lead),
-          onDelete: () => _confirmDelete(context, ref, lead),
-          onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
-          onConvert: () => convertLeadToBooking(context, lead),
-          onViewDetails: () => context.go('/sales/leads/${lead.id}'),
-        );
+    _LeadCard buildCard(Lead lead, {bool flexible = false}) {
+      String? assignedName;
+      if (lead.assignedTo != null) {
+        assignedName = users.where((u) => u.id == lead.assignedTo).firstOrNull?.name;
+      }
+
+      return _LeadCard(
+        lead: lead,
+        flexible: flexible,
+        showAssignedTo: isSalesManager,
+        assignedName: assignedName,
+        onEdit: () => _showEditDialog(context, ref, lead),
+        onDelete: () => _confirmDelete(context, ref, lead),
+        onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
+        onConvert: () => convertLeadToBooking(context, lead),
+        onViewDetails: () => context.go('/sales/leads/${lead.id}'),
+      );
+    }
 
     // Single column (phones): a plain list of content-sized cards. Avoids the
     // fixed 360px cell that clipped rich leads and left blank space on sparse
@@ -1934,6 +1946,8 @@ class _LeadCard extends StatefulWidget {
   /// When true the card sizes to its content (used for the single-column mobile
   /// list) instead of filling a fixed-height grid cell.
   final bool flexible;
+  final bool showAssignedTo;
+  final String? assignedName;
 
   const _LeadCard({
     required this.lead,
@@ -1943,6 +1957,8 @@ class _LeadCard extends StatefulWidget {
     required this.onConvert,
     required this.onViewDetails,
     this.flexible = false,
+    this.showAssignedTo = false,
+    this.assignedName,
   });
 
   @override
@@ -2166,6 +2182,15 @@ class _LeadCardState extends State<_LeadCard> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                  ],
+                  if (widget.showAssignedTo) ...[
+                    const SizedBox(height: 8),
+                    _InfoRow(
+                      icon: Icons.person_outline,
+                      label: 'Assigned',
+                      value: widget.assignedName ?? 'Unassigned',
+                      valueColor: widget.assignedName == null ? Colors.red : crm.primary,
                     ),
                   ],
                   // Fixed-height grid cells push the actions to the bottom; the

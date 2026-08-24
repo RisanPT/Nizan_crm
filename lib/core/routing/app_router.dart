@@ -86,6 +86,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/department_repor
 import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
+import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/chart_of_accounts_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/journal_voucher_screen.dart';
@@ -226,6 +227,9 @@ bool isRouteAllowed(String path, Access access,
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canSeeSales;
   }
+  if (path.startsWith('/company-reports')) {
+    return access.canSeeCompanyReports;
+  }
   if (path.startsWith('/company-finance')) {
     return access.canSeeCompanyFinance;
   }
@@ -297,6 +301,7 @@ String landingRouteFor(Access access,
     '/clients',
     '/calendar',
     '/finance',
+    '/company-reports',
     '/company-finance', '/company-finance/assets',
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
     '/accounts/artist-collections', '/accounts/fleet-expenses',
@@ -423,6 +428,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Cancelled Works';
           } else if (state.uri.path == '/reports/analyst') {
             title = 'Financial Report';
+          } else if (state.uri.path == '/company-reports') {
+            title = 'Company Reports';
           } else if (state.uri.path == '/company-finance') {
             title = 'Finance Dashboard';
           } else if (state.uri.path == '/company-finance/month-end') {
@@ -871,6 +878,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/finance',
             builder: (context, state) => const ArtistFinanceScreen(),
+          ),
+          GoRoute(
+            path: '/company-reports',
+            builder: (context, state) => const CompanyReportsScreen(),
           ),
           GoRoute(
             path: '/company-finance',

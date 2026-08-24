@@ -12,6 +12,11 @@ class ListPageParams {
   final String? department;
   final String? artistRole;
 
+  /// Customer list: status filter ('Active'/'Inactive'/'Prospect') and sort key
+  /// ('newest'/'oldest'/'name_asc'/'name_desc').
+  final String? status;
+  final String? sort;
+
   const ListPageParams({
     required this.page,
     required this.limit,
@@ -19,6 +24,8 @@ class ListPageParams {
     this.department,
     this.artistRole,
     this.search,
+    this.status,
+    this.sort,
     this.zoneId,
     this.stateId,
     this.regionId,
@@ -35,6 +42,8 @@ class ListPageParams {
         other.department == department &&
         other.artistRole == artistRole &&
         other.search == search &&
+        other.status == status &&
+        other.sort == sort &&
         other.zoneId == zoneId &&
         other.stateId == stateId &&
         other.regionId == regionId &&
@@ -50,6 +59,8 @@ class ListPageParams {
         department,
         artistRole,
         search,
+        status,
+        sort,
         zoneId,
         stateId,
         regionId,

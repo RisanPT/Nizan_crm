@@ -181,6 +181,14 @@ class BookingItem {
   final double totalPrice;
   final double advanceAmount;
   final List<BookingAssignment> assignedStaff;
+  // Per-item overrides. When non-empty, these take priority over the
+  // booking-level outfit / venue / time so each package on a different date
+  // can have its own independent details.
+  final String outfitDetails;
+  final String mapUrl;
+  /// "HH:mm" 24-h string (e.g. "09:30"). Empty = inherit booking-level time.
+  final String startTime;
+  final String endTime;
 
   const BookingItem({
     this.packageId = '',
@@ -190,6 +198,10 @@ class BookingItem {
     this.totalPrice = 0,
     this.advanceAmount = 0,
     this.assignedStaff = const [],
+    this.outfitDetails = '',
+    this.mapUrl = '',
+    this.startTime = '',
+    this.endTime = '',
   });
 
   factory BookingItem.fromJson(Map<String, dynamic> json) {
@@ -206,6 +218,10 @@ class BookingItem {
           .whereType<Map<String, dynamic>>()
           .map(BookingAssignment.fromJson)
           .toList(),
+      outfitDetails: json['outfitDetails'] as String? ?? '',
+      mapUrl: json['mapUrl'] as String? ?? '',
+      startTime: json['startTime'] as String? ?? '',
+      endTime: json['endTime'] as String? ?? '',
     );
   }
 
@@ -218,6 +234,10 @@ class BookingItem {
       'totalPrice': totalPrice,
       'advanceAmount': advanceAmount,
       'assignedStaff': assignedStaff.map((item) => item.toJson()).toList(),
+      'outfitDetails': outfitDetails,
+      'mapUrl': mapUrl,
+      'startTime': startTime,
+      'endTime': endTime,
     };
   }
 
@@ -229,6 +249,10 @@ class BookingItem {
     double? totalPrice,
     double? advanceAmount,
     List<BookingAssignment>? assignedStaff,
+    String? outfitDetails,
+    String? mapUrl,
+    String? startTime,
+    String? endTime,
   }) {
     return BookingItem(
       packageId: packageId ?? this.packageId,
@@ -238,6 +262,10 @@ class BookingItem {
       totalPrice: totalPrice ?? this.totalPrice,
       advanceAmount: advanceAmount ?? this.advanceAmount,
       assignedStaff: assignedStaff ?? this.assignedStaff,
+      outfitDetails: outfitDetails ?? this.outfitDetails,
+      mapUrl: mapUrl ?? this.mapUrl,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
     );
   }
 }
@@ -656,13 +684,15 @@ class Booking {
           ? item.selectedDates
           : fallbackDates;
       final anchorDate = itemDates.isNotEmpty ? itemDates.first : bookingDate;
-      final itemStart = DateTime(
-        anchorDate.year,
-        anchorDate.month,
-        anchorDate.day,
-        serviceStart.hour,
-        serviceStart.minute,
-      );
+      // Use the per-item startTime/endTime if set; otherwise inherit from the
+      // booking-level serviceStart / serviceEnd. This prevents one item's time
+      // from bleeding into all other items.
+      final parsedItemStart = _parseHhmm(item.startTime);
+      final parsedItemEnd = _parseHhmm(item.endTime);
+      final effectiveStartH = parsedItemStart?.hour ?? serviceStart.hour;
+      final effectiveStartM = parsedItemStart?.minute ?? serviceStart.minute;
+      final effectiveEndH = parsedItemEnd?.hour ?? serviceEnd.hour;
+      final effectiveEndM = parsedItemEnd?.minute ?? serviceEnd.minute;
       return [
         BookingDisplayEntry(
           id: '$id::$index::0',
@@ -675,13 +705,19 @@ class Booking {
           allSelectedDates: itemDates,
           totalPrice: item.totalPrice,
           advanceAmount: item.advanceAmount,
-          serviceStart: itemStart,
+          serviceStart: DateTime(
+            anchorDate.year,
+            anchorDate.month,
+            anchorDate.day,
+            effectiveStartH,
+            effectiveStartM,
+          ),
           serviceEnd: DateTime(
             anchorDate.year,
             anchorDate.month,
             anchorDate.day,
-            serviceEnd.hour,
-            serviceEnd.minute,
+            effectiveEndH,
+            effectiveEndM,
           ),
           assignedStaff: item.assignedStaff,
         ),
@@ -701,15 +737,15 @@ class Booking {
               itemDates[dateIndex].year,
               itemDates[dateIndex].month,
               itemDates[dateIndex].day,
-              serviceStart.hour,
-              serviceStart.minute,
+              effectiveStartH,
+              effectiveStartM,
             ),
             serviceEnd: DateTime(
               itemDates[dateIndex].year,
               itemDates[dateIndex].month,
               itemDates[dateIndex].day,
-              serviceEnd.hour,
-              serviceEnd.minute,
+              effectiveEndH,
+              effectiveEndM,
             ),
             assignedStaff: item.assignedStaff,
           ),
@@ -1048,4 +1084,16 @@ String _formatDateOnly(DateTime date) {
   final month = date.month.toString().padLeft(2, '0');
   final day = date.day.toString().padLeft(2, '0');
   return '$year-$month-$day';
+}
+
+/// Parses a "HH:mm" 24-h time string into hour and minute values.
+/// Returns null if the string is empty or malformed.
+({int hour, int minute})? _parseHhmm(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  final parts = raw.trim().split(':');
+  if (parts.length < 2) return null;
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return null;
+  return (hour: h.clamp(0, 23), minute: m.clamp(0, 59));
 }

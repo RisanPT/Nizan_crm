@@ -520,6 +520,14 @@ class Sidebar extends ConsumerWidget {
                         ),
                     ],
                   ],
+                  if (access.canSeeCompanyReports)
+                    _SidebarItem(
+                      icon: Icons.folder_shared_outlined,
+                      title: 'Company Reports',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/company-reports'),
+                      onTap: () => context.go('/company-reports'),
+                    ),
                   if (access.canSeeCompanyFinance) ...[
                     _SidebarItem(
                       icon: Icons.savings_outlined,

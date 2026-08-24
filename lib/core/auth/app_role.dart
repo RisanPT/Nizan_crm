@@ -87,6 +87,10 @@ enum AppRole {
   /// Company Finance (dashboard + asset register). Management + accounts.
   bool get canSeeCompanyFinance => isFullAccess || this == accounts;
 
+  /// Company Reports library — every department uploads/reads its own reports,
+  /// so it is broadly available; per-report access is enforced on the server.
+  bool get canSeeCompanyReports => true;
+
   /// Accounts payables (vendor bills / GST). Accounts team + inventory manager.
   bool get canSeePayables =>
       isFullAccess || this == accounts || this == inventoryManager;

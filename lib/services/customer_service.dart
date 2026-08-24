@@ -48,6 +48,9 @@ final paginatedCustomersProvider =
       return ref.watch(customerServiceProvider).getPaginatedCustomers(
             page: params.page,
             limit: params.limit,
+            search: params.search,
+            status: params.status,
+            sort: params.sort,
             zoneId: zoneId,
             stateId: stateId,
             regionId: regionId,
@@ -74,6 +77,9 @@ class CustomerService {
   Future<PaginatedListResponse<Customer>> getPaginatedCustomers({
     int page = 1,
     int limit = 20,
+    String? search,
+    String? status,
+    String? sort,
     String? zoneId,
     String? stateId,
     String? regionId,
@@ -84,6 +90,9 @@ class CustomerService {
       final Map<String, dynamic> queryParams = {
         'page': page,
         'limit': limit,
+        if (search != null && search.isNotEmpty) 'search': search,
+        if (status != null && status.isNotEmpty && status != 'All') 'status': status,
+        if (sort != null && sort.isNotEmpty) 'sort': sort,
         if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
         if (regionId != null && regionId.isNotEmpty) 'regionId': regionId,
