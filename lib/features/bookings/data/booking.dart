@@ -410,6 +410,9 @@ class Booking {
   final String driverName;
   final String status;
   final String mapUrl;
+  /// Per-date map/venue overrides for a multi-date booking, keyed by
+  /// 'YYYY-MM-DD'. A date not present here falls back to [mapUrl].
+  final Map<String, String> dateMaps;
   final String travelMode;
   final String travelTime;
   final double travelDistanceKm;
@@ -475,6 +478,7 @@ class Booking {
     this.driverName = '',
     this.status = 'pending',
     this.mapUrl = '',
+    this.dateMaps = const {},
     this.travelMode = '',
     this.travelTime = '',
     this.travelDistanceKm = 0,
@@ -781,6 +785,9 @@ class Booking {
       driverName: json['driverName'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       mapUrl: json['mapUrl'] as String? ?? '',
+      dateMaps: (json['dateMaps'] as Map?)
+              ?.map((k, v) => MapEntry(k.toString(), (v ?? '').toString())) ??
+          const {},
       travelMode: json['travelMode'] as String? ?? '',
       travelTime: json['travelTime'] as String? ?? '',
       travelDistanceKm: (json['travelDistanceKm'] as num?)?.toDouble() ?? 0,
@@ -857,6 +864,7 @@ class Booking {
       'driverName': driverName,
       'status': status,
       'mapUrl': mapUrl,
+      'dateMaps': dateMaps,
       'travelMode': travelMode,
       'travelTime': travelTime,
       'travelDistanceKm': travelDistanceKm,
@@ -917,6 +925,7 @@ class Booking {
     String? driverName,
     String? status,
     String? mapUrl,
+    Map<String, String>? dateMaps,
     String? travelMode,
     String? travelTime,
     double? travelDistanceKm,
@@ -973,6 +982,7 @@ class Booking {
       driverName: driverName ?? this.driverName,
       status: status ?? this.status,
       mapUrl: mapUrl ?? this.mapUrl,
+      dateMaps: dateMaps ?? this.dateMaps,
       travelMode: travelMode ?? this.travelMode,
       travelTime: travelTime ?? this.travelTime,
       travelDistanceKm: travelDistanceKm ?? this.travelDistanceKm,

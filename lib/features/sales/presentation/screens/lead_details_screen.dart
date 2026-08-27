@@ -132,6 +132,11 @@ class LeadDetailsScreen extends HookConsumerWidget {
           }
 
           final lead = leads[leadIndex];
+          final users = ref.watch(crmUsersProvider).value ?? [];
+          String? assignedName;
+          if (lead.assignedTo != null) {
+            assignedName = users.where((u) => u.id == lead.assignedTo).firstOrNull?.name;
+          }
 
           return SingleChildScrollView(
             padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -139,7 +144,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 1. Lead Header Details Card
-                _buildHeaderCard(context, ref, lead, crm, isAdminOrManager),
+                _buildHeaderCard(context, ref, lead, crm, isAdminOrManager, assignedName),
                 24.h,
 
                 // 2. Tab Bar Selector
@@ -199,6 +204,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
     Lead lead,
     CrmTheme crm,
     bool isAdminOrManager,
+    String? assignedName,
   ) {
     return Card(
       elevation: 0,
@@ -273,7 +279,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
                 _buildHeaderMeta(
                   Icons.assignment_ind_outlined,
                   'Assigned',
-                  lead.assignedTo != null ? 'Sales Staff' : 'Unassigned',
+                  lead.assignedTo != null ? (assignedName ?? 'Sales Staff') : 'Unassigned',
                 ),
                 _buildHeaderMeta(
                   Icons.calendar_today_outlined,

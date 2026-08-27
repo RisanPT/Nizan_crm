@@ -29,6 +29,10 @@ import 'package:nizan_crm/core/utils/whatsapp_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
+/// 'YYYY-MM-DD' key used for a booking's per-date map overrides (`dateMaps`).
+String _dateKey(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
   final String? bookingEntryId;
@@ -361,11 +365,18 @@ class ManageBookingScreen extends HookConsumerWidget {
               ? booking.bookingItems[selectedBookingItemIndex]
               : null;
 
-          // mapUrl: prefer per-item mapUrl if set, else booking-level
+          // mapUrl: prefer per-item mapUrl, else the per-DATE override for a
+          // multi-date booking, else the booking-level map.
+          final loadEntryDateKey = selectedDisplayEntry != null
+              ? _dateKey(selectedDisplayEntry.calendarDate)
+              : null;
+          final perDateMap = (selectedBookingItemIndex < 0 && loadEntryDateKey != null)
+              ? (booking.dateMaps[loadEntryDateKey] ?? '')
+              : '';
           mapUrlCtrl.text = (selectedItem != null &&
                   selectedItem.mapUrl.isNotEmpty)
               ? selectedItem.mapUrl
-              : booking.mapUrl;
+              : (perDateMap.isNotEmpty ? perDateMap : booking.mapUrl);
           travelModeCtrl.text = booking.travelMode;
           travelTimeCtrl.text = booking.travelTime;
           travelDistanceCtrl.text = booking.travelDistanceKm == 0
@@ -971,6 +982,17 @@ class ManageBookingScreen extends HookConsumerWidget {
           : rawDiscountValue.clamp(0.0, discountBase);
 
       final selectedDistrictModel = findDistrictById(selectedDistrictId.value);
+      // Per-date map override: for a multi-DATE booking with no per-item entry,
+      // the edited map belongs to THIS date only — write it to dateMaps and
+      // leave the shared booking-level mapUrl (and the other dates) untouched.
+      final isMultiDateEntry =
+          selectedBookingItemIndex < 0 && booking.selectedDates.length > 1;
+      final entryDateKey = selectedDisplayEntry != null
+          ? _dateKey(selectedDisplayEntry.calendarDate)
+          : null;
+      final updatedDateMaps = (isMultiDateEntry && entryDateKey != null)
+          ? {...booking.dateMaps, entryDateKey: mapUrlCtrl.text.trim()}
+          : booking.dateMaps;
       final currentBookingSnapshot = booking.copyWith(
         customerName: nameCtrl.text.trim(),
         // For a multi-item booking, keep the booking-level packageId intact —
@@ -1004,7 +1026,10 @@ class ManageBookingScreen extends HookConsumerWidget {
                 ?.artistName ??
             '',
         status: statusState.value,
-        mapUrl: isMultiItem ? booking.mapUrl : mapUrlCtrl.text.trim(),
+        mapUrl: (isMultiItem || isMultiDateEntry)
+            ? booking.mapUrl
+            : mapUrlCtrl.text.trim(),
+        dateMaps: updatedDateMaps,
         travelMode: travelModeCtrl.text.trim(),
         travelTime: travelTimeCtrl.text.trim(),
         travelDistanceKm: travelDistanceCtrl.text.trim().isEmpty

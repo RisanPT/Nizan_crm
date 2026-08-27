@@ -48,6 +48,10 @@ class AddBookingScreen extends HookConsumerWidget {
     final selectedDistrictId = useState<String?>('');
     final selectedPackageId = useState<String?>(null);
     final selectedDates = useState<List<DateTime>>([]);
+    // The date the booking was actually made/entered (defaults to today). For a
+    // forgotten booking entered late, set this to the real past date — it drives
+    // the record's createdAt so sales/reports count it in the right period.
+    final bookedDate = useState<DateTime>(DateTime.now());
     final eventSlotCtrl = useTextEditingController();
     final customPackageNameCtrl = useTextEditingController();
     final customPackageAmountCtrl = useTextEditingController();
@@ -302,6 +306,18 @@ class AddBookingScreen extends HookConsumerWidget {
       recalculate();
     }
 
+    Future<void> pickBookedDate() async {
+      final picked = await showDatePicker(
+        context: context,
+        initialDate: bookedDate.value,
+        firstDate: DateTime(2020),
+        lastDate: DateTime.now(), // a booking can't have been made in the future
+      );
+      if (picked != null) {
+        bookedDate.value = DateTime(picked.year, picked.month, picked.day);
+      }
+    }
+
     Future<void> pickDate() async {
       final picked = await showDatePicker(
         context: context,
@@ -503,6 +519,8 @@ class AddBookingScreen extends HookConsumerWidget {
           district: selectedDistrictModel?.name ?? '',
           bookingDate: d,
           selectedDates: sortedDates,
+          // When the booking was made/entered (past-dated for late entries).
+          createdAt: bookedDate.value,
           serviceStart: sStart,
           serviceEnd: sEnd,
           totalPrice: totalPrice.value,
@@ -1057,12 +1075,40 @@ class AddBookingScreen extends HookConsumerWidget {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  // Booking date = when it was BOOKED/entered
+                                  // (past-date a forgotten booking here).
+                                  InkWell(
+                                    onTap: isSubmitting.value ? null : pickBookedDate,
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InputDecorator(
+                                      decoration: _inputDeco('Booking Date (when booked)', crmColors),
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.event_note_outlined, size: 16, color: crmColors.textSecondary),
+                                          8.w,
+                                          Expanded(
+                                            child: Text(
+                                              bookedDate.value.toString().split(' ')[0],
+                                              style: TextStyle(color: crmColors.textPrimary),
+                                            ),
+                                          ),
+                                          Icon(Icons.edit_calendar_outlined, size: 18, color: crmColors.primary),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  4.h,
+                                  Text(
+                                    'Forgot to enter a booking earlier? Set this to the real past date it was booked.',
+                                    style: TextStyle(fontSize: 11.5, color: crmColors.textSecondary),
+                                  ),
+                                  16.h,
                                   InkWell(
                                     onTap: isSubmitting.value ? null : pickDate,
                                     borderRadius: BorderRadius.circular(8),
                                       child: InputDecorator(
                                         decoration: _inputDeco(
-                                          'Booking Dates',
+                                          'Event Date(s)',
                                         crmColors,
                                       ),
                                       child: Row(
@@ -1077,7 +1123,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                             child: Text(
                                               selectedDates.value.isNotEmpty
                                                   ? '${selectedDates.value.length} date${selectedDates.value.length == 1 ? '' : 's'} selected'
-                                                  : 'Add booking date…',
+                                                  : 'Add event date…',
                                               style: TextStyle(
                                                 color: selectedDates.value.isNotEmpty
                                                     ? crmColors.textPrimary
