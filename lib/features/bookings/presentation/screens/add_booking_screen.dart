@@ -543,6 +543,7 @@ class AddBookingScreen extends HookConsumerWidget {
           ref.invalidate(leadsProvider);
           ref.invalidate(paginatedLeadsProvider);
         }
+        ref.invalidate(paginatedBookingsProvider);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
