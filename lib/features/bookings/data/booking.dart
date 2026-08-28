@@ -189,6 +189,15 @@ class BookingItem {
   /// "HH:mm" 24-h string (e.g. "09:30"). Empty = inherit booking-level time.
   final String startTime;
   final String endTime;
+  // Per-item travel. Empty/0 = inherit the booking-level travel fields.
+  final String travelMode;
+  final String travelTime;
+  final double travelDistanceKm;
+  // Per-item work details (multi-package). Empty = inherit booking-level.
+  final String requiredRoomDetail;
+  final String staffInstructions;
+  final String internalRemarks;
+  final String status; // '' = inherit the booking-level status
 
   const BookingItem({
     this.packageId = '',
@@ -202,6 +211,13 @@ class BookingItem {
     this.mapUrl = '',
     this.startTime = '',
     this.endTime = '',
+    this.travelMode = '',
+    this.travelTime = '',
+    this.travelDistanceKm = 0,
+    this.requiredRoomDetail = '',
+    this.staffInstructions = '',
+    this.internalRemarks = '',
+    this.status = '',
   });
 
   factory BookingItem.fromJson(Map<String, dynamic> json) {
@@ -222,6 +238,13 @@ class BookingItem {
       mapUrl: json['mapUrl'] as String? ?? '',
       startTime: json['startTime'] as String? ?? '',
       endTime: json['endTime'] as String? ?? '',
+      travelMode: json['travelMode'] as String? ?? '',
+      travelTime: json['travelTime'] as String? ?? '',
+      travelDistanceKm: (json['travelDistanceKm'] as num?)?.toDouble() ?? 0,
+      requiredRoomDetail: json['requiredRoomDetail'] as String? ?? '',
+      staffInstructions: json['staffInstructions'] as String? ?? '',
+      internalRemarks: json['internalRemarks'] as String? ?? '',
+      status: json['status'] as String? ?? '',
     );
   }
 
@@ -238,6 +261,13 @@ class BookingItem {
       'mapUrl': mapUrl,
       'startTime': startTime,
       'endTime': endTime,
+      'travelMode': travelMode,
+      'travelTime': travelTime,
+      'travelDistanceKm': travelDistanceKm,
+      'requiredRoomDetail': requiredRoomDetail,
+      'staffInstructions': staffInstructions,
+      'internalRemarks': internalRemarks,
+      'status': status,
     };
   }
 
@@ -253,6 +283,13 @@ class BookingItem {
     String? mapUrl,
     String? startTime,
     String? endTime,
+    String? travelMode,
+    String? travelTime,
+    double? travelDistanceKm,
+    String? requiredRoomDetail,
+    String? staffInstructions,
+    String? internalRemarks,
+    String? status,
   }) {
     return BookingItem(
       packageId: packageId ?? this.packageId,
@@ -266,6 +303,13 @@ class BookingItem {
       mapUrl: mapUrl ?? this.mapUrl,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
+      travelMode: travelMode ?? this.travelMode,
+      travelTime: travelTime ?? this.travelTime,
+      travelDistanceKm: travelDistanceKm ?? this.travelDistanceKm,
+      requiredRoomDetail: requiredRoomDetail ?? this.requiredRoomDetail,
+      staffInstructions: staffInstructions ?? this.staffInstructions,
+      internalRemarks: internalRemarks ?? this.internalRemarks,
+      status: status ?? this.status,
     );
   }
 }
@@ -324,6 +368,35 @@ class BookingDisplayEntry {
     }
     return service;
   }
+
+  /// Per-package status for this entry: the item's own status when set, else the
+  /// booking-level status. Lets each package show its own status on the calendar.
+  String get status {
+    if (bookingItemIndex >= 0 && bookingItemIndex < booking.bookingItems.length) {
+      final s = booking.bookingItems[bookingItemIndex].status.trim();
+      if (s.isNotEmpty) return s;
+    }
+    return booking.status;
+  }
+
+  /// The BookingItem this entry belongs to, or null for a non-item (single-date /
+  /// legacy) booking.
+  BookingItem? get item =>
+      (bookingItemIndex >= 0 && bookingItemIndex < booking.bookingItems.length)
+          ? booking.bookingItems[bookingItemIndex]
+          : null;
+
+  // Per-package detail fields for THIS entry. For a package entry these return
+  // the package's own value (empty when unset — never another package's), so the
+  // calendar popup shows/saves per-package. Non-item entries use booking-level.
+  String get travelMode => item?.travelMode ?? booking.travelMode;
+  String get travelTime => item?.travelTime ?? booking.travelTime;
+  double get travelDistanceKm => item?.travelDistanceKm ?? booking.travelDistanceKm;
+  String get requiredRoomDetail => item?.requiredRoomDetail ?? booking.requiredRoomDetail;
+  String get staffInstructions => item?.staffInstructions ?? booking.staffInstructions;
+  String get internalRemarks => item?.internalRemarks ?? booking.internalRemarks;
+  String get mapUrl => item?.mapUrl ?? booking.mapUrl;
+  String get outfitDetails => item?.outfitDetails ?? booking.outfitDetails;
 }
 
 class BookingPageSummary {

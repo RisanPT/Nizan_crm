@@ -377,15 +377,25 @@ class ManageBookingScreen extends HookConsumerWidget {
                   selectedItem.mapUrl.isNotEmpty)
               ? selectedItem.mapUrl
               : (perDateMap.isNotEmpty ? perDateMap : booking.mapUrl);
-          travelModeCtrl.text = booking.travelMode;
-          travelTimeCtrl.text = booking.travelTime;
-          travelDistanceCtrl.text = booking.travelDistanceKm == 0
-              ? ''
-              : booking.travelDistanceKm.toStringAsFixed(0);
+          // Travel is per-package: when editing a specific package show ONLY
+          // that package's own values (empty when unset) — never fall back to
+          // the booking-level value, or an empty package would inherit another
+          // package's travel and appear to "bleed". Booking-level is used only
+          // for a non-item (single-date / legacy) booking.
+          final tMode = selectedItem != null ? selectedItem.travelMode : booking.travelMode;
+          final tTime = selectedItem != null ? selectedItem.travelTime : booking.travelTime;
+          final tKm = selectedItem != null ? selectedItem.travelDistanceKm : booking.travelDistanceKm;
+          travelModeCtrl.text = tMode;
+          travelTimeCtrl.text = tTime;
+          travelDistanceCtrl.text = tKm == 0 ? '' : tKm.toStringAsFixed(0);
           eventSlots.value = _parseEventSlots(
             selectedDisplayEntry?.eventSlot ?? booking.eventSlot,
           );
-          roomCtrl.text = booking.requiredRoomDetail;
+          // Per-package work details: when editing a specific package show ONLY
+          // that package's own value (empty when unset) so room / instructions /
+          // remarks never inherit another package's value. Booking-level is used
+          // only for a non-item (single-date / legacy) booking.
+          roomCtrl.text = selectedItem != null ? selectedItem.requiredRoomDetail : booking.requiredRoomDetail;
           secondaryPhoneCtrl.text = booking.secondaryContact;
           // outfitLooks: prefer per-item outfitDetails if set, else booking-level
           if (selectedItem != null && selectedItem.outfitDetails.isNotEmpty) {
@@ -398,10 +408,14 @@ class ManageBookingScreen extends HookConsumerWidget {
           }
           captureStaffCtrl.text = booking.captureStaffDetails;
           temporaryStaffCtrl.text = booking.temporaryStaffDetails;
-          staffNeedsCtrl.text = booking.staffInstructions;
-          remarksCtrl.text = booking.internalRemarks;
+          staffNeedsCtrl.text = selectedItem != null ? selectedItem.staffInstructions : booking.staffInstructions;
+          remarksCtrl.text = selectedItem != null ? selectedItem.internalRemarks : booking.internalRemarks;
           contentRequired.value = booking.contentCreationRequired;
-          statusState.value = booking.status;
+          // Status DOES inherit the booking status when a package hasn't set its
+          // own (a package defaults to the booking's status), so keep the fallback.
+          statusState.value = (selectedItem != null && selectedItem.status.isNotEmpty)
+              ? selectedItem.status
+              : booking.status;
           selectedRegionId.value = booking.regionId;
           selectedDistrictId.value = booking.districtId;
         }
@@ -908,6 +922,20 @@ class ManageBookingScreen extends HookConsumerWidget {
                 endTime: parsedEnd != null
                     ? _timeToHhmm(parsedEnd)
                     : entry.value.endTime,
+                // Per-item travel — saved for THIS package only.
+                travelMode: travelModeCtrl.text.trim(),
+                travelTime: travelTimeCtrl.text.trim(),
+                travelDistanceKm: travelDistanceCtrl.text.trim().isEmpty
+                    ? 0.0
+                    : (double.tryParse(travelDistanceCtrl.text
+                                .trim()
+                                .replaceAll(RegExp(r'[^0-9.]'), '')) ??
+                            entry.value.travelDistanceKm),
+                // Per-item work details — saved for THIS package only.
+                requiredRoomDetail: roomCtrl.text.trim(),
+                staffInstructions: staffNeedsCtrl.text.trim(),
+                internalRemarks: remarksCtrl.text.trim(),
+                status: statusState.value,
               );
             }).toList()
           : booking.bookingItems;
@@ -927,6 +955,19 @@ class ManageBookingScreen extends HookConsumerWidget {
       // special-case (see copyWith below).
       final bool useItemAggregates = updatedBookingItems.isNotEmpty;
       final bool isMultiItem = updatedBookingItems.length > 1;
+
+      // Booking-level status for a multi-package booking = the status shared by
+      // ALL packages, else 'confirmed' (active) so sales / invoices stay
+      // coherent while each package keeps its own status for the calendar.
+      final String rolledUpStatus = isMultiItem
+          ? (() {
+              final statuses = updatedBookingItems
+                  .map((i) =>
+                      i.status.trim().isEmpty ? booking.status : i.status.trim())
+                  .toSet();
+              return statuses.length == 1 ? statuses.first : 'confirmed';
+            })()
+          : statusState.value;
 
       final double addonsTotal = normalizedAddons.fold(
         0.0,
@@ -1025,30 +1066,38 @@ class ManageBookingScreen extends HookConsumerWidget {
                 .firstOrNull
                 ?.artistName ??
             '',
-        status: statusState.value,
+        // Multi-package: per-package status lives on each item (above); the
+        // booking-level status is the rollup. Single booking: the dropdown value.
+        status: rolledUpStatus,
         mapUrl: (isMultiItem || isMultiDateEntry)
             ? booking.mapUrl
             : mapUrlCtrl.text.trim(),
         dateMaps: updatedDateMaps,
-        travelMode: travelModeCtrl.text.trim(),
-        travelTime: travelTimeCtrl.text.trim(),
-        travelDistanceKm: travelDistanceCtrl.text.trim().isEmpty
-            ? 0.0
-            : (double.tryParse(travelDistanceCtrl.text.trim().replaceAll(RegExp(r'[^0-9.]'), '')) ??
-                booking.travelDistanceKm),
+        // For a multi-package booking, travel is stored per-item (above); keep
+        // the booking-level values intact so they don't bleed across packages.
+        travelMode: isMultiItem ? booking.travelMode : travelModeCtrl.text.trim(),
+        travelTime: isMultiItem ? booking.travelTime : travelTimeCtrl.text.trim(),
+        travelDistanceKm: isMultiItem
+            ? booking.travelDistanceKm
+            : (travelDistanceCtrl.text.trim().isEmpty
+                ? 0.0
+                : (double.tryParse(travelDistanceCtrl.text.trim().replaceAll(RegExp(r'[^0-9.]'), '')) ??
+                    booking.travelDistanceKm)),
         eventSlot: isMultiItem
             ? (aggregateEventSlot.isEmpty
                   ? booking.eventSlot
                   : aggregateEventSlot)
             : eventSlots.value.join(' | '),
-        requiredRoomDetail: roomCtrl.text.trim(),
+        // Per-package work details are stored per-item (above); keep the
+        // booking-level values intact for multi-package so they don't bleed.
+        requiredRoomDetail: isMultiItem ? booking.requiredRoomDetail : roomCtrl.text.trim(),
         secondaryContact: secondaryPhoneCtrl.text.trim(),
         outfitLooks: isMultiItem ? booking.outfitLooks : outfitLooks.value,
         referenceImages: referenceImages.value,
         captureStaffDetails: captureStaffCtrl.text.trim(),
         temporaryStaffDetails: temporaryStaffCtrl.text.trim(),
-        staffInstructions: staffNeedsCtrl.text.trim(),
-        internalRemarks: remarksCtrl.text.trim(),
+        staffInstructions: isMultiItem ? booking.staffInstructions : staffNeedsCtrl.text.trim(),
+        internalRemarks: isMultiItem ? booking.internalRemarks : remarksCtrl.text.trim(),
         contentCreationRequired: contentRequired.value,
         createdAt:
             _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,

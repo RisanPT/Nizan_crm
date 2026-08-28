@@ -152,9 +152,9 @@ class CalendarScreen extends HookConsumerWidget {
     final groupLabels = <String, String>{};
     final groupTypes = <String, bool>{};
     for (final entry in bookings) {
-      final isCancelled = entry.booking.status.toLowerCase() == 'cancelled';
-      final isPostponed = entry.booking.status.toLowerCase() == 'postponed';
-      final isCompleted = entry.booking.status.toLowerCase() == 'completed';
+      final isCancelled = entry.status.toLowerCase() == 'cancelled';
+      final isPostponed = entry.status.toLowerCase() == 'postponed';
+      final isCompleted = entry.status.toLowerCase() == 'completed';
 
       if (isCancelled || isPostponed) {
         // Cancelled and postponed bookings are treated individually to show distinct color with client name
@@ -420,7 +420,7 @@ class CalendarScreen extends HookConsumerWidget {
   // Representative colour for a chip: the shared status if all works agree,
   // else slate (mixed). Completed shows green via _statusColor.
   static Color _groupColor(List<BookingDisplayEntry> entries) {
-    final statuses = entries.map((e) => e.booking.status.toLowerCase()).toSet();
+    final statuses = entries.map((e) => e.status.toLowerCase()).toSet();
     if (statuses.length == 1) return _statusColor(statuses.first);
     return const Color(0xFF7C8E9A); // soft slate (mixed)
   }
@@ -2723,19 +2723,21 @@ Widget _workDetailRow(CrmTheme crm, IconData icon, String label, String value) {
 // Per-work editable state held by the popup (controllers + view/edit flags).
 class _WorkForm {
   _WorkForm(this.entry)
-    : status = entry.booking.status,
+    : status = entry.status,
       customer = TextEditingController(text: entry.booking.customerName),
       phone = TextEditingController(text: entry.booking.phone),
       phone2 = TextEditingController(text: entry.booking.secondaryContact),
       email = TextEditingController(text: entry.booking.email),
-      service = TextEditingController(text: entry.booking.service),
-      eventSlot = TextEditingController(text: entry.booking.eventSlot),
+      // Per-package fields come from THIS entry's package (entry.*), not the
+      // booking level, so the popup never shows another package's details.
+      service = TextEditingController(text: entry.service),
+      eventSlot = TextEditingController(text: entry.eventSlot),
       address = TextEditingController(text: entry.booking.address),
-      mapUrl = TextEditingController(text: entry.booking.mapUrl),
-      outfit = TextEditingController(text: entry.booking.outfitDetails),
-      room = TextEditingController(text: entry.booking.requiredRoomDetail),
-      travelMode = TextEditingController(text: entry.booking.travelMode),
-      travelTime = TextEditingController(text: entry.booking.travelTime),
+      mapUrl = TextEditingController(text: entry.mapUrl),
+      outfit = TextEditingController(text: entry.outfitDetails),
+      room = TextEditingController(text: entry.requiredRoomDetail),
+      travelMode = TextEditingController(text: entry.travelMode),
+      travelTime = TextEditingController(text: entry.travelTime),
       driverName = TextEditingController(text: entry.booking.driverName),
       pocName = TextEditingController(text: entry.booking.pocName),
       pocPhone = TextEditingController(text: entry.booking.pocPhone),
@@ -2744,9 +2746,9 @@ class _WorkForm {
         text: entry.booking.temporaryStaffDetails,
       ),
       staffInstructions = TextEditingController(
-        text: entry.booking.staffInstructions,
+        text: entry.staffInstructions,
       ),
-      remarks = TextEditingController(text: entry.booking.internalRemarks);
+      remarks = TextEditingController(text: entry.internalRemarks);
 
   final BookingDisplayEntry entry;
   String status;
@@ -2877,32 +2879,85 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => f.saving = true);
     try {
-      await ref
-          .read(bookingProvider.notifier)
-          .updateBooking(
-            f.entry.booking.copyWith(
-              status: f.status,
-              customerName: f.customer.text.trim(),
-              phone: f.phone.text.trim(),
-              secondaryContact: f.phone2.text.trim(),
-              email: f.email.text.trim(),
-              service: f.service.text.trim(),
-              eventSlot: f.eventSlot.text.trim(),
-              address: f.address.text.trim(),
-              mapUrl: f.mapUrl.text.trim(),
-              outfitDetails: f.outfit.text.trim(),
-              requiredRoomDetail: f.room.text.trim(),
-              travelMode: f.travelMode.text.trim(),
-              travelTime: f.travelTime.text.trim(),
-              driverName: f.driverName.text.trim(),
-              pocName: f.pocName.text.trim(),
-              pocPhone: f.pocPhone.text.trim(),
-              captureStaffDetails: f.capture.text.trim(),
-              temporaryStaffDetails: f.tempStaff.text.trim(),
-              staffInstructions: f.staffInstructions.text.trim(),
-              internalRemarks: f.remarks.text.trim(),
-            ),
+      final booking = f.entry.booking;
+      final idx = f.entry.bookingItemIndex;
+      final isMultiItem = booking.bookingItems.length > 1;
+
+      Booking updated;
+      if (idx >= 0 && idx < booking.bookingItems.length && isMultiItem) {
+        // Multi-package: write the per-package fields into THIS package only, so
+        // editing one package's travel / room / remarks / status from the popup
+        // never changes another package. Booking-level per-package fields stay
+        // untouched; service/slot/status roll up from all packages.
+        final newItems = booking.bookingItems.asMap().entries.map((e) {
+          if (e.key != idx) return e.value;
+          return e.value.copyWith(
+            service: f.service.text.trim(),
+            eventSlot: f.eventSlot.text.trim(),
+            mapUrl: f.mapUrl.text.trim(),
+            outfitDetails: f.outfit.text.trim(),
+            requiredRoomDetail: f.room.text.trim(),
+            staffInstructions: f.staffInstructions.text.trim(),
+            internalRemarks: f.remarks.text.trim(),
+            travelMode: f.travelMode.text.trim(),
+            travelTime: f.travelTime.text.trim(),
+            status: f.status,
           );
+        }).toList();
+        final aggService = {
+          for (final i in newItems)
+            if (i.service.trim().isNotEmpty) i.service.trim(),
+        }.join(' + ');
+        final aggSlot = {
+          for (final i in newItems)
+            if (i.eventSlot.trim().isNotEmpty) i.eventSlot.trim(),
+        }.join(' | ');
+        final statuses = newItems
+            .map((i) => i.status.trim().isEmpty ? booking.status : i.status.trim())
+            .toSet();
+        updated = booking.copyWith(
+          bookingItems: newItems,
+          service: aggService.isEmpty ? booking.service : aggService,
+          eventSlot: aggSlot.isEmpty ? booking.eventSlot : aggSlot,
+          status: statuses.length == 1 ? statuses.first : 'confirmed',
+          // Shared client / booking fields stay editable from the popup.
+          customerName: f.customer.text.trim(),
+          phone: f.phone.text.trim(),
+          secondaryContact: f.phone2.text.trim(),
+          email: f.email.text.trim(),
+          address: f.address.text.trim(),
+          driverName: f.driverName.text.trim(),
+          pocName: f.pocName.text.trim(),
+          pocPhone: f.pocPhone.text.trim(),
+          captureStaffDetails: f.capture.text.trim(),
+          temporaryStaffDetails: f.tempStaff.text.trim(),
+        );
+      } else {
+        // Single package / non-item booking — booking-level (existing behaviour).
+        updated = booking.copyWith(
+          status: f.status,
+          customerName: f.customer.text.trim(),
+          phone: f.phone.text.trim(),
+          secondaryContact: f.phone2.text.trim(),
+          email: f.email.text.trim(),
+          service: f.service.text.trim(),
+          eventSlot: f.eventSlot.text.trim(),
+          address: f.address.text.trim(),
+          mapUrl: f.mapUrl.text.trim(),
+          outfitDetails: f.outfit.text.trim(),
+          requiredRoomDetail: f.room.text.trim(),
+          travelMode: f.travelMode.text.trim(),
+          travelTime: f.travelTime.text.trim(),
+          driverName: f.driverName.text.trim(),
+          pocName: f.pocName.text.trim(),
+          pocPhone: f.pocPhone.text.trim(),
+          captureStaffDetails: f.capture.text.trim(),
+          temporaryStaffDetails: f.tempStaff.text.trim(),
+          staffInstructions: f.staffInstructions.text.trim(),
+          internalRemarks: f.remarks.text.trim(),
+        );
+      }
+      await ref.read(bookingProvider.notifier).updateBooking(updated);
       ref.invalidate(bookingProvider);
       if (!mounted) return;
       setState(() {
@@ -2921,7 +2976,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   Widget build(BuildContext context) {
     final crm = widget.crm;
     final head = single
-        ? CalendarScreen._statusColor(forms.first.entry.booking.status)
+        ? CalendarScreen._statusColor(forms.first.entry.status)
         : crm.primary;
     final headerTitle = single ? forms.first.entry.summaryLabel : widget.title;
     final headerSub = single
@@ -3036,7 +3091,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   Widget _workCard(int index, _WorkForm f) {
     final crm = widget.crm;
     final e = f.entry;
-    final c = CalendarScreen._statusColor(e.booking.status);
+    final c = CalendarScreen._statusColor(e.status);
     final slot = e.eventSlot.trim();
     final sub = [
       '${CalendarScreen._fmtTime(e.serviceStart)} – ${CalendarScreen._fmtTime(e.serviceEnd)}',
@@ -3117,7 +3172,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      e.booking.status.isEmpty ? 'pending' : e.booking.status,
+                      e.status.isEmpty ? 'pending' : e.status,
                       style: TextStyle(
                         color: c,
                         fontSize: 10,

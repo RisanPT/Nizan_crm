@@ -73,7 +73,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
         ? allDistricts
         : allDistricts.where((d) => d.regionId == selectedRegionId.value).toList();
 
-    final financialYears = ['2026-27', '2025-26', '2024-25', '2023-24'];
+    // FY options from 2035-36 down to 2023-24 (newest first). Extends the range
+    // forward so bookings with events up to 2035 can be filtered.
+    final financialYears = List<String>.generate(13, (i) {
+      final startYear = 2035 - i;
+      return '$startYear-${((startYear + 1) % 100).toString().padLeft(2, '0')}';
+    });
 
     final pageParams = PaginatedBookingsParams(
       page: pageState.value,
