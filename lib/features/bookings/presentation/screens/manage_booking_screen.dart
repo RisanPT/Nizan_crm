@@ -1883,12 +1883,18 @@ class ManageBookingScreen extends HookConsumerWidget {
                               }
                             }
 
+                            // Stay on the manage screen after saving. Previously
+                            // it popped the screen unconditionally, so choosing
+                            // "Later" (skip PDF) kicked the user out of the
+                            // booking. They now leave via the back / calendar
+                            // button when they're actually done.
                             if (context.mounted) {
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                context.go('/calendar');
-                              }
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Booking updated'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
                             }
                           },
                           style: ElevatedButton.styleFrom(

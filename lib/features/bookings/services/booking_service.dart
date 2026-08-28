@@ -57,6 +57,8 @@ class BookingService {
     String? month,
     bool onlyWithMapLink = false,
     String? status,
+    String? from,
+    String? to,
   }) async {
     try {
       final response = await _dio.get(
@@ -79,6 +81,8 @@ class BookingService {
           if (month != null && month.isNotEmpty) 'month': month,
           if (onlyWithMapLink) 'onlyWithMapLink': true,
           if (status != null && status.isNotEmpty) 'status': status,
+          if (from != null && from.isNotEmpty) 'from': from,
+          if (to != null && to.isNotEmpty) 'to': to,
         },
       );
       return PaginatedBookingsResponse.fromJson(

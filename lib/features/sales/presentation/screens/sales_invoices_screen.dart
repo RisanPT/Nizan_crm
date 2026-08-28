@@ -28,6 +28,16 @@ import '../../../../core/models/zone.dart';
 part '../widgets/sales_components.dart';
 part '../widgets/sales_monthly_summary.dart';
 
+// yyyy-MM-dd for the date-range query params (null when no date picked).
+String? _ymd(DateTime? d) => d == null
+    ? null
+    : '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+String _ddMon(DateTime d) {
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${d.day} ${m[d.month - 1]}';
+}
+
 class SalesBookingsScreen extends HookConsumerWidget {
   const SalesBookingsScreen({super.key});
 
@@ -50,6 +60,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final selectedStateId = useState<String>('');
     final selectedRegionId = useState<String>('');
     final selectedDistrictId = useState<String>('');
+
+    // Explicit date-range search (filters by the selected basis — event/booking).
+    final dateFrom = useState<DateTime?>(null);
+    final dateTo = useState<DateTime?>(null);
 
     final asyncZones = ref.watch(zonesProvider);
     final asyncStates = ref.watch(statesProvider);
@@ -91,6 +105,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
       stateId: selectedStateId.value.isEmpty ? null : selectedStateId.value,
       regionId: selectedRegionId.value.isEmpty ? null : selectedRegionId.value,
       districtId: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
+      from: _ymd(dateFrom.value),
+      to: _ymd(dateTo.value),
     );
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
@@ -126,7 +142,25 @@ class SalesBookingsScreen extends HookConsumerWidget {
       return true;
     }
 
-    final geoFilteredAllBookings = allBookings.where(bookingMatchesGeoFilters).toList();
+    // Also honour the explicit date range in the client-side summary so the
+    // cards match the filtered list.
+    bool matchesDateRange(Booking b) {
+      if (dateFrom.value == null && dateTo.value == null) return true;
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+      if (dateFrom.value != null) {
+        final f = dateFrom.value!;
+        if (d.isBefore(DateTime(f.year, f.month, f.day))) return false;
+      }
+      if (dateTo.value != null) {
+        final t = dateTo.value!;
+        if (d.isAfter(DateTime(t.year, t.month, t.day, 23, 59, 59))) return false;
+      }
+      return true;
+    }
+
+    final geoFilteredAllBookings = allBookings
+        .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b))
+        .toList();
 
     int countPackages(Iterable<Booking> bookings) {
       return bookings.fold(0, (sum, b) => sum + (b.bookingItems.isEmpty ? 1 : b.bookingItems.length));
@@ -775,6 +809,50 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                       underline: const SizedBox(),
                       icon: const Icon(Icons.keyboard_arrow_down),
+                    ),
+                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                    // ── Date range search (filters by the basis above) ──
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2035, 12, 31),
+                          initialDateRange: (dateFrom.value != null && dateTo.value != null)
+                              ? DateTimeRange(start: dateFrom.value!, end: dateTo.value!)
+                              : null,
+                        );
+                        if (picked != null) {
+                          dateFrom.value = picked.start;
+                          dateTo.value = picked.end;
+                          pageState.value = 1;
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.date_range, size: 18, color: crmColors.textPrimary),
+                          const SizedBox(width: 6),
+                          Text(
+                            (dateFrom.value != null && dateTo.value != null)
+                                ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)}'
+                                : 'Date range',
+                            style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                          ),
+                          if (dateFrom.value != null || dateTo.value != null) ...[
+                            const SizedBox(width: 4),
+                            InkWell(
+                              onTap: () {
+                                dateFrom.value = null;
+                                dateTo.value = null;
+                                pageState.value = 1;
+                              },
+                              child: Icon(Icons.close, size: 16, color: crmColors.textSecondary),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                     if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
                     // ── Zone Dropdown ──

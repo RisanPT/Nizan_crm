@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
@@ -26,6 +25,9 @@ class PaginatedBookingsParams {
   final String? month;
   final bool onlyWithMapLink;
   final String? status;
+  // Explicit event/booking date range (yyyy-MM-dd) for the date search filter.
+  final String? from;
+  final String? to;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -43,6 +45,8 @@ class PaginatedBookingsParams {
     this.month,
     this.onlyWithMapLink = false,
     this.status,
+    this.from,
+    this.to,
   });
 
   @override
@@ -62,7 +66,9 @@ class PaginatedBookingsParams {
         other.dateBasis == dateBasis &&
         other.month == month &&
         other.onlyWithMapLink == onlyWithMapLink &&
-        other.status == status;
+        other.status == status &&
+        other.from == from &&
+        other.to == to;
   }
 
   @override
@@ -82,6 +88,8 @@ class PaginatedBookingsParams {
     month,
     onlyWithMapLink,
     status,
+    from,
+    to,
   );
 }
 
@@ -128,6 +136,8 @@ final paginatedBookingsProvider =
             month: params.month,
             onlyWithMapLink: params.onlyWithMapLink,
             status: params.status,
+            from: params.from,
+            to: params.to,
           );
     });
 
@@ -165,21 +175,22 @@ final artistAssignedWorksProvider =
 
 final singleBookingProvider = FutureProvider.autoDispose.family<Booking?, String>((ref, id) async {
   if (id.isEmpty || id == 'new') return null;
-  
-  await Future.delayed(const Duration(milliseconds: 400));
-  final asyncBookings = ref.watch(bookingProvider);
-  final allBookings = asyncBookings.value ?? [];
-  final found = allBookings.cast<Booking?>().firstWhere(
-    (b) => b?.id == id,
-    orElse: () => null,
-  );
-  // DEBUG: log what we found in local cache
-  debugPrint(
-    '[singleBookingProvider] id=$id '
-    'totalPrice=${found?.totalPrice} '
-    'addons=${found?.addons.map((a) => "${a.service}:${a.amount}").toList()}',
-  );
-  return found;
+
+  // Prefer the in-memory cache — it reflects local optimistic edits and is
+  // instant. Watch it so this provider re-runs when the cache updates.
+  final cached = (ref.watch(bookingProvider).value ?? const <Booking>[])
+      .cast<Booking?>()
+      .firstWhere((b) => b?.id == id, orElse: () => null);
+  if (cached != null) return cached;
+
+  // Not in the cache — e.g. opened from the server-paginated Sales list, whose
+  // rows aren't guaranteed to be in the all-bookings cache. Fetch it directly
+  // from the server by id so the manage screen never wrongly says "not found".
+  try {
+    return await ref.read(bookingServiceProvider).getBookingById(id);
+  } catch (_) {
+    return null;
+  }
 });
 
 @Riverpod(keepAlive: true)
