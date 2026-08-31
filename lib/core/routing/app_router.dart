@@ -87,6 +87,11 @@ import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_board_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/ticket_detail_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_tickets_dashboard_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/chart_of_accounts_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/journal_voucher_screen.dart';
@@ -230,6 +235,8 @@ bool isRouteAllowed(String path, Access access,
   if (path.startsWith('/company-reports')) {
     return access.canSeeCompanyReports;
   }
+  if (path.startsWith('/it/')) return access.canSeeIt;
+  if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
   if (path.startsWith('/company-finance')) {
     return access.canSeeCompanyFinance;
   }
@@ -882,6 +889,28 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-reports',
             builder: (context, state) => const CompanyReportsScreen(),
+          ),
+          GoRoute(
+            path: '/it/projects',
+            builder: (context, state) => const ITProjectsScreen(),
+          ),
+          GoRoute(
+            path: '/it/projects/:id',
+            builder: (context, state) =>
+                ITBoardScreen(projectId: state.pathParameters['id'] ?? ''),
+          ),
+          GoRoute(
+            path: '/it/tickets',
+            builder: (context, state) => const ITTicketsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/helpdesk',
+            builder: (context, state) => const HelpDeskScreen(),
+          ),
+          GoRoute(
+            path: '/helpdesk/tickets/:id',
+            builder: (context, state) =>
+                TicketDetailScreen(ticketId: state.pathParameters['id'] ?? ''),
           ),
           GoRoute(
             path: '/company-finance',

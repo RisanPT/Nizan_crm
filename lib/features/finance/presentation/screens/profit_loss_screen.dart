@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -70,8 +71,8 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
   Future<void> _applyPreset(DateRangePreset p) async {
     if (p == DateRangePreset.custom) {
       final now = DateTime.now();
-      final picked = await showDateRangePicker(
-        context: context,
+      final picked = await showBrandedDateRangePicker(
+        context,
         firstDate: DateTime(2015),
         lastDate: DateTime(now.year + 1),
         initialDateRange: (_from != null && _to != null)

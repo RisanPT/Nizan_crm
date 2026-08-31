@@ -48,6 +48,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _hrUserCollapsed = false;
   bool _financeExpanded = false;
   bool _financeUserCollapsed = false;
+  bool _itExpanded = false;
+  bool _itUserCollapsed = false;
 
   int _calculateSelectedIndex(BuildContext context, AppRole role) {
     final location = GoRouterState.of(context).uri.path;
@@ -506,6 +508,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               setState(() {
                 _financeExpanded = expanded;
                 _financeUserCollapsed = !expanded;
+              });
+            },
+            itExpanded: _itExpanded,
+            itUserCollapsed: _itUserCollapsed,
+            onItExpandToggle: (expanded) {
+              setState(() {
+                _itExpanded = expanded;
+                _itUserCollapsed = !expanded;
               });
             },
           ),

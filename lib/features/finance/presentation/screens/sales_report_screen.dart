@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
@@ -150,8 +151,8 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
   Future<void> _applyPreset(DateRangePreset p) async {
     if (p == DateRangePreset.custom) {
       final now = DateTime.now();
-      final picked = await showDateRangePicker(
-        context: context,
+      final picked = await showBrandedDateRangePicker(
+        context,
         firstDate: DateTime(2015),
         lastDate: DateTime(now.year + 1),
         initialDateRange:

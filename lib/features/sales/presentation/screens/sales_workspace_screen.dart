@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
@@ -418,6 +419,63 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     }
   }
 
+  /// Pick an existing service package and add it as a line item (name + price).
+  Future<void> _addPackageDialog() async {
+    final packages = await ref.read(packagesProvider.future);
+    if (!mounted) return;
+    if (packages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No packages available')),
+      );
+      return;
+    }
+    final picked = await showModalBottomSheet<ServicePackage>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        var q = '';
+        return StatefulBuilder(builder: (ctx, setSheet) {
+          final filtered = q.isEmpty
+              ? packages
+              : packages.where((p) => p.name.toLowerCase().contains(q.toLowerCase())).toList();
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(ctx).viewInsets.bottom),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Add a package', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              TextField(
+                autofocus: true,
+                decoration: const InputDecoration(hintText: 'Search packages…', prefixIcon: Icon(Icons.search)),
+                onChanged: (v) => setSheet(() => q = v.trim()),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.45),
+                child: filtered.isEmpty
+                    ? const Padding(padding: EdgeInsets.all(24), child: Text('No matching packages.'))
+                    : ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final p in filtered)
+                            ListTile(
+                              title: Text(p.name),
+                              trailing: Text('₹${p.price.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700)),
+                              onTap: () => Navigator.pop(ctx, p),
+                            ),
+                        ],
+                      ),
+              ),
+            ]),
+          );
+        });
+      },
+    );
+    if (picked != null) {
+      setState(() => _lines.add(SpotInvoiceLine(label: picked.name, amount: picked.price)));
+    }
+  }
+
   Future<void> _generate() async {
     if (_customerCtrl.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -497,6 +555,11 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
                   style: TextStyle(
                       color: crm.textSecondary, fontWeight: FontWeight.w700)),
               const Spacer(),
+              TextButton.icon(
+                onPressed: _addPackageDialog,
+                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                label: const Text('Package'),
+              ),
               TextButton.icon(
                 onPressed: _addLineDialog,
                 icon: const Icon(Icons.add, size: 18),
@@ -629,9 +692,19 @@ class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
             children: [
               IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
               Expanded(
-                child: Text('${_monthNames[_month.month]} ${_month.year}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showMonthPicker(context, initial: _month);
+                    if (picked != null) setState(() => _month = DateTime(picked.year, picked.month));
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text('${_monthNames[_month.month]} ${_month.year}',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                    const Icon(Icons.arrow_drop_down, size: 22),
+                  ]),
+                ),
               ),
               IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
             ],

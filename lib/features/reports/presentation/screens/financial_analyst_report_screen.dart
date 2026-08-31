@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/reports/data/financial_analyst_report.dart';
 import 'package:nizan_crm/features/reports/services/financial_report_service.dart';
 import 'package:nizan_crm/core/utils/financial_report_service.dart' as export_svc;
@@ -18,8 +19,8 @@ String _money(num v) {
 }
 
 const _months = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December'
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
 class FinancialAnalystReportScreen extends ConsumerStatefulWidget {
@@ -41,6 +42,20 @@ class _FinancialAnalystReportScreenState
   void _shift(int by) =>
       setState(() => _month = DateTime(_month.year, _month.month + by, 1));
 
+  bool get _canGoForward =>
+      _month.isBefore(DateTime(DateTime.now().year, DateTime.now().month, 1));
+
+  Future<void> _pickMonth() async {
+    final picked = await showMonthPicker(context, initial: _month);
+    if (picked == null) return;
+    final now = DateTime.now();
+    // Never allow a future month (the report is retrospective).
+    final capped = picked.isAfter(DateTime(now.year, now.month, 1))
+        ? DateTime(now.year, now.month, 1)
+        : DateTime(picked.year, picked.month, 1);
+    setState(() => _month = capped);
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
@@ -50,10 +65,13 @@ class _FinancialAnalystReportScreenState
       backgroundColor: crm.background,
       body: Column(
         children: [
-          // Month navigator + export
+          // ── Month navigator + export ─────────────────────────────────────
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            color: crm.surface,
+            decoration: BoxDecoration(
+              color: crm.surface,
+              border: Border(bottom: BorderSide(color: crm.border)),
+            ),
             child: Row(
               children: [
                 IconButton(
@@ -61,22 +79,27 @@ class _FinancialAnalystReportScreenState
                   icon: const Icon(Icons.chevron_left),
                 ),
                 Expanded(
-                  child: Text(
-                    '${_months[_month.month - 1]} ${_month.year}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 16),
+                  child: InkWell(
+                    onTap: _pickMonth,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('${_months[_month.month - 1]} ${_month.year}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16)),
+                        Icon(Icons.arrow_drop_down, color: crm.textSecondary),
+                      ],
+                    ),
                   ),
                 ),
                 IconButton(
-                  onPressed: _month.isBefore(
-                          DateTime(DateTime.now().year, DateTime.now().month, 1))
-                      ? () => _shift(1)
-                      : null,
+                  onPressed: _canGoForward ? () => _shift(1) : null,
                   icon: const Icon(Icons.chevron_right),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
+                  style: FilledButton.styleFrom(backgroundColor: crm.primary),
                   onPressed: (_exporting || !async.hasValue)
                       ? null
                       : () async {
@@ -120,6 +143,14 @@ class _FinancialAnalystReportScreenState
   }
 }
 
+class _Kpi {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _Kpi(this.label, this.value, this.icon, this.color);
+}
+
 class _ReportBody extends StatelessWidget {
   final FinancialAnalystReport report;
   final CrmTheme crm;
@@ -131,174 +162,219 @@ class _ReportBody extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
       children: [
-        _section(crm, '📋 Sales', [
-          _kpiWrap([
-            _kpi('Total bookings', '${r.totalBookings}'),
-            _kpi('Revenue', _money(r.totalRevenue)),
-            _kpi('Advance', _money(r.totalAdvance)),
-            _kpi('Balance', _money(r.totalBalance)),
-            _kpi('Discounts', _money(r.totalDiscounts)),
-            _kpi('Cancellations', '${r.totalCancellations}'),
-            _kpi('Enquiries', '${r.enquiries}'),
-            _kpi('Next-month bookings',
-                '${r.forwardCount} · ${_money(r.forwardValue)}'),
+        _section(Icons.receipt_long_outlined, 'Sales', [
+          _kpiGrid([
+            _Kpi('Total bookings', '${r.totalBookings}', Icons.event_note_outlined, Colors.indigo),
+            _Kpi('Revenue', _money(r.totalRevenue), Icons.payments_outlined, const Color(0xFF2E8B57)),
+            _Kpi('Advance', _money(r.totalAdvance), Icons.savings_outlined, Colors.teal),
+            _Kpi('Balance', _money(r.totalBalance), Icons.account_balance_wallet_outlined, Colors.orange.shade700),
+            _Kpi('Discounts', _money(r.totalDiscounts), Icons.percent, Colors.purple),
+            _Kpi('Cancellations', '${r.totalCancellations}', Icons.cancel_outlined, Colors.red.shade600),
+            _Kpi('Enquiries', '${r.enquiries}', Icons.contact_phone_outlined, Colors.blue.shade600),
+            _Kpi('Next-month bookings', '${r.forwardCount} · ${_money(r.forwardValue)}', Icons.trending_up, crm.primary),
           ]),
-          12.gap,
+          16.gap,
           _subTitle('Package-wise'),
           _table(
             ['Package', 'Bookings', 'Revenue', 'Advance', 'Balance', 'Cancel'],
             [
               for (final p in r.packageBreakdown)
-                [
-                  p.package,
-                  '${p.count}',
-                  _money(p.revenue),
-                  _money(p.advance),
-                  _money(p.balance),
-                  '${p.cancellations}',
-                ],
+                [p.package, '${p.count}', _money(p.revenue), _money(p.advance), _money(p.balance), '${p.cancellations}'],
             ],
           ),
           if (r.leadSource.isNotEmpty) ...[
-            12.gap,
+            16.gap,
             _subTitle('Lead source'),
             _table(
               ['Source', 'Bookings/Leads'],
-              [
-                for (final e in r.leadSource.entries) [e.key, '${e.value}'],
-              ],
+              [for (final e in r.leadSource.entries) [e.key, '${e.value}']],
             ),
           ],
         ]),
         16.gap,
-        _section(crm, '🤝 Customer Relations', [
-          _kpiWrap([
-            _kpi('Active clients', '${r.activeClients}'),
-            _kpi('New clients', '${r.newClients}'),
-            _kpi('Repeat clients', '${r.repeatClients}'),
-            _kpi('Referral leads', '${r.referralLeads}'),
+        _section(Icons.handshake_outlined, 'Customer Relations', [
+          _kpiGrid([
+            _Kpi('Active clients', '${r.activeClients}', Icons.groups_outlined, Colors.teal),
+            _Kpi('New clients', '${r.newClients}', Icons.person_add_alt, const Color(0xFF2E8B57)),
+            _Kpi('Repeat clients', '${r.repeatClients}', Icons.repeat, Colors.indigo),
+            _Kpi('Referral leads', '${r.referralLeads}', Icons.share_outlined, Colors.blue.shade600),
           ]),
-          12.gap,
+          16.gap,
           _subTitle('District-wise'),
           _table(
             ['District', 'Bookings', 'Revenue'],
-            [
-              for (final d in r.districtBreakdown)
-                [d.district, '${d.count}', _money(d.revenue)],
-            ],
+            [for (final d in r.districtBreakdown) [d.district, '${d.count}', _money(d.revenue)]],
           ),
           if (r.cancellations.isNotEmpty) ...[
-            12.gap,
+            16.gap,
             _subTitle('Cancellations (reason)'),
             _table(
               ['Customer', 'Package', 'Reason'],
-              [
-                for (final c in r.cancellations)
-                  [c.customer, c.package, c.reason],
-              ],
+              [for (final c in r.cancellations) [c.customer, c.package, c.reason]],
             ),
           ],
         ]),
         16.gap,
-        _section(crm, '💰 Finance (from CRM)', [
-          _kpiWrap([
-            _kpi('Cash collected', _money(r.cashCollected)),
-            _kpi('Receivables 0–30d', _money(r.aging0to30)),
-            _kpi('Receivables 31–90d', _money(r.aging31to90)),
-            _kpi('Receivables 90d+', _money(r.aging90plus)),
+        _section(Icons.account_balance_outlined, 'Finance (from CRM)', [
+          _kpiGrid([
+            _Kpi('Cash collected', _money(r.cashCollected), Icons.account_balance_outlined, const Color(0xFF2E8B57)),
+            _Kpi('Receivables 0–30d', _money(r.aging0to30), Icons.schedule_outlined, Colors.amber.shade700),
+            _Kpi('Receivables 31–90d', _money(r.aging31to90), Icons.history_toggle_off, Colors.orange.shade700),
+            _Kpi('Receivables 90d+', _money(r.aging90plus), Icons.warning_amber_outlined, Colors.red.shade600),
           ]),
-          8.gap,
-          Text(
-            'Cash = verified collections this month. GST, bank balances, loans '
-            'and expense exports come from the accounting system (Zoho), not the CRM.',
-            style: TextStyle(fontSize: 11, color: crm.textSecondary),
+          10.gap,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: crm.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: crm.border),
+            ),
+            child: Row(children: [
+              Icon(Icons.info_outline, size: 15, color: crm.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Cash = verified collections this month. GST, bank balances, loans and '
+                  'expense exports come from the accounting system (Zoho), not the CRM.',
+                  style: TextStyle(fontSize: 11, color: crm.textSecondary),
+                ),
+              ),
+            ]),
           ),
         ]),
       ],
     );
   }
 
-  Widget _section(CrmTheme crm, String title, List<Widget> children) => Container(
-        padding: const EdgeInsets.all(16),
+  Widget _section(IconData icon, String title, List<Widget> children) => Container(
+        margin: const EdgeInsets.only(bottom: 2),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: crm.surface,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(color: crm.border),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 12, offset: const Offset(0, 4)),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: crm.primary)),
-            12.gap,
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(10)),
+                child: Icon(icon, size: 18, color: crm.primary),
+              ),
+              const SizedBox(width: 10),
+              Text(title, style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: crm.primary)),
+            ]),
+            16.gap,
             ...children,
           ],
         ),
       );
 
   Widget _subTitle(String t) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Text(t.toUpperCase(),
             style: TextStyle(
-                fontSize: 10.5,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                color: crm.textSecondary)),
+                fontSize: 10.5, fontWeight: FontWeight.bold, letterSpacing: 1, color: crm.textSecondary)),
       );
 
-  Widget _kpiWrap(List<Widget> items) =>
-      Wrap(spacing: 10, runSpacing: 10, children: items);
+  Widget _kpiGrid(List<_Kpi> items) => LayoutBuilder(builder: (ctx, c) {
+        final perRow = c.maxWidth >= 1000 ? 4 : (c.maxWidth >= 640 ? 3 : 2);
+        const gap = 12.0;
+        final w = (c.maxWidth - gap * (perRow - 1)) / perRow;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [for (final k in items) SizedBox(width: w, child: _kpiCard(k))],
+        );
+      });
 
-  Widget _kpi(String label, String value) => Container(
-        constraints: const BoxConstraints(minWidth: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+  Widget _kpiCard(_Kpi k) => Container(
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: crm.primary.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: crm.primary.withValues(alpha: 0.15)),
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: crm.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(value,
-                style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: crm.primary)),
-            Text(label,
-                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(color: k.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+              child: Icon(k.icon, size: 16, color: k.color),
+            ),
+            10.gap,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(k.value,
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: crm.textPrimary, letterSpacing: -0.3)),
+            ),
+            3.gap,
+            Text(k.label, style: TextStyle(fontSize: 11, color: crm.textSecondary, fontWeight: FontWeight.w600)),
           ],
         ),
       );
 
+  bool _numericCol(List<List<String>> rows, int col) {
+    if (rows.isEmpty) return false;
+    final re = RegExp(r'^[₹]?[\d,]+(\.\d+)?$');
+    return rows.every((r) {
+      final c = r[col].trim();
+      return c.isEmpty || re.hasMatch(c);
+    });
+  }
+
   Widget _table(List<String> headers, List<List<String>> rows) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: DataTable(
-        headingRowHeight: 36,
-        dataRowMinHeight: 34,
-        dataRowMaxHeight: 44,
-        columnSpacing: 22,
-        headingTextStyle: TextStyle(
-            fontWeight: FontWeight.bold, fontSize: 12, color: crm.textPrimary),
-        dataTextStyle: TextStyle(fontSize: 12.5, color: crm.textPrimary),
-        columns: [for (final h in headers) DataColumn(label: Text(h))],
-        rows: [
-          if (rows.isEmpty)
-            DataRow(cells: [
-              for (var i = 0; i < headers.length; i++)
-                DataCell(Text(i == 0 ? '—' : '',
-                    style: TextStyle(color: crm.textSecondary))),
-            ])
-          else
-            for (final row in rows)
-              DataRow(cells: [for (final c in row) DataCell(Text(c))]),
-        ],
+    final rightCols = {
+      for (var i = 0; i < headers.length; i++)
+        if (i != 0 && _numericCol(rows, i)) i
+    };
+    int flexOf(int i) => i == 0 ? 3 : 2;
+    Widget cell(String text, int i, {required bool header}) => Expanded(
+          flex: flexOf(i),
+          child: Text(
+            text,
+            textAlign: rightCols.contains(i) ? TextAlign.right : TextAlign.left,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: header
+                ? TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: crm.primary, letterSpacing: 0.3)
+                : TextStyle(fontSize: 12.5, color: crm.textPrimary),
+          ),
+        );
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: crm.border),
+        borderRadius: BorderRadius.circular(12),
       ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        Container(
+          color: crm.primary.withValues(alpha: 0.07),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Row(children: [for (var i = 0; i < headers.length; i++) cell(headers[i], i, header: true)]),
+        ),
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Text('No data for this month.', style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+          )
+        else
+          for (var ri = 0; ri < rows.length; ri++)
+            Container(
+              color: ri.isOdd ? crm.background.withValues(alpha: 0.4) : Colors.transparent,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              child: Row(children: [for (var i = 0; i < headers.length; i++) cell(rows[ri][i], i, header: false)]),
+            ),
+      ]),
     );
   }
 }

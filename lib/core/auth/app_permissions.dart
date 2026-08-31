@@ -126,6 +126,8 @@ const List<AppFeature> kAppFeatures = [
   ]),
   AppFeature('reports', 'Reports', 'CEO daily report and analytics',
       Icons.insights_outlined),
+  AppFeature('it', 'IT', 'Projects, task board and helpdesk',
+      Icons.computer_outlined),
   AppFeature('leave', 'Leave Requests', 'Apply for and review leave',
       Icons.event_busy_outlined),
   AppFeature('settings', 'Settings', 'Users, roles and configuration',

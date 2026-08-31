@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -44,11 +45,18 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
     final month = useState<DateTime>(DateTime(now.year, now.month));
     final eventBasis = useState<bool>(true); // true = event date, false = booking date
     final query = useState<String>('');
+    // When set, the screen shows a MONTH RANGE (e.g. Mar–Aug) instead of one month.
+    final range = useState<DateTimeRange?>(null);
 
     final bookingsAsync = ref.watch(bookingProvider);
 
     DateTime basisDate(Booking b) =>
         eventBasis.value ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+
+    Future<void> pickRange() async {
+      final picked = await showMonthRangePicker(context, initial: range.value);
+      if (picked != null) range.value = picked; // already whole-month bounds
+    }
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,
@@ -85,9 +93,19 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
         ),
         data: (all) {
           final m = month.value;
-          // Bookings whose chosen-basis date lands in the selected month.
+          final r = range.value;
+          final useRange = r != null;
+          final rStart = useRange ? DateTime(r.start.year, r.start.month, r.start.day) : null;
+          final rEnd = useRange ? DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59) : null;
+          String mon3(DateTime d) => _months[d.month].substring(0, 3);
+          final periodLabel = useRange
+              ? '${mon3(r.start)} ${r.start.year} – ${mon3(r.end)} ${r.end.year}'
+              : '${_months[m.month]} ${m.year}';
+
+          // Bookings whose chosen-basis date lands in the selected month OR range.
           var inMonth = all.where((b) {
             final d = basisDate(b);
+            if (useRange) return !d.isBefore(rStart!) && !d.isAfter(rEnd!);
             return d.year == m.year && d.month == m.month;
           }).toList()
             ..sort((a, b) => basisDate(b).compareTo(basisDate(a)));
@@ -114,9 +132,13 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                 month: m,
                 crm: crm,
                 eventBasis: eventBasis.value,
+                range: r,
+                periodLabel: periodLabel,
                 onMonth: (v) => month.value = v,
                 onBasis: (v) => eventBasis.value = v,
                 onSearch: (v) => query.value = v,
+                onPickRange: pickRange,
+                onClearRange: () => range.value = null,
               ),
               const Divider(height: 1),
               Expanded(
@@ -152,7 +174,7 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                             child: Column(children: [
                               Icon(Icons.event_busy_outlined, size: 48, color: crm.textSecondary.withValues(alpha: 0.5)),
                               10.h,
-                              Text('No bookings for ${_months[m.month]} ${m.year}.',
+                              Text('No bookings for $periodLabel.',
                                   style: TextStyle(color: crm.textSecondary)),
                             ]),
                           ),
@@ -179,19 +201,28 @@ class _Controls extends StatelessWidget {
     required this.month,
     required this.crm,
     required this.eventBasis,
+    required this.range,
+    required this.periodLabel,
     required this.onMonth,
     required this.onBasis,
     required this.onSearch,
+    required this.onPickRange,
+    required this.onClearRange,
   });
   final DateTime month;
   final CrmTheme crm;
   final bool eventBasis;
+  final DateTimeRange? range;
+  final String periodLabel;
   final ValueChanged<DateTime> onMonth;
   final ValueChanged<bool> onBasis;
   final ValueChanged<String> onSearch;
+  final VoidCallback onPickRange;
+  final VoidCallback onClearRange;
 
   @override
   Widget build(BuildContext context) {
+    final inRange = range != null;
     final monthBar = Container(
       decoration: BoxDecoration(
         color: crm.sidebar.withValues(alpha: 0.05),
@@ -200,20 +231,43 @@ class _Controls extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_left_rounded, color: crm.accent),
-            onPressed: () => onMonth(DateTime(month.year, month.month - 1)),
-          ),
+          if (inRange)
+            IconButton(
+              tooltip: 'Change range',
+              icon: Icon(Icons.date_range_rounded, color: crm.accent),
+              onPressed: onPickRange,
+            )
+          else
+            IconButton(
+              icon: Icon(Icons.keyboard_arrow_left_rounded, color: crm.accent),
+              onPressed: () => onMonth(DateTime(month.year, month.month - 1)),
+            ),
           Expanded(
             child: Center(
-              child: Text('${_months[month.month]} ${month.year}',
-                  style: TextStyle(fontWeight: FontWeight.w800, color: crm.primary, fontSize: 15)),
+              child: GestureDetector(
+                onTap: inRange ? onPickRange : null,
+                child: Text(periodLabel,
+                    style: TextStyle(fontWeight: FontWeight.w800, color: crm.primary, fontSize: 15)),
+              ),
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_right_rounded, color: crm.accent),
-            onPressed: () => onMonth(DateTime(month.year, month.month + 1)),
-          ),
+          if (inRange)
+            IconButton(
+              tooltip: 'Clear range — back to single month',
+              icon: Icon(Icons.close_rounded, color: crm.accent),
+              onPressed: onClearRange,
+            )
+          else ...[
+            IconButton(
+              icon: Icon(Icons.keyboard_arrow_right_rounded, color: crm.accent),
+              onPressed: () => onMonth(DateTime(month.year, month.month + 1)),
+            ),
+            IconButton(
+              tooltip: 'Pick a month range (e.g. Mar–Aug)',
+              icon: Icon(Icons.date_range_rounded, color: crm.accent),
+              onPressed: onPickRange,
+            ),
+          ],
         ],
       ),
     );

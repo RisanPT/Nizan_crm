@@ -35,6 +35,9 @@ class Sidebar extends ConsumerWidget {
   final bool financeExpanded;
   final bool financeUserCollapsed;
   final ValueChanged<bool> onFinanceExpandToggle;
+  final bool itExpanded;
+  final bool itUserCollapsed;
+  final ValueChanged<bool> onItExpandToggle;
 
   const Sidebar({
     super.key,
@@ -62,6 +65,9 @@ class Sidebar extends ConsumerWidget {
     required this.financeExpanded,
     required this.financeUserCollapsed,
     required this.onFinanceExpandToggle,
+    required this.itExpanded,
+    required this.itUserCollapsed,
+    required this.onItExpandToggle,
   });
 
   @override
@@ -89,7 +95,9 @@ class Sidebar extends ConsumerWidget {
     final isAccountsRoute =
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
-    final isFinanceRoute = currentPath.startsWith('/company-finance');
+    final isFinanceRoute = currentPath.startsWith('/company-finance') ||
+        currentPath == '/reports/analyst';
+    final isItRoute = currentPath.startsWith('/it/') || currentPath.startsWith('/helpdesk');
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
@@ -110,6 +118,8 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (hrExpanded || (isHrRoute && !hrUserCollapsed));
     final effectiveFinanceExpanded = !isCollapsed &&
         (financeExpanded || (isFinanceRoute && !financeUserCollapsed));
+    final effectiveItExpanded =
+        !isCollapsed && (itExpanded || (isItRoute && !itUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session, honouring the active workspace so a
@@ -158,15 +168,6 @@ class Sidebar extends ConsumerWidget {
                     isCollapsed: isCollapsed,
                     isSelected: currentPath == '/sales/home',
                     onTap: () => context.go('/sales/home'),
-                  ),
-                // Monthly Financial-Analyst report (Sales + CR + receivables).
-                if (access.canSeeCEOReport)
-                  _SidebarItem(
-                    icon: Icons.insights_outlined,
-                    title: 'Financial Report',
-                    isCollapsed: isCollapsed,
-                    isSelected: currentPath == '/reports/analyst',
-                    onTap: () => context.go('/reports/analyst'),
                   ),
                 if (role == AppRole.artist) ...[
                   // ── ARTIST VIEW ───────────────────────────────────────────
@@ -528,12 +529,63 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/company-reports'),
                       onTap: () => context.go('/company-reports'),
                     ),
-                  if (access.canSeeCompanyFinance) ...[
+                  // IT department hub — Projects & Tickets are IT-only; Help Desk
+                  // is open to every department. Grouped under one "IT" parent.
+                  // _SidebarItem(
+                  //   icon: Icons.computer_outlined,
+                  //   title: 'IT',
+                  //   isCollapsed: isCollapsed,
+                  //   isSelected: isItRoute,
+                  //   trailing: isCollapsed
+                  //       ? null
+                  //       : Icon(
+                  //           effectiveItExpanded
+                  //               ? Icons.expand_less
+                  //               : Icons.expand_more,
+                  //           color: Colors.white.withValues(alpha: 0.7),
+                  //         ),
+                  //   onTap: () => onItExpandToggle(!itExpanded || itUserCollapsed),
+                  // ),
+                  // if (!isCollapsed && effectiveItExpanded) ...[
+                  //   if (access.canSeeIt)
+                  //     Padding(
+                  //       padding: const EdgeInsets.only(left: 14),
+                  //       child: _SidebarItem(
+                  //         icon: Icons.folder_special_outlined,
+                  //         title: 'Projects',
+                  //         isCollapsed: false,
+                  //         isSelected: currentPath.startsWith('/it/projects'),
+                  //         onTap: () => context.go('/it/projects'),
+                  //       ),
+                  //     ),
+                  //   if (access.canSeeIt)
+                  //     Padding(
+                  //       padding: const EdgeInsets.only(left: 14),
+                  //       child: _SidebarItem(
+                  //         icon: Icons.confirmation_number_outlined,
+                  //         title: 'Tickets',
+                  //         isCollapsed: false,
+                  //         isSelected: currentPath.startsWith('/it/tickets'),
+                  //         onTap: () => context.go('/it/tickets'),
+                  //       ),
+                  //     ),
+                  //   Padding(
+                  //     padding: const EdgeInsets.only(left: 14),
+                  //     child: _SidebarItem(
+                  //       icon: Icons.support_agent_outlined,
+                  //       title: 'Help Desk',
+                  //       isCollapsed: false,
+                  //       isSelected: currentPath.startsWith('/helpdesk'),
+                  //       onTap: () => context.go('/helpdesk'),
+                  //     ),
+                  //   ),
+                  // ],
+                  if (access.canSeeCompanyFinance || access.canSeeCEOReport) ...[
                     _SidebarItem(
                       icon: Icons.savings_outlined,
                       title: 'Finance',
                       isCollapsed: isCollapsed,
-                      isSelected: isFinanceRoute,
+                      isSelected: isFinanceRoute || currentPath == '/reports/analyst',
                       trailing: isCollapsed
                           ? null
                           : Icon(
@@ -546,6 +598,18 @@ class Sidebar extends ConsumerWidget {
                           !financeExpanded || financeUserCollapsed),
                     ),
                     if (!isCollapsed && effectiveFinanceExpanded) ...[
+                      // Monthly Financial-Analyst report (Sales + CR + receivables).
+                      if (access.canSeeCEOReport)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.insights_outlined,
+                            title: 'Financial Report',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/reports/analyst',
+                            onTap: () => context.go('/reports/analyst'),
+                          ),
+                        ),
                       if (access.canSeeCompanyFinance)
                         Padding(
                           padding: const EdgeInsets.only(left: 14),

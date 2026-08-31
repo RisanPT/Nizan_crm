@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -814,11 +815,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     // ── Date range search (filters by the basis above) ──
                     InkWell(
                       onTap: () async {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2035, 12, 31),
-                          initialDateRange: (dateFrom.value != null && dateTo.value != null)
+                        final picked = await showMonthRangePicker(
+                          context,
+                          initial: (dateFrom.value != null && dateTo.value != null)
                               ? DateTimeRange(start: dateFrom.value!, end: dateTo.value!)
                               : null,
                         );
@@ -1099,6 +1098,21 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     spacing: spacing,
                     runSpacing: spacing,
                     children: [
+                      // How many bookings match the current filter (all pages).
+                      // With a date range + "By Booking Date" this is exactly
+                      // "how many bookings added" in e.g. March–August.
+                      _StatCardWithIcon(
+                        title: 'Total Bookings',
+                        value: '${response.totalItems}',
+                        subtitle: (dateFrom.value != null && dateTo.value != null)
+                            ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)} · ${dateBasis.value == 'booking_date' ? 'added' : 'event'}'
+                            : (dateBasis.value == 'booking_date'
+                                ? 'Added · FY ${selectedFY.value}'
+                                : 'FY ${selectedFY.value}'),
+                        icon: Icons.receipt_long_outlined,
+                        color: Colors.indigo,
+                        width: itemWidth,
+                      ),
                       _StatCardWithIcon(
                         title: 'Total Sales Value',
                         value: '₹${_money(totalSalesValue)}',

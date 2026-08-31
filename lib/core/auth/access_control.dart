@@ -124,6 +124,10 @@ class Access {
   bool get canManageInventory => has('inventory', role.canManageInventory);
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
   bool get canSeeCEOReport => has('reports', role.canSeeCEOReport);
+  // IT hub (projects, task board, and — later — helpdesk tickets). No AppRole
+  // matrix entry yet, so it's driven by the granted 'it' permission (admin/
+  // manager see it via the isFullAccess bypass).
+  bool get canSeeIt => isFullAccess || has('it', false);
   bool get canSeeLeaveRequests => has('leave', role.canSeeLeaveRequests);
 
   /// Settings stays admin/manager-only even if granted, to protect the role

@@ -25,6 +25,7 @@ import '../../services/report_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/providers/trial_provider.dart';
+import '../../core/models/trial.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 
@@ -134,10 +135,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final asyncBookings = ref.watch(bookingProvider);
     final asyncTrials = ref.watch(allTrialsProvider);
 
-    // Filter bookings for this artist if scoped
+    // Filter bookings for this artist if scoped.
+    // An artist may be assigned at the BOOKING level OR on an individual package
+    // (bookingItem) of a multi-package booking. The booking-level `assignedStaff`
+    // is only a rolled-up summary and isn't always populated for per-package
+    // assignments, so match either level — mirroring the backend's own
+    // `$or: [assignedStaff.employeeId, bookingItems.assignedStaff.employeeId]`.
+    // Without the item-level check, a newly assigned package's client never
+    // shows up in the collection picker.
     final myBookings = (asyncBookings.value ?? []).where((b) {
       if (!isScopedToOwn) return true;
-      return b.assignedStaff.any((s) => s.employeeId == myEmployeeId);
+      final assignedAtBooking =
+          b.assignedStaff.any((s) => s.employeeId == myEmployeeId);
+      final assignedAtItem = b.bookingItems.any(
+        (item) => item.assignedStaff.any((s) => s.employeeId == myEmployeeId),
+      );
+      return assignedAtBooking || assignedAtItem;
     }).toList();
 
     // Filter trials for this artist if scoped
@@ -300,9 +313,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       required CrmTheme crm,
       required bool isScopedToOwn,
       required String myEmployeeId,
-      required AsyncValue<dynamic> asyncEmployees,
-      required List<dynamic> myBookings,
-      required List<dynamic> myTrials,
+      // Concretely typed so the EmployeeSelection extension (isActive/isArtist)
+      // resolves — a `dynamic` element silently loses extension members and
+      // crashes at runtime with "NoSuchMethodError: 'isActive'".
+      required AsyncValue<List<Employee>> asyncEmployees,
+      required List<Booking> myBookings,
+      required List<Trial> myTrials,
       String? prefilledBookingId,
       String? prefilledTrialId,
       String? prefilledEmployeeId,
@@ -1576,11 +1592,18 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         }
                       }
 
+                      // Prefer the booking's client name; fall back to the trial
+                      // client, then a placeholder. Guard against an empty (not
+                      // just null) customerName so the card never renders blank.
+                      final bookingClient = c.booking?.customerName.trim() ?? '';
+                      final clientTitle = bookingClient.isNotEmpty
+                          ? bookingClient
+                          : (c.trial != null
+                              ? '${c.trial!.clientName} (Trial)'
+                              : 'Unknown Client');
+
                       return _FinanceEntryCard(
-                        title: c.booking?.customerName ??
-                            (c.trial != null
-                                ? '${c.trial!.clientName} (Trial)'
-                                : 'Unknown Client'),
+                        title: clientTitle,
                         amount: _currency(c.amount),
                         status: c.status,
                         metadata: metadataStr,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
@@ -244,8 +245,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   Future<void> _selectCustomRange() async {
-    final DateTimeRange? picked = await showDateRangePicker(
-      context: context,
+    final DateTimeRange? picked = await showBrandedDateRangePicker(
+      context,
       firstDate: DateTime(2024),
       lastDate: DateTime.now().add(const Duration(days: 365)),
       initialDateRange: _customDateRange ?? DateTimeRange(
