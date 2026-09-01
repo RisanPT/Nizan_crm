@@ -2500,6 +2500,64 @@ class _ExpandedDetails extends ConsumerWidget {
                   ),
                 ),
               ),
+              // Per-package add-ons (read-only). Booking-level add-ons above
+              // stay editable; these belong to specific packages.
+              if (booking.bookingItems.any((it) => it.addons.isNotEmpty)) ...[
+                12.h,
+                _DetailLabel('Package add-ons'),
+                8.h,
+                for (final item in booking.bookingItems)
+                  if (item.addons.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.service.trim().isEmpty
+                                ? 'Package'
+                                : item.service.trim(),
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: crm.textSecondary),
+                          ),
+                          4.h,
+                          for (final addon in item.addons)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: crm.background,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: crm.border),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${addon.service}${addon.persons > 1 ? ' × ${addon.persons}' : ''}',
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: crm.textPrimary),
+                                    ),
+                                  ),
+                                  Text(
+                                    '₹${(addon.amount * addon.persons).toStringAsFixed(0)}',
+                                    style: TextStyle(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: crm.primary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+              ],
               14.h,
 
               // Payment breakdown

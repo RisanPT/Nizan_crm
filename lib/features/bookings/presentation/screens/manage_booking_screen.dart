@@ -49,6 +49,12 @@ class ManageBookingScreen extends HookConsumerWidget {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
+    // Saving state for the floating/bottom save buttons. Declared BEFORE the
+    // early loading-return below so this hook is registered on EVERY build and
+    // is never disposed mid-save (a save triggers a refetch that briefly
+    // re-enters the loading state; a hook after the return would be dropped and
+    // the save's finally would then touch a disposed notifier).
+    final isSaving = useState(false);
 
     // Look up the booking from the provider by id
     final asyncSingleBooking = bookingId != 'new' ? ref.watch(singleBookingProvider(bookingId)) : null;
@@ -377,40 +383,50 @@ class ManageBookingScreen extends HookConsumerWidget {
                   selectedItem.mapUrl.isNotEmpty)
               ? selectedItem.mapUrl
               : (perDateMap.isNotEmpty ? perDateMap : booking.mapUrl);
-          // Travel is per-package: show the selected package's OWN values.
-          // BUT legacy bookings (previous months) stored travel only at the
-          // booking level — their items carry none. So if NO item has any
-          // travel, fall back to the booking-level values; otherwise they'd
-          // show blank AND get wiped to empty on the next save. New per-item
-          // bookings (some item has travel) stay strict so a package never
-          // inherits another package's travel and appears to "bleed".
-          final anyItemHasTravel = booking.bookingItems.any((it) =>
+          // LEGACY-DATA GUARD. Per-package fields (travel, room, staff
+          // instructions, remarks, outfit, map) are read from the selected
+          // package. But bookings made before the per-package refactor stored
+          // these ONLY at the booking level — their items carry none. Reading
+          // the (empty) item value then showed blank AND wiped the booking-level
+          // data to empty on the next save. So: if NO item carries ANY per-item
+          // detail, treat the booking as legacy and read from the booking level.
+          // New bookings (some item has detail) stay strict so packages don't
+          // inherit each other's values ("bleed").
+          final itemsHavePerItemDetail = booking.bookingItems.any((it) =>
               it.travelMode.trim().isNotEmpty ||
               it.travelTime.trim().isNotEmpty ||
-              it.travelDistanceKm > 0);
-          final tMode = (selectedItem != null && anyItemHasTravel)
-              ? selectedItem.travelMode
-              : booking.travelMode;
-          final tTime = (selectedItem != null && anyItemHasTravel)
-              ? selectedItem.travelTime
-              : booking.travelTime;
-          final tKm = (selectedItem != null && anyItemHasTravel)
-              ? selectedItem.travelDistanceKm
-              : booking.travelDistanceKm;
+              it.travelDistanceKm > 0 ||
+              it.requiredRoomDetail.trim().isNotEmpty ||
+              it.staffInstructions.trim().isNotEmpty ||
+              it.internalRemarks.trim().isNotEmpty ||
+              it.outfitDetails.trim().isNotEmpty ||
+              it.mapUrl.trim().isNotEmpty ||
+              it.addons.isNotEmpty);
+          final useItemDetail = selectedItem != null && itemsHavePerItemDetail;
+          final tMode = useItemDetail ? selectedItem.travelMode : booking.travelMode;
+          final tTime = useItemDetail ? selectedItem.travelTime : booking.travelTime;
+          final tKm = useItemDetail ? selectedItem.travelDistanceKm : booking.travelDistanceKm;
           travelModeCtrl.text = tMode;
           travelTimeCtrl.text = tTime;
           travelDistanceCtrl.text = tKm == 0 ? '' : tKm.toStringAsFixed(0);
           eventSlots.value = _parseEventSlots(
             selectedDisplayEntry?.eventSlot ?? booking.eventSlot,
           );
-          // Per-package work details: when editing a specific package show ONLY
-          // that package's own value (empty when unset) so room / instructions /
-          // remarks never inherit another package's value. Booking-level is used
-          // only for a non-item (single-date / legacy) booking.
-          roomCtrl.text = selectedItem != null ? selectedItem.requiredRoomDetail : booking.requiredRoomDetail;
+          // Per-package work details — same LEGACY-DATA GUARD as travel above:
+          // strict per-package for new bookings, booking-level for legacy ones.
+          roomCtrl.text = useItemDetail ? selectedItem.requiredRoomDetail : booking.requiredRoomDetail;
           secondaryPhoneCtrl.text = booking.secondaryContact;
-          // outfitLooks: prefer per-item outfitDetails if set, else booking-level
-          if (selectedItem != null && selectedItem.outfitDetails.isNotEmpty) {
+          // Outfit looks. A bookingItem can hold just ONE look with ONE map, so
+          // reading looks from the item collapses a 2nd look's map and merges it
+          // into the item's single (main) location map. The RICH per-look list
+          // (each look with its OWN map) lives at the booking level. So: for a
+          // single-package booking prefer the booking-level looks; only a genuine
+          // MULTI-package booking reads per-item outfit (and only its one map).
+          final isMultiPackage = booking.bookingItems.length > 1;
+          if (!isMultiPackage && booking.outfitLooks.isNotEmpty) {
+            outfitLooks.value = List<OutfitLook>.from(booking.outfitLooks);
+          } else if (selectedItem != null &&
+              selectedItem.outfitDetails.isNotEmpty) {
             outfitLooks.value = [OutfitLook(
               outfitDetails: selectedItem.outfitDetails,
               mapUrl: selectedItem.mapUrl,
@@ -420,16 +436,25 @@ class ManageBookingScreen extends HookConsumerWidget {
           }
           captureStaffCtrl.text = booking.captureStaffDetails;
           temporaryStaffCtrl.text = booking.temporaryStaffDetails;
-          staffNeedsCtrl.text = selectedItem != null ? selectedItem.staffInstructions : booking.staffInstructions;
-          remarksCtrl.text = selectedItem != null ? selectedItem.internalRemarks : booking.internalRemarks;
+          staffNeedsCtrl.text = useItemDetail ? selectedItem.staffInstructions : booking.staffInstructions;
+          remarksCtrl.text = useItemDetail ? selectedItem.internalRemarks : booking.internalRemarks;
           contentRequired.value = booking.contentCreationRequired;
           // Status DOES inherit the booking status when a package hasn't set its
           // own (a package defaults to the booking's status), so keep the fallback.
           statusState.value = (selectedItem != null && selectedItem.status.isNotEmpty)
               ? selectedItem.status
               : booking.status;
-          selectedRegionId.value = booking.regionId;
-          selectedDistrictId.value = booking.districtId;
+          // Per-package district drives THIS package's price. Prefer the
+          // selected package's OWN district; fall back to the booking-level
+          // district for legacy items that don't carry one.
+          selectedDistrictId.value =
+              (selectedItem != null && selectedItem.districtId.isNotEmpty)
+                  ? selectedItem.districtId
+                  : booking.districtId;
+          selectedRegionId.value =
+              (selectedItem != null && selectedItem.regionId.isNotEmpty)
+                  ? selectedItem.regionId
+                  : booking.regionId;
         }
         return null;
       },
@@ -556,7 +581,18 @@ class ManageBookingScreen extends HookConsumerWidget {
           }
 
           assignments.value = initialAssignments;
-          addons.value = List<BookingAddon>.from(booking.addons);
+          // Per-package add-ons: show the selected package's OWN add-ons for a
+          // multi-package booking that carries per-item add-ons; fall back to
+          // the booking-level list for single/legacy bookings.
+          final selItem = (selectedBookingItemIndex >= 0 &&
+                  selectedBookingItemIndex < booking.bookingItems.length)
+              ? booking.bookingItems[selectedBookingItemIndex]
+              : null;
+          final itemsHaveAddons =
+              booking.bookingItems.any((it) => it.addons.isNotEmpty);
+          addons.value = (selItem != null && itemsHaveAddons)
+              ? List<BookingAddon>.from(selItem.addons)
+              : List<BookingAddon>.from(booking.addons);
         }
         return null;
       },
@@ -948,6 +984,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                 staffInstructions: staffNeedsCtrl.text.trim(),
                 internalRemarks: remarksCtrl.text.trim(),
                 status: statusState.value,
+                // Per-package district — drives this package's district price.
+                districtId: selectedDistrictId.value,
+                regionId: findDistrictById(selectedDistrictId.value)?.regionId ??
+                    selectedRegionId.value,
+                // Per-package add-ons — saved for THIS package only.
+                addons: _normalizedAddons(addons.value),
               );
             }).toList()
           : booking.bookingItems;
@@ -1062,8 +1104,13 @@ class ManageBookingScreen extends HookConsumerWidget {
             : (packageCtrl.text.trim().isEmpty
                   ? booking.service
                   : packageCtrl.text.trim()),
-        regionId: selectedDistrictModel?.regionId ?? selectedRegionId.value,
-        districtId: selectedDistrictId.value,
+        // For a multi-package booking each package carries its OWN district
+        // (saved per-item above); keep the booking-level district intact so
+        // editing one package doesn't repoint the whole booking.
+        regionId: isMultiItem
+            ? booking.regionId
+            : (selectedDistrictModel?.regionId ?? selectedRegionId.value),
+        districtId: isMultiItem ? booking.districtId : selectedDistrictId.value,
         driverId:
             assignments.value
                 .where((a) => a.roleType == 'driver')
@@ -1139,7 +1186,9 @@ class ManageBookingScreen extends HookConsumerWidget {
         discountType: discountType.value,
         discountValue: rawDiscountValue,
         assignedStaff: summarizedAssignments,
-        addons: normalizedAddons,
+        // Multi-package: add-ons live per package (saved above); keep the
+        // booking-level list intact so editing one package doesn't clobber it.
+        addons: isMultiItem ? booking.addons : normalizedAddons,
         bookingItems: updatedBookingItems,
         pocId: selectedPocId.value,
         pocName: () {
@@ -1188,9 +1237,62 @@ class ManageBookingScreen extends HookConsumerWidget {
       return currentBookingSnapshot;
     }
 
+    // Shared save handler, reused by the bottom button AND the floating button.
+    // (isSaving is declared at the top of build so the hook survives the
+    // save-triggered refetch's brief loading state.)
+    Future<void> saveBooking() async {
+      if (isSaving.value) return;
+      isSaving.value = true;
+      try {
+        final updatedBooking = buildCurrentBookingSnapshot();
+        Booking? savedBooking;
+        try {
+          savedBooking = await ref
+              .read(bookingProvider.notifier)
+              .updateBooking(updatedBooking);
+        } catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to save changes: $error'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        if (!context.mounted) return;
+        try {
+          await showPrintDialog(savedBooking);
+        } catch (error) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Booking saved, but WhatsApp action failed: $error'),
+                backgroundColor: Colors.orange,
+              ),
+            );
+          }
+        }
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Booking updated'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } finally {
+        if (context.mounted) isSaving.value = false;
+      }
+    }
+
     return SelectionArea(
-      child: SingleChildScrollView(
-        child: Column(
+      child: Stack(
+        children: [
+          SingleChildScrollView(
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Header ─────────────────────────────────────────────────────
@@ -1937,6 +2039,28 @@ class ManageBookingScreen extends HookConsumerWidget {
         ],
       ),
     ),
+          // Floating save button — always in reach on this long form.
+          Positioned(
+            right: 24,
+            bottom: 24,
+            child: FloatingActionButton.extended(
+              heroTag: 'manageBookingSave',
+              onPressed: isSaving.value ? null : saveBooking,
+              backgroundColor: crmColors.primary,
+              foregroundColor: Colors.white,
+              icon: isSaving.value
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.save_rounded),
+              label: Text(isSaving.value ? 'Saving…' : 'Save changes'),
+            ),
+          ),
+        ],
+      ),
   );
   }
 
@@ -2520,6 +2644,62 @@ class ManageBookingScreen extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Grand total across all packages (base + add-ons) — surfaced at the
+          // top so the whole-booking amount is visible at a glance.
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [crm.primary, const Color(0xFF3A101A)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: crm.primary.withValues(alpha: 0.24),
+                  blurRadius: 14,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total (all packages)',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.72))),
+                    const SizedBox(height: 2),
+                    Text('₹${booking.totalPrice.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white)),
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                      '${items.length} package${items.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
           for (final entry in items.asMap().entries)
             Builder(builder: (context) {
               final index = entry.key;

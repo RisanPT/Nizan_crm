@@ -198,6 +198,14 @@ class BookingItem {
   final String staffInstructions;
   final String internalRemarks;
   final String status; // '' = inherit the booking-level status
+  // Per-item district (multi-district bookings): each package/date can sit in
+  // its own district, which drives that package's district-based price. Empty =
+  // inherit the booking-level district.
+  final String districtId;
+  final String regionId;
+  // Per-package add-ons (multi-package bookings): each package/date carries its
+  // own add-ons. Booking-level `addons` stays for single bookings.
+  final List<BookingAddon> addons;
 
   const BookingItem({
     this.packageId = '',
@@ -218,6 +226,9 @@ class BookingItem {
     this.staffInstructions = '',
     this.internalRemarks = '',
     this.status = '',
+    this.districtId = '',
+    this.regionId = '',
+    this.addons = const [],
   });
 
   factory BookingItem.fromJson(Map<String, dynamic> json) {
@@ -245,6 +256,12 @@ class BookingItem {
       staffInstructions: json['staffInstructions'] as String? ?? '',
       internalRemarks: json['internalRemarks'] as String? ?? '',
       status: json['status'] as String? ?? '',
+      districtId: json['districtId'] as String? ?? '',
+      regionId: json['regionId'] as String? ?? '',
+      addons: ((json['addons'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(BookingAddon.fromJson)
+          .toList(),
     );
   }
 
@@ -268,6 +285,9 @@ class BookingItem {
       'staffInstructions': staffInstructions,
       'internalRemarks': internalRemarks,
       'status': status,
+      'districtId': districtId,
+      'regionId': regionId,
+      'addons': addons.map((a) => a.toJson()).toList(),
     };
   }
 
@@ -290,6 +310,9 @@ class BookingItem {
     String? staffInstructions,
     String? internalRemarks,
     String? status,
+    String? districtId,
+    String? regionId,
+    List<BookingAddon>? addons,
   }) {
     return BookingItem(
       packageId: packageId ?? this.packageId,
@@ -310,6 +333,9 @@ class BookingItem {
       staffInstructions: staffInstructions ?? this.staffInstructions,
       internalRemarks: internalRemarks ?? this.internalRemarks,
       status: status ?? this.status,
+      districtId: districtId ?? this.districtId,
+      regionId: regionId ?? this.regionId,
+      addons: addons ?? this.addons,
     );
   }
 }

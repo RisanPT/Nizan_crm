@@ -110,6 +110,15 @@ class AddBookingScreen extends HookConsumerWidget {
             final entryDates = entry.date != null
                 ? <DateTime>[entry.date!]
                 : allDates;
+            // This package's OWN district (falls back to the booking-level
+            // district), used both for its district-based price and to store
+            // the per-item district so a multi-district booking prices each
+            // package correctly.
+            final entryDistrictId = entry.districtId.isNotEmpty
+                ? entry.districtId
+                : (selectedDistrictId.value ?? '');
+            final entryRegionId =
+                findDistrictById(entryDistrictId)?.regionId ?? '';
             if (entry.packageId.isEmpty) {
               return List.generate(
                 entry.quantity,
@@ -120,14 +129,16 @@ class AddBookingScreen extends HookConsumerWidget {
                   selectedDates: entryDates,
                   totalPrice: entry.customAmount,
                   advanceAmount: entry.advanceAmount,
+                  districtId: entryDistrictId,
+                  regionId: entryRegionId,
+                  addons: entry.addons,
                 ),
               );
             }
             final package = findPackageById(entry.packageId);
             if (package == null) return const <BookingItem>[];
-            final basePrice = package.effectivePriceForDistrict(
-              selectedDistrictId.value,
-            );
+            final basePrice =
+                package.effectivePriceForDistrict(entryDistrictId);
             return List.generate(
               entry.quantity,
               (_) => BookingItem(
@@ -137,6 +148,9 @@ class AddBookingScreen extends HookConsumerWidget {
                 selectedDates: entryDates,
                 totalPrice: basePrice,
                 advanceAmount: package.advanceAmount,
+                districtId: entryDistrictId,
+                regionId: entryRegionId,
+                addons: entry.addons,
               ),
             );
           })
@@ -151,7 +165,12 @@ class AddBookingScreen extends HookConsumerWidget {
 
     void recalculate() {
       final bookingItems = buildBookingItems();
-      final addonsSum = addonsTotalOf(addons.value);
+      // Single mode: one booking-level add-on list. Multiple mode: each package
+      // carries its OWN add-ons, so sum them across the packages.
+      final addonsSum = isSingleMode
+          ? addonsTotalOf(addons.value)
+          : bookingCart.value
+              .fold<double>(0, (s, e) => s + addonsTotalOf(e.addons));
       if (packages.isEmpty || bookingItems.isEmpty) {
         basePackageAmount.value = 0;
         // Add-ons can still be priced even before a package is chosen so the
@@ -263,6 +282,74 @@ class AddBookingScreen extends HookConsumerWidget {
                   addons.value = next;
                   recalculate();
                 },
+              ),
+            ),
+        ],
+      );
+    }
+
+    // Compact add-on editor scoped to ONE package row (multiple-booking mode).
+    Widget packageAddonEditor(int entryIndex) {
+      final entry = bookingCart.value[entryIndex];
+      final entryAddons = entry.addons;
+      void setAddons(List<BookingAddon> next) {
+        final list = [...bookingCart.value];
+        list[entryIndex] = list[entryIndex].copyWith(addons: next);
+        bookingCart.value = list;
+        recalculate();
+      }
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('ADD-ONS',
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: crmColors.textSecondary,
+                      letterSpacing: 1.1)),
+              TextButton.icon(
+                onPressed: () => setAddons([
+                  ...entryAddons,
+                  const BookingAddon(
+                      addonServiceId: '', service: '', amount: 0, persons: 1),
+                ]),
+                icon: const Icon(Icons.add, size: 14),
+                label: const Text('Add', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(0, 30),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              ),
+            ],
+          ),
+          if (entryAddons.isEmpty)
+            Text('No add-ons for this package.',
+                style: TextStyle(fontSize: 11, color: crmColors.textSecondary))
+          else
+            ...List.generate(
+              entryAddons.length,
+              (i) => KeyedSubtree(
+                key: ValueKey('addon-$entryIndex-$i'),
+                child: _AddonRow(
+                  index: i,
+                  addon: entryAddons[i],
+                  services: availableAddonServices,
+                  crm: crmColors,
+                  enabled: !isSubmitting.value,
+                  onChanged: (updated) {
+                    final next = [...entryAddons];
+                    next[i] = updated;
+                    setAddons(next);
+                  },
+                  onRemove: () {
+                    final next = [...entryAddons]..removeAt(i);
+                    setAddons(next);
+                  },
+                ),
               ),
             ),
         ],
@@ -592,7 +679,14 @@ class AddBookingScreen extends HookConsumerWidget {
         endTime.value.minute,
       );
 
-      final selectedDistrictModel = findDistrictById(selectedDistrictId.value);
+      // Booking-level district: the top selector in single mode, else the FIRST
+      // package's own district in multiple mode — so the booking still carries a
+      // representative district for geo/reports even though each package prices
+      // by its own district.
+      final bookingLevelDistrictId = (selectedDistrictId.value?.isNotEmpty == true)
+          ? selectedDistrictId.value!
+          : (bookingItems.isNotEmpty ? bookingItems.first.districtId : '');
+      final selectedDistrictModel = findDistrictById(bookingLevelDistrictId);
       final actualName =
           autoCompleteNameCtrl?.text.trim() ?? nameCtrl.text.trim();
 
@@ -638,7 +732,10 @@ class AddBookingScreen extends HookConsumerWidget {
           advanceAmount: advanceAmount.value,
           leadId: qParams['leadId'],
           bookingItems: bookingItems,
-          addons: addons.value,
+          // Single mode: booking-level add-ons. Multiple mode: add-ons live on
+          // each package (bookingItems), so keep the booking level empty to
+          // avoid double-counting.
+          addons: isSingleMode ? addons.value : const <BookingAddon>[],
         );
         await ref.read(bookingProvider.notifier).addBooking(booking);
 
@@ -1032,6 +1129,11 @@ class AddBookingScreen extends HookConsumerWidget {
                                     style: TextStyle(color: crmColors.warning),
                                   ),
                                 ),
+                              // The booking-level district selector shows ONLY in
+                              // single mode. In multiple mode each date row below
+                              // picks its own package AND its own district, so a
+                              // top-level district here would be redundant.
+                              if (isSingleMode)
                               Row(
                                 children: [
                                   // District
@@ -1484,6 +1586,69 @@ class AddBookingScreen extends HookConsumerWidget {
                                                                 },
                                                         ),
                                                       ),
+                                                    // Per-package district —
+                                                    // prices THIS package by its
+                                                    // own district. Empty = use
+                                                    // the booking's district.
+                                                    if (!isSingleMode) ...[
+                                                      6.h,
+                                                      Builder(builder: (ctx) {
+                                                        final pkg = findPackageById(
+                                                            entry.value.packageId);
+                                                        final dId = entry.value.districtId;
+                                                        final match = districts
+                                                            .where((d) => d.id == dId)
+                                                            .toList();
+                                                        final label = dId.isEmpty
+                                                            ? 'Default (Base Price)'
+                                                            : (match.isNotEmpty
+                                                                ? '${match.first.name} (${match.first.regionName})'
+                                                                : 'Default (Base Price)');
+                                                        final priceStr = pkg == null
+                                                            ? ''
+                                                            : '₹${pkg.effectivePriceForDistrict(dId).toStringAsFixed(0)}';
+                                                        return InkWell(
+                                                          onTap: districts.isEmpty
+                                                              ? null
+                                                              : () async {
+                                                                  final picked = await _showDistrictPricePicker(
+                                                                    context: ctx,
+                                                                    districts: districts,
+                                                                    package: pkg,
+                                                                    currentId: dId,
+                                                                  );
+                                                                  if (picked != null) {
+                                                                    final list = [...bookingCart.value];
+                                                                    list[entry.key] =
+                                                                        list[entry.key].copyWith(districtId: picked);
+                                                                    bookingCart.value = list;
+                                                                    recalculate();
+                                                                  }
+                                                                },
+                                                          child: InputDecorator(
+                                                            decoration: const InputDecoration(
+                                                              isDense: true,
+                                                              border: OutlineInputBorder(),
+                                                              contentPadding:
+                                                                  EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                                              prefixIcon: Icon(Icons.location_on_outlined, size: 16),
+                                                              prefixIconConstraints:
+                                                                  BoxConstraints(minWidth: 32, minHeight: 0),
+                                                            ),
+                                                            child: Row(children: [
+                                                              Expanded(
+                                                                  child: Text(label, overflow: TextOverflow.ellipsis)),
+                                                              if (priceStr.isNotEmpty)
+                                                                Text(priceStr,
+                                                                    style: TextStyle(
+                                                                        fontWeight: FontWeight.w700,
+                                                                        color: crmColors.primary)),
+                                                              Icon(Icons.arrow_drop_down, color: crmColors.textSecondary),
+                                                            ]),
+                                                          ),
+                                                        );
+                                                      }),
+                                                    ],
                                                     if (entry.value.eventSlot
                                                         .trim()
                                                         .isNotEmpty) ...[
@@ -1506,6 +1671,18 @@ class AddBookingScreen extends HookConsumerWidget {
                                                         fontWeight: FontWeight.w600,
                                                       ),
                                                     ),
+                                                    // Per-package add-ons live
+                                                    // right under the package.
+                                                    if (!isSingleMode) ...[
+                                                      10.h,
+                                                      Divider(
+                                                          height: 1,
+                                                          color:
+                                                              crmColors.border),
+                                                      8.h,
+                                                      packageAddonEditor(
+                                                          entry.key),
+                                                    ],
                                                   ],
                                                 ),
                                               ),
@@ -1720,7 +1897,9 @@ class AddBookingScreen extends HookConsumerWidget {
                                 ],
                               ),
                               32.h,
-                              addonSection(),
+                              // Single mode only — in multiple mode each package
+                              // row carries its own add-ons below.
+                              if (isSingleMode) addonSection(),
                               24.h,
                               // ── Totals + Submit ──────────────────────────────
                               Row(
@@ -1941,6 +2120,14 @@ class _BookingCartEntry {
   /// everything still bills as ONE invoice.
   final DateTime? date;
 
+  /// This package's own district (multi-district bookings). '' = use the
+  /// booking-level district. Drives THIS package's district-based price.
+  final String districtId;
+
+  /// This package's own add-ons (multi-package bookings). Priced + invoiced
+  /// under this package.
+  final List<BookingAddon> addons;
+
   const _BookingCartEntry({
     required this.id,
     required this.packageId,
@@ -1950,6 +2137,8 @@ class _BookingCartEntry {
     this.eventSlot = '',
     this.quantity = 1,
     this.date,
+    this.districtId = '',
+    this.addons = const [],
   });
 
   _BookingCartEntry copyWith({
@@ -1961,6 +2150,8 @@ class _BookingCartEntry {
     String? eventSlot,
     int? quantity,
     DateTime? date,
+    String? districtId,
+    List<BookingAddon>? addons,
   }) {
     return _BookingCartEntry(
       id: id ?? this.id,
@@ -1971,6 +2162,8 @@ class _BookingCartEntry {
       eventSlot: eventSlot ?? this.eventSlot,
       quantity: quantity ?? this.quantity,
       date: date ?? this.date,
+      districtId: districtId ?? this.districtId,
+      addons: addons ?? this.addons,
     );
   }
 }
@@ -2146,6 +2339,214 @@ class _AddonRowState extends State<_AddonRow> {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Searchable, priced district picker ──────────────────────────────────────
+// Bottom sheet listing districts with a search box and each district's price
+// for the given package, so a per-package district is quick to choose.
+Future<String?> _showDistrictPricePicker({
+  required BuildContext context,
+  required List<District> districts,
+  required ServicePackage? package,
+  required String currentId,
+}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) => _DistrictPricePickerSheet(
+      districts: districts,
+      package: package,
+      currentId: currentId,
+    ),
+  );
+}
+
+class _DistrictPricePickerSheet extends StatefulWidget {
+  final List<District> districts;
+  final ServicePackage? package;
+  final String currentId;
+  const _DistrictPricePickerSheet({
+    required this.districts,
+    required this.package,
+    required this.currentId,
+  });
+  @override
+  State<_DistrictPricePickerSheet> createState() =>
+      _DistrictPricePickerSheetState();
+}
+
+class _DistrictPricePickerSheetState extends State<_DistrictPricePickerSheet> {
+  final _searchCtrl = TextEditingController();
+  String _q = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String _priceFor(String districtId) {
+    final p = widget.package;
+    if (p == null) return '';
+    return '₹${p.effectivePriceForDistrict(districtId).toStringAsFixed(0)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final media = MediaQuery.of(context);
+    final q = _q.trim().toLowerCase();
+    final filtered = widget.districts
+        .where((d) =>
+            q.isEmpty ||
+            d.name.toLowerCase().contains(q) ||
+            d.regionName.toLowerCase().contains(q))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: Container(
+        constraints: BoxConstraints(maxHeight: media.size.height * 0.82),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                color: crm.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+              child: Row(
+                children: [
+                  Text('Select district',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: crm.textPrimary)),
+                  const Spacer(),
+                  if (widget.package != null)
+                    Flexible(
+                      child: Text(widget.package!.name,
+                          textAlign: TextAlign.right,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              TextStyle(fontSize: 12, color: crm.textSecondary)),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                onChanged: (v) => setState(() => _q = v),
+                decoration: InputDecoration(
+                  hintText: 'Search district or region…',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  isDense: true,
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 16),
+                children: [
+                  if (q.isEmpty)
+                    _row(crm,
+                        id: '',
+                        title: 'Default (Base Price)',
+                        subtitle: '',
+                        price: _priceFor('')),
+                  for (final d in filtered)
+                    _row(crm,
+                        id: d.id,
+                        title: d.name,
+                        subtitle: d.regionName,
+                        price: _priceFor(d.id)),
+                  if (filtered.isEmpty && q.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Text('No districts match "$_q"',
+                            style: TextStyle(color: crm.textSecondary)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(
+    CrmTheme crm, {
+    required String id,
+    required String title,
+    required String subtitle,
+    required String price,
+  }) {
+    final selected = id == widget.currentId;
+    return InkWell(
+      onTap: () => Navigator.of(context).pop(id),
+      child: Container(
+        color: selected ? crm.primary.withValues(alpha: 0.06) : null,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.location_on_outlined,
+                size: 18,
+                color: selected ? crm.primary : crm.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600, color: crm.textPrimary)),
+                  if (subtitle.isNotEmpty)
+                    Text(subtitle,
+                        style:
+                            TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                ],
+              ),
+            ),
+            if (price.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: crm.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(price,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: crm.primary,
+                        fontSize: 13)),
+              ),
+          ],
+        ),
       ),
     );
   }

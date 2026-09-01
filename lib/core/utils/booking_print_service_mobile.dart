@@ -45,7 +45,13 @@ Future<void> printBookingDetails(
         ),
       ),
       build: (context) {
-        final addonsTotal = booking.addons.fold(0.0, (sum, item) => sum + (item.amount * item.persons));
+        // Booking-level add-ons (single bookings) + each package's own add-ons
+        // (multi-package bookings).
+        final allAddons = [
+          ...booking.addons,
+          for (final it in booking.bookingItems) ...it.addons,
+        ];
+        final addonsTotal = allAddons.fold(0.0, (sum, item) => sum + (item.amount * item.persons));
         final basePrice = booking.totalPrice - addonsTotal;
 
         // ── GST helpers (inclusive @ 5%) ──────────────────────────────────
@@ -390,7 +396,7 @@ Future<void> printBookingDetails(
                   ],
                 ),
                 if (variant != BookingPrintVariant.clientAdvanceReceipt)
-                  ...booking.addons.map((addon) {
+                  ...allAddons.map((addon) {
                     final addonIncl = addon.amount * addon.persons;
                     final addonBase = gstBase(addonIncl);
                     final addonCgst = gstCgst(addonIncl);

@@ -15,12 +15,17 @@ String _staffWorkLabel(BookingAssignment staff) {
   return staff.role.trim();
 }
 
-double _addonTotal(Booking booking) {
-  return booking.addons.fold<double>(
-    0,
-    (sum, addon) => sum + (addon.amount * addon.persons),
-  );
-}
+// Every add-on on the booking — the booking-level list (single bookings) plus
+// each package's own add-ons (multi-package bookings).
+List<BookingAddon> _allAddons(Booking booking) => [
+      ...booking.addons,
+      for (final it in booking.bookingItems) ...it.addons,
+    ];
+
+double _addonTotal(Booking booking) => _allAddons(booking).fold<double>(
+      0,
+      (sum, addon) => sum + (addon.amount * addon.persons),
+    );
 
 double _packageAmountFromTotal(double totalAmount, double addonTotal) {
   final value = totalAmount - addonTotal;
@@ -282,9 +287,10 @@ String _buildSingleBookingHtml(
             )
             .join();
 
-  final addonRows = booking.addons.isEmpty
+  final allAddons = _allAddons(booking);
+  final addonRows = allAddons.isEmpty
       ? '<tr><td colspan="4">No add-ons</td></tr>'
-      : booking.addons
+      : allAddons
             .map(
               (addon) =>
                   '''
@@ -634,9 +640,11 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
       packageAmount,
     );
   }
-  // Add-on rows
+  // Add-on rows — booking-level add-ons (single bookings) PLUS each package's
+  // own add-ons (multi-package bookings), so the invoice itemises them all and
+  // the printed lines reconcile with the grand total.
   if (variant != BookingPrintVariant.clientAdvanceReceipt) {
-    for (final addon in booking.addons) {
+    for (final addon in _allAddons(booking)) {
       final addonIncl  = addon.amount * addon.persons;
       lineAmountTotal += addonIncl;
       final addonCgst  = gstCgst(addonIncl);
