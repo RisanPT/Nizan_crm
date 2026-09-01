@@ -194,7 +194,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
           InkWell(
             onTap: r.accountId.isEmpty
                 ? null
-                : () => context.go('/company-finance/ledger?account=${r.accountId}'),
+                : () => context.push('/company-finance/ledger?account=${r.accountId}'),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(

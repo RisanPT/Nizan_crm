@@ -175,10 +175,15 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final filterToDate = useState<DateTime?>(null);
     final filterMinAmount = useState<double?>(null);
     final filterMaxAmount = useState<double?>(null);
+    // Free-text search (client name / notes / service). '' = no search.
+    final searchCtrl = useTextEditingController();
+    final searchQuery = useState('');
 
     final collectionItems =
         asyncCollections.value ?? const <ArtistCollection>[];
     final expenseItems = asyncExpenses.value ?? const <ArtistExpense>[];
+
+    final q = searchQuery.value.trim().toLowerCase();
 
     // Filtered lists
     final filteredCollections = collectionItems.where((c) {
@@ -189,6 +194,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
       if (filterMinAmount.value != null && c.amount < filterMinAmount.value!) return false;
       if (filterMaxAmount.value != null && c.amount > filterMaxAmount.value!) return false;
+      if (q.isNotEmpty) {
+        final hay = '${c.booking?.customerName ?? ''} ${c.trial?.clientName ?? ''} '
+                '${c.booking?.service ?? ''} ${c.notes} ${c.employee?.name ?? ''}'
+            .toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
       return true;
     }).toList();
 
@@ -200,6 +211,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
       if (filterMinAmount.value != null && e.amount < filterMinAmount.value!) return false;
       if (filterMaxAmount.value != null && e.amount > filterMaxAmount.value!) return false;
+      if (q.isNotEmpty) {
+        final hay = '${e.booking?.customerName ?? ''} ${e.category} ${e.notes} '
+                '${e.employee?.name ?? ''}'
+            .toLowerCase();
+        if (!hay.contains(q)) return false;
+      }
       return true;
     }).toList();
 
@@ -1431,6 +1448,39 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
+    // Reusable search box, shown at the top of both tabs (works even when the
+    // filtered result is empty, so a search can always be cleared).
+    Widget searchSliver(String hint) => SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: TextField(
+              controller: searchCtrl,
+              onChanged: (v) => searchQuery.value = v,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: hint,
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: searchQuery.value.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          searchCtrl.clear();
+                          searchQuery.value = '';
+                        },
+                      ),
+                isDense: true,
+                filled: true,
+                fillColor: crm.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: crm.border),
+                ),
+              ),
+            ),
+          ),
+        );
+
     Widget collectionsTab(List<ArtistCollection> items) {
       if (items.isEmpty) {
         return Builder(
@@ -1442,13 +1492,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                 SliverOverlapInjector(
                   handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
                 ),
-                const SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                searchSliver('Search by client, service or note…'),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   sliver: SliverToBoxAdapter(
                     child: _FinanceEmptyState(
                       icon: Icons.account_balance_wallet_outlined,
-                      title: 'No collections logged yet',
-                      subtitle: 'Start by recording the first amount collected from a client.',
+                      title: q.isEmpty ? 'No collections logged yet' : 'No matching collections',
+                      subtitle: q.isEmpty
+                          ? 'Start by recording the first amount collected from a client.'
+                          : 'Try a different search or clear the filters.',
                     ),
                   ),
                 ),
@@ -1468,6 +1521,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               SliverOverlapInjector(
                 handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
+              searchSliver('Search by client, service or note…'),
               SliverPadding(
                 padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
                 sliver: SliverList(
@@ -1475,7 +1529,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                     (context, i) {
                       final c = sortedItems[i];
                       final metadataStr = [
-                        _fmt(c.date),
                         c.paymentMode.toUpperCase(),
                         if (c.booking != null) c.booking!.service,
                         if (!isScopedToOwn && c.employee != null) c.employee!.name,
@@ -1637,13 +1690,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                 SliverOverlapInjector(
                   handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
                 ),
-                const SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                searchSliver('Search by client, category or note…'),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   sliver: SliverToBoxAdapter(
                     child: _FinanceEmptyState(
                       icon: Icons.receipt_long_outlined,
-                      title: 'No expenses logged yet',
-                      subtitle: 'Receipts and travel costs logged here will appear for review.',
+                      title: q.isEmpty ? 'No expenses logged yet' : 'No matching expenses',
+                      subtitle: q.isEmpty
+                          ? 'Receipts and travel costs logged here will appear for review.'
+                          : 'Try a different search or clear the filters.',
                     ),
                   ),
                 ),
@@ -1663,6 +1719,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               SliverOverlapInjector(
                 handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
+              searchSliver('Search by client, category or note…'),
               // Bridal vs model-shoot spend at a glance.
               SliverToBoxAdapter(
                 child: Padding(
@@ -1712,7 +1769,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ? 'Model Shoot'
                             : 'Bridal Work',
                         catLabel,
-                        _fmt(e.date),
                         if (e.booking != null) e.booking!.customerName,
                       ].join(' • ');
 
@@ -2975,6 +3031,11 @@ class _FinanceEmptyState extends StatelessWidget {
   }
 }
 
+String _fmtCardDate(DateTime d) {
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${d.day.toString().padLeft(2, '0')} ${m[d.month - 1]} ${d.year}';
+}
+
 class _FinanceEntryCard extends StatelessWidget {
   final String title;
   final String amount;
@@ -3065,14 +3126,32 @@ class _FinanceEntryCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         4.h,
-                        Text(
-                          metadata,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: crm.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        // Date shown clearly next to the client name.
+                        Row(
+                          children: [
+                            Icon(Icons.event_outlined, size: 13, color: crm.primary),
+                            4.w,
+                            Text(
+                              _fmtCardDate(date),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: crm.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
+                        if (metadata.isNotEmpty) ...[
+                          2.h,
+                          Text(
+                            metadata,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: crm.textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

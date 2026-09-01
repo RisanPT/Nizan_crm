@@ -46,12 +46,12 @@ class NotificationToast {
         body: body,
         icon: icon,
         topOffset: _gap + slot * (_cardHeight + _gap),
-        onTap: onTap == null
-            ? null
-            : () {
-                onTap();
-                dismiss();
-              },
+        // Tapping ANYWHERE dismisses (and follows the link if there is one), so
+        // the popup can always be cleared with a single tap.
+        onTap: () {
+          if (onTap != null) onTap();
+          dismiss();
+        },
         onClose: dismiss,
       ),
     );
@@ -88,6 +88,8 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
   late final AnimationController _c;
   late final Animation<Offset> _slide;
   late final Animation<double> _fade;
+  // Stable key so the Dismissible survives rebuilds of this card.
+  final Key _dismissKey = UniqueKey();
 
   @override
   void initState() {
@@ -120,15 +122,17 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
         opacity: _fade,
         child: SlideTransition(
           position: _slide,
-          child: Material(
-            color: Colors.transparent,
+          // Swipe sideways to dismiss — a guaranteed way to clear the toast
+          // even if a tap is missed.
+          child: Dismissible(
+            key: _dismissKey,
+            direction: DismissDirection.horizontal,
+            onDismissed: (_) => widget.onClose(),
             child: Container(
               width: width,
               constraints: const BoxConstraints(maxWidth: 400),
               decoration: BoxDecoration(
-                color: crm.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: crm.border),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.14),
@@ -137,53 +141,61 @@ class _ToastCardState extends State<_ToastCard> with SingleTickerProviderStateMi
                   ),
                 ],
               ),
-              child: InkWell(
+              child: Material(
+                color: crm.surface,
                 borderRadius: BorderRadius.circular(14),
-                onTap: widget.onTap,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: crm.primary.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(10),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  // The WHOLE card is one tap target: tapping anywhere — the
+                  // body or the ✕ — dismisses it (and opens the linked screen
+                  // if the notification has one). No nested gestures that could
+                  // swallow the tap, so it always closes.
+                  onTap: widget.onTap,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: crm.border),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: crm.primary.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(widget.icon, size: 20, color: crm.primary),
                         ),
-                        child: Icon(widget.icon, size: 20, color: crm.primary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.title,
-                              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              widget.body,
-                              style: TextStyle(fontSize: 12, color: crm.textSecondary, height: 1.25),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.title,
+                                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                widget.body,
+                                style: TextStyle(fontSize: 12, color: crm.textSecondary, height: 1.25),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: widget.onClose,
-                        child: Padding(
-                          padding: const EdgeInsets.all(2),
-                          child: Icon(Icons.close_rounded, size: 16, color: crm.textSecondary),
-                        ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        // Visual ✕ only — it has no gesture of its own, so it
+                        // simply relays to the card's onTap (dismiss). Placing a
+                        // real handler here is what used to get the tap eaten.
+                        Icon(Icons.close_rounded, size: 18, color: crm.textSecondary),
+                      ],
+                    ),
                   ),
                 ),
               ),

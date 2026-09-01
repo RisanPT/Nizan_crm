@@ -71,7 +71,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
                       ),
                     ),
                     OutlinedButton.icon(
-                      onPressed: () => context.go('/company-finance/assets'),
+                      onPressed: () => context.push('/company-finance/assets'),
                       icon: const Icon(Icons.dashboard_customize_outlined, size: 16),
                       label: const Text('Manage assets'),
                     ),

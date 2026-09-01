@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
@@ -192,12 +193,13 @@ class ITProjectsScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 TextField(controller: desc, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: managerId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Manager (IT) *', prefixIcon: Icon(Icons.person_outline)),
-                  items: [for (final e in employees) DropdownMenuItem(value: e.id, child: Text(e.name))],
-                  onChanged: (v) => setSheet(() => managerId = v),
+                EmployeePickerField(
+                  employees: employees,
+                  selectedId: managerId,
+                  selectedName: existing?.managerName,
+                  label: 'Manager (IT) *',
+                  allowUnassign: false,
+                  onChanged: (e) => setSheet(() => managerId = e?.id),
                 ),
                 if (employees.isEmpty)
                   Padding(

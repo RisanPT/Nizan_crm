@@ -59,6 +59,8 @@ class BookingService {
     String? status,
     String? from,
     String? to,
+    String? salesPersonId,
+    String? createdBy,
   }) async {
     try {
       final response = await _dio.get(
@@ -83,6 +85,9 @@ class BookingService {
           if (status != null && status.isNotEmpty) 'status': status,
           if (from != null && from.isNotEmpty) 'from': from,
           if (to != null && to.isNotEmpty) 'to': to,
+          if (salesPersonId != null && salesPersonId.isNotEmpty)
+            'salesPersonId': salesPersonId,
+          if (createdBy != null && createdBy.isNotEmpty) 'createdBy': createdBy,
         },
       );
       return PaginatedBookingsResponse.fromJson(

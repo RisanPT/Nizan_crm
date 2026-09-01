@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart' show priorityColor;
@@ -227,12 +228,13 @@ class ITBoardScreen extends ConsumerWidget {
                 const SizedBox(height: 10),
                 TextField(controller: desc, maxLines: 2, decoration: const InputDecoration(labelText: 'Description')),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: assignee,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Assignee *', prefixIcon: Icon(Icons.person_outline)),
-                  items: [for (final e in employees) DropdownMenuItem(value: e.id, child: Text(e.name))],
-                  onChanged: (v) => setSheet(() => assignee = v),
+                EmployeePickerField(
+                  employees: employees,
+                  selectedId: assignee,
+                  selectedName: existing?.assignedToName,
+                  label: 'Assignee *',
+                  allowUnassign: false,
+                  onChanged: (e) => setSheet(() => assignee = e?.id),
                 ),
                 const SizedBox(height: 10),
                 Row(children: [

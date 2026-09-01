@@ -15,6 +15,8 @@ import 'package:nizan_crm/models/customer.dart';
 import 'package:nizan_crm/services/customer_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
+import 'package:nizan_crm/services/addon_service_service.dart';
+import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -29,8 +31,13 @@ class AddBookingScreen extends HookConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncPackages = ref.watch(packagesProvider);
     final asyncDistricts = ref.watch(districtsProvider);
+    final asyncAddonServices = ref.watch(addonServicesProvider);
     final packages = _uniquePackages(asyncPackages.value ?? const []);
     final districts = _uniqueDistricts(asyncDistricts.value ?? const []);
+    final availableAddonServices =
+        (asyncAddonServices.value ?? const <AddonService>[])
+            .where((s) => s.status.toLowerCase() == 'active')
+            .toList();
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
     TextEditingController? autoCompleteNameCtrl;
@@ -69,6 +76,10 @@ class AddBookingScreen extends HookConsumerWidget {
     final totalPrice = useState<double>(0);
     final advanceAmount = useState<double>(0);
     final basePackageAmount = useState<double>(0);
+    // Optional add-ons (single or multiple). Each row = one add-on service ×
+    // persons. The backend re-sums the grand total as Σ packages + Σ add-ons,
+    // so add-ons are extra on top of the package base, not a substitute.
+    final addons = useState<List<BookingAddon>>([]);
     final totalPackageCount = bookingCart.value.fold<int>(
       0,
       (sum, item) => sum + item.quantity,
@@ -133,11 +144,19 @@ class AddBookingScreen extends HookConsumerWidget {
           .toList();
     }
 
+    double addonsTotalOf(List<BookingAddon> items) => items.fold<double>(
+          0,
+          (sum, a) => sum + (a.amount * a.persons),
+        );
+
     void recalculate() {
       final bookingItems = buildBookingItems();
+      final addonsSum = addonsTotalOf(addons.value);
       if (packages.isEmpty || bookingItems.isEmpty) {
         basePackageAmount.value = 0;
-        totalPrice.value = 0;
+        // Add-ons can still be priced even before a package is chosen so the
+        // running total is never wrong.
+        totalPrice.value = addonsSum;
         advanceAmount.value = 0;
         return;
       }
@@ -148,13 +167,105 @@ class AddBookingScreen extends HookConsumerWidget {
         0,
         (sum, item) => sum + item.totalPrice,
       );
-      // Total = Σ package base prices. The ₹3000/package is the ADVANCE (below),
-      // not an addition to the bill.
-      totalPrice.value = basePackageAmount.value;
+      // Total = Σ package base prices + Σ add-ons. The ₹3000/package is the
+      // ADVANCE (below), not an addition to the bill.
+      totalPrice.value = basePackageAmount.value + addonsSum;
       // Advance is per package, once each (package count × ₹3000).
       advanceAmount.value = bookingItems.fold<double>(
         0,
         (sum, item) => sum + item.advanceAmount,
+      );
+    }
+
+    // Add-on editor — supports zero, one, or many add-ons on a single booking.
+    Widget addonSection() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ADD-ONS (OPTIONAL)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: crmColors.textSecondary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: isSubmitting.value
+                    ? null
+                    : () {
+                        addons.value = [
+                          ...addons.value,
+                          const BookingAddon(
+                            addonServiceId: '',
+                            service: '',
+                            amount: 0,
+                            persons: 1,
+                          ),
+                        ];
+                        recalculate();
+                      },
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add Add-on'),
+              ),
+            ],
+          ),
+          if (asyncAddonServices.isLoading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          if (asyncAddonServices.hasError)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Could not load add-on services.',
+                style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+              ),
+            ),
+          if (addons.value.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: crmColors.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: crmColors.border),
+              ),
+              child: Text(
+                'No add-ons. Tap "Add Add-on" to include one or more extra '
+                'services (e.g. hairstyling, saree draping) — each add-on can '
+                'have its own price and number of persons.',
+                style: TextStyle(color: crmColors.textSecondary, fontSize: 12),
+              ),
+            )
+          else
+            ...List.generate(
+              addons.value.length,
+              (i) => _AddonRow(
+                index: i,
+                addon: addons.value[i],
+                services: availableAddonServices,
+                crm: crmColors,
+                enabled: !isSubmitting.value,
+                onChanged: (updated) {
+                  final next = [...addons.value];
+                  next[i] = updated;
+                  addons.value = next;
+                  recalculate();
+                },
+                onRemove: () {
+                  final next = [...addons.value]..removeAt(i);
+                  addons.value = next;
+                  recalculate();
+                },
+              ),
+            ),
+        ],
       );
     }
 
@@ -527,6 +638,7 @@ class AddBookingScreen extends HookConsumerWidget {
           advanceAmount: advanceAmount.value,
           leadId: qParams['leadId'],
           bookingItems: bookingItems,
+          addons: addons.value,
         );
         await ref.read(bookingProvider.notifier).addBooking(booking);
 
@@ -1608,6 +1720,8 @@ class AddBookingScreen extends HookConsumerWidget {
                                 ],
                               ),
                               32.h,
+                              addonSection(),
+                              24.h,
                               // ── Totals + Submit ──────────────────────────────
                               Row(
                                 children: [
@@ -1871,3 +1985,168 @@ String _formatDayLabel(DateTime d) {
 
 String _dateKey(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// One add-on row in the Add Booking screen. Stateful so its price/persons text
+/// fields keep their own controllers and don't lose the cursor when the parent
+/// rebuilds after each keystroke (the total recomputes live).
+class _AddonRow extends StatefulWidget {
+  final int index;
+  final BookingAddon addon;
+  final List<AddonService> services;
+  final CrmTheme crm;
+  final bool enabled;
+  final ValueChanged<BookingAddon> onChanged;
+  final VoidCallback onRemove;
+
+  const _AddonRow({
+    required this.index,
+    required this.addon,
+    required this.services,
+    required this.crm,
+    required this.enabled,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  @override
+  State<_AddonRow> createState() => _AddonRowState();
+}
+
+class _AddonRowState extends State<_AddonRow> {
+  late final TextEditingController _price;
+  late final TextEditingController _persons;
+
+  @override
+  void initState() {
+    super.initState();
+    _price = TextEditingController(
+      text: widget.addon.amount == 0 ? '' : widget.addon.amount.toStringAsFixed(0),
+    );
+    _persons = TextEditingController(text: widget.addon.persons.toString());
+  }
+
+  @override
+  void dispose() {
+    _price.dispose();
+    _persons.dispose();
+    super.dispose();
+  }
+
+  InputDecoration _deco(String label) => InputDecoration(
+        labelText: label,
+        isDense: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = widget.crm;
+    final selectedId =
+        widget.services.any((s) => s.id == widget.addon.addonServiceId)
+            ? widget.addon.addonServiceId
+            : null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'ADD-ON ${widget.index + 1}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: crm.textSecondary,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              TextButton(
+                onPressed: widget.enabled ? widget.onRemove : null,
+                child: const Text(
+                  'REMOVE',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          8.h,
+          DropdownButtonFormField<String>(
+            initialValue: selectedId,
+            isExpanded: true,
+            decoration: _deco('Add-on service'),
+            items: widget.services
+                .map(
+                  (s) => DropdownMenuItem(
+                    value: s.id,
+                    child: Text(
+                      '${s.name} — ₹ ${s.price.toStringAsFixed(0)}',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: widget.enabled
+                ? (value) {
+                    if (value == null) return;
+                    final sel =
+                        widget.services.firstWhere((s) => s.id == value);
+                    // Auto-fill the price from the chosen service; the user can
+                    // still override it below.
+                    _price.text = sel.price.toStringAsFixed(0);
+                    widget.onChanged(
+                      widget.addon.copyWith(
+                        addonServiceId: sel.id,
+                        service: sel.name,
+                        amount: sel.price,
+                        description: sel.description,
+                      ),
+                    );
+                  }
+                : null,
+          ),
+          10.h,
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _price,
+                  enabled: widget.enabled,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _deco('Price (₹)'),
+                  onChanged: (v) => widget.onChanged(
+                    widget.addon.copyWith(amount: double.tryParse(v) ?? 0),
+                  ),
+                ),
+              ),
+              12.w,
+              Expanded(
+                child: TextField(
+                  controller: _persons,
+                  enabled: widget.enabled,
+                  keyboardType: TextInputType.number,
+                  decoration: _deco('Persons'),
+                  onChanged: (v) => widget.onChanged(
+                    widget.addon.copyWith(persons: int.tryParse(v) ?? 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

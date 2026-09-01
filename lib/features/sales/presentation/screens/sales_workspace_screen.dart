@@ -67,11 +67,17 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               labelColor: crm.primary,
               unselectedLabelColor: crm.textSecondary,
               indicatorColor: crm.primary,
+              labelStyle:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+              unselectedLabelStyle:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              indicatorSize: TabBarIndicatorSize.label,
+              indicatorWeight: 2.5,
               tabs: const [
-                Tab(icon: Icon(Icons.people_alt_outlined), text: 'Leads'),
-                Tab(icon: Icon(Icons.calculate_outlined), text: 'Calculator'),
-                Tab(icon: Icon(Icons.event_available_outlined), text: 'Availability'),
-                Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Spot Invoice'),
+                Tab(icon: Icon(Icons.groups_rounded), text: 'Leads'),
+                Tab(icon: Icon(Icons.calculate_rounded), text: 'Quote'),
+                Tab(icon: Icon(Icons.event_available_rounded), text: 'Slots'),
+                Tab(icon: Icon(Icons.receipt_long_rounded), text: 'Invoice'),
               ],
             ),
           ),
@@ -166,13 +172,35 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Quote Calculator',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold, color: crm.textPrimary)),
-          const SizedBox(height: 4),
-          Text('Build a quick price quote, then turn it into a shareable invoice.',
-              style: TextStyle(color: crm.textSecondary, fontSize: 13)),
-          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: crm.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(Icons.calculate_rounded, color: crm.primary, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Quote Calculator',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('Build a quick price quote, then turn it into an invoice.',
+                        style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
 
           // Customer (optional)
           TextField(
@@ -273,46 +301,117 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
           if (addons.isNotEmpty) ...[
             Text('Add-ons',
                 style: TextStyle(
-                    color: crm.textSecondary, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            ...addons.map((a) => CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  value: _addonIds.contains(a.id),
-                  title: Text(a.name),
-                  secondary: Text('₹${a.price.toStringAsFixed(0)}'),
-                  onChanged: (v) => setState(() {
-                    if (v == true) {
-                      _addonIds.add(a.id);
-                    } else {
+                    color: crm.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14)),
+            const SizedBox(height: 8),
+            ...addons.map((a) {
+              final selected = _addonIds.contains(a.id);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => setState(() {
+                    if (selected) {
                       _addonIds.remove(a.id);
+                    } else {
+                      _addonIds.add(a.id);
                     }
                   }),
-                )),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? crm.primary.withValues(alpha: 0.06)
+                          : crm.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected ? crm.primary : crm.border,
+                        width: selected ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 22,
+                          height: 22,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color:
+                                selected ? crm.primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(
+                                color: selected ? crm.primary : crm.border,
+                                width: 1.5),
+                          ),
+                          child: selected
+                              ? const Icon(Icons.check_rounded,
+                                  size: 15, color: Colors.white)
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(a.name,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: crm.textPrimary)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('₹${a.price.toStringAsFixed(0)}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: selected
+                                    ? crm.primary
+                                    : crm.textSecondary)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
           ],
           const SizedBox(height: 16),
 
           // Total
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
-              color: crm.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: crm.primary.withValues(alpha: 0.3)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [crm.primary, const Color(0xFF3A101A)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: crm.primary.withValues(alpha: 0.28),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                Text('Total',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: crm.textPrimary)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total amount',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.7))),
+                    const SizedBox(height: 2),
+                    Text('₹${total.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white)),
+                  ],
+                ),
                 const Spacer(),
-                Text('₹${total.toStringAsFixed(0)}',
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: crm.primary)),
+                Icon(Icons.receipt_long_rounded,
+                    color: Colors.white.withValues(alpha: 0.85), size: 28),
               ],
             ),
           ),
@@ -328,10 +427,12 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
                         _phoneCtrl.text.trim(),
                         lines,
                       ),
-              icon: const Icon(Icons.receipt_long_outlined),
+              icon: const Icon(Icons.receipt_long_rounded),
               label: const Text('Create Invoice from this Quote'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
             ),
           ),
@@ -523,13 +624,35 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Spot Invoice',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold, color: crm.textPrimary)),
-          const SizedBox(height: 4),
-          Text('Generate a quotation and share it with the customer (no GST).',
-              style: TextStyle(color: crm.textSecondary, fontSize: 13)),
-          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: crm.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(Icons.receipt_long_rounded, color: crm.primary, size: 23),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Spot Invoice',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                    const SizedBox(height: 2),
+                    Text('Generate a quotation and share it with the customer (no GST).',
+                        style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
           TextField(
             controller: _customerCtrl,
             decoration: const InputDecoration(
@@ -568,10 +691,29 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
             ],
           ),
           if (_lines.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text('No items yet. Add one, or build a quote in the Calculator tab.',
-                  style: TextStyle(color: crm.textSecondary)),
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+              decoration: BoxDecoration(
+                color: crm.input,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: crm.border),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.playlist_add_rounded,
+                      color: crm.textSecondary, size: 28),
+                  const SizedBox(height: 8),
+                  Text('No items yet',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                  const SizedBox(height: 2),
+                  Text('Add a package or line, or build a quote in the Quote tab.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                ],
+              ),
             )
           else
             ..._lines.asMap().entries.map((e) {
@@ -579,20 +721,32 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
               final l = e.value;
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                 decoration: BoxDecoration(
                   color: crm.surface,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: crm.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Row(
                   children: [
-                    Expanded(child: Text(l.label)),
+                    Expanded(
+                        child: Text(l.label,
+                            style: const TextStyle(fontWeight: FontWeight.w600))),
+                    const SizedBox(width: 8),
                     Text('₹${l.amount.toStringAsFixed(0)}',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.close, size: 18, color: crm.destructive),
+                      icon: Icon(Icons.close_rounded,
+                          size: 18, color: crm.destructive),
                       onPressed: () => setState(() => _lines.removeAt(i)),
                     ),
                   ],
@@ -613,25 +767,43 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
           const SizedBox(height: 16),
 
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
-              color: crm.primary.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: crm.primary.withValues(alpha: 0.3)),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [crm.primary, const Color(0xFF3A101A)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: crm.primary.withValues(alpha: 0.28),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
             child: Row(
               children: [
-                Text('Total',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: crm.textPrimary)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Total amount',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.7))),
+                    const SizedBox(height: 2),
+                    Text('₹${total.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white)),
+                  ],
+                ),
                 const Spacer(),
-                Text('₹${total.toStringAsFixed(0)}',
-                    style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                        color: crm.primary)),
+                Icon(Icons.ios_share_rounded,
+                    color: Colors.white.withValues(alpha: 0.85), size: 26),
               ],
             ),
           ),
@@ -647,10 +819,12 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
                       height: 18,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.ios_share),
+                  : const Icon(Icons.ios_share_rounded),
               label: Text(_generating ? 'Generating…' : 'Generate & Share'),
               style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
               ),
             ),
           ),
@@ -736,26 +910,92 @@ class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
 
   Widget _summary(BuildContext context, MonthAvailability m) {
     final crm = context.crmColors;
+    const gold = Color(0xFFC9A66B);
+    final pct = m.totalCapacity == 0
+        ? 0.0
+        : (m.totalBooked / m.totalCapacity).clamp(0.0, 1.0);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: crm.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.primary.withValues(alpha: 0.2)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [crm.primary, const Color(0xFF3A101A)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: crm.primary.withValues(alpha: 0.26),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('${m.totalAvailable}',
-              style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, color: crm.primary, height: 1)),
-          const SizedBox(height: 2),
-          Text('slots open in ${_monthNames[m.month]}',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: crm.textPrimary)),
-          const SizedBox(height: 6),
-          Text('${m.totalBooked} booked · ${m.totalCapacity} total capacity  ·  ${m.defaultMorning + m.defaultEvening} slots/day (${m.defaultMorning} AM + ${m.defaultEvening} PM)',
-              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+              style: const TextStyle(
+                  fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1)),
+          const SizedBox(height: 4),
+          Text('slots open in ${_monthNames[m.month]} ${m.year}',
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _heroPill(Icons.event_busy_rounded, '${m.totalBooked}', 'Booked'),
+              const SizedBox(width: 8),
+              _heroPill(Icons.event_seat_rounded, '${m.totalCapacity}', 'Capacity'),
+              const SizedBox(width: 8),
+              _heroPill(Icons.today_rounded,
+                  '${m.defaultMorning + m.defaultEvening}', 'Per day'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 7,
+              backgroundColor: Colors.white.withValues(alpha: 0.22),
+              valueColor: const AlwaysStoppedAnimation(gold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${(pct * 100).round()}% booked  ·  ${m.defaultMorning} morning + ${m.defaultEvening} evening',
+            style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.62)),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _heroPill(IconData icon, String value, String label) {
+    const gold = Color(0xFFC9A66B);
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 15, color: gold),
+            const SizedBox(height: 6),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 10.5, color: Colors.white.withValues(alpha: 0.6))),
+          ],
+        ),
       ),
     );
   }
@@ -764,75 +1004,135 @@ class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
     final crm = context.crmColors;
     final today = DateTime.now();
     final isPast = d.date.isBefore(DateTime(today.year, today.month, today.day));
+    final color = d.unavailable ? crm.destructive : crm.success;
+    final pct = d.total.capacity == 0
+        ? 0.0
+        : (d.total.booked / d.total.capacity).clamp(0.0, 1.0);
+    final label = d.blocked
+        ? 'BLOCKED'
+        : (d.total.isFull ? 'FULL' : '${d.total.available} of ${d.total.capacity} left');
+
     return Opacity(
-      opacity: isPast ? 0.45 : 1,
+      opacity: isPast ? 0.5 : 1,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: crm.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: d.unavailable ? crm.destructive.withValues(alpha: 0.35) : crm.border),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: d.unavailable
+                  ? crm.destructive.withValues(alpha: 0.30)
+                  : crm.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            SizedBox(
+            // Date chip
+            Container(
               width: 46,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text('${d.date.day}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                          height: 1)),
+                  const SizedBox(height: 2),
                   Text(_weekdays[d.date.weekday],
-                      style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: color.withValues(alpha: 0.85))),
                 ],
               ),
             ),
-            Expanded(child: _totalCell(context, d)),
-            if (d.isOverride)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Tooltip(
-                  message: 'HR set a custom limit for this day',
-                  child: Icon(Icons.push_pin_outlined, size: 15, color: crm.textSecondary),
-                ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(9),
+                        ),
+                        child: Text(label,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: color)),
+                      ),
+                      const Spacer(),
+                      if (d.isOverride)
+                        Tooltip(
+                          message: 'HR set a custom limit for this day',
+                          child: Icon(Icons.push_pin_rounded,
+                              size: 14, color: crm.textSecondary),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 9),
+                  if (d.blocked)
+                    Text('Blocked by HR — no bookings',
+                        style: TextStyle(fontSize: 11.5, color: crm.destructive))
+                  else ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: LinearProgressIndicator(
+                        value: pct,
+                        minHeight: 6,
+                        backgroundColor: color.withValues(alpha: 0.12),
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        _amPm(Icons.wb_sunny_rounded, 'Morning',
+                            d.morning.booked, d.morning.capacity, crm.textSecondary),
+                        const SizedBox(width: 16),
+                        _amPm(Icons.nightlight_round, 'Evening',
+                            d.evening.booked, d.evening.capacity, crm.textSecondary),
+                      ],
+                    ),
+                  ],
+                ],
               ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _totalCell(BuildContext context, DaySlot d) {
-    final crm = context.crmColors;
-    final color = d.unavailable ? crm.destructive : crm.success;
-    final label = d.blocked
-        ? 'BLOCKED'
-        : (d.total.isFull ? 'FULL' : '${d.total.available} of ${d.total.capacity} left');
+  Widget _amPm(
+      IconData icon, String label, int booked, int capacity, Color c) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            d.blocked
-                ? 'Blocked by HR — no bookings'
-                : '${d.total.booked}/${d.total.capacity} booked  ·  ${d.morning.booked} AM · ${d.evening.booked} PM',
-            style: TextStyle(fontSize: 11, color: crm.textSecondary),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        Icon(icon, size: 13, color: c),
+        const SizedBox(width: 5),
+        Text('$label $booked/$capacity',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c)),
       ],
     );
   }

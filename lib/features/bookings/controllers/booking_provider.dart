@@ -28,6 +28,11 @@ class PaginatedBookingsParams {
   // Explicit event/booking date range (yyyy-MM-dd) for the date search filter.
   final String? from;
   final String? to;
+  // Filter by the salesperson credited with the booking (Booking.salesPersonId).
+  final String? salesPersonId;
+  // Filter by the user who ENTERED the booking (Booking.createdBy) — the
+  // "Added By" filter (sales / CRM / managers / admin all enter bookings).
+  final String? createdBy;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -47,6 +52,8 @@ class PaginatedBookingsParams {
     this.status,
     this.from,
     this.to,
+    this.salesPersonId,
+    this.createdBy,
   });
 
   @override
@@ -68,7 +75,9 @@ class PaginatedBookingsParams {
         other.onlyWithMapLink == onlyWithMapLink &&
         other.status == status &&
         other.from == from &&
-        other.to == to;
+        other.to == to &&
+        other.salesPersonId == salesPersonId &&
+        other.createdBy == createdBy;
   }
 
   @override
@@ -90,6 +99,8 @@ class PaginatedBookingsParams {
     status,
     from,
     to,
+    salesPersonId,
+    createdBy,
   );
 }
 
@@ -138,6 +149,8 @@ final paginatedBookingsProvider =
             status: params.status,
             from: params.from,
             to: params.to,
+            salesPersonId: params.salesPersonId,
+            createdBy: params.createdBy,
           );
     });
 

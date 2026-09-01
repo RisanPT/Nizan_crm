@@ -377,14 +377,26 @@ class ManageBookingScreen extends HookConsumerWidget {
                   selectedItem.mapUrl.isNotEmpty)
               ? selectedItem.mapUrl
               : (perDateMap.isNotEmpty ? perDateMap : booking.mapUrl);
-          // Travel is per-package: when editing a specific package show ONLY
-          // that package's own values (empty when unset) — never fall back to
-          // the booking-level value, or an empty package would inherit another
-          // package's travel and appear to "bleed". Booking-level is used only
-          // for a non-item (single-date / legacy) booking.
-          final tMode = selectedItem != null ? selectedItem.travelMode : booking.travelMode;
-          final tTime = selectedItem != null ? selectedItem.travelTime : booking.travelTime;
-          final tKm = selectedItem != null ? selectedItem.travelDistanceKm : booking.travelDistanceKm;
+          // Travel is per-package: show the selected package's OWN values.
+          // BUT legacy bookings (previous months) stored travel only at the
+          // booking level — their items carry none. So if NO item has any
+          // travel, fall back to the booking-level values; otherwise they'd
+          // show blank AND get wiped to empty on the next save. New per-item
+          // bookings (some item has travel) stay strict so a package never
+          // inherits another package's travel and appears to "bleed".
+          final anyItemHasTravel = booking.bookingItems.any((it) =>
+              it.travelMode.trim().isNotEmpty ||
+              it.travelTime.trim().isNotEmpty ||
+              it.travelDistanceKm > 0);
+          final tMode = (selectedItem != null && anyItemHasTravel)
+              ? selectedItem.travelMode
+              : booking.travelMode;
+          final tTime = (selectedItem != null && anyItemHasTravel)
+              ? selectedItem.travelTime
+              : booking.travelTime;
+          final tKm = (selectedItem != null && anyItemHasTravel)
+              ? selectedItem.travelDistanceKm
+              : booking.travelDistanceKm;
           travelModeCtrl.text = tMode;
           travelTimeCtrl.text = tTime;
           travelDistanceCtrl.text = tKm == 0 ? '' : tKm.toStringAsFixed(0);
@@ -4801,9 +4813,26 @@ class _OutfitLooksEditorState extends State<_OutfitLooksEditor> {
   @override
   void didUpdateWidget(_OutfitLooksEditor old) {
     super.didUpdateWidget(old);
-    if (old.looks.length != widget.looks.length) {
+    // Re-sync whenever the incoming looks differ from our current controller
+    // state — an EXTERNAL change (switching package/date, reload, collapsing
+    // multiple looks to one). Comparing against _buildLooks() (not old.looks)
+    // means our OWN onChanged emissions don't trigger a resync that would fight
+    // the user's typing. Without this, a look kept the PREVIOUS look's location.
+    if (!_looksMatch(widget.looks, _buildLooks())) {
       _syncControllers(widget.looks);
     }
+  }
+
+  bool _looksMatch(List<OutfitLook> a, List<OutfitLook> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].lookLabel != b[i].lookLabel ||
+          a[i].outfitDetails != b[i].outfitDetails ||
+          a[i].mapUrl != b[i].mapUrl) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _syncControllers(List<OutfitLook> looks) {
@@ -4818,6 +4847,20 @@ class _OutfitLooksEditorState extends State<_OutfitLooksEditor> {
       _labelCtrls.add(TextEditingController(text: looks[i].lookLabel));
       _detailsCtrls.add(TextEditingController(text: looks[i].outfitDetails));
       _mapUrlCtrls.add(TextEditingController(text: looks[i].mapUrl));
+    }
+    // Refresh EXISTING controllers so each look shows its OWN label / details /
+    // location — never a stale value carried over from a previously-loaded
+    // look. Guard each assignment so we don't disturb a field mid-edit.
+    for (int i = 0; i < looks.length; i++) {
+      if (_labelCtrls[i].text != looks[i].lookLabel) {
+        _labelCtrls[i].text = looks[i].lookLabel;
+      }
+      if (_detailsCtrls[i].text != looks[i].outfitDetails) {
+        _detailsCtrls[i].text = looks[i].outfitDetails;
+      }
+      if (_mapUrlCtrls[i].text != looks[i].mapUrl) {
+        _mapUrlCtrls[i].text = looks[i].mapUrl;
+      }
     }
   }
 

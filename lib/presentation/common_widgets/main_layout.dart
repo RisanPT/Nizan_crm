@@ -15,7 +15,7 @@ import '../../features/notifications/presentation/widgets/notification_watcher.d
 
 /// Tab-root screens that render their OWN AppBar — the mobile shell bar is
 /// suppressed for these so they don't show two stacked bars.
-const _mobileOwnAppBarRoutes = {'/works', '/hr/slots'};
+const _mobileOwnAppBarRoutes = {'/works', '/hr/slots', '/sales/home'};
 
 class MainLayout extends ConsumerStatefulWidget {
   final Widget child;
@@ -50,6 +50,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _financeUserCollapsed = false;
   bool _itExpanded = false;
   bool _itUserCollapsed = false;
+  bool _marketingExpanded = false;
+  bool _marketingUserCollapsed = false;
+  bool _contentExpanded = false;
+  bool _contentUserCollapsed = false;
 
   int _calculateSelectedIndex(BuildContext context, AppRole role) {
     final location = GoRouterState.of(context).uri.path;
@@ -217,9 +221,6 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         bottomNavigationBar: NavigationBar(
           selectedIndex: _calculateSelectedIndex(context, role),
           onDestinationSelected: (index) => _onItemTapped(index, role),
-          elevation: 0,
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          indicatorColor: Theme.of(context).primaryColor.withValues(alpha: 0.1),
           destinations: role == AppRole.artist
               ? [
                   const NavigationDestination(
@@ -516,6 +517,22 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               setState(() {
                 _itExpanded = expanded;
                 _itUserCollapsed = !expanded;
+              });
+            },
+            marketingExpanded: _marketingExpanded,
+            marketingUserCollapsed: _marketingUserCollapsed,
+            onMarketingExpandToggle: (expanded) {
+              setState(() {
+                _marketingExpanded = expanded;
+                _marketingUserCollapsed = !expanded;
+              });
+            },
+            contentExpanded: _contentExpanded,
+            contentUserCollapsed: _contentUserCollapsed,
+            onContentExpandToggle: (expanded) {
+              setState(() {
+                _contentExpanded = expanded;
+                _contentUserCollapsed = !expanded;
               });
             },
           ),

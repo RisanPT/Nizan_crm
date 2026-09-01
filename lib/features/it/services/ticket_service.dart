@@ -14,6 +14,21 @@ class TicketQuery {
   final bool mine;
   final String? assignee;
   const TicketQuery({this.status, this.type, this.priority, this.mine = false, this.assignee});
+
+  // Value equality is REQUIRED: this is a FutureProvider.family key. Without it,
+  // every widget rebuild creates a new (unequal) key → a fresh provider that is
+  // perpetually loading → the Help Desk list spins forever and never resolves.
+  @override
+  bool operator ==(Object other) =>
+      other is TicketQuery &&
+      other.status == status &&
+      other.type == type &&
+      other.priority == priority &&
+      other.mine == mine &&
+      other.assignee == assignee;
+
+  @override
+  int get hashCode => Object.hash(status, type, priority, mine, assignee);
 }
 
 /// Visibility-scoped ticket list (backend enforces "whole department + IT").

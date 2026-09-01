@@ -41,6 +41,8 @@ import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
+import '../../features/marketing/presentation/screens/content_calendar_screen.dart';
+import '../../features/marketing/presentation/screens/content_dashboard_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
 import '../../features/org/presentation/screens/departments_screen.dart';
@@ -90,6 +92,7 @@ import 'package:nizan_crm/features/reports/presentation/screens/company_reports_
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_board_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
+import 'package:nizan_crm/features/backup/presentation/screens/backup_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/ticket_detail_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_tickets_dashboard_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/depreciation_screen.dart';
@@ -237,8 +240,10 @@ bool isRouteAllowed(String path, Access access,
   }
   if (path.startsWith('/it/')) return access.canSeeIt;
   if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
+  if (path.startsWith('/backup')) return true; // screen self-scopes; backend enforces per-target access
   if (path.startsWith('/company-finance')) {
-    return access.canSeeCompanyFinance;
+    final sub = subKeyForPath(path);
+    return sub != null ? access.canSeeSub(sub) : access.canSeeCompanyFinance;
   }
   if (path.startsWith('/finance')) return access.canSeeFinance;
   // Artist "My Inventory" needs the inventoryAccess flag; the manager views
@@ -316,6 +321,7 @@ String landingRouteFor(Access access,
     '/accounts/admin-salaries', '/accounts/operations-salaries',
     '/accounts/attendance-payroll', '/accounts/sales-returns', '/accounts/hra',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
+    '/marketing/content/dashboard', '/marketing/content/calendar',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
@@ -549,6 +555,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Competitors';
           } else if (state.uri.path == '/marketing/scores') {
             title = 'Weekly Growth Score';
+          } else if (state.uri.path == '/marketing/content/dashboard') {
+            title = 'Content Dashboard';
+          } else if (state.uri.path == '/marketing/content/calendar') {
+            title = 'Content Calendar';
+          } else if (state.uri.path == '/backup') {
+            title = 'Backup Data';
           } else if (state.uri.path == '/finance') {
             title = 'Artist Finance';
           } else if (state.uri.path == '/works') {
@@ -573,7 +585,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Trial Packages';
           }
 
-          return MainLayout(title: title, child: child);
+          // Android back handling for the whole shell. Sidebar navigation uses
+          // context.go (which replaces the stack), so without this the system
+          // back button exits the app from any inner page (e.g. finance
+          // reports). Here: pop a genuinely-pushed route; otherwise return to
+          // the dashboard; only exit when already at the dashboard. A screen
+          // with its own PopScope (calendar/trials) still handles back first.
+          return PopScope(
+            canPop: state.uri.path == '/' && !context.canPop(),
+            onPopInvokedWithResult: (didPop, result) {
+              if (didPop) return;
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/');
+              }
+            },
+            child: MainLayout(title: title, child: child),
+          );
         },
         routes: [
           GoRoute(
@@ -799,6 +828,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/marketing/scores',
             builder: (context, state) => const GrowthScoresScreen(),
           ),
+          // ── Marketing → Content Planning ─────────────────────────────
+          GoRoute(
+            path: '/marketing/content/dashboard',
+            builder: (context, state) => const ContentDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/content/calendar',
+            builder: (context, state) => const ContentCalendarScreen(),
+          ),
           // ── Inventory ────────────────────────────────────────────────
           GoRoute(
             path: '/inventory',
@@ -911,6 +949,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/helpdesk/tickets/:id',
             builder: (context, state) =>
                 TicketDetailScreen(ticketId: state.pathParameters['id'] ?? ''),
+          ),
+          GoRoute(
+            path: '/backup',
+            builder: (context, state) => const BackupScreen(),
           ),
           GoRoute(
             path: '/company-finance',

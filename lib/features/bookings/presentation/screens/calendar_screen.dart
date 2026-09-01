@@ -1156,7 +1156,7 @@ class CalendarScreen extends HookConsumerWidget {
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(16),
                   side: BorderSide(color: crmColors.border),
                 ),
                 child: Column(
@@ -1216,10 +1216,21 @@ class CalendarScreen extends HookConsumerWidget {
                                     OutlinedButton(
                                       onPressed: goToToday,
                                       style: OutlinedButton.styleFrom(
+                                        foregroundColor: crmColors.primary,
+                                        backgroundColor: crmColors.primary
+                                            .withValues(alpha: 0.06),
+                                        side: BorderSide(
+                                            color: crmColors.primary
+                                                .withValues(alpha: 0.28)),
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 8,
+                                          horizontal: 14,
+                                          vertical: 9,
                                         ),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12)),
+                                        textStyle: const TextStyle(
+                                            fontWeight: FontWeight.w700),
                                       ),
                                       child: const Text('Today'),
                                     ),

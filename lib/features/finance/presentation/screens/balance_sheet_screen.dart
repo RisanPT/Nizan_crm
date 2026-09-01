@@ -178,7 +178,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
       q['to'] = DateTime(_asOf!.year, _asOf!.month, _asOf!.day).toIso8601String();
     }
     final qs = q.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
-    context.go('/company-finance/ledger?$qs');
+    context.push('/company-finance/ledger?$qs');
   }
 
   Widget _section(CrmTheme crm, String title, List<ReportLine> lines, double total, Color color) {

@@ -59,7 +59,7 @@ class _ReportsCenterScreenState extends ConsumerState<ReportsCenterScreen> {
 
   void _open(FinanceReport r) {
     ref.read(reportsMetaProvider.notifier).recordVisit(r.key);
-    context.go(r.route);
+    context.push(r.route);
   }
 
   @override

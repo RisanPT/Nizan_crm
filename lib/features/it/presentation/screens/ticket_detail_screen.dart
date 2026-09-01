@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -49,7 +51,8 @@ class TicketDetailScreen extends HookConsumerWidget {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
-        data: (t) => Column(children: [
+        data: (t) => SelectionArea(
+          child: Column(children: [
           Expanded(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -70,7 +73,7 @@ class TicketDetailScreen extends HookConsumerWidget {
             ),
           ),
           _composer(context, ref, crm, comment, sending),
-        ]),
+        ])),
       ),
     );
   }
@@ -83,10 +86,31 @@ class TicketDetailScreen extends HookConsumerWidget {
           border: Border.all(color: crm.border),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Icon(ticketTypeIcon(t.type), size: 18, color: ticketPriorityColor(t.priority)),
             const SizedBox(width: 8),
             Expanded(child: Text(t.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+            const SizedBox(width: 4),
+            // One-tap copy of the whole ticket (number, title, description).
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                final buf = StringBuffer();
+                if (t.ticketNumber.isNotEmpty) buf.writeln(t.ticketNumber);
+                buf.write(t.title);
+                if (t.description.isNotEmpty) buf.write('\n\n${t.description}');
+                Clipboard.setData(ClipboardData(text: buf.toString()));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Ticket copied'),
+                      duration: Duration(seconds: 1)),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4),
+                child: Icon(Icons.copy_rounded, size: 18, color: crm.textSecondary),
+              ),
+            ),
           ]),
           const SizedBox(height: 10),
           Wrap(spacing: 6, runSpacing: 6, children: [
@@ -317,15 +341,13 @@ class _TriagePanel extends HookConsumerWidget {
           ),
         ]),
         const SizedBox(height: 10),
-        DropdownButtonFormField<String?>(
-          initialValue: assigneeId.value,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'Assign to', isDense: true, prefixIcon: Icon(Icons.engineering_outlined)),
-          items: [
-            const DropdownMenuItem<String?>(value: null, child: Text('Unassigned')),
-            for (final e in employees) DropdownMenuItem<String?>(value: e.id, child: Text(e.name)),
-          ],
-          onChanged: (v) => assigneeId.value = v,
+        EmployeePickerField(
+          employees: employees,
+          selectedId: assigneeId.value,
+          selectedName: ticket.assignedToName,
+          label: 'Assign to',
+          icon: Icons.engineering_outlined,
+          onChanged: (e) => assigneeId.value = e?.id,
         ),
         if (status.value == 'resolved' || status.value == 'closed') ...[
           const SizedBox(height: 10),
@@ -427,12 +449,14 @@ class _TriagePanel extends HookConsumerWidget {
                 onChanged: (v) => setD(() => projectId = v),
               ),
               const SizedBox(height: 10),
-              DropdownButtonFormField<String>(
-                initialValue: assigneeId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Assign to *', prefixIcon: Icon(Icons.engineering_outlined)),
-                items: [for (final e in employees) DropdownMenuItem(value: e.id, child: Text(e.name))],
-                onChanged: (v) => setD(() => assigneeId = v),
+              EmployeePickerField(
+                employees: employees,
+                selectedId: assigneeId,
+                selectedName: ticket.assignedToName,
+                label: 'Assign to *',
+                icon: Icons.engineering_outlined,
+                allowUnassign: false,
+                onChanged: (e) => setD(() => assigneeId = e?.id),
               ),
             ]),
             actions: [

@@ -118,6 +118,33 @@ class AppTheme {
         textColor: _textPrimaryColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: _surfaceColor,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: Colors.black.withValues(alpha: 0.12),
+        elevation: 3,
+        height: 66,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        indicatorColor: _primaryColor.withValues(alpha: 0.14),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return TextStyle(
+            fontSize: 11.5,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? _primaryColor : _textSecondaryColor,
+          );
+        }),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(
+            size: 24,
+            color: selected ? _primaryColor : _textSecondaryColor,
+          );
+        }),
+      ),
     );
   }
 }

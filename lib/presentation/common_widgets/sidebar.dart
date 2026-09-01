@@ -38,6 +38,12 @@ class Sidebar extends ConsumerWidget {
   final bool itExpanded;
   final bool itUserCollapsed;
   final ValueChanged<bool> onItExpandToggle;
+  final bool marketingExpanded;
+  final bool marketingUserCollapsed;
+  final ValueChanged<bool> onMarketingExpandToggle;
+  final bool contentExpanded;
+  final bool contentUserCollapsed;
+  final ValueChanged<bool> onContentExpandToggle;
 
   const Sidebar({
     super.key,
@@ -68,6 +74,12 @@ class Sidebar extends ConsumerWidget {
     required this.itExpanded,
     required this.itUserCollapsed,
     required this.onItExpandToggle,
+    required this.marketingExpanded,
+    required this.marketingUserCollapsed,
+    required this.onMarketingExpandToggle,
+    required this.contentExpanded,
+    required this.contentUserCollapsed,
+    required this.onContentExpandToggle,
   });
 
   @override
@@ -99,6 +111,7 @@ class Sidebar extends ConsumerWidget {
         currentPath == '/reports/analyst';
     final isItRoute = currentPath.startsWith('/it/') || currentPath.startsWith('/helpdesk');
     final isMarketingRoute = currentPath.startsWith('/marketing');
+    final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
     final isCollapsed = isTablet && !isMobile;
@@ -118,8 +131,15 @@ class Sidebar extends ConsumerWidget {
         !isCollapsed && (hrExpanded || (isHrRoute && !hrUserCollapsed));
     final effectiveFinanceExpanded = !isCollapsed &&
         (financeExpanded || (isFinanceRoute && !financeUserCollapsed));
+    // Paired with the IT sidebar group below, which is currently commented out.
+    // Uncomment both together to re-enable the IT menu.
+    // ignore: unused_local_variable
     final effectiveItExpanded =
         !isCollapsed && (itExpanded || (isItRoute && !itUserCollapsed));
+    final effectiveMarketingExpanded = !isCollapsed &&
+        (marketingExpanded || (isMarketingRoute && !marketingUserCollapsed));
+    final effectiveContentExpanded = !isCollapsed &&
+        (contentExpanded || (isContentRoute && !contentUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
     // Resolve current role from session, honouring the active workspace so a
@@ -529,57 +549,58 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/company-reports'),
                       onTap: () => context.go('/company-reports'),
                     ),
+
                   // IT department hub — Projects & Tickets are IT-only; Help Desk
                   // is open to every department. Grouped under one "IT" parent.
-                  // _SidebarItem(
-                  //   icon: Icons.computer_outlined,
-                  //   title: 'IT',
-                  //   isCollapsed: isCollapsed,
-                  //   isSelected: isItRoute,
-                  //   trailing: isCollapsed
-                  //       ? null
-                  //       : Icon(
-                  //           effectiveItExpanded
-                  //               ? Icons.expand_less
-                  //               : Icons.expand_more,
-                  //           color: Colors.white.withValues(alpha: 0.7),
-                  //         ),
-                  //   onTap: () => onItExpandToggle(!itExpanded || itUserCollapsed),
-                  // ),
-                  // if (!isCollapsed && effectiveItExpanded) ...[
-                  //   if (access.canSeeIt)
-                  //     Padding(
-                  //       padding: const EdgeInsets.only(left: 14),
-                  //       child: _SidebarItem(
-                  //         icon: Icons.folder_special_outlined,
-                  //         title: 'Projects',
-                  //         isCollapsed: false,
-                  //         isSelected: currentPath.startsWith('/it/projects'),
-                  //         onTap: () => context.go('/it/projects'),
-                  //       ),
-                  //     ),
-                  //   if (access.canSeeIt)
-                  //     Padding(
-                  //       padding: const EdgeInsets.only(left: 14),
-                  //       child: _SidebarItem(
-                  //         icon: Icons.confirmation_number_outlined,
-                  //         title: 'Tickets',
-                  //         isCollapsed: false,
-                  //         isSelected: currentPath.startsWith('/it/tickets'),
-                  //         onTap: () => context.go('/it/tickets'),
-                  //       ),
-                  //     ),
-                  //   Padding(
-                  //     padding: const EdgeInsets.only(left: 14),
-                  //     child: _SidebarItem(
-                  //       icon: Icons.support_agent_outlined,
-                  //       title: 'Help Desk',
-                  //       isCollapsed: false,
-                  //       isSelected: currentPath.startsWith('/helpdesk'),
-                  //       onTap: () => context.go('/helpdesk'),
-                  //     ),
-                  //   ),
-                  // ],
+                  _SidebarItem(
+                    icon: Icons.computer_outlined,
+                    title: 'IT',
+                    isCollapsed: isCollapsed,
+                    isSelected: isItRoute,
+                    trailing: isCollapsed
+                        ? null
+                        : Icon(
+                            effectiveItExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                    onTap: () => onItExpandToggle(!itExpanded || itUserCollapsed),
+                  ),
+                  if (!isCollapsed && effectiveItExpanded) ...[
+                    if (access.canSeeIt)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.folder_special_outlined,
+                          title: 'Projects',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/it/projects'),
+                          onTap: () => context.go('/it/projects'),
+                        ),
+                      ),
+                    if (access.canSeeIt)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.confirmation_number_outlined,
+                          title: 'Tickets',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/it/tickets'),
+                          onTap: () => context.go('/it/tickets'),
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 14),
+                      child: _SidebarItem(
+                        icon: Icons.support_agent_outlined,
+                        title: 'Help Desk',
+                        isCollapsed: false,
+                        isSelected: currentPath.startsWith('/helpdesk'),
+                        onTap: () => context.go('/helpdesk'),
+                      ),
+                    ),
+                  ],
                   if (access.canSeeCompanyFinance || access.canSeeCEOReport) ...[
                     _SidebarItem(
                       icon: Icons.savings_outlined,
@@ -1017,9 +1038,18 @@ class Sidebar extends ConsumerWidget {
                       title: 'Marketing',
                       isCollapsed: isCollapsed,
                       isSelected: isMarketingRoute,
-                      onTap: () => context.go('/marketing/dashboard'),
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveMarketingExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () => onMarketingExpandToggle(
+                          !marketingExpanded || marketingUserCollapsed),
                     ),
-                    if (!isCollapsed) ...[
+                    if (!isCollapsed && effectiveMarketingExpanded) ...[
                       if (access.canSeeSub('marketing.dashboard'))
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
@@ -1053,6 +1083,47 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/marketing/scores'),
                           ),
                         ),
+                      // Content Planning — nested group (click to expand →
+                      // Dashboard + Calendar).
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.post_add_outlined,
+                          title: 'Content',
+                          isCollapsed: false,
+                          isSelected: isContentRoute,
+                          trailing: Icon(
+                            effectiveContentExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                          onTap: () => onContentExpandToggle(
+                              !contentExpanded || contentUserCollapsed),
+                        ),
+                      ),
+                      if (effectiveContentExpanded) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: _SidebarItem(
+                            icon: Icons.insights_outlined,
+                            title: 'Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/content/dashboard',
+                            onTap: () => context.go('/marketing/content/dashboard'),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: _SidebarItem(
+                            icon: Icons.event_note_outlined,
+                            title: 'Calendar',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/content/calendar',
+                            onTap: () => context.go('/marketing/content/calendar'),
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                   if (access.canSeeFleet) ...[
@@ -1219,6 +1290,28 @@ class Sidebar extends ConsumerWidget {
             padding: 16.p,
             child: Column(
               children: [
+                // Report Bug — available to EVERY role/department (no access
+                // gate). Opens the Help Desk to raise a bug / feature request
+                // and track its status.
+                _SidebarItem(
+                  icon: Icons.bug_report_outlined,
+                  title: 'Report Bug',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/helpdesk'),
+                  onTap: () => context.go('/helpdesk'),
+                ),
+                8.h,
+                // Backup Data — each department exports its own data as JSON;
+                // IT/admin also get a full-database backup. The screen only
+                // shows what the signed-in user is allowed to export.
+                _SidebarItem(
+                  icon: Icons.cloud_download_outlined,
+                  title: 'Backup Data',
+                  isCollapsed: isCollapsed,
+                  isSelected: currentPath.startsWith('/backup'),
+                  onTap: () => context.go('/backup'),
+                ),
+                8.h,
                 _SidebarItem(
                   icon: Icons.account_circle_outlined,
                   title: 'My Profile',

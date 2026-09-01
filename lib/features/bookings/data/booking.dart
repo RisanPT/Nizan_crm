@@ -511,6 +511,9 @@ class Booking {
   final double discountValue;
   final int duplicateCount;
   final String? leadId;
+  // The salesperson credited with this booking (User id). Drives the
+  // salesperson filter & reports in Sales & Invoices.
+  final String? salesPersonId;
   final List<BookingAssignment> assignedStaff;
   final List<BookingAddon> addons;
   final List<BookingItem> bookingItems;
@@ -530,6 +533,8 @@ class Booking {
   final List<OutfitLook> outfitLooks;
   /// Denormalized name of the user who created this booking (from the backend).
   final String createdByName;
+  /// The User id who created/entered this booking. Drives the "Added By" filter.
+  final String createdBy;
 
   const Booking({
     required this.id,
@@ -572,6 +577,7 @@ class Booking {
     required this.totalPrice,
     required this.advanceAmount,
     this.leadId,
+    this.salesPersonId,
     this.discountAmount = 0,
     this.discountType = 'inr',
     this.discountValue = 0,
@@ -588,6 +594,7 @@ class Booking {
     this.hsnCode = '998361',
     this.outfitLooks = const [],
     this.createdByName = '',
+    this.createdBy = '',
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -892,6 +899,9 @@ class Booking {
       collectedAmount: (json['collectedAmount'] as num?)?.toDouble() ?? 0.0,
       duplicateCount: (json['duplicateCount'] as num?)?.toInt() ?? 0,
       leadId: json['leadId'] as String?,
+      salesPersonId: json['salesPersonId'] is Map
+          ? (json['salesPersonId']['_id'] as String? ?? '')
+          : json['salesPersonId'] as String?,
       assignedStaff: ((json['assignedStaff'] as List?) ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(BookingAssignment.fromJson)
@@ -914,6 +924,9 @@ class Booking {
       hsnCode: json['hsnCode'] as String? ?? '998361',
       outfitLooks: _parseOutfitLooks(json),
       createdByName: json['createdByName'] as String? ?? '',
+      createdBy: json['createdBy'] is Map
+          ? (json['createdBy']['_id'] as String? ?? '')
+          : (json['createdBy'] as String? ?? ''),
     );
   }
 
@@ -960,6 +973,7 @@ class Booking {
       'discountValue': discountValue,
       'duplicateCount': duplicateCount,
       if (leadId != null) 'leadId': leadId,
+      if (salesPersonId != null) 'salesPersonId': salesPersonId,
       'assignedStaff': assignedStaff.map((item) => item.toJson()).toList(),
       'addons': addons.map((item) => item.toJson()).toList(),
       'bookingItems': bookingItems.map((item) => item.toJson()).toList(),
@@ -1023,6 +1037,7 @@ class Booking {
     double? discountValue,
     int? duplicateCount,
     String? leadId,
+    String? salesPersonId,
     List<BookingAssignment>? assignedStaff,
     List<BookingAddon>? addons,
     List<BookingItem>? bookingItems,
@@ -1082,6 +1097,7 @@ class Booking {
       discountValue: discountValue ?? this.discountValue,
       duplicateCount: duplicateCount ?? this.duplicateCount,
       leadId: leadId ?? this.leadId,
+      salesPersonId: salesPersonId ?? this.salesPersonId,
       assignedStaff: assignedStaff ?? this.assignedStaff,
       addons: addons ?? this.addons,
       bookingItems: bookingItems ?? this.bookingItems,

@@ -347,7 +347,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     if (_from != null) q['from'] = _iso(_from);
     if (_to != null) q['to'] = _iso(_to);
     final qs = q.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
-    context.go('/company-finance/ledger?$qs');
+    context.push('/company-finance/ledger?$qs');
   }
 
   Widget _section(CrmTheme crm, String title, List<ReportLine> lines, double total, Color color) {

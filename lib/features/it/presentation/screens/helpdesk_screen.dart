@@ -154,7 +154,7 @@ class HelpDeskScreen extends HookConsumerWidget {
                 Expanded(
                   child: Text(t.title,
                       style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                      maxLines: 2, overflow: TextOverflow.ellipsis),
                 ),
                 _chip(ticketStatusLabel(t.status), ticketStatusColor(t.status)),
               ]),

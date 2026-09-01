@@ -15,6 +15,7 @@ import '../../../../core/utils/dashboard_report_service.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../services/package_service.dart';
+import '../../../../core/providers/auth_provider.dart';
 import '../../../../presentation/widgets/export_sales_report_dialog.dart';
 import '../../../../core/utils/booking_print_service.dart';
 import '../../../../services/zone_service.dart';
@@ -65,6 +66,15 @@ class SalesBookingsScreen extends HookConsumerWidget {
     // Explicit date-range search (filters by the selected basis — event/booking).
     final dateFrom = useState<DateTime?>(null);
     final dateTo = useState<DateTime?>(null);
+    // "Added By" filter — who ENTERED the booking (Booking.createdBy). '' = all.
+    final selectedCreatorId = useState<String>('');
+    final session = ref.watch(authSessionProvider);
+    // Managers / admins / CRM / department heads may slice by who added a booking.
+    final canFilterByCreator = session != null &&
+        (session.role == 'admin' ||
+            session.role == 'crm' ||
+            session.role.endsWith('manager') ||
+            session.isDepartmentHead);
 
     final asyncZones = ref.watch(zonesProvider);
     final asyncStates = ref.watch(statesProvider);
@@ -108,12 +118,27 @@ class SalesBookingsScreen extends HookConsumerWidget {
       districtId: selectedDistrictId.value.isEmpty ? null : selectedDistrictId.value,
       from: _ymd(dateFrom.value),
       to: _ymd(dateTo.value),
+      createdBy: selectedCreatorId.value.isEmpty ? null : selectedCreatorId.value,
     );
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
     );
     final asyncAllBookings = ref.watch(bookingProvider);
     final allBookings = asyncAllBookings.value ?? const <Booking>[];
+
+    // The FULL set of people who actually entered bookings — derived from the
+    // data itself, so it lists every enterer regardless of role (sales, CRM,
+    // sales_manager, admin, …). Older bookings with no recorded creator simply
+    // don't appear here.
+    final creatorOptions = <String, String>{};
+    for (final b in allBookings) {
+      if (b.createdBy.isNotEmpty) {
+        creatorOptions[b.createdBy] =
+            b.createdByName.trim().isEmpty ? 'Unknown' : b.createdByName.trim();
+      }
+    }
+    final creators = creatorOptions.entries.toList()
+      ..sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
     final allTrials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
 
     final now = DateTime.now();
@@ -159,8 +184,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
       return true;
     }
 
+    bool matchesCreator(Booking b) =>
+        selectedCreatorId.value.isEmpty || b.createdBy == selectedCreatorId.value;
+
     final geoFilteredAllBookings = allBookings
-        .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b))
+        .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b) && matchesCreator(b))
         .toList();
 
     int countPackages(Iterable<Booking> bookings) {
@@ -318,6 +346,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
         if (selectedDistrictId.value.isNotEmpty) {
           final district = allDistricts.cast<District?>().firstWhere((d) => d?.id == selectedDistrictId.value, orElse: () => null);
           if (district != null) parts.add('District: ${district.name}');
+        }
+        if (selectedCreatorId.value.isNotEmpty) {
+          final name = creatorOptions[selectedCreatorId.value];
+          if (name != null) parts.add('Added By: $name');
         }
         return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
       })();
@@ -946,6 +978,33 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       underline: const SizedBox(),
                       icon: const Icon(Icons.keyboard_arrow_down),
                     ),
+                    // ── Added By (who entered the booking) Dropdown ──
+                    if (canFilterByCreator) ...[
+                      if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
+                      DropdownButton<String>(
+                        value: selectedCreatorId.value.isEmpty ||
+                                !creatorOptions.containsKey(selectedCreatorId.value)
+                            ? 'all'
+                            : selectedCreatorId.value,
+                        onChanged: (val) {
+                          selectedCreatorId.value = (val == null || val == 'all') ? '' : val;
+                          pageState.value = 1;
+                        },
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('Added By: All', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                          ...creators.map((e) => DropdownMenuItem(
+                                value: e.key,
+                                child: Text(e.value, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              )),
+                        ],
+                        style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                        underline: const SizedBox(),
+                        icon: const Icon(Icons.person_pin_outlined, size: 18),
+                      ),
+                    ],
                     if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
                     SegmentedButton<bool>(
                       segments: const [

@@ -180,15 +180,23 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                 'Review new bookings, accept or reject individually, and bulk confirm orders from one place.',
                 style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
               ),
-              12.h,
+              14.h,
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   onPressed: () => showAddBookingModeChooser(context),
-                  icon: const Icon(Icons.add, size: 18),
+                  icon: const Icon(Icons.add_rounded, size: 20),
                   label: const Text('New Booking'),
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    foregroundColor: crmColors.primary,
+                    backgroundColor: crmColors.primary.withValues(alpha: 0.06),
+                    side: BorderSide(
+                        color: crmColors.primary.withValues(alpha: 0.30)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15),
                   ),
                 ),
               ),
@@ -267,20 +275,36 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                       color: crmColors.surface,
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(color: crmColors.border),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          Icons.mark_email_read_outlined,
-                          size: 48,
-                          color: crmColors.textSecondary,
+                        Container(
+                          width: 72,
+                          height: 72,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: crmColors.primary.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.mark_email_read_rounded,
+                            size: 34,
+                            color: crmColors.primary,
+                          ),
                         ),
-                        14.h,
+                        18.h,
                         Text(
-                          'No pending booking requests.',
+                          'No pending booking requests',
                           style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                         8.h,
                         Text(

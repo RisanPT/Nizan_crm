@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/core/services/followup_alarm_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
@@ -17,7 +18,6 @@ import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:nizan_crm/services/notification_service.dart';
 
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 
@@ -189,6 +189,16 @@ String _fmtDateTime(DateTime d) {
   return '${d.day.toString().padLeft(2, '0')}-${months[d.month - 1]}-${d.year}  $hour:$min $amPm';
 }
 
+// Reads the "[Reminder set for N minutes prior]" tag that the Record-Outcome
+// dialog writes into a lead's remarks, so reconcile() can re-arm the alarm with
+// the same offset (0 if none). Uses the LAST tag if several ever accumulate.
+int _reminderMinutesFromRemarks(String remarks) {
+  final matches =
+      RegExp(r'\[Reminder set for (\d+) minutes prior\]').allMatches(remarks);
+  if (matches.isEmpty) return 0;
+  return int.tryParse(matches.last.group(1) ?? '') ?? 0;
+}
+
 // ─────────────────────────────────────────────────────────
 //  Status color helper (top-level so shared everywhere)
 // ─────────────────────────────────────────────────────────
@@ -262,7 +272,15 @@ class SalesLeadsScreen extends HookConsumerWidget {
     });
 
     final session = ref.watch(authSessionProvider);
-    final isAdminOrManagerOrCRM = session != null && (session.role == 'admin' || session.role == 'manager' || session.role == 'crm');
+    // Who may filter leads by salesperson: admins, CRM, and ANY manager —
+    // including a Sales Manager (role 'sales_manager') or regional manager, plus
+    // a sales department head. Salespeople (role 'sales') are scoped to their own
+    // leads server-side, so they don't get this filter.
+    final canFilterBySalesperson = session != null &&
+        (session.role == 'admin' ||
+            session.role == 'crm' ||
+            session.role.endsWith('manager') || // manager, sales_manager, regional_manager
+            session.isDepartmentHead);
     final asyncUsers = ref.watch(crmUsersProvider);
 
     // Debounce search input
@@ -270,6 +288,40 @@ class SalesLeadsScreen extends HookConsumerWidget {
       currentPage.value = 1; // Reset to page 1 on search change
       return null;
     }, [searchQuery.value]);
+
+    // Arm on-device follow-up alarms once when the leads screen opens: request
+    // the Android permissions, then (re)schedule a full-screen alarm for every
+    // upcoming Follow-up lead. Reconcile clears stale ones first. Android-only;
+    // a no-op elsewhere.
+    useEffect(() {
+      // Follow-up alarms are a personal salesperson tool. Only the 'sales' role
+      // has its leads scoped to itself by the backend; for a manager/admin the
+      // list is EVERYONE's leads, so arming an alarm per lead would be wrong.
+      if (session?.role != 'sales') return null;
+      Future.microtask(() async {
+        await FollowUpAlarmService.instance.requestPermissions();
+        try {
+          final res = await ref
+              .read(leadServiceProvider)
+              .getLeads(LeadFilter(page: 1, limit: 2000, status: 'Follow-up'));
+          final reminders = <FollowUpReminder>[
+            for (final l in res.items)
+              if (l.followUpDate != null)
+                FollowUpReminder(
+                  leadId: l.id,
+                  name: l.name,
+                  phone: l.phone,
+                  followUpAt: l.followUpDate!,
+                  reminderMinutes: _reminderMinutesFromRemarks(l.remarks),
+                ),
+          ];
+          await FollowUpAlarmService.instance.reconcile(reminders);
+        } catch (_) {
+          // best-effort — alarms just won't be armed this session
+        }
+      });
+      return null;
+    }, const []);
 
     final filter = LeadFilter(
       page: currentPage.value,
@@ -477,7 +529,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   underline: const SizedBox(),
                                   icon: const Icon(Icons.keyboard_arrow_down),
                                 ),
-                                if (isAdminOrManagerOrCRM) ...[
+                                if (canFilterBySalesperson) ...[
                                   const Divider(),
                                   DropdownButton<String>(
                                     value: selectedSalesperson.value,
@@ -610,7 +662,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   underline: const SizedBox(),
                                   icon: const Icon(Icons.keyboard_arrow_down),
                                 ),
-                                if (isAdminOrManagerOrCRM) ...[
+                                if (canFilterBySalesperson) ...[
                                   Container(width: 1, height: 24, color: crm.border, margin: const EdgeInsets.symmetric(horizontal: 16)),
                                   DropdownButton<String>(
                                     value: selectedSalesperson.value,
@@ -1055,7 +1107,11 @@ class _LeadForm extends HookConsumerWidget {
           'alternateNumber': normalizePhone(alternateCtrl.text),
           'enquiryDate': enquiryDate.value.toIso8601String(),
           'bookedDate': bookedDate.value?.toIso8601String(),
-          'followUpDate': followUpDate.value?.toIso8601String(),
+          // Send the follow-up as a UTC instant (…Z). The picker gives a LOCAL
+          // DateTime; plain toIso8601String() drops the zone, so the UTC server
+          // misreads it as UTC and every later display is shifted by the local
+          // offset (e.g. IST +5:30). toUtc() makes the round-trip correct.
+          'followUpDate': followUpDate.value?.toUtc().toIso8601String(),
           // Only send an editable status. System states (Lost / Pending /
           // Converted) are managed by their own flows and preserved server-side.
           if (kLeadStatuses.contains(status.value)) 'status': status.value,
@@ -1092,20 +1148,20 @@ class _LeadForm extends HookConsumerWidget {
           assignedTo.value = null;
         }
 
-        // Schedule or cancel notification
-        if (leadIdStr.isNotEmpty) {
-          final notifId = leadIdStr.hashCode;
+        // Schedule (or cancel) the full-screen follow-up ALARM for this lead.
+        // Keyed by the lead id so reconcile()/cancelForLead find the same alarm.
+        // Only the salesperson who owns the lead should get its alarm.
+        if (leadIdStr.isNotEmpty && session?.role == 'sales') {
           if (payload['followUpDate'] != null) {
-            final dt = DateTime.parse(payload['followUpDate'] as String);
-            // import required: import 'package:nizan_crm/services/notification_service.dart';
-            await NotificationService().scheduleFollowUpNotification(
-              id: notifId,
-              title: 'Follow-up Due: ${payload['name']}',
-              body: 'Follow-up with ${payload['name']} (${payload['phone']})',
-              scheduledDate: dt,
-            );
+            final dt = DateTime.parse(payload['followUpDate'] as String).toLocal();
+            await FollowUpAlarmService.instance.scheduleForLead(FollowUpReminder(
+              leadId: leadIdStr,
+              name: (payload['name'] ?? '').toString(),
+              phone: (payload['phone'] ?? '').toString(),
+              followUpAt: dt,
+            ));
           } else {
-            await NotificationService().cancelNotification(notifId);
+            await FollowUpAlarmService.instance.cancelForLead(leadIdStr);
           }
         }
 
@@ -2694,8 +2750,12 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
       try {
         final dio = ref.read(dioProvider);
 
-        // Append reminder info to remarks if any reminder selected
-        var finalRemarks = remarksCtrl.text;
+        // Persist the reminder offset in remarks as a machine-readable tag so
+        // reconcile() can restore it on later reloads. Strip any previous tag
+        // first so repeated saves don't accumulate duplicates.
+        var finalRemarks = remarksCtrl.text
+            .replaceAll(RegExp(r'\n?\[Reminder set for \d+ minutes prior\]'), '')
+            .trimRight();
         if (status.value == 'Follow-up' && reminderMinutes.value > 0) {
           finalRemarks += '\n[Reminder set for ${reminderMinutes.value} minutes prior]';
         }
@@ -2710,21 +2770,45 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
           'alternateNumber': lead.alternateNumber,
           'enquiryDate': lead.enquiryDate.toIso8601String(),
           'bookedDate': lead.bookedDate?.toIso8601String(),
-          'followUpDate': followUpDate.value?.toIso8601String(),
+          // Send the follow-up as a UTC instant (…Z). The picker gives a LOCAL
+          // DateTime; plain toIso8601String() drops the zone, so the UTC server
+          // misreads it as UTC and every later display is shifted by the local
+          // offset (e.g. IST +5:30). toUtc() makes the round-trip correct.
+          'followUpDate': followUpDate.value?.toUtc().toIso8601String(),
           'status': status.value,
           'reason': reasonCtrl.text,
           'remarks': finalRemarks,
         };
 
         await dio.put('/leads/${lead.id}', data: payload);
+
+        // Arm (or clear) the on-device follow-up alarm immediately, so it's in
+        // sync right away — not only after the next leads-screen reload. Uses
+        // the LOCAL picker value (not the UTC-serialised one). Salesperson only.
+        if (session?.role == 'sales') {
+          if (status.value == 'Follow-up' && followUpDate.value != null) {
+            await FollowUpAlarmService.instance.scheduleForLead(FollowUpReminder(
+              leadId: lead.id,
+              name: lead.name,
+              phone: lead.phone,
+              followUpAt: followUpDate.value!,
+              reminderMinutes: reminderMinutes.value,
+            ));
+          } else {
+            await FollowUpAlarmService.instance.cancelForLead(lead.id);
+          }
+        }
+
         onSaved();
 
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(reminderMinutes.value > 0
-                ? 'Outcome updated and reminder scheduled!'
+              content: Text(status.value == 'Follow-up' && followUpDate.value != null
+                ? (reminderMinutes.value > 0
+                    ? 'Outcome saved — alarm set ${reminderMinutes.value} min before the follow-up.'
+                    : 'Outcome saved — alarm set for the follow-up time.')
                 : 'Outcome updated successfully!'),
               backgroundColor: Colors.green[700],
             ),
@@ -3082,30 +3166,32 @@ class _LeadStatsRow extends StatelessWidget {
         {String? filterValue}) {
       final selected = filterValue != null && filterValue == activeStatus;
       final card = Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: selected ? color.withValues(alpha: 0.07) : crm.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: selected ? color : crm.border,
               width: selected ? 1.6 : 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: 21),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -3113,20 +3199,27 @@ class _LeadStatsRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
-                    style: TextStyle(fontSize: 12, color: crm.textSecondary, fontWeight: FontWeight.w500),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
                     count.toString(),
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: crm.textPrimary,
+                        height: 1.0),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w500),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
             if (selected)
-              Icon(Icons.close, size: 15, color: color),
+              Icon(Icons.close_rounded, size: 16, color: color),
           ],
         ),
       );
@@ -3147,11 +3240,11 @@ class _LeadStatsRow extends StatelessWidget {
             children: [
               Expanded(
                   child: buildStatCard('New Leads', newCount,
-                      Icons.star_border, Colors.blue,
+                      Icons.auto_awesome_rounded, Colors.blue,
                       filterValue: 'New')),
               const SizedBox(width: 10),
               Expanded(
-                  child: buildStatCard('Follow-up', followUpCount, Icons.sync,
+                  child: buildStatCard('Follow-up', followUpCount, Icons.autorenew_rounded,
                       Colors.orange,
                       filterValue: 'Follow-up')),
             ],
@@ -3161,12 +3254,12 @@ class _LeadStatsRow extends StatelessWidget {
             children: [
               Expanded(
                   child: buildStatCard('Closed', closedCount,
-                      Icons.check_circle_outline, Colors.green,
+                      Icons.verified_rounded, Colors.green,
                       filterValue: 'Converted')),
               const SizedBox(width: 10),
               Expanded(
                   child: buildStatCard('Missed', missedCount,
-                      Icons.warning_amber_rounded, Colors.red)),
+                      Icons.report_rounded, Colors.red)),
             ],
           ),
         ],
@@ -3182,22 +3275,22 @@ class _LeadStatsRow extends StatelessWidget {
             SizedBox(
                 width: itemWidth,
                 child: buildStatCard('New Leads', newCount,
-                    Icons.star_border, Colors.blue,
+                    Icons.auto_awesome_rounded, Colors.blue,
                     filterValue: 'New')),
             SizedBox(
                 width: itemWidth,
                 child: buildStatCard(
-                    'Follow-up', followUpCount, Icons.sync, Colors.orange,
+                    'Follow-up', followUpCount, Icons.autorenew_rounded, Colors.orange,
                     filterValue: 'Follow-up')),
             SizedBox(
                 width: itemWidth,
                 child: buildStatCard('Closed Leads', closedCount,
-                    Icons.check_circle_outline, Colors.green,
+                    Icons.verified_rounded, Colors.green,
                     filterValue: 'Converted')),
             SizedBox(
                 width: itemWidth,
                 child: buildStatCard('Missed Leads', missedCount,
-                    Icons.warning_amber_rounded, Colors.red)),
+                    Icons.report_rounded, Colors.red)),
           ],
         );
       },
@@ -3219,13 +3312,13 @@ class _FollowUpStatsRow extends StatelessWidget {
 
     final cards = <Widget>[
       _miniStat(crm, "Today's Follow-ups", stats['followUpsToday'] ?? 0,
-          Icons.today_outlined, const Color(0xFFF59E0B)),
+          Icons.event_available_rounded, const Color(0xFFF59E0B)),
       _miniStat(crm, 'Pending', stats['followUpsPending'] ?? 0,
-          Icons.hourglass_bottom_outlined, const Color(0xFF3B82F6)),
+          Icons.hourglass_top_rounded, const Color(0xFF3B82F6)),
       _miniStat(crm, 'Completed', stats['followUpsCompleted'] ?? 0,
-          Icons.task_alt_outlined, const Color(0xFF16A34A)),
+          Icons.task_alt_rounded, const Color(0xFF16A34A)),
       _miniStat(crm, 'Overdue', stats['followUpsOverdue'] ?? 0,
-          Icons.error_outline, const Color(0xFFDC2626)),
+          Icons.notification_important_rounded, const Color(0xFFDC2626)),
     ];
 
     if (isMobile) {
@@ -3263,16 +3356,32 @@ class _FollowUpStatsRow extends StatelessWidget {
   Widget _miniStat(
       CrmTheme crm, String title, int count, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: crm.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: crm.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3280,8 +3389,12 @@ class _FollowUpStatsRow extends StatelessWidget {
                 Text(
                   count.toString(),
                   style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.bold, color: color),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary,
+                      height: 1.0),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   title,
                   style: TextStyle(fontSize: 10.5, color: crm.textSecondary),

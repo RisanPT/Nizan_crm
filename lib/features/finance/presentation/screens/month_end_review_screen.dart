@@ -211,7 +211,7 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    onPressed: () => context.go(detailRoute),
+                    onPressed: () => context.push(detailRoute),
                     icon: const Icon(Icons.arrow_forward, size: 16),
                     label: Text(detailLabel ?? 'View details'),
                     style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
@@ -459,7 +459,7 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => context.go('/company-finance/planning'),
+        onTap: () => context.push('/company-finance/planning'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(children: [
