@@ -80,6 +80,12 @@ class AddBookingScreen extends HookConsumerWidget {
     // persons. The backend re-sums the grand total as Σ packages + Σ add-ons,
     // so add-ons are extra on top of the package base, not a substitute.
     final addons = useState<List<BookingAddon>>([]);
+    // Discount entered directly on the booking form. `discountType` is 'inr'
+    // (a flat amount) or 'percent' (a % of the total). `discountValue` is the
+    // raw number the user typed; the resolved rupee amount is computed below.
+    final discountType = useState<String>('inr');
+    final discountCtrl = useTextEditingController();
+    final discountValue = useState<double>(0);
     final totalPackageCount = bookingCart.value.fold<int>(
       0,
       (sum, item) => sum + item.quantity,
@@ -194,6 +200,16 @@ class AddBookingScreen extends HookConsumerWidget {
         0,
         (sum, item) => sum + item.advanceAmount,
       );
+    }
+
+    // Resolved discount in rupees (a flat amount, or a % of the total), never
+    // more than the total itself.
+    double computedDiscount() {
+      final raw = discountValue.value;
+      final amt = discountType.value == 'percent'
+          ? totalPrice.value * raw / 100
+          : raw;
+      return amt.clamp(0.0, totalPrice.value).toDouble();
     }
 
     // Add-on editor — supports zero, one, or many add-ons on a single booking.
@@ -729,6 +745,8 @@ class AddBookingScreen extends HookConsumerWidget {
           serviceStart: sStart,
           serviceEnd: sEnd,
           totalPrice: totalPrice.value,
+          discountAmount: computedDiscount(),
+          discountType: discountType.value,
           advanceAmount: advanceAmount.value,
           leadId: qParams['leadId'],
           bookingItems: bookingItems,
@@ -1901,6 +1919,50 @@ class AddBookingScreen extends HookConsumerWidget {
                               // row carries its own add-ons below.
                               if (isSingleMode) addonSection(),
                               24.h,
+                              // ── Discount (applied to the balance) ────────────
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 200,
+                                    child: TextField(
+                                      controller: discountCtrl,
+                                      keyboardType:
+                                          const TextInputType.numberWithOptions(
+                                              decimal: true),
+                                      onChanged: (v) => discountValue.value =
+                                          double.tryParse(v.trim()) ?? 0,
+                                      decoration: _inputDeco(
+                                        discountType.value == 'percent'
+                                            ? 'Discount (%)'
+                                            : 'Discount (₹)',
+                                        crmColors,
+                                      ),
+                                    ),
+                                  ),
+                                  12.w,
+                                  ToggleButtons(
+                                    isSelected: [
+                                      discountType.value == 'inr',
+                                      discountType.value == 'percent',
+                                    ],
+                                    onPressed: (i) => discountType.value =
+                                        i == 0 ? 'inr' : 'percent',
+                                    borderRadius: BorderRadius.circular(8),
+                                    constraints: const BoxConstraints(
+                                        minHeight: 44, minWidth: 48),
+                                    children: const [Text('₹'), Text('%')],
+                                  ),
+                                  16.w,
+                                  if (computedDiscount() > 0)
+                                    Text(
+                                      '− ₹${computedDiscount().toStringAsFixed(0)} discount',
+                                      style: TextStyle(
+                                          color: crmColors.accent,
+                                          fontWeight: FontWeight.w700),
+                                    ),
+                                ],
+                              ),
+                              16.h,
                               // ── Totals + Submit ──────────────────────────────
                               Row(
                                 children: [
@@ -1928,7 +1990,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                     child: _summaryBox(
                                       label: 'BALANCE DUE',
                                       value:
-                                          '₹ ${(totalPrice.value - advanceAmount.value).clamp(0, double.infinity).toStringAsFixed(0)}',
+                                          '₹ ${(totalPrice.value - computedDiscount() - advanceAmount.value).clamp(0, double.infinity).toStringAsFixed(0)}',
                                       border: crmColors.border,
                                       valueColor: crmColors.textPrimary,
                                     ),

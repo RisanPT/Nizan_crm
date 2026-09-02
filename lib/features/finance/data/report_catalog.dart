@@ -150,6 +150,24 @@ const kFinanceReports = <FinanceReport>[
     icon: Icons.balance_outlined,
   ),
   FinanceReport(
+    key: 'inventory_valuation',
+    name: 'Inventory Valuation',
+    category: 'Business Overview',
+    description:
+        'Current stock value (quantity × unit price), with low / out-of-stock counts.',
+    route: '/company-finance/inventory-valuation',
+    icon: Icons.inventory_2_outlined,
+  ),
+  FinanceReport(
+    key: 'cash_flow',
+    name: 'Cash Flow Statement',
+    category: 'Business Overview',
+    description:
+        'Cash in (collections, advances, trials) vs cash out (expenses, purchases) and the net movement.',
+    route: '/company-finance/cash-flow',
+    icon: Icons.swap_vert_circle_outlined,
+  ),
+  FinanceReport(
     key: 'sales_customer',
     name: 'Sales by Customer',
     category: 'Sales',

@@ -101,6 +101,8 @@ import 'package:nizan_crm/features/finance/presentation/screens/journal_voucher_
 import 'package:nizan_crm/features/finance/presentation/screens/trial_balance_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/ledger_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/profit_loss_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/inventory_valuation_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/cash_flow_statement_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/balance_sheet_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/aging_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_reconciliation_screen.dart';
@@ -178,6 +180,11 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/company-finance/chart')) return 'company_finance.chart';
   if (path.startsWith('/company-finance/journal')) return 'company_finance.journal';
   if (path.startsWith('/company-finance/trial-balance')) return 'company_finance.trial_balance';
+  // Inventory Valuation is a Business Overview report — reuse P&L access so it's
+  // visible to the same finance audience without a new permission key.
+  if (path.startsWith('/company-finance/inventory-valuation')) return 'company_finance.pnl';
+  // Cash Flow is a Business Overview report — reuse P&L access.
+  if (path.startsWith('/company-finance/cash-flow')) return 'company_finance.pnl';
   if (path.startsWith('/company-finance/ledger')) return 'company_finance.ledger';
   if (path.startsWith('/company-finance/profit-loss')) return 'company_finance.pnl';
   if (path.startsWith('/company-finance/balance-sheet')) return 'company_finance.balance_sheet';
@@ -469,6 +476,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Journal';
           } else if (state.uri.path == '/company-finance/trial-balance') {
             title = 'Trial Balance';
+          } else if (state.uri.path == '/company-finance/inventory-valuation') {
+            title = 'Inventory Valuation';
+          } else if (state.uri.path == '/company-finance/cash-flow') {
+            title = 'Cash Flow Statement';
           } else if (state.uri.path == '/company-finance/ledger') {
             title = 'General Ledger';
           } else if (state.uri.path == '/company-finance/profit-loss') {
@@ -1041,6 +1052,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/profit-loss',
             builder: (context, state) => const ProfitLossScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/inventory-valuation',
+            builder: (context, state) => const InventoryValuationScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/cash-flow',
+            builder: (context, state) => const CashFlowStatementScreen(),
           ),
           GoRoute(
             path: '/company-finance/balance-sheet',
