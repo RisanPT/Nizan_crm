@@ -1396,6 +1396,370 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
+    /// Edits an existing collection. An artist may only correct their own entry
+    /// while it is still pending — the backend enforces the same rule.
+    Future<void> editCollectionDialog({required ArtistCollection existing}) async {
+      final amountCtrl =
+          TextEditingController(text: existing.amount.toStringAsFixed(0));
+      final notesCtrl = TextEditingController(text: existing.notes);
+      var selPayMode = _paymentModes
+              .any((m) => m.$1 == existing.paymentMode)
+          ? existing.paymentMode
+          : 'cash';
+      var selDate = existing.date;
+      XFile? attachmentFile;
+      bool isUploading = false;
+      final formKey = GlobalKey<FormState>();
+
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setState) {
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: theme.scaffoldBackgroundColor,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: formKey,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                          ),
+                          24.h,
+                          // ── Header ─────────────────────────────────────────
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: crm.primary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  size: 24,
+                                  color: crm.primary,
+                                ),
+                              ),
+                              16.w,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Edit Collection',
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(fontWeight: FontWeight.w900),
+                                    ),
+                                    Text(
+                                      existing.booking?.customerName ??
+                                          existing.trial?.clientName ??
+                                          'Unknown Client',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: crm.textSecondary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          20.h,
+                          // ── Amount ─────────────────────────────────────────
+                          TextFormField(
+                            controller: amountCtrl,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.bold),
+                            decoration: InputDecoration(
+                              labelText: 'Amount Collected (₹) *',
+                              prefixIcon:
+                                  const Icon(Icons.currency_rupee, size: 20),
+                              filled: true,
+                              fillColor: crm.success.withValues(alpha: 0.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                    color: crm.success.withValues(alpha: 0.3)),
+                              ),
+                            ),
+                            validator: (v) =>
+                                (v == null || v.trim().isEmpty)
+                                    ? 'Enter amount'
+                                    : null,
+                          ),
+                          16.h,
+                          // ── Payment Mode ───────────────────────────────────
+                          DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Payment Mode',
+                              prefixIcon:
+                                  const Icon(Icons.payments_outlined),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                            // Filter out 'split' — split payments are recorded
+                            // as two separate entries and cannot be re-combined.
+                            value: selPayMode == 'split' ? 'cash' : selPayMode,
+                            items: _paymentModes
+                                .where((m) => m.$1 != 'split')
+                                .map<DropdownMenuItem<String>>((m) =>
+                                    DropdownMenuItem<String>(
+                                        value: m.$1, child: Text(m.$2)))
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => selPayMode = v ?? 'cash'),
+                          ),
+                          16.h,
+                          // ── Date ───────────────────────────────────────────
+                          InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: ctx,
+                                initialDate: selDate,
+                                firstDate: DateTime(2020),
+                                lastDate: DateTime(2100),
+                              );
+                              if (picked != null) {
+                                setState(() => selDate = picked);
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: InputDecorator(
+                              decoration: InputDecoration(
+                                labelText: 'Date',
+                                prefixIcon:
+                                    const Icon(Icons.calendar_today_outlined),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: Text(_fmt(selDate)),
+                            ),
+                          ),
+                          16.h,
+                          // ── Notes ──────────────────────────────────────────
+                          TextFormField(
+                            controller: notesCtrl,
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              labelText: 'Notes',
+                              prefixIcon:
+                                  const Icon(Icons.note_alt_outlined),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                          // ── Screenshot (UPI) ───────────────────────────────
+                          if (selPayMode == 'upi') ...[
+                            16.h,
+                            const Text(
+                              'UPI Payment Screenshot',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            8.h,
+                            InkWell(
+                              onTap: () async {
+                                final picker = ImagePicker();
+                                final picked = await picker.pickImage(
+                                  source: ImageSource.gallery,
+                                  imageQuality: 50,
+                                  maxWidth: 1080,
+                                );
+                                if (picked != null) {
+                                  setState(() => attachmentFile = picked);
+                                }
+                              },
+                              child: Container(
+                                height: 120,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: attachmentFile == null
+                                        ? (existing.attachmentUrl != null
+                                            ? crm.success
+                                            : Colors.grey.shade300)
+                                        : crm.success,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.grey.shade50,
+                                ),
+                                child: attachmentFile != null
+                                    ? ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(11),
+                                        child: kIsWeb
+                                            ? Image.network(
+                                                attachmentFile!.path,
+                                                fit: BoxFit.cover)
+                                            : Image.file(
+                                                File(attachmentFile!.path),
+                                                fit: BoxFit.cover),
+                                      )
+                                    : existing.attachmentUrl != null
+                                        ? Stack(
+                                            fit: StackFit.expand,
+                                            children: [
+                                              ClipRRect(
+                                                borderRadius:
+                                                    BorderRadius.circular(11),
+                                                child: Image.network(
+                                                  existing.attachmentUrl!,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (_, __, ___) =>
+                                                          const SizedBox(),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                bottom: 6,
+                                                right: 6,
+                                                child: Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.black54,
+                                                    borderRadius:
+                                                        BorderRadius.circular(8),
+                                                  ),
+                                                  child: const Text(
+                                                    'Tap to replace',
+                                                    style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 11),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          )
+                                        : const Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                Icons.add_a_photo_outlined,
+                                                color: Colors.grey,
+                                              ),
+                                              Text(
+                                                'Tap to add screenshot',
+                                                style: TextStyle(
+                                                    color: Colors.grey,
+                                                    fontSize: 12),
+                                              ),
+                                            ],
+                                          ),
+                              ),
+                            ),
+                          ],
+                          32.h,
+                          // ── Save button ────────────────────────────────────
+                          SizedBox(
+                            width: double.infinity,
+                            child: isUploading
+                                ? const Center(
+                                    child: CircularProgressIndicator())
+                                : ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: crm.primary,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 16),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14)),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () async {
+                                      if (!formKey.currentState!.validate()) {
+                                        return;
+                                      }
+                                      setState(() => isUploading = true);
+                                      try {
+                                        String? uploadedUrl;
+                                        if (attachmentFile != null) {
+                                          uploadedUrl = await ref
+                                              .read(uploadServiceProvider)
+                                              .uploadImage(attachmentFile!);
+                                        }
+                                        await ref
+                                            .read(collectionServiceProvider)
+                                            .updateCollection(
+                                              id: existing.id,
+                                              amount: double.tryParse(
+                                                      amountCtrl.text.trim()) ??
+                                                  existing.amount,
+                                              date: selDate,
+                                              paymentMode: selPayMode,
+                                              notes: notesCtrl.text.trim(),
+                                              // Only send a new URL if a new
+                                              // file was actually picked.
+                                              attachmentUrl: uploadedUrl,
+                                            );
+                                        ref.invalidate(collectionsProvider);
+                                        ref.invalidate(
+                                            artistCollectionsProvider);
+                                        if (ctx.mounted) Navigator.pop(ctx);
+                                      } catch (e) {
+                                        setState(() => isUploading = false);
+                                        if (ctx.mounted) {
+                                          ScaffoldMessenger.of(ctx).showSnackBar(
+                                            SnackBar(
+                                                content: Text(
+                                                    friendlyErrorMessage(e))),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    child: const Text(
+                                      'SAVE CHANGES',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
     Future<void> verifyItem({
       required String id,
       required bool isCollection,
@@ -1611,6 +1975,30 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               backgroundColor: crm.destructive.withValues(alpha: 0.05),
                               side: BorderSide(color: crm.destructive.withValues(alpha: 0.3)),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.all(8),
+                              minimumSize: const Size(36, 36),
+                            ),
+                          ),
+                        );
+                        actionsList.add(8.w);
+                      }
+                      // An artist can correct their own pending collection
+                      // until Accounts verifies/rejects it — same rule as
+                      // expenses. After that it is locked.
+                      if (isScopedToOwn && c.status == 'pending') {
+                        actionsList.add(
+                          IconButton(
+                            tooltip: 'Edit this collection',
+                            icon: const Icon(Icons.edit_outlined, size: 14),
+                            onPressed: () => editCollectionDialog(existing: c),
+                            style: IconButton.styleFrom(
+                              foregroundColor: crm.primary,
+                              backgroundColor:
+                                  crm.primary.withValues(alpha: 0.05),
+                              side: BorderSide(
+                                  color: crm.primary.withValues(alpha: 0.3)),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
                               padding: const EdgeInsets.all(8),
                               minimumSize: const Size(36, 36),
                             ),

@@ -549,6 +549,18 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/company-reports'),
                       onTap: () => context.go('/company-reports'),
                     ),
+                  // Client reviews — CRM / sales / accounts / full access.
+                  if (access.isFullAccess ||
+                      access.role == AppRole.crm ||
+                      access.role == AppRole.accounts ||
+                      access.canSeeSales)
+                    _SidebarItem(
+                      icon: Icons.reviews_outlined,
+                      title: 'Client Reviews',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/reviews'),
+                      onTap: () => context.go('/reviews'),
+                    ),
 
                   // IT department hub — Projects & Tickets are IT-only; Help Desk
                   // is open to every department. Grouped under one "IT" parent.

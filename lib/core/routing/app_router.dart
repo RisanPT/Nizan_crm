@@ -89,6 +89,7 @@ import 'package:nizan_crm/features/finance/services/sales_report_service.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
+import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_board_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
@@ -250,6 +251,13 @@ bool isRouteAllowed(String path, Access access,
   }
   if (path.startsWith('/company-reports')) {
     return access.canSeeCompanyReports;
+  }
+  // Client reviews — CRM/sales/accounts + full access (admin/manager).
+  if (path.startsWith('/reviews')) {
+    return access.isFullAccess ||
+        access.role == AppRole.crm ||
+        access.role == AppRole.accounts ||
+        access.canSeeSales;
   }
   if (path.startsWith('/it/')) return access.canSeeIt;
   if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
@@ -953,6 +961,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-reports',
             builder: (context, state) => const CompanyReportsScreen(),
+          ),
+          GoRoute(
+            path: '/reviews',
+            builder: (context, state) => const ReviewsScreen(),
           ),
           GoRoute(
             path: '/it/projects',

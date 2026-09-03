@@ -69,6 +69,35 @@ class CollectionService {
     }
   }
 
+  /// Edits an existing collection. The backend rejects this for an artist once
+  /// Accounts has verified or rejected the entry.
+  Future<ArtistCollection> updateCollection({
+    required String id,
+    double? amount,
+    DateTime? date,
+    String? paymentMode,
+    String? notes,
+    String? attachmentUrl,
+  }) async {
+    try {
+      final response = await _dio.put('/collections/$id', data: {
+        if (amount != null) 'amount': amount,
+        if (date != null) 'date': date.toIso8601String(),
+        if (paymentMode != null) 'paymentMode': paymentMode,
+        if (notes != null) 'notes': notes,
+        if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+      });
+      return ArtistCollection.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      throw Exception(
+        (data is Map && data['message'] != null)
+            ? data['message'].toString()
+            : 'Failed to update collection: ${e.message}',
+      );
+    }
+  }
+
   Future<ArtistCollection> verifyCollection({
     required String id,
     required String status, // 'verified' | 'rejected'

@@ -561,6 +561,10 @@ class Booking {
   final String createdByName;
   /// The User id who created/entered this booking. Drives the "Added By" filter.
   final String createdBy;
+  /// Transient: the public review-form URL returned by the backend when a
+  /// booking is saved as completed. Not persisted; used to append the link to
+  /// the completion WhatsApp message.
+  final String reviewUrl;
 
   const Booking({
     required this.id,
@@ -620,6 +624,7 @@ class Booking {
     this.hsnCode = '998361',
     this.outfitLooks = const [],
     this.createdByName = '',
+    this.reviewUrl = '',
     this.createdBy = '',
   });
 
@@ -950,6 +955,7 @@ class Booking {
       hsnCode: json['hsnCode'] as String? ?? '998361',
       outfitLooks: _parseOutfitLooks(json),
       createdByName: json['createdByName'] as String? ?? '',
+      reviewUrl: json['reviewUrl'] as String? ?? '',
       createdBy: json['createdBy'] is Map
           ? (json['createdBy']['_id'] as String? ?? '')
           : (json['createdBy'] as String? ?? ''),
@@ -1075,6 +1081,9 @@ class Booking {
     String? paymentMode,
     String? hsnCode,
     List<OutfitLook>? outfitLooks,
+    String? createdByName,
+    String? createdBy,
+    String? reviewUrl,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -1135,6 +1144,9 @@ class Booking {
       paymentMode: paymentMode ?? this.paymentMode,
       hsnCode: hsnCode ?? this.hsnCode,
       outfitLooks: outfitLooks ?? this.outfitLooks,
+      createdByName: createdByName ?? this.createdByName,
+      createdBy: createdBy ?? this.createdBy,
+      reviewUrl: reviewUrl ?? this.reviewUrl,
     );
   }
 }

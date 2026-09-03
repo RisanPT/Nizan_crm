@@ -7,4 +7,10 @@ class WhatsAppService {
   static Future<void> sendInvoiceMessage(Booking booking) {
     return impl.sendInvoiceMessage(booking);
   }
+
+  /// Opens WhatsApp to the client with a short review-request message that
+  /// contains the public review-form [reviewUrl].
+  static Future<void> sendReviewRequest(Booking booking, String reviewUrl) {
+    return impl.sendReviewRequest(booking, reviewUrl);
+  }
 }

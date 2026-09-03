@@ -26,6 +26,7 @@ import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
 import 'package:nizan_crm/core/utils/whatsapp_service.dart';
+import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
@@ -1346,6 +1347,33 @@ class ManageBookingScreen extends HookConsumerWidget {
                     label: const Text('WhatsApp'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.green,
+                    ),
+                  ),
+                  12.w,
+                  // Fetches (or creates) the review link for this booking and
+                  // opens WhatsApp with a short review-request message.
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final link = await ref
+                            .read(reviewServiceProvider)
+                            .getReviewLink(booking.id);
+                        await WhatsAppService.sendReviewRequest(booking, link);
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                e.toString().replaceFirst('Exception: ', '')),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.rate_review_outlined, size: 18),
+                    label: const Text('Send Review'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: crmColors.primary,
                     ),
                   ),
                   12.w,
