@@ -175,6 +175,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final filterToDate = useState<DateTime?>(null);
     final filterMinAmount = useState<double?>(null);
     final filterMaxAmount = useState<double?>(null);
+    // Artist filter — null means all artists
+    final filterArtistId = useState<String?>(null);
+    // Month filter — null means all months; value = DateTime(year, month)
+    final filterMonth = useState<DateTime?>(null);
+    // Pagination for Collections tab
+    final collectionPage = useState<int>(0);
+    const collPageSize = 12;
     // Free-text search (client name / notes / service). '' = no search.
     final searchCtrl = useTextEditingController();
     final searchQuery = useState('');
@@ -194,6 +201,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
       if (filterMinAmount.value != null && c.amount < filterMinAmount.value!) return false;
       if (filterMaxAmount.value != null && c.amount > filterMaxAmount.value!) return false;
+      // Artist filter
+      if (filterArtistId.value != null && c.employee?.id != filterArtistId.value) return false;
+      // Month filter
+      if (filterMonth.value != null) {
+        if (c.date.year != filterMonth.value!.year || c.date.month != filterMonth.value!.month) return false;
+      }
       if (q.isNotEmpty) {
         final hay = '${c.booking?.customerName ?? ''} ${c.trial?.clientName ?? ''} '
                 '${c.booking?.service ?? ''} ${c.notes} ${c.employee?.name ?? ''}'
@@ -511,37 +524,59 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             16.h,
                           ],
                           if (collectType == 'booking') ...[
-                            DropdownButtonFormField<String>(
-                              isExpanded: true,
-                              itemHeight: 80,
-                              decoration: InputDecoration(
-                                labelText: 'Select Booking / Client *',
-                                prefixIcon: const Icon(Icons.book_online_outlined),
-                                helperText: 'Only your assigned works are shown here',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              initialValue: selBooking.isEmpty ? null : selBooking,
-                              items: myBookings.map<DropdownMenuItem<String>>((b) {
-                                final balance = b.totalPrice - b.advanceAmount - b.discountAmount;
-                                return DropdownMenuItem<String>(
-                                  value: b.id,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(b.customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), overflow: TextOverflow.ellipsis),
-                                      const SizedBox(height: 4),
-                                      Text('${b.service} • ₹${balance.toStringAsFixed(0)} Bal.', style: const TextStyle(fontSize: 11, color: Colors.grey), overflow: TextOverflow.ellipsis),
-                                    ],
+                            // ── Searchable booking picker ──────────────────────────
+                            Builder(builder: (ctx2) {
+                              final selBookingObj = myBookings.where((b) => b.id == selBooking).firstOrNull;
+                              final displayLabel = selBookingObj != null
+                                  ? selBookingObj.customerName
+                                  : 'Select Booking / Client *';
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(12),
+                                    onTap: () async {
+                                      final picked = await _showBookingSearchDialog(
+                                        context: ctx,
+                                        bookings: myBookings,
+                                        fmtDate: _fmt,
+                                        initialSelected: selBooking.isEmpty ? null : selBooking,
+                                      );
+                                      if (picked != null) setState(() => selBooking = picked);
+                                    },
+                                    child: InputDecorator(
+                                      decoration: InputDecoration(
+                                        labelText: 'Select Booking / Client *',
+                                        prefixIcon: const Icon(Icons.book_online_outlined),
+                                        helperText: 'Tap to search your assigned works',
+                                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        displayLabel,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: selBookingObj != null ? FontWeight.bold : FontWeight.normal,
+                                          color: selBookingObj != null ? null : Colors.grey,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
-                                );
-                              }).toList(),
-                              validator: (v) => (v == null || v.isEmpty) ? 'Select a booking' : null,
-                              onChanged: (v) => setState(() => selBooking = v ?? ''),
-                            ),
+                                  if (selBooking.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4, left: 12),
+                                      child: Text(
+                                        'Please select a booking',
+                                        style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            }),
                           ] else ...[
                             DropdownButtonFormField<String>(
                               isExpanded: true,
@@ -1482,6 +1517,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         );
 
     Widget collectionsTab(List<ArtistCollection> items) {
+      final sortedItems = [...items]..sort((a, b) => b.date.compareTo(a.date));
+      final totalPages = sortedItems.isEmpty ? 1 : (sortedItems.length / collPageSize).ceil();
+      final curPage = collectionPage.value.clamp(0, totalPages - 1);
+      final pageStart = curPage * collPageSize;
+      final pageEnd = (pageStart + collPageSize).clamp(0, sortedItems.length);
+      final pageItems = sortedItems.isEmpty ? const <ArtistCollection>[] : sortedItems.sublist(pageStart, pageEnd);
+
       if (items.isEmpty) {
         return Builder(
           builder: (context) {
@@ -1511,7 +1553,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         );
       }
 
-      final sortedItems = [...items]..sort((a, b) => b.date.compareTo(a.date));
       return Builder(
         builder: (context) {
           return CustomScrollView(
@@ -1527,7 +1568,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, i) {
-                      final c = sortedItems[i];
+                      final c = pageItems[i];
                       final metadataStr = [
                         c.paymentMode.toUpperCase(),
                         if (c.booking != null) c.booking!.service,
@@ -1646,8 +1687,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       }
 
                       // Prefer the booking's client name; fall back to the trial
-                      // client, then a placeholder. Guard against an empty (not
-                      // just null) customerName so the card never renders blank.
+                      // client, then a placeholder.
                       final bookingClient = c.booking?.customerName.trim() ?? '';
                       final clientTitle = bookingClient.isNotEmpty
                           ? bookingClient
@@ -1669,7 +1709,38 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             : null,
                       );
                     },
-                    childCount: sortedItems.length,
+                    childCount: pageItems.length,
+                  ),
+                ),
+              ),
+              // ── Pagination bar ──────────────────────────────────────────────
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isMobile ? 16 : 0, 4, isMobile ? 16 : 0, 24,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${sortedItems.length} total  •  Page ${curPage + 1} / $totalPages',
+                        style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_left),
+                        onPressed: curPage > 0
+                            ? () => collectionPage.value = curPage - 1
+                            : null,
+                        tooltip: 'Previous page',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.chevron_right),
+                        onPressed: curPage < totalPages - 1
+                            ? () => collectionPage.value = curPage + 1
+                            : null,
+                        tooltip: 'Next page',
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1893,6 +1964,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     void openFilterBottomSheet() {
       // ── Temp state lives here, OUTSIDE the builder, so it survives rebuilds ──
       final tempStatuses = Set<String>.from(filterStatuses.value);
+      String? tempArtistId = filterArtistId.value;
+      DateTime? tempFilterMonth = filterMonth.value;
       final tempPaymentModes = Set<String>.from(filterPaymentModes.value);
       final tempCategories = Set<String>.from(filterCategories.value);
       DateTime? tempFromDate = filterFromDate.value;
@@ -1952,6 +2025,54 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               onPressed: () => Navigator.pop(ctx),
                             ),
                           ],
+                        ),
+                        16.h,
+                        // ── Artist Filter ──────────────────────────────────────
+                        if (!isScopedToOwn) ...[
+                          Text(
+                            'ARTIST',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: crm.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          8.h,
+                          DropdownButtonFormField<String?>(
+                            decoration: InputDecoration(
+                              labelText: 'Artist',
+                              prefixIcon: const Icon(Icons.person_outline),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                            initialValue: tempArtistId,
+                            items: [
+                              const DropdownMenuItem<String?>(value: null, child: Text('All Artists')),
+                              ...(asyncEmployees.value ?? [])
+                                  .where((e) => e.isActive && e.isArtist)
+                                  .map<DropdownMenuItem<String?>>(
+                                    (e) => DropdownMenuItem<String?>(value: e.id, child: Text(e.name)),
+                                  ),
+                            ],
+                            onChanged: (v) => setState(() => tempArtistId = v),
+                          ),
+                          16.h,
+                        ],
+                        // ── Month Filter ───────────────────────────────────────
+                        Text(
+                          'MONTH',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: crm.textSecondary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        8.h,
+                        _MonthFilterPicker(
+                          selectedMonth: tempFilterMonth,
+                          onChanged: (m) => setState(() => tempFilterMonth = m),
                         ),
                         16.h,
                         Text(
@@ -2171,6 +2292,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   filterToDate.value = null;
                                   filterMinAmount.value = null;
                                   filterMaxAmount.value = null;
+                                  filterArtistId.value = null;
+                                  filterMonth.value = null;
+                                  collectionPage.value = 0;
                                   Navigator.pop(ctx);
                                   showToast('✓ Filters Reset');
                                 },
@@ -2191,6 +2315,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   filterToDate.value = tempToDate;
                                   filterMinAmount.value = double.tryParse(minAmountCtrl.text);
                                   filterMaxAmount.value = double.tryParse(maxAmountCtrl.text);
+                                  filterArtistId.value = tempArtistId;
+                                  filterMonth.value = tempFilterMonth;
+                                  collectionPage.value = 0;
                                   Navigator.pop(ctx);
                                   showToast('✓ Filters Applied Successfully');
                                 },
@@ -2926,6 +3053,429 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       'December',
     ];
     return months[m - 1];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Searchable Booking Picker Dialog
+// ─────────────────────────────────────────────────────────────────────────────
+Future<String?> _showBookingSearchDialog({
+  required BuildContext context,
+  required List<Booking> bookings,
+  required String Function(DateTime) fmtDate,
+  String? initialSelected,
+}) async {
+  final searchCtrl = TextEditingController();
+  String query = '';
+  DateTime? filterFrom;
+  DateTime? filterTo;
+
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) {
+        // Apply search + date filter
+        final filtered = bookings.where((b) {
+          // Text filter
+          if (query.isNotEmpty) {
+            final q = query.toLowerCase();
+            if (!b.customerName.toLowerCase().contains(q) &&
+                !b.service.toLowerCase().contains(q)) {
+              return false;
+            }
+          }
+          // Date range filter
+          if (filterFrom != null) {
+            final from = DateTime(filterFrom!.year, filterFrom!.month, filterFrom!.day);
+            if (b.serviceStart.isBefore(from)) return false;
+          }
+          if (filterTo != null) {
+            final to = DateTime(filterTo!.year, filterTo!.month, filterTo!.day, 23, 59, 59);
+            if (b.serviceStart.isAfter(to)) return false;
+          }
+          return true;
+        }).toList()
+          ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
+
+        final hasDateFilter = filterFrom != null || filterTo != null;
+        final screenH = MediaQuery.of(ctx).size.height;
+
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 48),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: screenH * 0.78),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Header ──────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.book_online_outlined, size: 18,
+                          color: Color(0xFF6C3483)),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Select Booking / Client',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // ── Search box ──────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: TextField(
+                    controller: searchCtrl,
+                    autofocus: true,
+                    onChanged: (v) => setState(() => query = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search by client name or service…',
+                      hintStyle: const TextStyle(fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                searchCtrl.clear();
+                                setState(() => query = '');
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 9),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // ── Date filter row ─────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      // From date chip
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: filterFrom ?? DateTime.now(),
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2030),
+                              helpText: 'From Date',
+                            );
+                            if (picked != null) setState(() => filterFrom = picked);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: filterFrom != null
+                                      ? const Color(0xFF6C3483)
+                                      : Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: filterFrom != null
+                                  ? const Color(0xFF6C3483).withValues(alpha: 0.07)
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.calendar_today_outlined,
+                                    size: 13,
+                                    color: filterFrom != null
+                                        ? const Color(0xFF6C3483)
+                                        : Colors.grey.shade600),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    filterFrom != null
+                                        ? fmtDate(filterFrom!)
+                                        : 'From date',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: filterFrom != null
+                                            ? const Color(0xFF6C3483)
+                                            : Colors.grey.shade600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Text('–',
+                            style: TextStyle(color: Colors.grey.shade500)),
+                      ),
+                      // To date chip
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: filterTo ?? DateTime.now(),
+                              firstDate: filterFrom ?? DateTime(2020),
+                              lastDate: DateTime(2030),
+                              helpText: 'To Date',
+                            );
+                            if (picked != null) setState(() => filterTo = picked);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: filterTo != null
+                                      ? const Color(0xFF6C3483)
+                                      : Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(8),
+                              color: filterTo != null
+                                  ? const Color(0xFF6C3483).withValues(alpha: 0.07)
+                                  : null,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.calendar_today_outlined,
+                                    size: 13,
+                                    color: filterTo != null
+                                        ? const Color(0xFF6C3483)
+                                        : Colors.grey.shade600),
+                                const SizedBox(width: 5),
+                                Expanded(
+                                  child: Text(
+                                    filterTo != null
+                                        ? fmtDate(filterTo!)
+                                        : 'To date',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: filterTo != null
+                                            ? const Color(0xFF6C3483)
+                                            : Colors.grey.shade600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Clear date filter button
+                      if (hasDateFilter)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: IconButton(
+                            icon: const Icon(Icons.cancel_outlined,
+                                size: 18, color: Colors.redAccent),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Clear date filter',
+                            onPressed: () => setState(() {
+                              filterFrom = null;
+                              filterTo = null;
+                            }),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Divider(height: 1, color: Colors.grey.shade200),
+                // Result count badge
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  child: Row(
+                    children: [
+                      Text(
+                        '${filtered.length} booking${filtered.length == 1 ? '' : 's'} found',
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Booking list ────────────────────────────────────
+                Flexible(
+                  child: filtered.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.search_off_rounded,
+                                  size: 36, color: Colors.grey.shade300),
+                              const SizedBox(height: 8),
+                              Text(
+                                hasDateFilter || query.isNotEmpty
+                                    ? 'No bookings match your filters.'
+                                    : 'No bookings available.',
+                                style: const TextStyle(
+                                    color: Colors.grey, fontSize: 13),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final b = filtered[i];
+                            final balance =
+                                (b.totalPrice - b.advanceAmount - b.discountAmount)
+                                    .clamp(0, double.infinity)
+                                    .toDouble();
+                            final isSelected = b.id == initialSelected;
+                            return InkWell(
+                              onTap: () => Navigator.pop(ctx, b.id),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFF6C3483).withValues(alpha: 0.07)
+                                      : i.isOdd
+                                          ? Colors.grey.withValues(alpha: 0.03)
+                                          : null,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (isSelected)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(right: 8, top: 2),
+                                        child: const Icon(Icons.check_circle,
+                                            size: 15,
+                                            color: Color(0xFF6C3483)),
+                                      ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            b.customerName,
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              const Icon(Icons.event_outlined,
+                                                  size: 12,
+                                                  color: Color(0xFF6C3483)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                fmtDate(b.serviceStart),
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: Color(0xFF6C3483),
+                                                    fontWeight: FontWeight.w600),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            '${b.service}  •  ₹${balance.toStringAsFixed(0)} Bal.',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Month filter picker widget
+// ─────────────────────────────────────────────────────────────────────────────
+class _MonthFilterPicker extends StatelessWidget {
+  final DateTime? selectedMonth;
+  final void Function(DateTime?) onChanged;
+  const _MonthFilterPicker({required this.selectedMonth, required this.onChanged});
+
+  static const _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final years = [now.year - 1, now.year];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            // "All" chip
+            ChoiceChip(
+              label: const Text('All', style: TextStyle(fontSize: 12)),
+              selected: selectedMonth == null,
+              onSelected: (_) => onChanged(null),
+              selectedColor: const Color(0xFF6C3483).withValues(alpha: 0.15),
+              checkmarkColor: const Color(0xFF6C3483),
+            ),
+            for (final yr in years)
+              for (var m = 1; m <= 12; m++) ...[
+                if (yr == now.year && m > now.month) const SizedBox.shrink()
+                else Builder(builder: (ctx) {
+                  final dt = DateTime(yr, m);
+                  final sel = selectedMonth != null &&
+                      selectedMonth!.year == yr &&
+                      selectedMonth!.month == m;
+                  return ChoiceChip(
+                    label: Text('${_months[m - 1]} $yr',
+                        style: const TextStyle(fontSize: 11)),
+                    selected: sel,
+                    onSelected: (_) => onChanged(dt),
+                    selectedColor: const Color(0xFF6C3483).withValues(alpha: 0.15),
+                    checkmarkColor: const Color(0xFF6C3483),
+                    visualDensity: VisualDensity.compact,
+                  );
+                }),
+              ],
+          ],
+        ),
+      ],
+    );
   }
 }
 

@@ -3,6 +3,9 @@
 class SalesRow {
   final String label;
   final String sublabel;
+  /// Drill key: phone (by-customer), service (by-package) or userId
+  /// (by-salesperson). Empty for the non-drillable summaries.
+  final String id;
   final int count;
   final double amount;
   final double received;
@@ -11,6 +14,7 @@ class SalesRow {
   const SalesRow({
     this.label = '',
     this.sublabel = '',
+    this.id = '',
     this.count = 0,
     this.amount = 0,
     this.received = 0,
@@ -20,6 +24,7 @@ class SalesRow {
   factory SalesRow.fromJson(Map<String, dynamic> j) => SalesRow(
         label: j['label'] as String? ?? '',
         sublabel: j['sublabel'] as String? ?? '',
+        id: j['id'] as String? ?? '',
         count: (j['count'] as num?)?.toInt() ?? 0,
         amount: (j['amount'] as num?)?.toDouble() ?? 0,
         received: (j['received'] as num?)?.toDouble() ?? 0,

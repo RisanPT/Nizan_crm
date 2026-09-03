@@ -2501,8 +2501,12 @@ class _ExpandedDetails extends ConsumerWidget {
                 ),
               ),
               // Per-package add-ons (read-only). Booking-level add-ons above
-              // stay editable; these belong to specific packages.
-              if (booking.bookingItems.any((it) => it.addons.isNotEmpty)) ...[
+              // stay editable; these belong to specific packages. Only for a
+              // genuine multi-package booking — a single-package booking keeps
+              // its add-ons at the booking level (shown above), so showing the
+              // item copy too would duplicate them.
+              if (booking.bookingItems.length > 1 &&
+                  booking.bookingItems.any((it) => it.addons.isNotEmpty)) ...[
                 12.h,
                 _DetailLabel('Package add-ons'),
                 8.h,

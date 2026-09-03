@@ -6,8 +6,11 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/providers/my_department_provider.dart';
 import 'package:nizan_crm/features/org/services/department_service.dart';
 import 'package:nizan_crm/features/reports/data/company_report.dart';
+import 'package:nizan_crm/features/reports/data/report_folder.dart';
+import 'package:nizan_crm/features/reports/presentation/screens/report_viewer_screen.dart';
 import 'package:nizan_crm/features/reports/services/company_report_service.dart';
 
 const _mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -45,8 +48,11 @@ class CompanyReportsScreen extends ConsumerStatefulWidget {
 
 class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
   String _deptFilter = 'All';
+  // null → all folders (grouped); a folder id → that folder; _kUnfiled → no folder.
+  String? _folder;
 
   static const _kTeam = '__team__';
+  static const _kUnfiled = '__unfiled__';
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +99,9 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
             },
             orElse: () => const SizedBox(height: 52),
           ),
+          // Folders live inside a department, so the folder bar only shows when
+          // a single department is selected.
+          if (!isTeam && _deptFilter != 'All') _folderBar(_deptFilter),
           Expanded(
             child: bodyAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -139,7 +148,42 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
         ],
       ];
     }
-    return [for (final r in reports.where((r) => r.department == _deptFilter)) _reportTile(r)];
+    // A single department is selected — organise its reports by folder.
+    final deptReports =
+        reports.where((r) => r.department == _deptFilter).toList();
+    final folders =
+        ref.watch(reportFoldersProvider(_deptFilter)).value ?? const <ReportFolder>[];
+
+    if (_folder == _kUnfiled) {
+      return [
+        for (final r in deptReports.where((r) => r.folderId.isEmpty))
+          _reportTile(r),
+      ];
+    }
+    if (_folder != null) {
+      return [
+        for (final r in deptReports.where((r) => r.folderId == _folder))
+          _reportTile(r),
+      ];
+    }
+
+    // All folders → group by folder, with an "Unfiled" bucket at the end.
+    final children = <Widget>[];
+    for (final f in folders) {
+      final inFolder = deptReports.where((r) => r.folderId == f.id).toList();
+      children.add(_sectionHeader(Icons.folder_outlined, f.name, inFolder.length));
+      for (final r in inFolder) {
+        children.add(_reportTile(r));
+      }
+    }
+    final unfiled = deptReports.where((r) => r.folderId.isEmpty).toList();
+    if (unfiled.isNotEmpty || folders.isEmpty) {
+      children.add(_sectionHeader(Icons.folder_off_outlined, 'Unfiled', unfiled.length));
+      for (final r in unfiled) {
+        children.add(_reportTile(r));
+      }
+    }
+    return children;
   }
 
   Widget _chip(String value, String label, int? count, {IconData? icon}) {
@@ -151,9 +195,67 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
         avatar: icon == null ? null : Icon(icon, size: 16, color: selected ? crm.primary : crm.textSecondary),
         label: Text(count == null ? label : '$label ($count)'),
         selected: selected,
-        onSelected: (_) => setState(() => _deptFilter = value),
+        onSelected: (_) => setState(() {
+          _deptFilter = value;
+          _folder = null; // reset folder when switching department
+        }),
         selectedColor: crm.primary.withValues(alpha: 0.15),
         labelStyle: TextStyle(color: selected ? crm.primary : crm.textSecondary, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _folderBar(String dept) {
+    final crm = context.crmColors;
+    final folders = ref.watch(reportFoldersProvider(dept)).value ?? const <ReportFolder>[];
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.surface,
+        border: Border(bottom: BorderSide(color: crm.border)),
+      ),
+      child: SizedBox(
+        height: 46,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          children: [
+            _folderChip(null, 'All folders', Icons.folder_copy_outlined),
+            for (final f in folders)
+              _folderChip(f.id, f.name, Icons.folder_outlined, folder: f),
+            _folderChip(_kUnfiled, 'Unfiled', Icons.folder_off_outlined),
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: ActionChip(
+                avatar: Icon(Icons.create_new_folder_outlined, size: 16, color: crm.primary),
+                label: const Text('New folder'),
+                onPressed: () => _addFolder(dept),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _folderChip(String? value, String label, IconData icon, {ReportFolder? folder}) {
+    final crm = context.crmColors;
+    final selected = _folder == value;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onLongPress: folder == null ? null : () => _manageFolder(folder),
+        child: ChoiceChip(
+          avatar: Icon(icon, size: 15, color: selected ? crm.primary : crm.textSecondary),
+          label: Text(label),
+          selected: selected,
+          onSelected: (_) => setState(() => _folder = value),
+          selectedColor: crm.primary.withValues(alpha: 0.15),
+          labelStyle: TextStyle(
+            color: selected ? crm.primary : crm.textSecondary,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
       ),
     );
   }
@@ -210,6 +312,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border)),
       child: ListTile(
+        onTap: () => _openViewer(r),
         leading: CircleAvatar(
           backgroundColor: crm.primary.withValues(alpha: 0.1),
           child: Icon(_fileIcon(r.fileType), color: crm.primary, size: 20),
@@ -218,6 +321,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
         subtitle: Text(
           [
             r.department,
+            if (r.folderName.isNotEmpty) r.folderName,
             if (r.period.isNotEmpty) r.period,
             if (r.uploadedByName.isNotEmpty) 'by ${r.uploadedByName}',
             _date(r.createdAt),
@@ -234,14 +338,53 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
               onPressed: () => _download(r),
             ),
             if (canManage)
-              IconButton(
-                icon: Icon(Icons.delete_outline, color: crm.textSecondary),
-                tooltip: 'Delete',
-                onPressed: () => _confirmDelete(r),
+              PopupMenuButton<String>(
+                icon: Icon(Icons.more_vert, color: crm.textSecondary),
+                tooltip: 'More',
+                onSelected: (v) {
+                  if (v == 'open') _openViewer(r);
+                  if (v == 'move') _moveToFolder(r);
+                  if (v == 'delete') _confirmDelete(r);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'open',
+                    child: ListTile(
+                      leading: Icon(Icons.open_in_full),
+                      title: Text('Open'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'move',
+                    child: ListTile(
+                      leading: Icon(Icons.drive_file_move_outline),
+                      title: Text('Move to folder'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: ListTile(
+                      leading: Icon(Icons.delete_outline),
+                      title: Text('Delete'),
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
       ),
+    );
+  }
+
+  void _openViewer(CompanyReport r) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReportViewerScreen(report: r)),
     );
   }
 
@@ -284,6 +427,176 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     }
   }
 
+  String _err(Object e) => e.toString().replaceFirst('Exception: ', '');
+
+  Future<String?> _promptFolderName(String title, {String initial = ''}) async {
+    final ctrl = TextEditingController(text: initial);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Folder name',
+            hintText: 'e.g. Monthly Reports',
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    return (name == null || name.isEmpty) ? null : name;
+  }
+
+  Future<void> _addFolder(String dept) async {
+    final name = await _promptFolderName('New folder in $dept');
+    if (name == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(companyReportServiceProvider).createFolder(name, department: dept);
+      ref.invalidate(reportFoldersProvider(dept));
+      messenger.showSnackBar(SnackBar(content: Text('Folder "$name" created')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+    }
+  }
+
+  Future<void> _manageFolder(ReportFolder f) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.drive_file_rename_outline),
+              title: const Text('Rename folder'),
+              onTap: () => Navigator.pop(ctx, 'rename'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete folder'),
+              subtitle: const Text('Documents inside move to Unfiled'),
+              onTap: () => Navigator.pop(ctx, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == 'rename') {
+      final name = await _promptFolderName('Rename folder', initial: f.name);
+      if (name == null || name == f.name || !mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await ref.read(companyReportServiceProvider).renameFolder(f.id, name);
+        ref.invalidate(reportFoldersProvider(f.department));
+        ref.invalidate(companyReportsProvider);
+        messenger.showSnackBar(const SnackBar(content: Text('Folder renamed')));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+      }
+    } else if (action == 'delete') {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete folder?'),
+          content: Text('Delete "${f.name}"? Documents inside move to Unfiled.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: ctx.crmColors.destructive),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      try {
+        await ref.read(companyReportServiceProvider).deleteFolder(f.id);
+        if (_folder == f.id) setState(() => _folder = null);
+        ref.invalidate(reportFoldersProvider(f.department));
+        ref.invalidate(companyReportsProvider);
+        messenger.showSnackBar(const SnackBar(content: Text('Folder deleted')));
+      } catch (e) {
+        messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+      }
+    }
+  }
+
+  Future<void> _moveToFolder(CompanyReport r) async {
+    final messenger = ScaffoldMessenger.of(context);
+    List<ReportFolder> folders;
+    try {
+      folders = await ref.read(reportFoldersProvider(r.department).future);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+      return;
+    }
+    if (!mounted) return;
+
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Move to folder', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_off_outlined),
+              title: const Text('Unfiled'),
+              trailing: r.folderId.isEmpty ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(ctx, ''),
+            ),
+            for (final f in folders)
+              ListTile(
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(f.name),
+                trailing: r.folderId == f.id ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(ctx, f.id),
+              ),
+            ListTile(
+              leading: const Icon(Icons.create_new_folder_outlined),
+              title: const Text('New folder…'),
+              onTap: () => Navigator.pop(ctx, '__new__'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null) return; // dismissed
+
+    try {
+      if (choice == '__new__') {
+        final name = await _promptFolderName('New folder in ${r.department}');
+        if (name == null) return;
+        final folder =
+            await ref.read(companyReportServiceProvider).createFolder(name, department: r.department);
+        await ref.read(companyReportServiceProvider).moveToFolder(r.id, folder.id);
+        ref.invalidate(reportFoldersProvider(r.department));
+      } else {
+        await ref
+            .read(companyReportServiceProvider)
+            .moveToFolder(r.id, choice.isEmpty ? null : choice);
+      }
+      ref.invalidate(companyReportsProvider);
+      messenger.showSnackBar(const SnackBar(content: Text('Report moved')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+    }
+  }
+
   Future<void> _upload() async {
     final crm = context.crmColors;
     final messenger = ScaffoldMessenger.of(context);
@@ -308,10 +621,31 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     final periodCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     String? department;
+    String? folderId;
+    List<ReportFolder> folders = const [];
     final roles = <String>{};
 
-    final departmentsAsync = ref.read(departmentsProvider);
-    final deptNames = (departmentsAsync.value ?? const []).map((d) => d.name).toList();
+    // Ensure the department list is loaded (for admins/managers who pick one).
+    List<String> deptNames = const [];
+    try {
+      deptNames =
+          (await ref.read(departmentsProvider.future)).map((d) => d.name).toList();
+    } catch (_) {/* fall back to empty; lock path below still works */}
+    if (!mounted) return;
+
+    // A department user (not admin/manager) files under their OWN department —
+    // pre-fill and lock it instead of showing an empty required dropdown.
+    final session = ref.read(authSessionProvider);
+    final fullAccess = session?.role == 'admin' || session?.role == 'manager';
+    final myDept = ref.read(myDepartmentNameProvider);
+    final lockDept = !fullAccess && myDept.isNotEmpty;
+    if (lockDept) {
+      department = myDept;
+      try {
+        folders = await ref.read(reportFoldersProvider(myDept).future);
+      } catch (_) {/* folders optional */}
+    }
+    if (!mounted) return;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -337,13 +671,95 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
                   const SizedBox(height: 14),
                   TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Title *', border: OutlineInputBorder(), isDense: true)),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                    initialValue: department,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Department *', border: OutlineInputBorder(), isDense: true),
-                    items: deptNames.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
-                    onChanged: (v) => setSheet(() => department = v),
-                  ),
+                  if (lockDept)
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Department *',
+                        helperText: 'Your department',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(department ?? '',
+                                style: const TextStyle(fontSize: 15)),
+                          ),
+                          Icon(Icons.lock_outline, size: 15, color: crm.textSecondary),
+                        ],
+                      ),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      initialValue: department,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Department *', border: OutlineInputBorder(), isDense: true),
+                      items: deptNames.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                      onChanged: (v) async {
+                        setSheet(() {
+                          department = v;
+                          folderId = null;
+                          folders = const [];
+                        });
+                        if (v != null) {
+                          try {
+                            final fs = await ref.read(reportFoldersProvider(v).future);
+                            if (ctx.mounted && department == v) {
+                              setSheet(() => folders = fs);
+                            }
+                          } catch (_) {/* folders optional */}
+                        }
+                      },
+                    ),
+                  if (department != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String?>(
+                            initialValue: folderId,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Folder (optional)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                  value: null, child: Text('Unfiled')),
+                              for (final f in folders)
+                                DropdownMenuItem<String?>(
+                                    value: f.id, child: Text(f.name)),
+                            ],
+                            onChanged: (v) => setSheet(() => folderId = v),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: 'New folder',
+                          icon: Icon(Icons.create_new_folder_outlined, color: crm.primary),
+                          onPressed: () async {
+                            final name = await _promptFolderName('New folder in ${department!}');
+                            if (name == null) return;
+                            try {
+                              final folder = await ref
+                                  .read(companyReportServiceProvider)
+                                  .createFolder(name, department: department!);
+                              ref.invalidate(reportFoldersProvider(department!));
+                              if (ctx.mounted) {
+                                setSheet(() {
+                                  folders = [...folders, folder];
+                                  folderId = folder.id;
+                                });
+                              }
+                            } catch (e) {
+                              messenger.showSnackBar(SnackBar(content: Text(_err(e))));
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   TextField(controller: periodCtrl, decoration: const InputDecoration(labelText: 'Period (e.g. Aug 2026)', border: OutlineInputBorder(), isDense: true)),
                   const SizedBox(height: 10),
@@ -388,6 +804,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
                                       bytes: file.bytes,
                                       filename: file.name,
                                       visibleToRoles: roles.toList(),
+                                      folderId: folderId,
                                     );
                                 if (ctx.mounted) Navigator.pop(ctx, true);
                               } catch (e) {

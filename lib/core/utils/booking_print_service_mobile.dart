@@ -46,11 +46,14 @@ Future<void> printBookingDetails(
       ),
       build: (context) {
         // Booking-level add-ons (single bookings) + each package's own add-ons
-        // (multi-package bookings).
-        final allAddons = [
-          ...booking.addons,
+        // (multi-package bookings). Single-package keeps them at the booking
+        // level; don't also count any copied onto the single item (double-up).
+        final perItemAddons = [
           for (final it in booking.bookingItems) ...it.addons,
         ];
+        final allAddons = booking.bookingItems.length <= 1
+            ? (booking.addons.isNotEmpty ? booking.addons : perItemAddons)
+            : [...booking.addons, ...perItemAddons];
         final addonsTotal = allAddons.fold(0.0, (sum, item) => sum + (item.amount * item.persons));
         final basePrice = booking.totalPrice - addonsTotal;
 

@@ -17,7 +17,10 @@ String _fmtDate(DateTime d) => DateFormat('d MMM yyyy').format(d);
 
 /// Finance → Journal. Post and review double-entry vouchers.
 class JournalVoucherScreen extends ConsumerStatefulWidget {
-  const JournalVoucherScreen({super.key});
+  const JournalVoucherScreen({super.key, this.initialSearch});
+
+  /// Pre-fill the search box (e.g. a voucher no. drilled in from the Ledger).
+  final String? initialSearch;
 
   @override
   ConsumerState<JournalVoucherScreen> createState() => _JournalVoucherScreenState();
@@ -35,6 +38,16 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
   String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
   ({String type, String status, String from, String to}) get _filter =>
       (type: _type, status: _status, from: _iso(_from), to: _iso(_to));
+
+  @override
+  void initState() {
+    super.initState();
+    final q = widget.initialSearch?.trim() ?? '';
+    if (q.isNotEmpty) {
+      _search = q;
+      _searchCtrl.text = q;
+    }
+  }
 
   @override
   void dispose() {

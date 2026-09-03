@@ -1237,6 +1237,16 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/team'),
                       onTap: () => context.go('/team/manage'),
                     ),
+                    // Department heads submit their own department's expenses
+                    // here; Accounts approves the payment. Accounts/Admin reach
+                    // the same screen via Accounts → Administrative → Expenses.
+                    _SidebarItem(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Department Expenses',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/accounts/admin-expenses',
+                      onTap: () => context.go('/accounts/admin-expenses'),
+                    ),
                   ],
 
                   // ── BUSINESS SECTION ─────────────────────────────────────────

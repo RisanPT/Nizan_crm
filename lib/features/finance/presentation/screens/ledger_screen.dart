@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
@@ -197,7 +198,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                     ),
                     // opening (only when not searching, so the running balance stays meaningful)
                     if (_search.isEmpty) _openingRow(crm, l),
-                    for (final r in filtered.take(_visible)) _entryRow(crm, r),
+                    for (final r in filtered.take(_visible)) _entryRow(context, crm, r),
                   ]),
                 ),
                 ShowMoreButton(
@@ -257,7 +258,13 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
         ]),
       );
 
-  Widget _entryRow(CrmTheme crm, LedgerRow r) => Container(
+  Widget _entryRow(BuildContext context, CrmTheme crm, LedgerRow r) => InkWell(
+        // Drill to the voucher itself (Journal filtered to this voucher no.).
+        onTap: r.voucherNo.trim().isEmpty
+            ? null
+            : () => context.push(
+                '/company-finance/journal?q=${Uri.encodeComponent(r.voucherNo.trim())}'),
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -274,7 +281,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
           Expanded(flex: 2, child: Text(r.credit > 0 ? _money(r.credit) : '', textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, color: crm.success))),
           Expanded(flex: 3, child: Text('${_money(r.balance)} ${r.balanceSide.toUpperCase()}', textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.textPrimary))),
         ]),
-      );
+      ));
 
   TextStyle _hdr(CrmTheme crm) => TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.4, color: crm.textSecondary);
 }

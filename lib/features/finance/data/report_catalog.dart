@@ -168,6 +168,15 @@ const kFinanceReports = <FinanceReport>[
     icon: Icons.swap_vert_circle_outlined,
   ),
   FinanceReport(
+    key: 'expenses_by_category',
+    name: 'Expenses by Category',
+    category: 'Business Overview',
+    description:
+        'Drill from category totals → the transactions inside → each receipt/invoice.',
+    route: '/company-finance/expenses-by-category',
+    icon: Icons.account_tree_outlined,
+  ),
+  FinanceReport(
     key: 'sales_customer',
     name: 'Sales by Customer',
     category: 'Sales',
@@ -246,6 +255,23 @@ const kFinanceReports = <FinanceReport>[
     description: 'Net GST payable and the outward supplies register.',
     route: '/company-finance/gst',
     icon: Icons.percent_outlined,
+  ),
+  FinanceReport(
+    key: 'gstr3b',
+    name: 'GSTR-3B Summary',
+    category: 'Taxes',
+    description:
+        'The monthly GST return — 3.1 outward supplies, 4 eligible ITC, net tax payable.',
+    route: '/company-finance/gstr3b',
+    icon: Icons.summarize_outlined,
+  ),
+  FinanceReport(
+    key: 'tds',
+    name: 'TDS Summary',
+    category: 'Taxes',
+    description: 'Tax deducted at source on vendor payments, grouped by section.',
+    route: '/company-finance/tds',
+    icon: Icons.request_quote_outlined,
   ),
   FinanceReport(
     key: 'reconciliation',

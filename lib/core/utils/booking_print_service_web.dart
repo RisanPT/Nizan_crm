@@ -16,11 +16,17 @@ String _staffWorkLabel(BookingAssignment staff) {
 }
 
 // Every add-on on the booking — the booking-level list (single bookings) plus
-// each package's own add-ons (multi-package bookings).
-List<BookingAddon> _allAddons(Booking booking) => [
-      ...booking.addons,
-      for (final it in booking.bookingItems) ...it.addons,
-    ];
+// each package's own add-ons (multi-package bookings). A single-package booking
+// keeps its add-ons at the booking level; older/edited data may have ALSO
+// copied them onto the single item, so don't count both (that double-ups the
+// invoice + subtotal).
+List<BookingAddon> _allAddons(Booking booking) {
+  final perItem = [for (final it in booking.bookingItems) ...it.addons];
+  if (booking.bookingItems.length <= 1) {
+    return booking.addons.isNotEmpty ? booking.addons : perItem;
+  }
+  return [...booking.addons, ...perItem];
+}
 
 double _addonTotal(Booking booking) => _allAddons(booking).fold<double>(
       0,

@@ -240,6 +240,9 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.gavel_outlined, Color(0xFF7C3AED));
     case 'booking_created':
       return const _TypeMeta(Icons.event_available_outlined, Color(0xFF0D9488));
+    // Company Reports
+    case 'report_uploaded':
+      return const _TypeMeta(Icons.folder_shared_outlined, Color(0xFF7C3AED));
     // Accounts
     case 'payment_received':
       return const _TypeMeta(Icons.payments_outlined, Color(0xFF16A34A));

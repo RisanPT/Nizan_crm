@@ -20,6 +20,8 @@ class CompanyReport {
   final String title;
   final String description;
   final String department;
+  final String folderId;
+  final String folderName;
   final String period;
   final String fileUrl;
   final String fileType; // pdf | excel | csv | word | image | other
@@ -35,6 +37,8 @@ class CompanyReport {
     required this.title,
     this.description = '',
     required this.department,
+    this.folderId = '',
+    this.folderName = '',
     this.period = '',
     required this.fileUrl,
     required this.fileType,
@@ -48,11 +52,16 @@ class CompanyReport {
 
   factory CompanyReport.fromJson(Map<String, dynamic> j) {
     final up = j['uploadedBy'];
+    final folder = j['folder'];
     return CompanyReport(
       id: (j['_id'] ?? j['id'] ?? '').toString(),
       title: (j['title'] ?? '').toString(),
       description: (j['description'] ?? '').toString(),
       department: (j['department'] ?? '').toString(),
+      folderId: folder is Map
+          ? (folder['_id'] ?? '').toString()
+          : (folder ?? '').toString(),
+      folderName: folder is Map ? (folder['name'] ?? '').toString() : '',
       period: (j['period'] ?? '').toString(),
       fileUrl: (j['fileUrl'] ?? '').toString(),
       fileType: (j['fileType'] ?? 'other').toString(),

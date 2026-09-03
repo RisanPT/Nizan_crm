@@ -28,6 +28,7 @@ class InventoryValuationScreen extends ConsumerStatefulWidget {
 class _InventoryValuationScreenState
     extends ConsumerState<InventoryValuationScreen> {
   String _search = '';
+  InventoryProduct? _sel; // drilled-into product
 
   bool _matches(InventoryProduct p) {
     final q = _search.trim().toLowerCase();
@@ -70,6 +71,7 @@ class _InventoryValuationScreenState
               ),
             ]),
             data: (all) {
+              if (_sel != null) return _detailView(crm, _sel!);
               if (all.isEmpty) {
                 return ListView(children: [
                   SizedBox(
@@ -139,6 +141,106 @@ class _InventoryValuationScreenState
     );
   }
 
+  // Tier-3: one product's full detail.
+  Widget _detailView(CrmTheme crm, InventoryProduct p) {
+    final meta = <(String, String)>[
+      if (p.brand.trim().isNotEmpty) ('Brand', p.brand),
+      if (p.shade.trim().isNotEmpty) ('Shade', p.shade),
+      if (p.category.trim().isNotEmpty) ('Category', p.category),
+      if (p.productType.trim().isNotEmpty) ('Type', p.productType),
+      if (p.barcode.trim().isNotEmpty) ('Barcode', p.barcode),
+      ('Quantity in stock', '${p.quantity}'),
+      ('Unit price', _money(p.price)),
+      ('Stock value', _money(_value(p))),
+      ('Low-stock threshold', '${p.lowStockThreshold}'),
+      if (p.expiry != null)
+        ('Expiry', DateFormat('dd MMM yyyy').format(p.expiry!)),
+      ('Owner', p.owner.trim().isEmpty ? 'Studio' : p.owner),
+      if (p.notes.trim().isNotEmpty) ('Notes', p.notes),
+    ];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
+      children: [
+        Row(children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.arrow_back_rounded, size: 20),
+            onPressed: () => setState(() => _sel = null),
+          ),
+          Expanded(
+            child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+              InkWell(
+                onTap: () => setState(() => _sel = null),
+                child: Text('Inventory Valuation',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: crm.primary)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.chevron_right_rounded,
+                    size: 16, color: crm.textSecondary),
+              ),
+              Text(p.name.isEmpty ? '(Unnamed)' : p.name,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+            ]),
+          ),
+        ]),
+        12.h,
+        Container(
+          decoration: BoxDecoration(
+              color: crm.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: crm.border)),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(p.name.isEmpty ? '(Unnamed)' : p.name,
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+              6.h,
+              Text(_money(_value(p)),
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: crm.primary)),
+              14.h,
+              for (final m in meta)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: Text(m.$1,
+                            style: TextStyle(
+                                fontSize: 12.5, color: crm.textSecondary)),
+                      ),
+                      Expanded(
+                        child: Text(m.$2,
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: crm.textPrimary)),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _stat(CrmTheme crm, String label, String value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -196,7 +298,9 @@ class _InventoryValuationScreenState
           ),
           Divider(height: 1, color: crm.border),
           for (final p in products)
-            Padding(
+            InkWell(
+              onTap: () => setState(() => _sel = p),
+              child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               child: Row(children: [
                 Expanded(
@@ -246,8 +350,10 @@ class _InventoryValuationScreenState
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w700)),
                 ),
+                Icon(Icons.chevron_right_rounded,
+                    size: 16, color: crm.textSecondary),
               ]),
-            ),
+            )),
           Divider(height: 1, color: crm.border),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),

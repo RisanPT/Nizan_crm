@@ -988,8 +988,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                 districtId: selectedDistrictId.value,
                 regionId: findDistrictById(selectedDistrictId.value)?.regionId ??
                     selectedRegionId.value,
-                // Per-package add-ons — saved for THIS package only.
-                addons: _normalizedAddons(addons.value),
+                // Per-package add-ons — ONLY for a genuine multi-package booking.
+                // A single-package booking keeps its add-ons at the booking
+                // level; writing them here too would double-count them (in the
+                // total and on the invoice).
+                addons: booking.bookingItems.length > 1
+                    ? _normalizedAddons(addons.value)
+                    : const <BookingAddon>[],
               );
             }).toList()
           : booking.bookingItems;

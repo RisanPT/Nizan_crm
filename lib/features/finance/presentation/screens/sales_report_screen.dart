@@ -14,6 +14,9 @@ import 'package:nizan_crm/features/finance/presentation/widgets/show_more_button
 import 'package:nizan_crm/features/finance/presentation/widgets/sort_header.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/data/booking.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -108,8 +111,34 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
   bool _asc = false;
   int _visible = kFinancePageSize;
   SalesReport? _last;
+  SalesRow? _drillRow; // Tier-3: the row we've drilled into.
 
   SalesReportSpec get spec => widget.spec;
+
+  /// Customer / package / salesperson rows drill into the underlying bookings.
+  bool get _drillable =>
+      spec.kind == kSalesByCustomer ||
+      spec.kind == kSalesByPackage ||
+      spec.kind == kSalesBySalesperson;
+
+  String _phoneKey(String v) {
+    final digits = v.replaceAll(RegExp(r'\D'), '');
+    return digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+  }
+
+  bool _bookingMatches(Booking b, SalesRow row) {
+    switch (spec.kind) {
+      case kSalesByCustomer:
+        return _phoneKey(b.phone) == _phoneKey(row.id);
+      case kSalesByPackage:
+        return b.service.trim() == row.id.trim() ||
+            b.bookingItems.any((it) => it.service.trim() == row.id.trim());
+      case kSalesBySalesperson:
+        return (b.salesPersonId ?? '') == row.id && row.id.isNotEmpty;
+      default:
+        return false;
+    }
+  }
   String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
 
   void _sort(String key) => setState(() {
@@ -202,6 +231,9 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
             ]),
             data: (rep) {
               _last = rep;
+              if (_drillRow != null && _drillable) {
+                return _drillView(crm, _drillRow!);
+              }
               return _content(crm, rep);
             },
           ),
@@ -315,14 +347,16 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
     );
   }
 
-  Widget _row(CrmTheme crm, SalesRow r) => Container(
+  Widget _row(CrmTheme crm, SalesRow r) {
+    final canDrill = _drillable && r.id.trim().isNotEmpty;
+    final body = Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             flex: 5,
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(r.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(r.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: canDrill ? crm.primary : crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
               if (r.sublabel.isNotEmpty)
                 Text(r.sublabel, style: TextStyle(fontSize: 11, color: crm.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
             ]),
@@ -331,8 +365,165 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
           Expanded(flex: 3, child: Text(_money(r.amount), textAlign: TextAlign.right, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: crm.textPrimary))),
           if (spec.showReceived)
             Expanded(flex: 3, child: Text(_money(r.received), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12.5, color: Color(0xFF0D9488)))),
+          if (canDrill)
+            Padding(padding: const EdgeInsets.only(left: 4), child: Icon(Icons.chevron_right_rounded, size: 16, color: crm.textSecondary)),
         ]),
       );
+    if (!canDrill) return body;
+    return InkWell(
+      onTap: () => setState(() {
+        _drillRow = r;
+        _visible = kFinancePageSize;
+      }),
+      child: body,
+    );
+  }
+
+  // ── Tier 3: the bookings behind one summary row ─────────────────────────────
+  Widget _drillView(CrmTheme crm, SalesRow row) {
+    final async = ref.watch(bookingProvider);
+    final months = const [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    String dateLabel(DateTime? d) =>
+        d == null ? '' : '${d.day} ${months[d.month - 1]} ${d.year}';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
+      children: [
+        // Breadcrumb + back
+        Row(children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.arrow_back_rounded, size: 20),
+            onPressed: () => setState(() => _drillRow = null),
+          ),
+          Expanded(
+            child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: [
+              InkWell(
+                onTap: () => setState(() => _drillRow = null),
+                child: Text(spec.title,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: crm.primary)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.chevron_right_rounded,
+                    size: 16, color: crm.textSecondary),
+              ),
+              Text(row.label,
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
+            ]),
+          ),
+        ]),
+        12.h,
+        async.when(
+          loading: () => const Padding(
+              padding: EdgeInsets.all(40),
+              child: Center(child: CircularProgressIndicator())),
+          error: (e, _) => Padding(
+              padding: const EdgeInsets.all(40),
+              child: Center(
+                  child: Text(friendlyErrorMessage(e),
+                      style: TextStyle(color: crm.destructive)))),
+          data: (all) {
+            final bookings = all
+                .where((b) => _bookingMatches(b, row) && _inDrillRange(b))
+                .toList()
+              ..sort((a, b) => (b.bookingDate).compareTo(a.bookingDate));
+            if (bookings.isEmpty) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: crm.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: crm.border),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 36),
+                child: Center(
+                    child: Text('No bookings found for this selection.',
+                        style: TextStyle(color: crm.textSecondary))),
+              );
+            }
+            return Container(
+              decoration: BoxDecoration(
+                color: crm.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: crm.border),
+              ),
+              child: Column(children: [
+                for (final b in bookings)
+                  InkWell(
+                    onTap: () => context.push('/booking/manage/${b.id}'),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 11),
+                      decoration: BoxDecoration(
+                          border: Border(
+                              top: BorderSide(
+                                  color: crm.border.withValues(alpha: 0.4)))),
+                      child: Row(children: [
+                        Expanded(
+                          flex: 6,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  b.customerName.isEmpty
+                                      ? (b.service.isEmpty
+                                          ? 'Booking'
+                                          : b.service)
+                                      : b.customerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: crm.textPrimary)),
+                              Text(
+                                  '${dateLabel(b.bookingDate)}'
+                                  '${b.service.trim().isNotEmpty ? '  ·  ${b.service.trim()}' : ''}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 11, color: crm.textSecondary)),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 3,
+                          child: Text(_money(b.totalPrice),
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w700)),
+                        ),
+                        Icon(Icons.chevron_right_rounded,
+                            size: 18, color: crm.textSecondary),
+                      ]),
+                    ),
+                  ),
+              ]),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  bool _inDrillRange(Booking b) {
+    if (_from != null && b.bookingDate.isBefore(_from!)) return false;
+    if (_to != null &&
+        b.bookingDate
+            .isAfter(DateTime(_to!.year, _to!.month, _to!.day, 23, 59, 59))) {
+      return false;
+    }
+    return true;
+  }
 
   Future<void> _export() async {
     final rep = _last;

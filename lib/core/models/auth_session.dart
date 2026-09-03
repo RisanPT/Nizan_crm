@@ -21,6 +21,9 @@ class AuthSession {
   final String employeeId;
   /// The Department this user belongs to (Department entity id), or ''.
   final String departmentId;
+  /// The display name of that department (e.g. 'IT'), resolved by the backend.
+  /// Used to scope/lock departmental expense submission to the head's own dept.
+  final String departmentName;
   final String zoneId;
   final String stateId;
   final String regionId;
@@ -41,6 +44,7 @@ class AuthSession {
     this.inventoryManage = false,
     this.employeeId = '',
     this.departmentId = '',
+    this.departmentName = '',
     this.zoneId = '',
     this.stateId = '',
     this.regionId = '',
@@ -62,6 +66,7 @@ class AuthSession {
       'inventoryManage': inventoryManage,
       'employeeId': employeeId,
       'departmentId': departmentId,
+      'departmentName': departmentName,
       'zoneId': zoneId,
       'stateId': stateId,
       'regionId': regionId,
@@ -90,6 +95,7 @@ class AuthSession {
       inventoryManage: user['inventoryManage'] as bool? ?? false,
       employeeId: user['employeeId'] as String? ?? '',
       departmentId: user['departmentId'] as String? ?? '',
+      departmentName: user['departmentName'] as String? ?? '',
       zoneId: user['zoneId'] as String? ?? '',
       stateId: user['stateId'] as String? ?? '',
       regionId: user['regionId'] as String? ?? '',

@@ -143,6 +143,8 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
         return Icons.event_available_rounded;
       case 'new_lead':
         return Icons.person_add_alt_1_rounded;
+      case 'report_uploaded':
+        return Icons.folder_shared_rounded;
       default:
         return Icons.notifications_active_rounded;
     }

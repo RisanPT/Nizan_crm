@@ -9,6 +9,10 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/admin_expense_controller.dart';
 import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
+import 'package:nizan_crm/core/providers/my_department_provider.dart';
+import 'package:nizan_crm/features/accounts/data/expense_category.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/manage_expense_categories_dialog.dart';
+import 'package:nizan_crm/features/accounts/services/expense_category_service.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -23,6 +27,8 @@ const _departments = [
   'Sales',
   'Marketing',
   'HR',
+  'Artist',
+  'Fleet',
   'Operations',
   'General',
 ];
@@ -285,9 +291,52 @@ class _AdministrativeExpensesScreenState
     final asyncStats = ref.watch(adminExpenseStatsProvider);
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
-    final canVerify = access.role == AppRole.admin ||
-        access.role == AppRole.accounts ||
-        access.canSeeSub('payables.admin_expenses');
+    // Approvers are Accounts/Admin ONLY — this matches the backend, which
+    // rejects an approve/reject from anyone else. A department head's role may
+    // resolve `payables` through the permission fallback, so we must NOT treat
+    // that as "approver" here, or heads would wrongly get the full audit view.
+    final isApprover =
+        access.role == AppRole.admin || access.role == AppRole.accounts;
+    final canVerify = isApprover;
+    // Everyone else who can reach this screen (department heads, managers) gets
+    // the scoped, submit-only view: their own department only, no approve
+    // controls, no cross-department tabs. The backend already restricts their
+    // data to their own department.
+    final isDeptHeadView = !isApprover && access.isDepartmentHead;
+    final myDept = ref.watch(myDepartmentNameProvider);
+
+    void openManageCategories() {
+      showDialog(
+        context: context,
+        builder: (_) => ManageExpenseCategoriesDialog(
+          department: isDeptHeadView
+              ? myDept
+              : (filter.department != 'All' ? filter.department : ''),
+          canPickDepartment: !isDeptHeadView,
+        ),
+      );
+    }
+
+    // Category options for the filter — the managed categories of the single
+    // department in context, else the default seed set. The active filter value
+    // is always kept selectable so the dropdown never trips on a stale value.
+    final filterCatDept = isDeptHeadView
+        ? myDept
+        : (filter.department != 'All' ? filter.department : '');
+    final filterCatBase = filterCatDept.isEmpty
+        ? _categories.where((c) => c != 'All').toList()
+        : (ref.watch(expenseCategoriesProvider(filterCatDept)).value ??
+                const <ExpenseCategory>[])
+            .map((c) => c.name)
+            .toList();
+    final filterCatOptions = <String>[
+      'All',
+      ...{
+        ...filterCatBase,
+        if (filter.category != 'All' && filter.category.isNotEmpty)
+          filter.category,
+      },
+    ];
 
     return Scaffold(
       body: RefreshIndicator(
@@ -312,7 +361,9 @@ class _AdministrativeExpensesScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Administrative Expenses',
+                        isDeptHeadView
+                            ? 'Department Expenses'
+                            : 'Administrative Expenses',
                         style: TextStyle(
                           fontSize: isMobile ? 22 : 28,
                           fontWeight: FontWeight.w800,
@@ -322,7 +373,9 @@ class _AdministrativeExpensesScreenState
                       ),
                       4.h,
                       Text(
-                        'Manage & audit operating expenses, overheads, and departmental spend across CRM, Finance, Accounts, IT, Sales, Marketing, HR, and Operations.',
+                        isDeptHeadView
+                            ? 'Submit your department\'s expenses for Accounts to approve. A pending expense is not paid until Accounts approves it.'
+                            : 'Manage & audit operating expenses, overheads, and departmental spend across CRM, Finance, Accounts, IT, Sales, Marketing, HR, and Operations.',
                         style: TextStyle(
                           fontSize: 13,
                           color: crm.textSecondary,
@@ -333,6 +386,26 @@ class _AdministrativeExpensesScreenState
                 ),
                 if (!isMobile) ...[
                   const SizedBox(width: 16),
+                  OutlinedButton.icon(
+                    onPressed: openManageCategories,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: crm.primary,
+                      side: BorderSide(color: crm.primary.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.category_outlined, size: 18),
+                    label: const Text(
+                      'Categories',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
                   FilledButton.icon(
                     onPressed: () => _showAddEditExpenseDialog(),
                     style: FilledButton.styleFrom(
@@ -356,20 +429,38 @@ class _AdministrativeExpensesScreenState
             ),
             if (isMobile) ...[
               12.h,
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () => _showAddEditExpenseDialog(),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: crm.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+              Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => _showAddEditExpenseDialog(),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: crm.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Record Expense'),
                     ),
                   ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Record Expense'),
-                ),
+                  10.w,
+                  OutlinedButton.icon(
+                    onPressed: openManageCategories,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: crm.primary,
+                      side: BorderSide(color: crm.primary.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.category_outlined, size: 18),
+                    label: const Text('Categories'),
+                  ),
+                ],
               ),
             ],
 
@@ -415,44 +506,46 @@ class _AdministrativeExpensesScreenState
 
             20.h,
 
-            // ── Department Filter Tabs ──
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _departments.map((dept) {
-                  final isSelected = filter.department == dept;
-                  final color = dept == 'All' ? crm.primary : _deptColor(dept);
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      selected: isSelected,
-                      label: Text(
-                        dept,
-                        style: TextStyle(
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected ? Colors.white : crm.textPrimary,
-                          fontSize: 13,
+            // ── Department Filter Tabs ── (hidden for a department head — they
+            // only ever see their own department's expenses).
+            if (!isDeptHeadView) ...[
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _departments.map((dept) {
+                    final isSelected = filter.department == dept;
+                    final color = dept == 'All' ? crm.primary : _deptColor(dept);
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        selected: isSelected,
+                        label: Text(
+                          dept,
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? Colors.white : crm.textPrimary,
+                            fontSize: 13,
+                          ),
                         ),
+                        selectedColor: color,
+                        backgroundColor: crm.surface,
+                        side: BorderSide(
+                          color: isSelected ? color : crm.border,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        onSelected: (val) {
+                          ref.read(adminExpenseFilterProvider.notifier).state =
+                              filter.copyWith(department: dept);
+                        },
                       ),
-                      selectedColor: color,
-                      backgroundColor: crm.surface,
-                      side: BorderSide(
-                        color: isSelected ? color : crm.border,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      onSelected: (val) {
-                        ref.read(adminExpenseFilterProvider.notifier).state =
-                            filter.copyWith(department: dept);
-                      },
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }).toList(),
+                ),
               ),
-            ),
-
-            14.h,
+              14.h,
+            ],
 
             // ── Secondary Filters (Status, Search, Date) ──
             Wrap(
@@ -507,10 +600,9 @@ class _AdministrativeExpensesScreenState
                       isDense: true,
                       icon: Icon(Icons.arrow_drop_down, color: crm.textSecondary),
                       style: TextStyle(fontSize: 13, color: crm.textPrimary),
-                      items: _categories.map((c) {
-                        String label = c == 'All'
-                            ? 'All Categories'
-                            : c.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+                      items: filterCatOptions.map((c) {
+                        final label =
+                            c == 'All' ? 'All Categories' : prettyCategory(c);
                         return DropdownMenuItem(
                           value: c,
                           child: Text(label),
@@ -944,11 +1036,15 @@ class _AddEditAdminExpenseDialogState
   bool _isRecurring = false;
   String _gstType = 'none';
   bool _isSubmitting = false;
+  // A department head (non-approver) may only file for their OWN department, so
+  // the department field is locked to it. Accounts/Admin can pick any.
+  bool _lockDept = false;
 
   @override
   void initState() {
     super.initState();
     final e = widget.expense;
+
     _titleCtrl = TextEditingController(text: e?.title ?? '');
     _amountCtrl = TextEditingController(
       text: e != null ? e.amount.toStringAsFixed(0) : '',
@@ -1050,6 +1146,33 @@ class _AddEditAdminExpenseDialogState
     final crm = context.crmColors;
     final employeesAsync = ref.watch(employeesProvider);
 
+    // Resolve whether the department must be locked to the signed-in user's own
+    // department. Approvers (Accounts/Admin) can file for any department; a
+    // department head is forced to their own by the backend. We take the
+    // department NAME from the session, and — since an older session may not
+    // carry `departmentName` yet — fall back to resolving it from the
+    // department id against the loaded departments list.
+    final session = ref.watch(authSessionProvider);
+    final role = session?.role ?? '';
+    final approver = role == 'admin' || role == 'accounts';
+    // Resolved from session → departments → Employee record (see provider).
+    final headDept = ref.watch(myDepartmentNameProvider);
+    _lockDept = !approver && headDept.isNotEmpty;
+    // When locked, the selection is always the head's own department (this also
+    // corrects it once the department name finishes resolving).
+    if (_lockDept && _selectedDept != headDept) {
+      _selectedDept = headDept;
+    }
+
+    // Categories are managed per department — load the ones for the department
+    // this expense is being filed under.
+    final categoryValues = _selectedDept.isEmpty
+        ? const <String>[]
+        : (ref.watch(expenseCategoriesProvider(_selectedDept)).value ??
+                const <ExpenseCategory>[])
+            .map((c) => c.name)
+            .toList();
+
     return Dialog(
       backgroundColor: crm.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1068,7 +1191,9 @@ class _AddEditAdminExpenseDialogState
                   children: [
                     Text(
                       widget.expense == null
-                          ? 'Record Administrative Expense'
+                          ? (_lockDept
+                              ? 'Submit Department Expense'
+                              : 'Record Administrative Expense')
                           : 'Edit Expense',
                       style: TextStyle(
                         fontSize: 18,
@@ -1096,35 +1221,102 @@ class _AddEditAdminExpenseDialogState
                 ),
                 12.h,
 
+                // A department head whose department couldn't be resolved from
+                // any source — warn them, since the backend will also reject the
+                // submission until an admin assigns their department.
+                if (!approver && !_lockDept) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: crm.warning.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: crm.warning.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: crm.warning, size: 18),
+                        8.w,
+                        Expanded(
+                          child: Text(
+                            'Your department isn\'t set on your account, so it can\'t be filled in automatically. Ask an admin to set your department.',
+                            style: TextStyle(
+                                fontSize: 12, color: crm.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  12.h,
+                ],
+
                 // Department & Category
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
+                        // Key on the value+lock so the field rebuilds with the
+                        // correct selection once the head's department resolves.
+                        key: ValueKey('dept-$_selectedDept-$_lockDept'),
                         initialValue: _selectedDept,
-                        decoration: const InputDecoration(labelText: 'Department *'),
-                        items: _departments.where((d) => d != 'All').map((dept) {
+                        decoration: InputDecoration(
+                          labelText: 'Department *',
+                          helperText:
+                              _lockDept ? 'Your department' : null,
+                        ),
+                        // Always include the currently selected department so a
+                        // head's own department (or a custom one) is a valid item.
+                        items: <String>{
+                          ..._departments.where((d) => d != 'All'),
+                          if (_selectedDept.isNotEmpty) _selectedDept,
+                        }.map((dept) {
                           return DropdownMenuItem(value: dept, child: Text(dept));
                         }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedDept = val);
-                        },
+                        // Locked for department heads — they can only file for
+                        // their own department.
+                        onChanged: _lockDept
+                            ? null
+                            : (val) {
+                                if (val != null) {
+                                  setState(() => _selectedDept = val);
+                                }
+                              },
                       ),
                     ),
                     12.w,
                     Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _selectedCategory,
-                        decoration: const InputDecoration(labelText: 'Category *'),
-                        items: _categories.where((c) => c != 'All').map((cat) {
-                          final label = cat
-                              .split('_')
-                              .map((w) => w[0].toUpperCase() + w.substring(1))
-                              .join(' ');
-                          return DropdownMenuItem(value: cat, child: Text(label));
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedCategory = val);
+                      child: Builder(
+                        builder: (context) {
+                          // Always keep the current selection selectable, even
+                          // if it isn't in the loaded list (legacy value).
+                          final options = <String>{
+                            ...categoryValues,
+                            if (_selectedCategory.isNotEmpty) _selectedCategory,
+                          }.toList();
+                          return DropdownButtonFormField<String>(
+                            key: ValueKey(
+                                'cat-$_selectedDept-${options.length}'),
+                            initialValue: options.contains(_selectedCategory)
+                                ? _selectedCategory
+                                : null,
+                            isExpanded: true,
+                            decoration:
+                                const InputDecoration(labelText: 'Category *'),
+                            items: options
+                                .map((v) => DropdownMenuItem(
+                                      value: v,
+                                      child: Text(prettyCategory(v)),
+                                    ))
+                                .toList(),
+                            validator: (v) => (v == null || v.isEmpty)
+                                ? 'Select a category'
+                                : null,
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedCategory = val);
+                              }
+                            },
+                          );
                         },
                       ),
                     ),

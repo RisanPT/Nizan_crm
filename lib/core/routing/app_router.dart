@@ -103,10 +103,13 @@ import 'package:nizan_crm/features/finance/presentation/screens/ledger_screen.da
 import 'package:nizan_crm/features/finance/presentation/screens/profit_loss_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/inventory_valuation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/cash_flow_statement_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/expenses_by_category_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/balance_sheet_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/aging_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/bank_reconciliation_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/gst_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/gstr3b_summary_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/tds_summary_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -185,11 +188,14 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/company-finance/inventory-valuation')) return 'company_finance.pnl';
   // Cash Flow is a Business Overview report — reuse P&L access.
   if (path.startsWith('/company-finance/cash-flow')) return 'company_finance.pnl';
+  if (path.startsWith('/company-finance/expenses-by-category')) return 'company_finance.pnl';
   if (path.startsWith('/company-finance/ledger')) return 'company_finance.ledger';
   if (path.startsWith('/company-finance/profit-loss')) return 'company_finance.pnl';
   if (path.startsWith('/company-finance/balance-sheet')) return 'company_finance.balance_sheet';
   if (path.startsWith('/company-finance/aging')) return 'company_finance.aging';
   if (path.startsWith('/company-finance/reconciliation')) return 'company_finance.reconciliation';
+  if (path.startsWith('/company-finance/gstr3b')) return 'company_finance.gst';
+  if (path.startsWith('/company-finance/tds')) return 'company_finance.gst';
   if (path.startsWith('/company-finance/gst')) return 'company_finance.gst';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
@@ -273,6 +279,9 @@ bool isRouteAllowed(String path, Access access,
     if (inventoryManage) return true;
     return sub != null ? access.canSeeSub(sub) : access.canManageInventory;
   }
+  // Department heads may open Administrative Expenses to submit their own
+  // department's expenses (Accounts approves the payment).
+  if (path == '/accounts/admin-expenses') return access.canSeeAdminExpenses;
   if (path.startsWith('/accounts')) {
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canSeePayables;
@@ -480,6 +489,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Inventory Valuation';
           } else if (state.uri.path == '/company-finance/cash-flow') {
             title = 'Cash Flow Statement';
+          } else if (state.uri.path == '/company-finance/expenses-by-category') {
+            title = 'Expenses by Category';
           } else if (state.uri.path == '/company-finance/ledger') {
             title = 'General Ledger';
           } else if (state.uri.path == '/company-finance/profit-loss') {
@@ -490,6 +501,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Receivables & Payables';
           } else if (state.uri.path == '/company-finance/reconciliation') {
             title = 'Bank Reconciliation';
+          } else if (state.uri.path == '/company-finance/gstr3b') {
+            title = 'GSTR-3B Summary';
+          } else if (state.uri.path == '/company-finance/tds') {
+            title = 'TDS Summary';
           } else if (state.uri.path == '/company-finance/gst') {
             title = 'GST';
           } else if (state.uri.path == '/sales/home') {
@@ -1032,7 +1047,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/company-finance/journal',
-            builder: (context, state) => const JournalVoucherScreen(),
+            builder: (context, state) => JournalVoucherScreen(
+              initialSearch: state.uri.queryParameters['q'],
+            ),
           ),
           GoRoute(
             path: '/company-finance/trial-balance',
@@ -1062,6 +1079,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const CashFlowStatementScreen(),
           ),
           GoRoute(
+            path: '/company-finance/expenses-by-category',
+            builder: (context, state) => const ExpensesByCategoryScreen(),
+          ),
+          GoRoute(
             path: '/company-finance/balance-sheet',
             builder: (context, state) => const BalanceSheetScreen(),
           ),
@@ -1076,6 +1097,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/gst',
             builder: (context, state) => const GstScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/gstr3b',
+            builder: (context, state) => const Gstr3bSummaryScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/tds',
+            builder: (context, state) => const TdsSummaryScreen(),
           ),
           GoRoute(
             path: '/sales/dashboard',

@@ -120,6 +120,12 @@ class Access {
   bool get canSeeCompanyReports =>
       isFullAccess || has('company_reports', role.canSeeCompanyReports);
   bool get canSeePayables => has('payables', role.canSeePayables);
+
+  /// The Administrative Expenses screen. Accounts/Admin reach it through the
+  /// normal payables permission; any department head also reaches it to SUBMIT
+  /// their own department's expenses for Accounts to approve.
+  bool get canSeeAdminExpenses =>
+      isFullAccess || canSeeSub('payables.admin_expenses') || isDepartmentHead;
   bool get canSeeFleet => has('fleet', role.canSeeFleet);
   bool get canManageInventory => has('inventory', role.canManageInventory);
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
