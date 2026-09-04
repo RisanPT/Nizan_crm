@@ -20,7 +20,14 @@ class Access {
   /// their own department's staff members.
   final bool isDepartmentHead;
 
-  const Access(this.role, this.granted, {this.configuredHomeRoute = '', this.isDepartmentHead = false});
+  /// Mirrors [AuthSession.artistHead] — an artist who also leads the artist
+  /// team, granting the Artist Head dashboard on top of their artist role.
+  final bool artistHead;
+
+  const Access(this.role, this.granted,
+      {this.configuredHomeRoute = '',
+      this.isDepartmentHead = false,
+      this.artistHead = false});
 
   factory Access.of(AuthSession? session) {
     final role = AppRole.fromString(session?.role);
@@ -34,6 +41,7 @@ class Access {
       (session?.permissions ?? const []).toSet(),
       configuredHomeRoute: session?.homeRoute ?? '',
       isDepartmentHead: (session?.isDepartmentHead ?? false) || isManager,
+      artistHead: session?.artistHead ?? false,
     );
   }
 
@@ -130,6 +138,11 @@ class Access {
   bool get canManageInventory => has('inventory', role.canManageInventory);
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
   bool get canSeeCEOReport => has('reports', role.canSeeCEOReport);
+
+  /// Artist Head dashboard — the dedicated artist_head role, an artist flagged
+  /// as also-head, or full-access management.
+  bool get canSeeArtistHead =>
+      isFullAccess || role == AppRole.artistHead || artistHead;
   // IT hub (projects, task board, and — later — helpdesk tickets). No AppRole
   // matrix entry yet, so it's driven by the granted 'it' permission (admin/
   // manager see it via the isFullAccess bypass).

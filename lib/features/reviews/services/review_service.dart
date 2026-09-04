@@ -43,6 +43,16 @@ class ReviewService {
     }
   }
 
+  Future<ArtistReviewPerformance> getArtistPerformance(String employeeId) async {
+    try {
+      final res = await _dio.get('/reviews/artist/$employeeId');
+      return ArtistReviewPerformance.fromJson(res.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw Exception(
+          friendlyErrorMessage(e, fallback: 'Failed to load artist reviews'));
+    }
+  }
+
   Future<ReviewAnalytics> getAnalytics() async {
     try {
       final res = await _dio.get('/reviews/analytics');
@@ -126,6 +136,57 @@ final reviewsProvider = FutureProvider<List<Review>>((ref) async {
 final reviewAnalyticsProvider = FutureProvider<ReviewAnalytics>((ref) async {
   return ref.watch(reviewServiceProvider).getAnalytics();
 });
+
+/// A single artist's client-review performance (avg rating, breakdown,
+/// testimonials), keyed by their Employee id.
+final artistReviewPerformanceProvider =
+    FutureProvider.family<ArtistReviewPerformance, String>((ref, empId) async {
+  return ref.watch(reviewServiceProvider).getArtistPerformance(empId);
+});
+
+class ArtistReviewTestimonial {
+  final String text, bride;
+  final double rating;
+  final bool consent;
+  const ArtistReviewTestimonial(
+      {this.text = '', this.bride = '', this.rating = 0, this.consent = false});
+  factory ArtistReviewTestimonial.fromJson(Map<String, dynamic> j) =>
+      ArtistReviewTestimonial(
+        text: (j['text'] ?? '').toString(),
+        bride: (j['bride'] ?? '').toString(),
+        rating: (j['rating'] as num?)?.toDouble() ?? 0,
+        consent: j['consent'] == true,
+      );
+}
+
+class ArtistReviewPerformance {
+  final int reviewCount;
+  final double avgClientRating;
+  final double avgBrideScore;
+  final Map<String, double> breakdown;
+  final List<ArtistReviewTestimonial> testimonials;
+  const ArtistReviewPerformance({
+    this.reviewCount = 0,
+    this.avgClientRating = 0,
+    this.avgBrideScore = 0,
+    this.breakdown = const {},
+    this.testimonials = const [],
+  });
+
+  factory ArtistReviewPerformance.fromJson(Map<String, dynamic> j) {
+    final b = (j['breakdown'] as Map?) ?? const {};
+    return ArtistReviewPerformance(
+      reviewCount: (j['reviewCount'] as num?)?.toInt() ?? 0,
+      avgClientRating: (j['avgClientRating'] as num?)?.toDouble() ?? 0,
+      avgBrideScore: (j['avgBrideScore'] as num?)?.toDouble() ?? 0,
+      breakdown:
+          b.map((k, v) => MapEntry(k.toString(), (v as num?)?.toDouble() ?? 0)),
+      testimonials: ((j['testimonials'] as List?) ?? const [])
+          .map((e) => ArtistReviewTestimonial.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
 
 class ArtistStat {
   final String artistName;

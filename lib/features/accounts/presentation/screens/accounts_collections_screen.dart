@@ -146,6 +146,45 @@ class _AccountsCollectionsScreenState
                 ),
               ),
               12.w,
+              // Raw per-payment CSV of the currently-filtered collections
+              // (Date · Customer · Ref# · Amount · Mode · Status) — for
+              // reconciling against external reports (e.g. Zoho Payments
+              // Received) on a payment-date basis.
+              PopupMenuButton<String>(
+                tooltip: 'Download',
+                onSelected: (v) => _downloadPayments(
+                  context,
+                  ref,
+                  v == 'all' ? null : v,
+                ),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                      value: 'all', child: Text('Download all payments')),
+                  PopupMenuItem(
+                      value: 'advance', child: Text('Download advances only')),
+                  PopupMenuItem(
+                      value: 'collection',
+                      child: Text('Download collections only')),
+                ],
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.dividerColor),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.file_download_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      const Text('Download'),
+                      Icon(Icons.arrow_drop_down, color: crm.textSecondary),
+                    ],
+                  ),
+                ),
+              ),
+              12.w,
               ElevatedButton.icon(
                 onPressed: () => _showFilterSheet(context, ref),
                 icon: const Icon(Icons.filter_list),
@@ -697,6 +736,86 @@ class _AccountsCollectionsScreenState
         },
       ),
     );
+  }
+
+  // Prompts for a date range, then downloads "payments received" for it.
+  // [type] = 'advance' | 'collection' | null (all).
+  Future<void> _downloadPayments(
+      BuildContext context, WidgetRef ref, String? type) async {
+    final now = DateTime.now();
+    final filters = ref.read(collectionFiltersProvider);
+    final initial = (filters.startDate != null && filters.endDate != null)
+        ? DateTimeRange(start: filters.startDate!, end: filters.endDate!)
+        : DateTimeRange(
+            start: DateTime(now.year, now.month, 1),
+            end: DateTime(now.year, now.month + 1, 0));
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: initial,
+      helpText: 'Select the payment date range',
+    );
+    if (range == null || !context.mounted) return;
+    await _exportCollectionsCsv(context, ref,
+        from: range.start, to: range.end, type: type);
+  }
+
+  // Exports "payments received" over [from]..[to] — booking ADVANCES (booked
+  // date) plus logged COLLECTIONS (payment date) — as a raw per-payment CSV, to
+  // reconcile against an external report (e.g. Zoho Payments Received).
+  // [type] filters the rows: 'advance', 'collection', or null = all.
+  Future<void> _exportCollectionsCsv(BuildContext context, WidgetRef ref,
+      {required DateTime from, required DateTime to, String? type}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final res = await ref.read(collectionServiceProvider).getPaymentsReceived(
+            from: from,
+            to: to,
+          );
+      final rows0 =
+          type == null ? res.rows : res.rows.where((r) => r.type == type).toList();
+      if (rows0.isEmpty) {
+        messenger.showSnackBar(SnackBar(
+            content: Text('No ${type ?? 'payment'}s in this date range.')));
+        return;
+      }
+      final subtotal = rows0.fold<double>(0, (s, r) => s + r.amount);
+      final label = type == 'advance'
+          ? 'advances'
+          : (type == 'collection' ? 'collections' : 'payments');
+      String d2(DateTime d) =>
+          '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final rangeStr = '${d2(from)}_to_${d2(to)}';
+      final rows = <List<dynamic>>[
+        ['Payments received ($label)', 'from', _fmt(from), 'to', _fmt(to)],
+        [],
+        ['Date', 'Customer', 'Ref#', 'Type', 'Amount', 'Mode', 'Status'],
+        for (final r in rows0)
+          [
+            _fmt(r.date),
+            r.customer,
+            r.ref,
+            r.type,
+            r.amount.toStringAsFixed(0),
+            r.mode,
+            r.status,
+          ],
+        [],
+        if (type == null) ...[
+          ['', '', '', 'Advances', res.advancesTotal.toStringAsFixed(0), '', ''],
+          ['', '', '', 'Collections', res.collectionsTotal.toStringAsFixed(0), '', ''],
+        ],
+        ['', '', '', 'TOTAL (${rows0.length})', subtotal.toStringAsFixed(0), '', ''],
+      ];
+      await ExportUtils.exportCsv('crm-$label-$rangeStr.csv', rows);
+      messenger.showSnackBar(SnackBar(
+        content: Text(
+            'Exported ${rows0.length} $label (${_fmt(from)}–${_fmt(to)}) — ₹${subtotal.toStringAsFixed(0)}'),
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
   }
 
   void _showReportDialog(BuildContext context, WidgetRef ref) {

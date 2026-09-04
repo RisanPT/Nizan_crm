@@ -54,6 +54,7 @@ class SettingsScreen extends HookConsumerWidget {
       var active = user?.active ?? true;
       var inventoryAccess = user?.inventoryAccess ?? false;
       var inventoryManage = user?.inventoryManage ?? false;
+      var artistHead = user?.artistHead ?? false;
       var isDepartmentHead = user?.isDepartmentHead ?? false;
       var selEmployeeId = user?.employeeId ?? '';
       var selZoneId = user?.zoneId ?? '';
@@ -216,6 +217,23 @@ class SettingsScreen extends HookConsumerWidget {
                                   style: TextStyle(fontSize: 12)),
                               secondary:
                                   const Icon(Icons.swap_horiz_rounded),
+                            ),
+                          ),
+                          8.h,
+                          Container(
+                            decoration: BoxDecoration(
+                              color: crmColors.primary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: SwitchListTile(
+                              value: artistHead,
+                              onChanged: (v) => setState(() => artistHead = v),
+                              title: const Text('Also Artist Head'),
+                              subtitle: const Text(
+                                  'Keeps their artist role & personal dashboard, and adds the org-wide Artist Head dashboard (team, leads, bookings, top artists).',
+                                  style: TextStyle(fontSize: 12)),
+                              secondary: const Icon(Icons.insights_outlined),
                             ),
                           ),
                         ],
@@ -451,6 +469,7 @@ class SettingsScreen extends HookConsumerWidget {
                             inventoryAccess: inventoryAccess,
                             inventoryManage: inventoryManage,
                             isDepartmentHead: isDepartmentHead,
+                            artistHead: artistHead,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,
                             zoneId: selZoneId.isEmpty ? null : selZoneId,
@@ -469,6 +488,7 @@ class SettingsScreen extends HookConsumerWidget {
                             inventoryAccess: inventoryAccess,
                             inventoryManage: inventoryManage,
                             isDepartmentHead: isDepartmentHead,
+                            artistHead: artistHead,
                             password: password.isEmpty ? null : password,
                             employeeId:
                                 selEmployeeId.isEmpty ? null : selEmployeeId,

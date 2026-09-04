@@ -5,6 +5,7 @@ enum AppRole {
   crm,
   sales,
   artist,
+  artistHead,
   accounts,
   fleetManager,
   driver,
@@ -28,6 +29,10 @@ enum AppRole {
         return AppRole.sales;
       case 'artist':
         return AppRole.artist;
+      case 'artist_head':
+      case 'artisthead':
+      case 'regional_artist_head':
+        return AppRole.artistHead;
       case 'accounts':
       case 'accounts_manager':
       case 'accounts_executive':
@@ -59,26 +64,29 @@ enum AppRole {
   bool get canSeeDashboard => this == admin || this == artist;
 
   /// Clients directory + client profiles
-  bool get canSeeClients => isFullAccess || this == crm || this == sales;
+  bool get canSeeClients =>
+      isFullAccess || this == crm || this == sales || this == artistHead;
 
   /// Calendar scheduler / Works
-  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts || this == fleetManager;
+  bool get canSeeCalendar => isFullAccess || this == crm || this == artist || this == sales || this == accounts || this == fleetManager || this == artistHead;
 
   /// Booking requests + manage booking
   bool get canSeeBookings =>
       isFullAccess ||
       this == crm ||
       this == sales ||
-      this == accounts;
+      this == accounts ||
+      this == artistHead;
 
   /// Services management (packages, regions, addons)
   bool get canSeeServices => isFullAccess;
 
   /// Staff management
-  bool get canSeeStaff => isFullAccess || this == crm;
+  bool get canSeeStaff => isFullAccess || this == crm || this == artistHead;
 
   /// Sales & invoices
-  bool get canSeeSales => isFullAccess || this == sales || this == accounts;
+  bool get canSeeSales =>
+      isFullAccess || this == sales || this == accounts || this == artistHead;
 
   /// Artist Finance module
   bool get canSeeFinance =>
@@ -110,7 +118,7 @@ enum AppRole {
   bool get canSeeSettings => isFullAccess;
 
   /// CEO Daily Report
-  bool get canSeeCEOReport => isFullAccess;
+  bool get canSeeCEOReport => isFullAccess || this == artistHead;
 
   /// Leave requests
   bool get canSeeLeaveRequests => this == artist || isFullAccess;
@@ -128,6 +136,8 @@ enum AppRole {
     switch (this) {
       case AppRole.artist:
         return '/';
+      case AppRole.artistHead:
+        return '/artist-head';
       case AppRole.sales:
         return '/sales/leads';
       case AppRole.crm:

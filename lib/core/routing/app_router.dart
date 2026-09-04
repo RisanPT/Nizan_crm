@@ -6,6 +6,9 @@ import '../auth/app_role.dart';
 import '../auth/access_control.dart';
 import '../../presentation/common_widgets/main_layout.dart';
 import '../../presentation/screens/dashboard_screen.dart';
+import '../../presentation/screens/artist_head_dashboard_screen.dart';
+import '../../presentation/screens/artist_directory_screen.dart';
+import '../../presentation/screens/artist_profile_screen.dart';
 import '../../presentation/screens/clients_directory_screen.dart';
 import '../../presentation/screens/client_profile_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/calendar_screen.dart';
@@ -232,6 +235,9 @@ bool isRouteAllowed(String path, Access access,
     {bool inventoryAccess = false, bool inventoryManage = false}) {
   final role = access.role;
   if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
+  if (path.startsWith('/artist-head')) {
+    return access.canSeeArtistHead;
+  }
   if (path.startsWith('/client')) return access.canSeeClients;
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
@@ -642,6 +648,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/',
             builder: (context, state) => const DashboardScreen(),
+          ),
+          GoRoute(
+            path: '/artist-head',
+            builder: (context, state) => const ArtistHeadDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/artist-head/artists',
+            builder: (context, state) => const ArtistDirectoryScreen(),
+          ),
+          GoRoute(
+            path: '/artist-head/artist/:id',
+            builder: (context, state) => ArtistProfileScreen(
+              artistId: state.pathParameters['id'] ?? '',
+            ),
           ),
           // We will add other routes here as we build them.
           GoRoute(

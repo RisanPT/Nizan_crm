@@ -212,6 +212,25 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath.startsWith('/finance'),
                     onTap: () => context.go('/finance'),
                   ),
+                  // Dual-role: an artist who also leads the team gets the
+                  // org-wide Artist Head dashboard alongside their own view.
+                  if (access.canSeeArtistHead) ...[
+                    _SidebarItem(
+                      icon: Icons.insights_outlined,
+                      title: 'Artist Head',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/artist-head',
+                      onTap: () => context.go('/artist-head'),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.groups_2_outlined,
+                      title: 'Artists',
+                      isCollapsed: isCollapsed,
+                      isSelected:
+                          currentPath.startsWith('/artist-head/artist'),
+                      onTap: () => context.go('/artist-head/artists'),
+                    ),
+                  ],
                   if (session?.inventoryAccess ?? false) ...[
                     _SidebarItem(
                       icon: Icons.inventory_2_outlined,
@@ -325,6 +344,26 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/',
                       onTap: () => context.go('/'),
                     ),
+                  // Artist Head org-wide dashboard — the dedicated artist_head
+                  // role, or an artist also flagged as head (keeps their own
+                  // dashboard at '/').
+                  if (access.canSeeArtistHead) ...[
+                    _SidebarItem(
+                      icon: Icons.insights_outlined,
+                      title: 'Artist Head',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/artist-head',
+                      onTap: () => context.go('/artist-head'),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.groups_2_outlined,
+                      title: 'Artists',
+                      isCollapsed: isCollapsed,
+                      isSelected:
+                          currentPath.startsWith('/artist-head/artist'),
+                      onTap: () => context.go('/artist-head/artists'),
+                    ),
+                  ],
                   if (access.canSeeClients)
                     _SidebarItem(
                       icon: Icons.people_outline,

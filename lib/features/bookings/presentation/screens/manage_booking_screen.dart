@@ -1305,13 +1305,16 @@ class ManageBookingScreen extends HookConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
                   IconButton(
                     onPressed: () => context.pop(),
                     icon: const Icon(Icons.arrow_back),
                   ),
-                  8.w,
                   Text(
                     'Manage Booking #$displayBookingNumber',
                     style: theme.textTheme.headlineSmall?.copyWith(
@@ -1430,7 +1433,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                       foregroundColor: Colors.red,
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
               if (!isMobile)
                 TextButton.icon(

@@ -31,6 +31,9 @@ class AuthSession {
   final String pincodeId;
   /// True when this user is a Department Head and can manage their own team.
   final bool isDepartmentHead;
+  /// True when this artist ALSO leads the artist team — grants the Artist Head
+  /// dashboard on top of their artist role.
+  final bool artistHead;
 
   const AuthSession({
     required this.token,
@@ -51,6 +54,7 @@ class AuthSession {
     this.districtId = '',
     this.pincodeId = '',
     this.isDepartmentHead = false,
+    this.artistHead = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -73,6 +77,7 @@ class AuthSession {
       'districtId': districtId,
       'pincodeId': pincodeId,
       'isDepartmentHead': isDepartmentHead,
+      'artistHead': artistHead,
     },
   };
 
@@ -102,6 +107,7 @@ class AuthSession {
       districtId: user['districtId'] as String? ?? '',
       pincodeId: user['pincodeId'] as String? ?? '',
       isDepartmentHead: user['isDepartmentHead'] as bool? ?? false,
+      artistHead: user['artistHead'] as bool? ?? false,
     );
   }
 

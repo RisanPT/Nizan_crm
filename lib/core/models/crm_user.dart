@@ -19,6 +19,7 @@ class CrmUser {
   final DateTime? updatedAt;
   /// True when this user can manage (add/edit/deactivate) staff in their own department.
   final bool isDepartmentHead;
+  final bool artistHead;
   /// The user-ID of the Department Head who created this user; blank for Admin-created users.
   final String managedBy;
 
@@ -40,6 +41,7 @@ class CrmUser {
     this.createdAt,
     this.updatedAt,
     this.isDepartmentHead = false,
+    this.artistHead = false,
     this.managedBy = '',
   });
 
@@ -62,6 +64,7 @@ class CrmUser {
       createdAt: _parseDate(json['createdAt']),
       updatedAt: _parseDate(json['updatedAt']),
       isDepartmentHead: json['isDepartmentHead'] as bool? ?? false,
+      artistHead: json['artistHead'] as bool? ?? false,
       managedBy: json['managedBy'] as String? ?? '',
     );
   }
@@ -84,6 +87,7 @@ class CrmUser {
     DateTime? createdAt,
     DateTime? updatedAt,
     bool? isDepartmentHead,
+    bool? artistHead,
     String? managedBy,
   }) {
     return CrmUser(
@@ -104,6 +108,7 @@ class CrmUser {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDepartmentHead: isDepartmentHead ?? this.isDepartmentHead,
+      artistHead: artistHead ?? this.artistHead,
       managedBy: managedBy ?? this.managedBy,
     );
   }

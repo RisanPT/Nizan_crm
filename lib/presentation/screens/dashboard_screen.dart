@@ -3,6 +3,7 @@ import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
+import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/extensions/space_extension.dart';
@@ -2766,6 +2767,39 @@ class _ArtistDashboardView extends StatelessWidget {
                   icon: Icons.assignment_rounded,
                   color: crm.primary,
                 ),
+                // Client review rating — from the bridal review forms this
+                // artist led. Only shown once we know their employee id.
+                if ((employeeId ?? '').isNotEmpty) ...[
+                  16.w,
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final perf = ref
+                          .watch(artistReviewPerformanceProvider(employeeId!));
+                      return perf.when(
+                        loading: () => const _ModernStatCard(
+                          title: 'Client Rating',
+                          value: '…',
+                          icon: Icons.star_rounded,
+                          color: Colors.amber,
+                        ),
+                        error: (_, _) => const _ModernStatCard(
+                          title: 'Client Rating',
+                          value: '—',
+                          icon: Icons.star_rounded,
+                          color: Colors.amber,
+                        ),
+                        data: (p) => _ModernStatCard(
+                          title: p.reviewCount > 0
+                              ? 'Rating (${p.reviewCount})'
+                              : 'Client Rating',
+                          value: p.reviewCount > 0 ? '${p.avgClientRating}★' : '—',
+                          icon: Icons.star_rounded,
+                          color: Colors.amber,
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
