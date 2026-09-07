@@ -13,4 +13,10 @@ class WhatsAppService {
   static Future<void> sendReviewRequest(Booking booking, String reviewUrl) {
     return impl.sendReviewRequest(booking, reviewUrl);
   }
+
+  /// Opens WhatsApp to [phone] with a pre-filled [message]. Generic outreach —
+  /// used by marketing client re-engagement.
+  static Future<void> openChat(String phone, String message) {
+    return impl.openChat(phone, message);
+  }
 }

@@ -86,7 +86,7 @@ class Employee {
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
-      type: json['type'] as String? ?? 'outsource',
+      type: json['type'] as String? ?? 'in-house',
       artistRole: json['artistRole'] as String? ?? 'artist',
       specialization: json['specialization'] as String? ?? '',
       works: ((json['works'] as List?) ?? const [])

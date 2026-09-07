@@ -146,6 +146,8 @@ class ManageBookingScreen extends HookConsumerWidget {
     final discountType = useState<String>(booking?.discountType ?? 'inr');
     final selectedRegionId = useState<String>(booking?.regionId ?? '');
     final selectedDistrictId = useState<String>(booking?.districtId ?? '');
+    // Optional community/culture of the event (Marketing "Culture" segment).
+    final cultureState = useState<String>(booking?.culture ?? '');
     final isDeleting = useState(false);
     final selectedPackageId = useState<String>(
       selectedDisplayEntry != null && selectedBookingItemIndex >= 0
@@ -1125,6 +1127,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             '',
         region: selectedDistrictModel?.regionName ?? regionCtrl.text.trim(),
         district: districtCtrl.text.trim(),
+        culture: cultureState.value.trim(),
         driverName:
             assignments.value
                 .where((a) => a.roleType == 'driver')
@@ -1692,6 +1695,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     availableVehicles,
                     districtCtrl,
                     regionCtrl,
+                    cultureState,
                     mapUrlCtrl,
                     travelModeCtrl,
                     travelTimeCtrl,
@@ -1727,6 +1731,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           availableVehicles,
                           districtCtrl,
                           regionCtrl,
+                          cultureState,
                           mapUrlCtrl,
                           travelModeCtrl,
                           travelTimeCtrl,
@@ -2282,6 +2287,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     List<Vehicle> availableVehicles,
     TextEditingController districtCtrl,
     TextEditingController regionCtrl,
+    ValueNotifier<String> cultureState,
     TextEditingController mapUrlCtrl,
     TextEditingController travelModeCtrl,
     TextEditingController travelTimeCtrl,
@@ -2319,6 +2325,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     districtCtrl,
                     regionCtrl,
                   ),
+                  _buildCultureDropdown(crmColors, cultureState),
                   _buildField(
                     ctx,
                     'MAP URL / COORDINATES',
@@ -4153,6 +4160,47 @@ class ManageBookingScreen extends HookConsumerWidget {
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  // Preset communities for the optional Marketing "Culture" segment.
+  static const _cultureOptions = ['Hindu', 'Muslim', 'Christian', 'Other'];
+
+  static Widget _buildCultureDropdown(
+    CrmTheme crmColors,
+    ValueNotifier<String> cultureState,
+  ) {
+    final current = cultureState.value.trim();
+    // Keep any legacy/non-preset value in the list so the Dropdown never asserts.
+    final options = [
+      ..._cultureOptions,
+      if (current.isNotEmpty && !_cultureOptions.contains(current)) current,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'COMMUNITY / CULTURE (OPTIONAL)',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        DropdownButtonFormField<String>(
+          initialValue: current,
+          isExpanded: true,
+          items: [
+            const DropdownMenuItem(value: '', child: Text('— Not set —')),
+            for (final c in options)
+              DropdownMenuItem(value: c, child: Text(c)),
+          ],
+          onChanged: (v) => cultureState.value = v ?? '',
+          decoration: _inputDeco('Community', crmColors),
         ),
       ],
     );

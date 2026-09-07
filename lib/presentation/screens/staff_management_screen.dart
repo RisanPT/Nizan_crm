@@ -650,7 +650,14 @@ class StaffManagementScreen extends HookConsumerWidget {
                                 ],
                                 onChanged: (value) {
                                   if (value != null) {
-                                    setModalState(() => type = value);
+                                    setModalState(() {
+                                      type = value;
+                                      // Freelancers are paid per booking, never
+                                      // on monthly payroll.
+                                      if (value == 'outsource') {
+                                        salaryType = 'per_booking';
+                                      }
+                                    });
                                   }
                                 },
                                 decoration: const InputDecoration(
@@ -742,6 +749,31 @@ class StaffManagementScreen extends HookConsumerWidget {
                                   isDense: true,
                                 ),
                               ),
+                              if (type == 'outsource') ...[
+                                10.h,
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: crmColors.primary
+                                        .withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.info_outline,
+                                          size: 15, color: crmColors.primary),
+                                      8.w,
+                                      const Expanded(
+                                        child: Text(
+                                          'Freelancer — paid per booking via Artist Payouts. The fee is entered per job (not a fixed rate), so no monthly salary is set here.',
+                                          style: TextStyle(fontSize: 11.5),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (type != 'outsource') ...[
                               10.h,
                               Row(
                                 children: [
@@ -826,6 +858,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                                   ),
                                 ],
                               ),
+                              ],
                             ],
                           ),
                         ),

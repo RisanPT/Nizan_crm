@@ -49,6 +49,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('staff.attendance', 'Attendance (Timebox)'),
     AppSubFeature('staff.salaries', 'Salaries & Payroll'),
     AppSubFeature('staff.slots', 'Slot Management'),
+    AppSubFeature('staff.evaluation', 'HR Evaluation / 5 Pillars'),
   ]),
   AppFeature('sales', 'Sales', 'Leads, sales and invoices',
       Icons.trending_up_outlined, subs: [
@@ -113,6 +114,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('marketing.dashboard', 'Marketing Dashboard'),
     AppSubFeature('marketing.competitors', 'Competitors'),
     AppSubFeature('marketing.scores', 'Growth Scores'),
+    AppSubFeature('marketing.insights', 'Marketing Insights'),
   ]),
   AppFeature('fleet', 'Fleet', 'Vehicles, drivers and fuel',
       Icons.local_shipping_outlined, subs: [

@@ -94,6 +94,7 @@ class Sidebar extends ConsumerWidget {
     final isOperationsRoute = currentPath == '/accounts/operations-dashboard' ||
         currentPath == '/finance' ||
         currentPath == '/accounts/artist-collections' ||
+        currentPath == '/accounts/artist-payouts' ||
         currentPath == '/accounts/fleet-expenses' ||
         currentPath == '/accounts/operations-salaries';
     // Administrative (Expenses / Subscriptions / Salaries) live under Accounts.
@@ -332,7 +333,8 @@ class Sidebar extends ConsumerWidget {
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────
                   if (access.canSeeDashboard || access.canSeeClients ||
-                      access.canSeeCalendar || access.canSeeBookings) ...[
+                      access.canSeeCalendar || access.canSeeBookings ||
+                      access.canSeeTrials) ...[
                     _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
                     8.h,
                   ],
@@ -380,7 +382,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/calendar',
                       onTap: () => context.go('/calendar'),
                     ),
-                  if (access.canSeeBookings)
+                  if (access.canSeeTrials)
                     _SidebarItem(
                       icon: Icons.event_available_outlined,
                       title: 'Trials',
@@ -388,7 +390,7 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
                       onTap: () => context.go('/trials'),
                     ),
-                  if (access.canSeeBookings)
+                  if (access.canSeeTrials)
                     _SidebarItem(
                       icon: Icons.auto_awesome_mosaic_outlined,
                       title: 'Trial Packages',
@@ -500,6 +502,18 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath.startsWith('/hr/salaries'),
                             onTap: () => context.go('/hr/salaries'),
+                          ),
+                        ),
+                      if (access.canSeeSub('staff.evaluation'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.workspace_premium_outlined,
+                            title: '5-Pillar Evaluation',
+                            isCollapsed: false,
+                            isSelected:
+                                currentPath.startsWith('/hr/evaluation'),
+                            onTap: () => context.go('/hr/evaluation'),
                           ),
                         ),
                     ],
@@ -811,6 +825,19 @@ class Sidebar extends ConsumerWidget {
                                   currentPath == '/accounts/artist-collections',
                               onTap: () =>
                                   context.go('/accounts/artist-collections'),
+                            ),
+                          ),
+                        if (access.canSeeFinance)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.volunteer_activism_outlined,
+                              title: 'Artist Payouts',
+                              isCollapsed: false,
+                              isSelected:
+                                  currentPath == '/accounts/artist-payouts',
+                              onTap: () =>
+                                  context.go('/accounts/artist-payouts'),
                             ),
                           ),
                         if (access.canSeeSub('payables.fleet_expenses'))
@@ -1132,6 +1159,19 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/marketing/scores',
                             onTap: () => context.go('/marketing/scores'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.insights'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.insights_outlined,
+                            title: 'Insights',
+                            isCollapsed: false,
+                            isSelected:
+                                currentPath == '/marketing/insights' ||
+                                    currentPath == '/marketing/re-engagement',
+                            onTap: () => context.go('/marketing/insights'),
                           ),
                         ),
                       // Content Planning — nested group (click to expand →

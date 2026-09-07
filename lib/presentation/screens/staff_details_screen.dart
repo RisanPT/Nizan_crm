@@ -9,6 +9,9 @@ import '../../services/employee_service.dart';
 import '../../core/models/salary_increment.dart';
 import '../../providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
+import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
@@ -157,13 +160,164 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 if (ctx.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                 }
               }
             },
             child: const Text('Save'),
           ),
         ],
+      ),
+    );
+  }
+
+  static const _mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul',
+      'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  Color _scoreColor(double v) {
+    if (v >= 4) return const Color(0xFF16A34A);
+    if (v >= 2.5) return const Color(0xFFF59E0B);
+    if (v > 0) return const Color(0xFFDC2626);
+    return const Color(0xFF6B7280);
+  }
+
+  /// 5-Pillar Scorecard — latest evaluation's pillar bars + composite, with a
+  /// link to the HR Evaluation screen to add/edit. Read-only here.
+  Widget _scorecardCard(ThemeData theme, CrmTheme crmColors) {
+    final async = ref.watch(employeeEvaluationsProvider(_employee.id));
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: crmColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('5-Pillar Scorecard',
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                TextButton.icon(
+                  onPressed: () => context.go('/hr/evaluation'),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Evaluate'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            async.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Text('Scorecard unavailable',
+                  style: TextStyle(color: crmColors.textSecondary)),
+              data: (list) {
+                if (list.isEmpty) {
+                  return Text(
+                      'No evaluations yet. Use the HR → 5-Pillar Evaluation screen.',
+                      style: TextStyle(color: crmColors.textSecondary));
+                }
+                final latest = list.first; // sorted desc by backend
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(latest.composite.toStringAsFixed(1),
+                            style: TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w900,
+                                color: _scoreColor(latest.composite))),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                              'composite · ${_mon[latest.month]} ${latest.year}',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: crmColors.textSecondary)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    for (final p in kPillars)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 110,
+                              child: Text(kPillarLabels[p]!,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: crmColors.textSecondary)),
+                            ),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(100),
+                                child: LinearProgressIndicator(
+                                  value: (latest.pillar(p) / 5).clamp(0, 1),
+                                  minHeight: 8,
+                                  backgroundColor: crmColors.border,
+                                  valueColor: AlwaysStoppedAnimation(
+                                      _scoreColor(latest.pillar(p))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(latest.pillar(p).toStringAsFixed(1),
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w800)),
+                          ],
+                        ),
+                      ),
+                    if (list.length > 1) ...[
+                      const SizedBox(height: 12),
+                      Text('History',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: crmColors.textPrimary)),
+                      const SizedBox(height: 6),
+                      for (final ev in list.take(6))
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('${_mon[ev.month]} ${ev.year}',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: crmColors.textSecondary)),
+                              Text(ev.composite.toStringAsFixed(1),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: _scoreColor(ev.composite))),
+                            ],
+                          ),
+                        ),
+                    ],
+                    if (latest.notes.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('"${latest.notes}"',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontStyle: FontStyle.italic,
+                              color: crmColors.textSecondary)),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -364,6 +518,8 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 32),
+            _scorecardCard(theme, crmColors),
             const SizedBox(height: 32),
             if (isAdmin)
               Card(

@@ -506,6 +506,9 @@ class Booking {
   final String service;
   final String region;
   final String district;
+  /// Optional community/culture of the event (Hindu / Muslim / Christian / …).
+  /// Captured on the Manage Booking screen; powers Marketing "Culture" segments.
+  final String culture;
   final String driverName;
   final String status;
   final String mapUrl;
@@ -583,6 +586,7 @@ class Booking {
     required this.service,
     this.region = '',
     this.district = '',
+    this.culture = '',
     this.driverName = '',
     this.status = 'pending',
     this.mapUrl = '',
@@ -893,6 +897,7 @@ class Booking {
       service: json['service'] as String? ?? '',
       region: json['region'] as String? ?? '',
       district: json['district'] as String? ?? '',
+      culture: json['culture'] as String? ?? '',
       driverName: json['driverName'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       mapUrl: json['mapUrl'] as String? ?? '',
@@ -979,6 +984,7 @@ class Booking {
       'service': service,
       'region': region,
       'district': district,
+      'culture': culture,
       'driverName': driverName,
       'status': status,
       'mapUrl': mapUrl,
@@ -1041,6 +1047,7 @@ class Booking {
     String? service,
     String? region,
     String? district,
+    String? culture,
     String? driverName,
     String? status,
     String? mapUrl,
@@ -1102,6 +1109,7 @@ class Booking {
       service: service ?? this.service,
       region: region ?? this.region,
       district: district ?? this.district,
+      culture: culture ?? this.culture,
       driverName: driverName ?? this.driverName,
       status: status ?? this.status,
       mapUrl: mapUrl ?? this.mapUrl,

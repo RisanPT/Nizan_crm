@@ -23,6 +23,16 @@ Future<void> sendReviewRequest(Booking booking, String reviewUrl) async {
   web.window.open(whatsappUrl, '_blank');
 }
 
+/// Opens WhatsApp to any phone with a pre-filled [message]. Used by marketing
+/// re-engagement outreach.
+Future<void> openChat(String phone, String message) async {
+  final formatted = _formatPhoneNumber(phone);
+  if (formatted.isEmpty) throw 'No valid phone number.';
+  final whatsappUrl =
+      'https://wa.me/$formatted?text=${Uri.encodeComponent(message)}';
+  web.window.open(whatsappUrl, '_blank');
+}
+
 String _buildReviewMessage(Booking booking, String reviewUrl) {
   return '''
 Hi *${booking.customerName}*,

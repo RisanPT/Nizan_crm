@@ -9,6 +9,7 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
+import 'package:nizan_crm/features/accounts/services/artist_payout_service.dart';
 
 /// Artist profile — the Artist Head's drill-down for one artist: their bookings,
 /// live workload, client rating, revenue contribution, plus roster controls
@@ -33,6 +34,15 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
     final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
     final bookings = ref.watch(bookingProvider).value ?? const <Booking>[];
     final perfAsync = ref.watch(artistReviewPerformanceProvider(widget.artistId));
+    // Freelance payouts (read-only) — total paid to this artist per booking.
+    final payoutsAsync =
+        ref.watch(artistPayoutsForEmployeeProvider(widget.artistId));
+    final paidOut = payoutsAsync.maybeWhen(
+      data: (l) => l
+          .where((p) => p.status == 'paid')
+          .fold<double>(0, (s, p) => s + p.amount),
+      orElse: () => 0.0,
+    );
 
     Employee? artist;
     for (final e in employees) {
@@ -138,6 +148,8 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
                     'This Month', const Color(0xFFDB2777)),
                 _kpi(crm, isMobile, Icons.account_balance_wallet_outlined,
                     '₹${_money(revenue)}', 'Revenue', const Color(0xFF7C3AED)),
+                _kpi(crm, isMobile, Icons.volunteer_activism_outlined,
+                    '₹${_money(paidOut)}', 'Paid Out', const Color(0xFF0D9488)),
               ],
             ),
             18.hg,

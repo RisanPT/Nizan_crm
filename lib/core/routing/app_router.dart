@@ -31,6 +31,7 @@ import 'package:nizan_crm/features/accounts/presentation/screens/administrative_
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_salaries_screen.dart';
 import '../../presentation/screens/hr_salaries_screen.dart';
 import '../../features/hr/presentation/screens/attendance_summary_screen.dart';
+import '../../features/hr/presentation/screens/hr_evaluation_screen.dart';
 import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
 import '../../features/accounts/presentation/screens/sales_returns_screen.dart';
 import '../../features/accounts/presentation/screens/hra_screen.dart';
@@ -46,6 +47,8 @@ import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../features/marketing/presentation/screens/content_calendar_screen.dart';
 import '../../features/marketing/presentation/screens/content_dashboard_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_insights_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_reengagement_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
 import '../../features/org/presentation/screens/departments_screen.dart';
@@ -62,6 +65,7 @@ import '../../presentation/screens/profile_screen.dart';
 import '../../features/trials/presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
+import '../../features/accounts/presentation/screens/artist_payouts_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/combined_accounts_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
@@ -221,12 +225,15 @@ String? subKeyForPath(String path) {
   // Marketing
   if (path.startsWith('/marketing/competitors')) return 'marketing.competitors';
   if (path.startsWith('/marketing/scores')) return 'marketing.scores';
+  if (path.startsWith('/marketing/insights')) return 'marketing.insights';
+  if (path.startsWith('/marketing/re-engagement')) return 'marketing.insights';
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
   if (path == '/hr/salaries') return 'staff.salaries';
   if (path == '/hr/slot-capacity') return 'staff.slots';
   if (path == '/hr/slots') return 'staff.slots';
   if (path == '/hr/attendance') return 'staff.attendance';
+  if (path == '/hr/evaluation') return 'staff.evaluation';
   if (path.startsWith('/staff')) return 'staff.employees';
   return null;
 }
@@ -250,6 +257,7 @@ bool isRouteAllowed(String path, Access access,
   if (path.startsWith('/services')) return access.canSeeServices;
   if (path == '/hr/slots') return access.canSeeSub('staff.slots');
   if (path == '/hr/attendance') return access.canSeeSub('staff.attendance');
+  if (path == '/hr/evaluation') return access.canSeeSub('staff.evaluation');
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
   if (path.startsWith('/sales')) {
     final sub = subKeyForPath(path);
@@ -356,7 +364,7 @@ String landingRouteFor(Access access,
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
     '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
-    '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries',
+    '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries', '/hr/evaluation',
   ];
   for (final route in candidates) {
     if (isRouteAllowed(route, access,
@@ -453,6 +461,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Staff Management';
           } else if (state.uri.path == '/hr/slots') {
             title = 'Slot Management';
+          } else if (state.uri.path == '/hr/evaluation') {
+            title = '5-Pillar Evaluations';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
           } else if (state.uri.path == '/sales/dashboard') {
@@ -595,6 +605,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Competitors';
           } else if (state.uri.path == '/marketing/scores') {
             title = 'Weekly Growth Score';
+          } else if (state.uri.path == '/marketing/insights') {
+            title = 'Marketing Insights';
+          } else if (state.uri.path == '/marketing/re-engagement') {
+            title = 'Client Re-engagement';
           } else if (state.uri.path == '/marketing/content/dashboard') {
             title = 'Content Dashboard';
           } else if (state.uri.path == '/marketing/content/calendar') {
@@ -741,6 +755,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const AttendanceSummaryScreen(),
           ),
           GoRoute(
+            path: '/hr/evaluation',
+            builder: (context, state) => const HrEvaluationScreen(),
+          ),
+          GoRoute(
             path: '/accounts/attendance-payroll',
             builder: (context, state) => const AttendancePayrollScreen(),
           ),
@@ -882,6 +900,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/marketing/scores',
             builder: (context, state) => const GrowthScoresScreen(),
           ),
+          GoRoute(
+            path: '/marketing/insights',
+            builder: (context, state) => const MarketingInsightsScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/re-engagement',
+            builder: (context, state) => const MarketingReEngagementScreen(),
+          ),
           // ── Marketing → Content Planning ─────────────────────────────
           GoRoute(
             path: '/marketing/content/dashboard',
@@ -931,6 +957,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/accounts/artist-collections',
             builder: (context, state) => const AccountsCollectionsScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/artist-payouts',
+            builder: (context, state) => const ArtistPayoutsScreen(),
           ),
           GoRoute(
             path: '/accounts/budget',
