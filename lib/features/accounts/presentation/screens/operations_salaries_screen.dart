@@ -418,7 +418,10 @@ class _OperationsSalariesScreenState
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: crm.border),
                       ),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Icon(Icons.calendar_month,
                               size: 18, color: crm.accent),
@@ -460,7 +463,7 @@ class _OperationsSalariesScreenState
                               }
                             },
                           ),
-                          const Spacer(),
+                          12.w,
                           Text(
                             '${result.salaries.length} Operations Personnel',
                             style: TextStyle(

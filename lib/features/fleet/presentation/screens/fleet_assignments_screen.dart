@@ -1091,6 +1091,7 @@ class _FleetAssignmentsScreenState
 
         // Driver selection dropdown
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: safeDriverId,
           decoration: const InputDecoration(
             labelText: 'Driver',
@@ -1119,6 +1120,7 @@ class _FleetAssignmentsScreenState
 
         // Vehicle selection dropdown
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: safeVehicleId,
           decoration: const InputDecoration(
             labelText: 'Vehicle',

@@ -184,8 +184,12 @@ class _GstScreenState extends ConsumerState<GstScreen> {
   Widget _gstr1Section(BuildContext context, CrmTheme crm, Gstr1Report r) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Text('GSTR-1 · Outward supplies',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+        Flexible(
+          child: Text('GSTR-1 · Outward supplies',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+        ),
         8.w,
         if (r.rate > 0)
           Container(

@@ -404,8 +404,10 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

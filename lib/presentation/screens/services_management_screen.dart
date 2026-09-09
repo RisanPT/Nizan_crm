@@ -188,9 +188,12 @@ class ServicesManagementScreen extends HookConsumerWidget {
                   children: [
                     Icon(Icons.filter_list, size: 18, color: crmColors.textSecondary),
                     8.w,
-                    const Text(
-                      'Search & Filter Packages by Geographic Pricing',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    const Expanded(
+                      child: Text(
+                        'Search & Filter Packages by Geographic Pricing',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -230,62 +233,73 @@ class ServicesManagementScreen extends HookConsumerWidget {
                   ],
                 ),
                 12.h,
-                Row(
-                  children: [
-                    // Zone Filter
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
-                        decoration: const InputDecoration(labelText: 'Zone', isDense: true),
-                        items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name))).toList(),
-                        onChanged: (val) {
-                          mainSelectedZoneId.value = val ?? '';
-                          mainSelectedStateId.value = '';
-                          mainSelectedRegionId.value = '';
-                          mainSelectedDistrictId.value = '';
-                        },
-                      ),
-                    ),
-                    12.w,
-                    // State Filter
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
-                        decoration: const InputDecoration(labelText: 'State', isDense: true),
-                        items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
-                        onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
-                          mainSelectedStateId.value = val ?? '';
-                          mainSelectedRegionId.value = '';
-                          mainSelectedDistrictId.value = '';
-                        },
-                      ),
-                    ),
-                    12.w,
-                    // Region Filter
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
-                        decoration: const InputDecoration(labelText: 'Region', isDense: true),
-                        items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name))).toList(),
-                        onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
-                          mainSelectedRegionId.value = val ?? '';
-                          mainSelectedDistrictId.value = '';
-                        },
-                      ),
-                    ),
-                    12.w,
-                    // District Filter
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
-                        decoration: const InputDecoration(labelText: 'District', isDense: true),
-                        items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name))).toList(),
-                        onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
-                          mainSelectedDistrictId.value = val ?? '';
-                        },
-                      ),
-                    ),
-                  ],
+                // Geo filters — 2-per-row on phones, 4-across on wider screens.
+                LayoutBuilder(
+                  builder: (ctx, c) {
+                    const gap = 12.0;
+                    final cols = c.maxWidth < 520 ? 2 : 4;
+                    final itemW = (c.maxWidth - gap * (cols - 1)) / cols;
+                    return Wrap(
+                      spacing: gap,
+                      runSpacing: gap,
+                      children: [
+                        SizedBox(
+                          width: itemW,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: mainSelectedZoneId.value.isEmpty ? null : mainSelectedZoneId.value,
+                            decoration: const InputDecoration(labelText: 'Zone', isDense: true),
+                            items: zones.map((z) => DropdownMenuItem(value: z.id, child: Text(z.name, overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: (val) {
+                              mainSelectedZoneId.value = val ?? '';
+                              mainSelectedStateId.value = '';
+                              mainSelectedRegionId.value = '';
+                              mainSelectedDistrictId.value = '';
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemW,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: mainSelectedStateId.value.isEmpty ? null : mainSelectedStateId.value,
+                            decoration: const InputDecoration(labelText: 'State', isDense: true),
+                            items: mainAvailableStates.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: mainSelectedZoneId.value.isEmpty ? null : (val) {
+                              mainSelectedStateId.value = val ?? '';
+                              mainSelectedRegionId.value = '';
+                              mainSelectedDistrictId.value = '';
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemW,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: mainSelectedRegionId.value.isEmpty ? null : mainSelectedRegionId.value,
+                            decoration: const InputDecoration(labelText: 'Region', isDense: true),
+                            items: mainAvailableRegions.map((r) => DropdownMenuItem(value: r.id, child: Text(r.name, overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: mainSelectedStateId.value.isEmpty ? null : (val) {
+                              mainSelectedRegionId.value = val ?? '';
+                              mainSelectedDistrictId.value = '';
+                            },
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemW,
+                          child: DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: mainSelectedDistrictId.value.isEmpty ? null : mainSelectedDistrictId.value,
+                            decoration: const InputDecoration(labelText: 'District', isDense: true),
+                            items: mainAvailableDistricts.map((d) => DropdownMenuItem(value: d.id, child: Text(d.name, overflow: TextOverflow.ellipsis))).toList(),
+                            onChanged: mainSelectedRegionId.value.isEmpty ? null : (val) {
+                              mainSelectedDistrictId.value = val ?? '';
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

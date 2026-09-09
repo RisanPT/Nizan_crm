@@ -5,6 +5,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/workspace.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/theme/crm_theme.dart';
 import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
@@ -205,6 +206,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       final unread = ref.watch(unreadCountProvider).asData?.value ?? 0;
 
       return Scaffold(
+        // The full role-gated sidebar as a slide-out drawer, so EVERY feature a
+        // role can reach on desktop is reachable on mobile too (fixes the admin
+        // shell exposing only 5 bottom-nav tabs). Opened by the AppBar hamburger.
+        drawer: Drawer(
+          width: 288,
+          backgroundColor: context.crmColors.sidebar,
+          child: SafeArea(bottom: false, child: _buildSidebar()),
+        ),
         appBar: showShellBar
             ? AppBar(
                 title: Text(widget.title),
@@ -430,112 +439,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Sidebar(
-            fleetExpanded: _fleetExpanded,
-            fleetUserCollapsed: _fleetUserCollapsed,
-            onFleetExpandToggle: (expanded) {
-              setState(() {
-                _fleetExpanded = expanded;
-                if (!expanded) {
-                  _fleetUserCollapsed = true;
-                } else {
-                  _fleetUserCollapsed = false;
-                }
-              });
-            },
-            accountsExpanded: _accountsExpanded,
-            accountsUserCollapsed: _accountsUserCollapsed,
-            onAccountsExpandToggle: (expanded) {
-              setState(() {
-                _accountsExpanded = expanded;
-                if (!expanded) {
-                  _accountsUserCollapsed = true;
-                } else {
-                  _accountsUserCollapsed = false;
-                }
-              });
-            },
-            operationsExpanded: _operationsExpanded,
-            operationsUserCollapsed: _operationsUserCollapsed,
-            onOperationsExpandToggle: (expanded) {
-              setState(() {
-                _operationsExpanded = expanded;
-                _operationsUserCollapsed = !expanded;
-              });
-            },
-            administrativeExpanded: _administrativeExpanded,
-            administrativeUserCollapsed: _administrativeUserCollapsed,
-            onAdministrativeExpandToggle: (expanded) {
-              setState(() {
-                _administrativeExpanded = expanded;
-                _administrativeUserCollapsed = !expanded;
-              });
-            },
-            inventoryExpanded: _inventoryExpanded,
-            inventoryUserCollapsed: _inventoryUserCollapsed,
-            onInventoryExpandToggle: (expanded) {
-              setState(() {
-                _inventoryExpanded = expanded;
-                _inventoryUserCollapsed = !expanded;
-              });
-            },
-            salesExpanded: _salesExpanded,
-            salesUserCollapsed: _salesUserCollapsed,
-            onSalesExpandToggle: (expanded) {
-              setState(() {
-                _salesExpanded = expanded;
-                if (!expanded) {
-                  _salesUserCollapsed = true;
-                } else {
-                  _salesUserCollapsed = false;
-                }
-              });
-            },
-            hrExpanded: _hrExpanded,
-            hrUserCollapsed: _hrUserCollapsed,
-            onHrExpandToggle: (expanded) {
-              setState(() {
-                _hrExpanded = expanded;
-                if (!expanded) {
-                  _hrUserCollapsed = true;
-                } else {
-                  _hrUserCollapsed = false;
-                }
-              });
-            },
-            financeExpanded: _financeExpanded,
-            financeUserCollapsed: _financeUserCollapsed,
-            onFinanceExpandToggle: (expanded) {
-              setState(() {
-                _financeExpanded = expanded;
-                _financeUserCollapsed = !expanded;
-              });
-            },
-            itExpanded: _itExpanded,
-            itUserCollapsed: _itUserCollapsed,
-            onItExpandToggle: (expanded) {
-              setState(() {
-                _itExpanded = expanded;
-                _itUserCollapsed = !expanded;
-              });
-            },
-            marketingExpanded: _marketingExpanded,
-            marketingUserCollapsed: _marketingUserCollapsed,
-            onMarketingExpandToggle: (expanded) {
-              setState(() {
-                _marketingExpanded = expanded;
-                _marketingUserCollapsed = !expanded;
-              });
-            },
-            contentExpanded: _contentExpanded,
-            contentUserCollapsed: _contentUserCollapsed,
-            onContentExpandToggle: (expanded) {
-              setState(() {
-                _contentExpanded = expanded;
-                _contentUserCollapsed = !expanded;
-              });
-            },
-          ),
+          _buildSidebar(),
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(24.0),
@@ -544,6 +448,102 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           ),
         ],
       ),
+    );
+  }
+
+  /// The full role-gated navigation sidebar. Rendered inline on desktop/tablet
+  /// and as a Drawer on mobile, so every feature a role can access stays
+  /// reachable on phones (including foldables) — not just the bottom-nav tabs.
+  Widget _buildSidebar() {
+    return Sidebar(
+      fleetExpanded: _fleetExpanded,
+      fleetUserCollapsed: _fleetUserCollapsed,
+      onFleetExpandToggle: (expanded) {
+        setState(() {
+          _fleetExpanded = expanded;
+          _fleetUserCollapsed = !expanded;
+        });
+      },
+      accountsExpanded: _accountsExpanded,
+      accountsUserCollapsed: _accountsUserCollapsed,
+      onAccountsExpandToggle: (expanded) {
+        setState(() {
+          _accountsExpanded = expanded;
+          _accountsUserCollapsed = !expanded;
+        });
+      },
+      operationsExpanded: _operationsExpanded,
+      operationsUserCollapsed: _operationsUserCollapsed,
+      onOperationsExpandToggle: (expanded) {
+        setState(() {
+          _operationsExpanded = expanded;
+          _operationsUserCollapsed = !expanded;
+        });
+      },
+      administrativeExpanded: _administrativeExpanded,
+      administrativeUserCollapsed: _administrativeUserCollapsed,
+      onAdministrativeExpandToggle: (expanded) {
+        setState(() {
+          _administrativeExpanded = expanded;
+          _administrativeUserCollapsed = !expanded;
+        });
+      },
+      inventoryExpanded: _inventoryExpanded,
+      inventoryUserCollapsed: _inventoryUserCollapsed,
+      onInventoryExpandToggle: (expanded) {
+        setState(() {
+          _inventoryExpanded = expanded;
+          _inventoryUserCollapsed = !expanded;
+        });
+      },
+      salesExpanded: _salesExpanded,
+      salesUserCollapsed: _salesUserCollapsed,
+      onSalesExpandToggle: (expanded) {
+        setState(() {
+          _salesExpanded = expanded;
+          _salesUserCollapsed = !expanded;
+        });
+      },
+      hrExpanded: _hrExpanded,
+      hrUserCollapsed: _hrUserCollapsed,
+      onHrExpandToggle: (expanded) {
+        setState(() {
+          _hrExpanded = expanded;
+          _hrUserCollapsed = !expanded;
+        });
+      },
+      financeExpanded: _financeExpanded,
+      financeUserCollapsed: _financeUserCollapsed,
+      onFinanceExpandToggle: (expanded) {
+        setState(() {
+          _financeExpanded = expanded;
+          _financeUserCollapsed = !expanded;
+        });
+      },
+      itExpanded: _itExpanded,
+      itUserCollapsed: _itUserCollapsed,
+      onItExpandToggle: (expanded) {
+        setState(() {
+          _itExpanded = expanded;
+          _itUserCollapsed = !expanded;
+        });
+      },
+      marketingExpanded: _marketingExpanded,
+      marketingUserCollapsed: _marketingUserCollapsed,
+      onMarketingExpandToggle: (expanded) {
+        setState(() {
+          _marketingExpanded = expanded;
+          _marketingUserCollapsed = !expanded;
+        });
+      },
+      contentExpanded: _contentExpanded,
+      contentUserCollapsed: _contentUserCollapsed,
+      onContentExpandToggle: (expanded) {
+        setState(() {
+          _contentExpanded = expanded;
+          _contentUserCollapsed = !expanded;
+        });
+      },
     );
   }
 }

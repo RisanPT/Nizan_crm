@@ -834,12 +834,12 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
 Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
   final products = ref.read(inventoryProductsProvider).value ??
       const <InventoryProduct>[];
-  // Show all studio products (including out-of-stock) so any can be allocated.
-  final inStock = [...products]
+  // Show all studio products sorted alphabetically.
+  final allProducts = [...products]
     ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   InventoryProduct? selected;
-  var custom = inStock.isEmpty; // no products at all → custom entry
+  var custom = allProducts.isEmpty; // no products at all → custom entry
   final qtyCtrl = TextEditingController(text: '1');
   final nameCtrl = TextEditingController();
   final brandCtrl = TextEditingController();
@@ -859,72 +859,79 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
         final crm = ctx.crmColors;
         return AlertDialog(
           title: const Text('Add Kit Item'),
+          contentPadding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
           content: SizedBox(
-            width: 400,
+            width: 460,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (!custom) ...[
-                  DropdownMenu<InventoryProduct>(
-                    initialSelection: selected,
-                    expandedInsets: EdgeInsets.zero,
-                    enableFilter: true,
-                    enableSearch: true,
-                    label: const Text('Pick from stock *'),
-                    dropdownMenuEntries: [
-                      for (final p in inStock)
-                        DropdownMenuEntry<InventoryProduct>(
-                          value: p,
-                          label: label(p),
-                        ),
-                    ],
-                    onSelected: (v) => setState(() => selected = v),
+                  // ── Searchable product picker ──────────────────────────
+                  _ProductPickerField(
+                    products: allProducts,
+                    selected: selected,
+                    label: label,
+                    onSelected: (p) => setState(() => selected = p),
                   ),
-                  if (inStock.isEmpty)
+                  if (allProducts.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                       child: Text('No products in the studio inventory yet.',
                           style: TextStyle(
                               fontSize: 12, color: crm.textSecondary)),
                     ),
                 ] else ...[
-                  TextField(
-                      controller: nameCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Product *')),
-                  const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
-                        child: TextField(
-                            controller: brandCtrl,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      children: [
+                        TextField(
+                            controller: nameCtrl,
                             decoration:
-                                const InputDecoration(labelText: 'Brand'))),
-                    const SizedBox(width: 12),
-                    Expanded(
-                        child: TextField(
-                            controller: shadeCtrl,
-                            decoration:
-                                const InputDecoration(labelText: 'Shade'))),
-                  ]),
+                                const InputDecoration(labelText: 'Product *')),
+                        const SizedBox(height: 12),
+                        Row(children: [
+                          Expanded(
+                              child: TextField(
+                                  controller: brandCtrl,
+                                  decoration:
+                                      const InputDecoration(labelText: 'Brand'))),
+                          const SizedBox(width: 12),
+                          Expanded(
+                              child: TextField(
+                                  controller: shadeCtrl,
+                                  decoration:
+                                      const InputDecoration(labelText: 'Shade'))),
+                        ]),
+                      ],
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: 110,
-                  child: TextField(
-                      controller: qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Quantity')),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: SizedBox(
+                    width: 110,
+                    child: TextField(
+                        controller: qtyCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Quantity')),
+                  ),
                 ),
                 const SizedBox(height: 4),
-                TextButton.icon(
-                  onPressed: () => setState(() => custom = !custom),
-                  icon: Icon(custom ? Icons.inventory_2_outlined : Icons.edit,
-                      size: 15),
-                  label: Text(custom
-                      ? 'Pick from stock instead'
-                      : 'Add a custom item'),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => custom = !custom),
+                    icon: Icon(custom ? Icons.inventory_2_outlined : Icons.edit,
+                        size: 15),
+                    label: Text(custom
+                        ? 'Pick from stock instead'
+                        : 'Add a custom item'),
+                  ),
                 ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -968,4 +975,242 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
       },
     ),
   );
+}
+
+/// Inline search-and-filter widget for picking a product from inventory.
+/// Shows a search TextField + in-stock toggle + scrollable filtered list.
+class _ProductPickerField extends StatefulWidget {
+  final List<InventoryProduct> products;
+  final InventoryProduct? selected;
+  final String Function(InventoryProduct) label;
+  final ValueChanged<InventoryProduct?> onSelected;
+
+  const _ProductPickerField({
+    required this.products,
+    required this.selected,
+    required this.label,
+    required this.onSelected,
+  });
+
+  @override
+  State<_ProductPickerField> createState() => _ProductPickerFieldState();
+}
+
+class _ProductPickerFieldState extends State<_ProductPickerField> {
+  final _searchCtrl = TextEditingController();
+  bool _inStockOnly = false;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl.addListener(() => setState(() => _query = _searchCtrl.text));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+
+    final filtered = widget.products.where((p) {
+      if (_inStockOnly && p.quantity <= 0) return false;
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      return p.name.toLowerCase().contains(q) ||
+          p.brand.toLowerCase().contains(q) ||
+          p.shade.toLowerCase().contains(q);
+    }).toList();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Search bar + filter chip ───────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: 'Search products…',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _query = '');
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 12),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text('In stock'),
+                selected: _inStockOnly,
+                onSelected: (v) => setState(() => _inStockOnly = v),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+
+        // ── Selected item banner ───────────────────────────────────────
+        if (widget.selected != null)
+          Container(
+            margin: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: crm.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: crm.primary.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline, size: 16, color: crm.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.label(widget.selected!),
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: crm.primary),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, size: 16, color: crm.textSecondary),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => widget.onSelected(null),
+                ),
+              ],
+            ),
+          ),
+
+        // ── Results list ───────────────────────────────────────────────
+        SizedBox(
+          height: 240,
+          child: filtered.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.search_off,
+                          size: 36,
+                          color: crm.textSecondary.withValues(alpha: 0.4)),
+                      const SizedBox(height: 8),
+                      Text('No products match',
+                          style: TextStyle(color: crm.textSecondary)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (context, i) {
+                    final p = filtered[i];
+                    final isSelected = widget.selected?.id == p.id;
+                    final outOfStock = p.quantity <= 0;
+                    return InkWell(
+                      onTap: outOfStock
+                          ? null
+                          : () => widget.onSelected(isSelected ? null : p),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 10),
+                        color: isSelected
+                            ? crm.primary.withValues(alpha: 0.06)
+                            : Colors.transparent,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    () {
+                                      final shade = p.shade.isNotEmpty &&
+                                              p.shade != '—'
+                                          ? ' · ${p.shade}'
+                                          : '';
+                                      return '${p.name}$shade';
+                                    }(),
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: outOfStock
+                                          ? crm.textSecondary
+                                          : crm.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (p.brand.isNotEmpty)
+                                    Text(
+                                      p.brand,
+                                      style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: crm.textSecondary),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: outOfStock
+                                    ? crm.textSecondary.withValues(alpha: 0.08)
+                                    : crm.success.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                outOfStock
+                                    ? 'Out of stock'
+                                    : '${p.quantity} in stock',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: outOfStock
+                                      ? crm.textSecondary
+                                      : crm.success,
+                                ),
+                              ),
+                            ),
+                            if (isSelected) ...[
+                              const SizedBox(width: 8),
+                              Icon(Icons.check_circle,
+                                  size: 18, color: crm.primary),
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        Divider(height: 1, color: crm.border),
+      ],
+    );
+  }
 }

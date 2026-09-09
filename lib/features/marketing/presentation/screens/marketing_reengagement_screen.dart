@@ -64,14 +64,17 @@ class MarketingReEngagementScreen extends ConsumerWidget {
                 Text('No booking in the last',
                     style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
                 10.wg,
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final m in _windows)
-                      _chip(crm, '${m}mo', months == m, () {
-                        ref.read(reEngagementMonthsProvider.notifier).state = m;
-                      }),
-                  ],
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in _windows)
+                        _chip(crm, '${m}mo', months == m, () {
+                          ref.read(reEngagementMonthsProvider.notifier).state = m;
+                        }),
+                    ],
+                  ),
                 ),
               ],
             ),

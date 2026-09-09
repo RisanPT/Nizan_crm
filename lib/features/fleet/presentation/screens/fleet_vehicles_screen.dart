@@ -184,6 +184,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                       ),
                       16.h,
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: hasSelectedDriver ? driverId : '',
                         items: driverOptions,
                         onChanged: (value) {

@@ -174,14 +174,24 @@ class HelpDeskScreen extends HookConsumerWidget {
               Row(children: [
                 Icon(Icons.person_outline, size: 13, color: crm.textSecondary),
                 const SizedBox(width: 3),
-                Text(t.raisedByName.isEmpty ? 'Someone' : t.raisedByName,
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                Flexible(
+                  child: Text(t.raisedByName.isEmpty ? 'Someone' : t.raisedByName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                ),
                 if (t.assignedToName.isNotEmpty) ...[
                   const SizedBox(width: 10),
                   Icon(Icons.engineering_outlined, size: 13, color: crm.textSecondary),
                   const SizedBox(width: 3),
-                  Text(t.assignedToName, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                  Flexible(
+                    child: Text(t.assignedToName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                  ),
                 ],
+                const SizedBox(width: 8),
                 const Spacer(),
                 Text(ticketAgo(t.createdAt), style: TextStyle(fontSize: 11, color: crm.textSecondary)),
               ]),

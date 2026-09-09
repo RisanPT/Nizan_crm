@@ -448,54 +448,77 @@ class PackageDetailScreen extends HookConsumerWidget {
                       ],
                     ),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => context.go('/services/add?id=${package.id}'),
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit Basic Info'),
-                  ),
-                  12.w,
-                  ElevatedButton.icon(
-                    onPressed: () => showAddOrEditOverrideDialog(),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Override'),
-                  ),
+                  if (MediaQuery.sizeOf(context).width < 600) ...[
+                    IconButton(
+                      tooltip: 'Edit Basic Info',
+                      onPressed: () => context.go('/services/add?id=${package.id}'),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                    IconButton(
+                      tooltip: 'Add Override',
+                      onPressed: () => showAddOrEditOverrideDialog(),
+                      icon: const Icon(Icons.add),
+                    ),
+                  ] else ...[
+                    OutlinedButton.icon(
+                      onPressed: () => context.go('/services/add?id=${package.id}'),
+                      icon: const Icon(Icons.edit_outlined, size: 16),
+                      label: const Text('Edit Basic Info'),
+                    ),
+                    12.w,
+                    ElevatedButton.icon(
+                      onPressed: () => showAddOrEditOverrideDialog(),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Add Override'),
+                    ),
+                  ],
                 ],
               ),
               24.h,
 
-              // 2. Metrics Info Row
-              Row(
-                children: [
-                  Expanded(
-                    child: _DetailMetricCard(
-                      label: 'BASE PACKAGE PRICE',
-                      value: '₹ ${package.price.toStringAsFixed(0)}',
-                      color: crmColors.success,
-                      icon: Icons.monetization_on_outlined,
-                      crmColors: crmColors,
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: _DetailMetricCard(
-                      label: 'BOOKING ADVANCE',
-                      value: '₹ ${package.advanceAmount.toStringAsFixed(0)}',
-                      color: crmColors.primary,
-                      icon: Icons.payment_outlined,
-                      crmColors: crmColors,
-                    ),
-                  ),
-                  16.w,
-                  Expanded(
-                    child: _DetailMetricCard(
-                      label: 'TOTAL GEOGRAPHIC OVERRIDES',
-                      value: '${package.districtPrices.length} Locations',
-                      color: crmColors.warning,
-                      icon: Icons.map_outlined,
-                      crmColors: crmColors,
-                    ),
-                  ),
-                ],
+              // 2. Metrics Info — 1 column on phones, 3 across on wider screens.
+              LayoutBuilder(
+                builder: (ctx, c) {
+                  const gap = 16.0;
+                  final cols = c.maxWidth < 520 ? 1 : 3;
+                  final itemW = (c.maxWidth - gap * (cols - 1)) / cols;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      SizedBox(
+                        width: itemW,
+                        child: _DetailMetricCard(
+                          label: 'BASE PACKAGE PRICE',
+                          value: '₹ ${package.price.toStringAsFixed(0)}',
+                          color: crmColors.success,
+                          icon: Icons.monetization_on_outlined,
+                          crmColors: crmColors,
+                        ),
+                      ),
+                      SizedBox(
+                        width: itemW,
+                        child: _DetailMetricCard(
+                          label: 'BOOKING ADVANCE',
+                          value: '₹ ${package.advanceAmount.toStringAsFixed(0)}',
+                          color: crmColors.primary,
+                          icon: Icons.payment_outlined,
+                          crmColors: crmColors,
+                        ),
+                      ),
+                      SizedBox(
+                        width: itemW,
+                        child: _DetailMetricCard(
+                          label: 'TOTAL GEOGRAPHIC OVERRIDES',
+                          value: '${package.districtPrices.length} Locations',
+                          color: crmColors.warning,
+                          icon: Icons.map_outlined,
+                          crmColors: crmColors,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               24.h,
 

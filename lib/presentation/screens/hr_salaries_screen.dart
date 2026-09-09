@@ -750,7 +750,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                   ),
                 ),
                 12.w,
-                Wrap(
+                Flexible(
+                  child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
@@ -831,6 +832,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                           : const SizedBox.shrink(),
                     ) ?? const SizedBox.shrink(),
                   ],
+                ),
                 ),
               ],
             ),

@@ -1266,6 +1266,9 @@ class _DashboardHeader extends StatelessWidget {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<DateTime>(
           value: selectedMonth,
+          // Fill the bounded width on mobile (it sits in an Expanded); shrink to
+          // content on desktop (unbounded Row) to avoid an infinite-width error.
+          isExpanded: isMobile,
           icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: Color(0xFF7B8694)),
           style: GoogleFonts.inter(
             fontSize: 13,
@@ -1277,10 +1280,11 @@ class _DashboardHeader extends StatelessWidget {
             return DropdownMenuItem<DateTime>(
               value: date,
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(Icons.calendar_today_outlined, size: 14, color: Color(0xFFC59B27)),
                   8.w,
-                  Text(label),
+                  Text(label, overflow: TextOverflow.ellipsis, maxLines: 1),
                 ],
               ),
             );
@@ -1658,7 +1662,8 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -1679,6 +1684,7 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                       ),
                     ),
                   ],
+                  ),
                 ),
                 // Toggle pill segment
                 Container(
@@ -2263,7 +2269,8 @@ class _EnquiriesByLocationCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
+                Expanded(
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -2284,6 +2291,7 @@ class _EnquiriesByLocationCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                  ),
                 ),
                 // Live Indicator
                 Row(

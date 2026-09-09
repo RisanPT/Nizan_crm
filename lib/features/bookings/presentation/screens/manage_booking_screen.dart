@@ -3398,6 +3398,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           else
             DropdownButtonFormField<String>(
               key: assignDropdownKey,
+              isExpanded: true,
               initialValue: null,
               items: selectableStaff
                   .map(
@@ -3697,6 +3698,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           )
         else
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: currentValue,
             items: [
               const DropdownMenuItem(value: '', child: Text('Custom Package')),
@@ -4011,6 +4013,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           ),
           4.h,
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue:
                 availableAddonServices.any(
                   (service) => service.id == addon.addonServiceId,
@@ -4249,6 +4252,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           )
         else ...[
           DropdownButtonFormField<String>(
+            isExpanded: true,
             key: ValueKey(
               'booking-district-${currentValue ?? 'none'}-${availableDistricts.map((d) => d.id).join(',')}',
             ),

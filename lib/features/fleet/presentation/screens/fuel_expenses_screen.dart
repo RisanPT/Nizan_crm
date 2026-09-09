@@ -211,6 +211,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: selectedCategory,
                           items: _expenseCategories
                               .map(
@@ -234,6 +235,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                         // hidden for it; every other category needs one.
                         if (!isSalary) ...[
                           DropdownButtonFormField<String>(
+                            isExpanded: true,
                             initialValue: hasSelectedVehicle
                                 ? selectedVehicleId
                                 : null,
@@ -256,6 +258,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                           16.h,
                         ],
                         DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: hasSelectedDriver
                               ? selectedDriverId
                               : '',
@@ -853,6 +856,37 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                                 ),
                                               ),
                                             ),
+                                            if (exp.notes.isNotEmpty) ...[
+                                              6.h,
+                                              Row(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Icon(
+                                                    Icons.notes_outlined,
+                                                    size: 11,
+                                                    color:
+                                                        crmColors.textSecondary,
+                                                  ),
+                                                  3.w,
+                                                  Expanded(
+                                                    child: Text(
+                                                      exp.notes,
+                                                      maxLines: 2,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: crmColors
+                                                            .textSecondary,
+                                                        fontStyle:
+                                                            FontStyle.italic,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),

@@ -1161,6 +1161,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                       children: [
                                         DropdownButtonFormField<String>(
                                           key: districtDropdownKey,
+                                          isExpanded: true,
                                           initialValue: validDistrictId,
                                           items: [
                                             const DropdownMenuItem(
@@ -1211,6 +1212,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                     Expanded(
                                       child: DropdownButtonFormField<String>(
                                         key: packageDropdownKey,
+                                        isExpanded: true,
                                         initialValue: validPackageId,
                                         items: [
                                           const DropdownMenuItem(
@@ -1922,8 +1924,7 @@ class AddBookingScreen extends HookConsumerWidget {
                               // ── Discount (applied to the balance) ────────────
                               Row(
                                 children: [
-                                  SizedBox(
-                                    width: 200,
+                                  Expanded(
                                     child: TextField(
                                       controller: discountCtrl,
                                       keyboardType:
@@ -1954,11 +1955,15 @@ class AddBookingScreen extends HookConsumerWidget {
                                   ),
                                   16.w,
                                   if (computedDiscount() > 0)
-                                    Text(
-                                      '− ₹${computedDiscount().toStringAsFixed(0)} discount',
-                                      style: TextStyle(
-                                          color: crmColors.accent,
-                                          fontWeight: FontWeight.w700),
+                                    Flexible(
+                                      child: Text(
+                                        '− ₹${computedDiscount().toStringAsFixed(0)} discount',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                            color: crmColors.accent,
+                                            fontWeight: FontWeight.w700),
+                                      ),
                                     ),
                                 ],
                               ),

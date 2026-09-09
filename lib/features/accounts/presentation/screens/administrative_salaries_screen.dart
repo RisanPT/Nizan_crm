@@ -426,7 +426,10 @@ class _AdministrativeSalariesScreenState
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: crm.border),
                       ),
-                      child: Row(
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Icon(Icons.calendar_month,
                               size: 18, color: const Color(0xFF6366F1)),
@@ -492,7 +495,7 @@ class _AdministrativeSalariesScreenState
                               }
                             },
                           ),
-                          const Spacer(),
+                          12.w,
                           Text(
                             '${result.salaries.length} Records',
                             style: TextStyle(

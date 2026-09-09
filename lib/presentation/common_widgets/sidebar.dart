@@ -1588,7 +1588,18 @@ class _SidebarItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: InkWell(
-        onTap: onTap,
+        onTap: onTap == null
+            ? null
+            : () {
+                onTap!();
+                // In the mobile nav drawer, close it after navigating to a leaf
+                // item. Group headers (which carry a trailing expand chevron)
+                // keep the drawer open so their sub-items can be reached.
+                if (trailing == null) {
+                  final scaffold = Scaffold.maybeOf(context);
+                  if (scaffold?.isDrawerOpen ?? false) scaffold!.closeDrawer();
+                }
+              },
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: 12.p,

@@ -151,13 +151,19 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                 border: Border.all(color: crm.border.withValues(alpha: 0.8)),
               ),
               child: Row(children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('CLOSING BALANCE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.textSecondary)),
                   4.h,
-                  Text('${_money(l.closingBalance)} ${l.closingSide.toUpperCase()}',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text('${_money(l.closingBalance)} ${l.closingSide.toUpperCase()}',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+                  ),
                 ]),
-                const Spacer(),
+                ),
+                12.w,
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   Text('${l.rows.length} entries', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                   4.h,

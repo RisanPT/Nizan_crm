@@ -241,8 +241,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       style: theme.textTheme.titleLarge
                           ?.copyWith(fontWeight: FontWeight.bold),
                     ),
-                    Row(
-                      children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
                         // Month Selector
                         Container(
                           decoration: BoxDecoration(
@@ -389,6 +392,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                         ),
                       ],
                     ),
+                        ),
+                      ),
                   ],
                 ),
               ),

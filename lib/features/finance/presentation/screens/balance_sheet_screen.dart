@@ -101,8 +101,12 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                   child: Row(children: [
                     Icon(r.balanced ? Icons.verified_outlined : Icons.error_outline, size: 18, color: color),
                     10.w,
-                    Text(r.balanced ? 'Balance sheet is balanced' : 'Out of balance',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+                    Flexible(
+                      child: Text(r.balanced ? 'Balance sheet is balanced' : 'Out of balance',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: color)),
+                    ),
                     const Spacer(),
                     Text(_money(r.totalAssets), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: crm.textSecondary)),
                   ]),

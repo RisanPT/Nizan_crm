@@ -180,13 +180,35 @@ class _AccountsFleetExpensesScreenState
             [
               e.category,
               if (e.vehicle?.name.isNotEmpty == true) e.vehicle!.name,
+              if (e.station.isNotEmpty) e.station,
               _date(e.date),
-              if (e.notes.isNotEmpty) e.notes,
             ].join('  ·  '),
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
           ),
+          if (e.notes.isNotEmpty) ...[
+            4.h,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.notes_outlined, size: 13, color: crm.textSecondary),
+                4.w,
+                Expanded(
+                  child: Text(
+                    e.notes,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: crm.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           10.h,
           Row(
             children: [

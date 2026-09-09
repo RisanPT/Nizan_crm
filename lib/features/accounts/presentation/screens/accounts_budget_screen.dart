@@ -281,10 +281,13 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Accounts Dashboard',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
+              Flexible(
+                child: Text(
+                  'Accounts Dashboard',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               budgetAsync.when(

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'vehicle.dart';
 
@@ -36,7 +37,7 @@ class FuelExpense {
     final vehicleJson = json['vehicleId'];
     final driverJson = json['driverId'];
 
-    return FuelExpense(
+    final expense = FuelExpense(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       category: json['category'] as String? ?? 'fuel',
       date:
@@ -56,5 +57,8 @@ class FuelExpense {
           ? Employee.fromJson(driverJson)
           : null,
     );
+    // TODO: remove after confirming notes — check Flutter debug console
+    debugPrint('[FuelExpense] id=${expense.id} notes="${expense.notes}" raw_notes=${json['notes']}');
+    return expense;
   }
 }

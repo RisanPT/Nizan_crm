@@ -281,9 +281,10 @@ class DriverAddExpenseScreen extends HookConsumerWidget {
               controller: descriptionCtrl,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Description',
+                labelText: 'Notes',
+                hintText: 'e.g. highway toll, refuel at Shell, etc.',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.description),
+                prefixIcon: Icon(Icons.notes_outlined),
               ),
             ),
             const SizedBox(height: 16),
