@@ -293,6 +293,9 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
       _metricRow(crm, 'Cash received', _money(r.cashReceived), valueColor: crm.success),
       _metricRow(crm, 'Cash paid', _money(r.cashPaid), valueColor: crm.destructive),
       _metricRow(crm, 'Net cash flow', _money(r.cashNet), valueColor: r.cashNet >= 0 ? crm.success : crm.destructive),
+      _metricRow(crm, 'CapEx (asset purchases)', _money(r.capex), valueColor: crm.destructive),
+      _metricRow(crm, 'Free cash flow', _money(r.freeCashFlow),
+          valueColor: r.freeCashFlow >= 0 ? crm.success : crm.destructive),
       const Divider(height: 20),
       _metricRow(crm, 'Bank balance', _money(r.bankBalance)),
       _metricRow(crm, 'Cash balance', _money(r.cashBalance)),
@@ -322,6 +325,8 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
       _metricRow(crm, 'Not yet due', _money(r.arNotYetDue)),
       _metricRow(crm, 'Collection efficiency', _pctS(r.collectionEfficiencyPct),
           valueColor: r.collectionEfficiencyPct >= 60 ? crm.success : crm.warning),
+      _metricRow(crm, 'Days sales outstanding (DSO)',
+          r.dso != null ? '${r.dso!.toStringAsFixed(0)} days' : '—'),
       8.h,
       _bucketBar(crm, r.arBuckets),
       if (r.highRisk.isNotEmpty) ...[
@@ -364,6 +369,8 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
     return _section(crm, 5, 'Accounts Payable', Icons.call_made_rounded, [
       _metricRow(crm, 'Vendor dues outstanding', _money(r.apOutstanding)),
       _metricRow(crm, 'Overdue', _money(r.apOverdue), valueColor: crm.destructive),
+      _metricRow(crm, 'Days payable outstanding (DPO)',
+          r.dpo != null ? '${r.dpo!.toStringAsFixed(0)} days' : '—'),
       if (r.upcoming.isNotEmpty) ...[
         10.h,
         Text('UPCOMING COMMITMENTS (NEXT 30 DAYS)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.textSecondary)),
@@ -408,6 +415,14 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
       _metricRow(crm, 'Working capital', _money(r.workingCapital), valueColor: crm.primary),
       _metricRow(crm, 'Current ratio', r.currentRatio != null ? r.currentRatio!.toStringAsFixed(2) : '—',
           valueColor: (r.currentRatio ?? 0) >= 1 ? crm.success : crm.destructive),
+      const Divider(height: 20),
+      _metricRow(crm, 'Inventory turnover (annualized)',
+          r.inventoryTurnover != null ? '${r.inventoryTurnover!.toStringAsFixed(1)}×' : '—'),
+      _metricRow(crm, 'Days of inventory',
+          r.daysInventory != null ? '${r.daysInventory!.toStringAsFixed(0)} days' : '—'),
+      _metricRow(crm, 'Debt-to-equity',
+          r.debtToEquity != null ? r.debtToEquity!.toStringAsFixed(2) : '—',
+          valueColor: (r.debtToEquity ?? 0) <= 1 ? crm.success : crm.warning),
     ]);
   }
 
@@ -418,6 +433,30 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
           valueColor: r.gstNetPayable > 0 ? crm.destructive : crm.success),
       _metricRow(crm, 'GST output tax', _money(r.gstOutput)),
       _metricRow(crm, 'Input tax credit', _money(r.gstInputCredit)),
+      if (r.filings.isNotEmpty) ...[
+        10.h,
+        Row(children: [
+          Text('STATUTORY FILINGS (GST / TDS)',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.textSecondary)),
+          if (r.filingsOverdue > 0) ...[
+            6.w,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                  color: crm.destructive.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(100)),
+              child: Text('${r.filingsOverdue} overdue',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: crm.destructive)),
+            ),
+          ],
+        ]),
+        6.h,
+        for (final f in r.filings)
+          _metricRow(crm, f.label,
+              f.dueDate != null ? 'due ${DateFormat('d MMM').format(f.dueDate!)}' : '—',
+              badge: f.status == 'filed' ? 'Filed' : (f.status == 'overdue' ? 'Overdue' : 'Pending'),
+              badgeColor: f.status == 'filed' ? crm.success : (f.status == 'overdue' ? crm.destructive : crm.warning)),
+      ],
       if (r.unusualTransactions.isNotEmpty) ...[
         10.h,
         Text('TRANSACTIONS TO REVIEW', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.warning)),
@@ -425,7 +464,7 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
         for (final u in r.unusualTransactions.take(6))
           _metricRow(crm, '${u.voucherNo} · ${u.reason}', _money(u.amount)),
       ],
-    ], detailRoute: '/company-finance/gst', detailLabel: 'GST report');
+    ], detailRoute: '/company-finance/tax-filings', detailLabel: 'Filing tracker');
   }
 
   Widget _decisions(CrmTheme crm, MonthEndReview r) {

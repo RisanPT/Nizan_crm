@@ -257,6 +257,15 @@ const kFinanceReports = <FinanceReport>[
     icon: Icons.percent_outlined,
   ),
   FinanceReport(
+    key: 'tax-filings',
+    name: 'GST / TDS Filings',
+    category: 'Taxes',
+    description:
+        'Statutory filing calendar — GSTR-1, GSTR-3B, TDS payment & return — with due dates and filed / overdue / pending status.',
+    route: '/company-finance/tax-filings',
+    icon: Icons.fact_check_outlined,
+  ),
+  FinanceReport(
     key: 'gstr3b',
     name: 'GSTR-3B Summary',
     category: 'Taxes',

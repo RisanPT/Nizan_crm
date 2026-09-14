@@ -48,7 +48,10 @@ import '../../features/marketing/presentation/screens/growth_scores_screen.dart'
 import '../../features/marketing/presentation/screens/content_calendar_screen.dart';
 import '../../features/marketing/presentation/screens/content_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_insights_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_analytics_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_calendar_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_reengagement_screen.dart';
+import '../../features/marketing/presentation/screens/campaigns_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
 import '../../features/org/presentation/screens/departments_screen.dart';
@@ -98,7 +101,9 @@ import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_scr
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
 import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
-import 'package:nizan_crm/features/it/presentation/screens/it_board_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_project_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_roadmap_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/it_my_tasks_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
 import 'package:nizan_crm/features/backup/presentation/screens/backup_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/ticket_detail_screen.dart';
@@ -118,6 +123,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/bank_reconciliat
 import 'package:nizan_crm/features/finance/presentation/screens/gst_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/gstr3b_summary_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/tds_summary_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/tax_filings_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -204,6 +210,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/company-finance/reconciliation')) return 'company_finance.reconciliation';
   if (path.startsWith('/company-finance/gstr3b')) return 'company_finance.gst';
   if (path.startsWith('/company-finance/tds')) return 'company_finance.gst';
+  if (path.startsWith('/company-finance/tax-filings')) return 'company_finance.gst';
   if (path.startsWith('/company-finance/gst')) return 'company_finance.gst';
   // Inventory
   if (path == '/inventory') return 'inventory.dashboard';
@@ -227,6 +234,9 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/scores')) return 'marketing.scores';
   if (path.startsWith('/marketing/insights')) return 'marketing.insights';
   if (path.startsWith('/marketing/re-engagement')) return 'marketing.insights';
+  if (path.startsWith('/marketing/analytics')) return 'marketing.analytics';
+  if (path.startsWith('/marketing/calendar')) return 'marketing.calendar';
+  if (path.startsWith('/marketing/campaigns')) return 'marketing.campaigns';
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
   if (path == '/hr/salaries') return 'staff.salaries';
@@ -531,6 +541,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'TDS Summary';
           } else if (state.uri.path == '/company-finance/gst') {
             title = 'GST';
+          } else if (state.uri.path == '/company-finance/tax-filings') {
+            title = 'GST / TDS Filings';
           } else if (state.uri.path == '/sales/home') {
             title = 'My Dashboard';
           } else if (state.uri.path == '/sales/leads') {
@@ -607,12 +619,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Weekly Growth Score';
           } else if (state.uri.path == '/marketing/insights') {
             title = 'Marketing Insights';
+          } else if (state.uri.path == '/marketing/analytics') {
+            title = 'Marketing Analytics';
+          } else if (state.uri.path == '/marketing/calendar') {
+            title = 'Sales Calendar';
+          } else if (state.uri.path == '/marketing/campaigns') {
+            title = 'Campaigns';
           } else if (state.uri.path == '/marketing/re-engagement') {
             title = 'Client Re-engagement';
           } else if (state.uri.path == '/marketing/content/dashboard') {
             title = 'Content Dashboard';
           } else if (state.uri.path == '/marketing/content/calendar') {
             title = 'Content Calendar';
+          } else if (state.uri.path == '/it/roadmap') {
+            title = 'Roadmap';
+          } else if (state.uri.path == '/it/my-tasks') {
+            title = 'My Tasks';
           } else if (state.uri.path == '/backup') {
             title = 'Backup Data';
           } else if (state.uri.path == '/finance') {
@@ -905,6 +927,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const MarketingInsightsScreen(),
           ),
           GoRoute(
+            path: '/marketing/analytics',
+            builder: (context, state) => const MarketingAnalyticsScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/calendar',
+            builder: (context, state) => const MarketingCalendarScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/campaigns',
+            builder: (context, state) => const CampaignsScreen(),
+          ),
+          GoRoute(
             path: '/marketing/re-engagement',
             builder: (context, state) => const MarketingReEngagementScreen(),
           ),
@@ -1023,7 +1057,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/it/projects/:id',
             builder: (context, state) =>
-                ITBoardScreen(projectId: state.pathParameters['id'] ?? ''),
+                ITProjectScreen(projectId: state.pathParameters['id'] ?? ''),
+          ),
+          GoRoute(
+            path: '/it/roadmap',
+            builder: (context, state) => const ITRoadmapScreen(),
+          ),
+          GoRoute(
+            path: '/it/my-tasks',
+            builder: (context, state) => const ITMyTasksScreen(),
           ),
           GoRoute(
             path: '/it/tickets',
@@ -1159,6 +1201,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/company-finance/gst',
             builder: (context, state) => const GstScreen(),
+          ),
+          GoRoute(
+            path: '/company-finance/tax-filings',
+            builder: (context, state) => const TaxFilingsScreen(),
           ),
           GoRoute(
             path: '/company-finance/gstr3b',

@@ -15,6 +15,7 @@ import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/services/ticket_service.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
+import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 
 class TicketDetailScreen extends HookConsumerWidget {
   final String ticketId;
@@ -497,6 +498,11 @@ class _TriagePanel extends HookConsumerWidget {
 
     if (done == true) {
       ref.invalidate(projectsProvider);
+      ref.invalidate(itAllTasksControllerProvider);
+      if (projectId != null) {
+        ref.invalidate(itProjectTasksControllerProvider(projectId!));
+      }
+      ref.invalidate(ticketStatsProvider);
       await onSaved();
       messenger.showSnackBar(const SnackBar(content: Text('Ticket converted to an IT task')));
     }

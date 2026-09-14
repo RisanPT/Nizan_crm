@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart' show BookingAssignment;
@@ -785,7 +786,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
 
   // ── Artist Assignment Flow (exact booking style) ───────────────────────
   Widget _buildAssignSection(CrmTheme crm) {
-    final isNarrow = MediaQuery.of(context).size.width < 900;
+    final isNarrow = MediaQuery.sizeOf(context).width < ResponsiveBreakpoints.twoPane;
     final artists = (ref.watch(employeesProvider).value ?? const <Employee>[])
         .where((e) =>
             e.status.toLowerCase() == 'active' &&

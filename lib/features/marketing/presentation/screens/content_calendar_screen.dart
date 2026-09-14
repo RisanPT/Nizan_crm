@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -57,7 +58,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
     final monthFocus = useState<DateTime>(DateTime(now.year, now.month, 1));
     final rangeKey = monthGridRange(monthFocus.value);
     final async = ref.watch(contentByMonthProvider(rangeKey));
-    final isMobile = MediaQuery.of(context).size.width < 700;
+    final isMobile = MediaQuery.sizeOf(context).width < ResponsiveBreakpoints.mobile;
 
     void refresh() => ref.invalidate(contentByMonthProvider);
 

@@ -34,11 +34,6 @@ class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Show the full-screen ring UI whenever a follow-up alarm sounds while the
-    // app is in the foreground. `ringing` is a value-stream, so it also replays
-    // the current state on subscribe — catching an alarm that's already ringing
-    // when the app is launched. (Locked/background is handled by the alarm's own
-    // full-screen notification + Stop action.)
     if (!kIsWeb) {
       _sub = Alarm.ringing.listen((alarmSet) {
         final active = alarmSet.alarms.isEmpty ? null : alarmSet.alarms.first;

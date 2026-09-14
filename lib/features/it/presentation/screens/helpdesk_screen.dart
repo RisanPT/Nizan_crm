@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:go_router/go_router.dart';
-import 'package:image_picker/image_picker.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
-import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/features/it/data/ticket.dart';
 import 'package:nizan_crm/features/it/services/ticket_service.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/raise_ticket_dialog.dart';
 
 // ── Shared ticket colours (reused by the detail screen) ───────────────────────
 Color ticketStatusColor(String s) => switch (s) {
@@ -215,141 +214,7 @@ class HelpDeskScreen extends HookConsumerWidget {
 
 String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
-/// The "Raise Ticket" bottom sheet — available to every department.
-Future<void> raiseTicketSheet(BuildContext context, WidgetRef ref) async {
-  final title = TextEditingController();
-  final desc = TextEditingController();
-  final module = TextEditingController();
-  String type = 'bug';
-  String priority = 'medium';
-  final shots = <String>[];
-  final messenger = ScaffoldMessenger.of(context);
-
-  final created = await showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    builder: (ctx) {
-      var busy = false;
-      var uploading = false;
-      return StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
-          child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                const Icon(Icons.confirmation_number_outlined),
-                const SizedBox(width: 8),
-                const Text('Raise a ticket', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              ]),
-              const SizedBox(height: 14),
-              TextField(
-                controller: title,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(labelText: 'Title *', hintText: 'Short summary of the issue'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: desc,
-                minLines: 3,
-                maxLines: 6,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Steps to reproduce, what you expected, what happened…',
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                  child: _ddSheet('Type', type, ticketTypes, ticketTypeLabel, (v) => setSheet(() => type = v)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ddSheet('Priority', priority, ticketPriorities, _cap, (v) => setSheet(() => priority = v)),
-                ),
-              ]),
-              const SizedBox(height: 10),
-              TextField(
-                controller: module,
-                decoration: const InputDecoration(labelText: 'Module / screen (optional)', hintText: 'e.g. Bookings, Sales, Payroll'),
-              ),
-              const SizedBox(height: 14),
-              Row(children: [
-                OutlinedButton.icon(
-                  onPressed: uploading
-                      ? null
-                      : () async {
-                          final picker = ImagePicker();
-                          final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-                          if (file == null) return;
-                          setSheet(() => uploading = true);
-                          try {
-                            final url = await ref.read(uploadServiceProvider).uploadImage(file);
-                            shots.add(url);
-                          } catch (e) {
-                            messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                          } finally {
-                            setSheet(() => uploading = false);
-                          }
-                        },
-                  icon: uploading
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.image_outlined, size: 18),
-                  label: Text(uploading ? 'Uploading…' : 'Attach screenshot'),
-                ),
-                const SizedBox(width: 10),
-                if (shots.isNotEmpty)
-                  Text('${shots.length} attached', style: TextStyle(fontSize: 12, color: context.crmColors.textSecondary)),
-              ]),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          if (title.text.trim().isEmpty) {
-                            messenger.showSnackBar(const SnackBar(content: Text('Please enter a title')));
-                            return;
-                          }
-                          setSheet(() => busy = true);
-                          try {
-                            await ref.read(ticketServiceProvider).createTicket({
-                              'title': title.text.trim(),
-                              'description': desc.text.trim(),
-                              'type': type,
-                              'priority': priority,
-                              'module': module.text.trim(),
-                              'screenshots': shots,
-                            });
-                            if (ctx.mounted) Navigator.pop(ctx, true);
-                          } catch (e) {
-                            setSheet(() => busy = false);
-                            messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                          }
-                        },
-                  child: Text(busy ? 'Submitting…' : 'Submit ticket'),
-                ),
-              ),
-            ]),
-          ),
-        ),
-      );
-    },
-  );
-
-  if (created == true) {
-    ref.invalidate(ticketsProvider);
-    messenger.showSnackBar(const SnackBar(content: Text('Ticket raised — IT has been notified')));
-  }
+/// The "Raise Ticket" modal — available to every department.
+Future<void> raiseTicketSheet(BuildContext context, WidgetRef ref, {String? defaultModule}) async {
+  await showRaiseTicketDialog(context, ref, defaultModule: defaultModule);
 }
-
-Widget _ddSheet(String label, String value, List<String> options, String Function(String) fmt, ValueChanged<String> onChanged) =>
-    DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: InputDecoration(labelText: label),
-      items: [for (final o in options) DropdownMenuItem(value: o, child: Text(fmt(o)))],
-      onChanged: (v) => onChanged(v ?? value),
-    );

@@ -4,6 +4,8 @@ class Lead {
   final String? email;
   final String phone;
   final String source;
+  /// Marketing campaign this lead is attributed to (drives campaign ROI).
+  final String? campaignId;
   final String location;
   final String leadType;
   /// Event Type (Wedding, Reception, …) — replaces the old Lead Type in the UI.
@@ -47,6 +49,7 @@ class Lead {
     this.email,
     required this.phone,
     required this.source,
+    this.campaignId,
     required this.location,
     required this.leadType,
     this.eventType = '',
@@ -84,6 +87,9 @@ class Lead {
       email: json['email'] as String?,
       phone: json['phone'] as String? ?? '',
       source: json['source'] as String? ?? 'Walk-in',
+      campaignId: json['campaignId'] is Map
+          ? json['campaignId']['_id'] as String?
+          : json['campaignId'] as String?,
       location: json['location'] as String? ?? '',
       leadType: json['leadType'] as String? ?? 'Individual',
       eventType: json['eventType'] as String? ?? '',
@@ -134,6 +140,7 @@ class Lead {
       'email': email,
       'phone': phone,
       'source': source,
+      'campaignId': campaignId,
       'location': location,
       'leadType': leadType,
       'eventType': eventType,
@@ -160,6 +167,7 @@ class Lead {
     String? email,
     String? phone,
     String? source,
+    String? campaignId,
     String? location,
     String? leadType,
     String? eventType,
@@ -187,6 +195,7 @@ class Lead {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       source: source ?? this.source,
+      campaignId: campaignId ?? this.campaignId,
       location: location ?? this.location,
       leadType: leadType ?? this.leadType,
       eventType: eventType ?? this.eventType,

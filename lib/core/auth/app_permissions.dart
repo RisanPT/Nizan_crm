@@ -115,6 +115,9 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('marketing.competitors', 'Competitors'),
     AppSubFeature('marketing.scores', 'Growth Scores'),
     AppSubFeature('marketing.insights', 'Marketing Insights'),
+    AppSubFeature('marketing.analytics', 'Analytics'),
+    AppSubFeature('marketing.calendar', 'Sales Calendar'),
+    AppSubFeature('marketing.campaigns', 'Campaigns & ROI'),
   ]),
   AppFeature('fleet', 'Fleet', 'Vehicles, drivers and fuel',
       Icons.local_shipping_outlined, subs: [

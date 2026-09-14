@@ -15,6 +15,7 @@ import 'package:nizan_crm/core/utils/dashboard_report_service.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
+import 'package:nizan_crm/features/marketing/services/campaign_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
@@ -948,6 +949,8 @@ class _LeadForm extends HookConsumerWidget {
     final customSourceCtrl = useTextEditingController(
       text: _isKnownSource(initialLead?.source) ? '' : (initialLead?.source ?? ''),
     );
+    // Marketing campaign this lead is attributed to (drives campaign ROI).
+    final selectedCampaignId = useState<String?>(initialLead?.campaignId);
     final locationCtrl  = useTextEditingController(text: initialLead?.location ?? '');
     final leadTypeCtrl  = useTextEditingController(text: initialLead?.leadType ?? 'Individual');
     // Event Type replaces Lead Type. Default to a valid option so the dropdown
@@ -1101,6 +1104,7 @@ class _LeadForm extends HookConsumerWidget {
           'source': selectedSource.value == 'Other'
               ? customSourceCtrl.text.trim()
               : selectedSource.value,
+          'campaignId': selectedCampaignId.value,
           'location': locationCtrl.text,
           'leadType': leadTypeCtrl.text,
           'eventType': eventType.value,
@@ -1384,6 +1388,36 @@ class _LeadForm extends HookConsumerWidget {
           ),
           desktopWidth: 180,
         ),
+
+      // Campaign attribution — revenue from this lead's booking rolls up to
+      // the chosen campaign's ROI.
+      responsiveField(
+        Consumer(builder: (_, r, _) {
+          final campaigns =
+              r.watch(campaignsProvider).asData?.value.campaigns ?? const [];
+          final current = campaigns.any((c) => c.id == selectedCampaignId.value)
+              ? selectedCampaignId.value
+              : null;
+          return DropdownButtonFormField<String?>(
+            initialValue: current,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Campaign (optional)',
+              prefixIcon: Icon(Icons.ads_click_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(
+                  value: null, child: Text('— No campaign —')),
+              for (final c in campaigns)
+                DropdownMenuItem<String?>(
+                    value: c.id,
+                    child: Text(c.title, overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) => selectedCampaignId.value = v,
+          );
+        }),
+        desktopWidth: 180,
+      ),
 
       // Location
       responsiveField(
@@ -1906,7 +1940,7 @@ class _LeadsTable extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    final double width = MediaQuery.of(context).size.width;
+    final double width = MediaQuery.sizeOf(context).width;
     final session = ref.watch(authSessionProvider);
     final users = ref.watch(crmUsersProvider).value ?? [];
     final isSalesManager = session?.role == 'sales_manager';

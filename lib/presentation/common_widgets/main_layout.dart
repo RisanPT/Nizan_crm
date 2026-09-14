@@ -210,7 +210,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         // role can reach on desktop is reachable on mobile too (fixes the admin
         // shell exposing only 5 bottom-nav tabs). Opened by the AppBar hamburger.
         drawer: Drawer(
-          width: 288,
+          width: (MediaQuery.sizeOf(context).width * 0.85).clamp(0.0, 288.0),
           backgroundColor: context.crmColors.sidebar,
           child: SafeArea(bottom: false, child: _buildSidebar()),
         ),
@@ -228,6 +228,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
             : null,
         body: SafeArea(child: NotificationWatcher(child: widget.child)),
         bottomNavigationBar: NavigationBar(
+          labelBehavior: NavigationDestinationLabelBehavior.onlyShowSelected,
           selectedIndex: _calculateSelectedIndex(context, role),
           onDestinationSelected: (index) => _onItemTapped(index, role),
           destinations: role == AppRole.artist

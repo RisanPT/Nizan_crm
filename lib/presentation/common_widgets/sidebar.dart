@@ -115,7 +115,7 @@ class Sidebar extends ConsumerWidget {
     final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
     final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
-    final isCollapsed = isTablet && !isMobile;
+    final isCollapsed = isTablet && !isMobile && !ResponsiveBuilder.isTwoPane(context);
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
     final effectiveAccountsExpanded =
@@ -648,6 +648,28 @@ class Sidebar extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
+                          icon: Icons.timeline_outlined,
+                          title: 'Roadmap',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/it/roadmap'),
+                          onTap: () => context.go('/it/roadmap'),
+                        ),
+                      ),
+                    if (access.canSeeIt)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.assignment_ind_outlined,
+                          title: 'My Tasks',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/it/my-tasks'),
+                          onTap: () => context.go('/it/my-tasks'),
+                        ),
+                      ),
+                    if (access.canSeeIt)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
                           icon: Icons.confirmation_number_outlined,
                           title: 'Tickets',
                           isCollapsed: false,
@@ -1174,6 +1196,39 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/marketing/insights'),
                           ),
                         ),
+                      if (access.canSeeSub('marketing.analytics'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.analytics_outlined,
+                            title: 'Analytics',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/analytics',
+                            onTap: () => context.go('/marketing/analytics'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.calendar'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.calendar_month_outlined,
+                            title: 'Sales Calendar',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/calendar',
+                            onTap: () => context.go('/marketing/calendar'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.campaigns'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.campaign_outlined,
+                            title: 'Campaigns',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/campaigns',
+                            onTap: () => context.go('/marketing/campaigns'),
+                          ),
+                        ),
                       // Content Planning — nested group (click to expand →
                       // Dashboard + Calendar).
                       Padding(
@@ -1385,30 +1440,27 @@ class Sidebar extends ConsumerWidget {
               ],
             ),
           ),
-          // ── BOTTOM SECTION ─────────────────────────────────────────────────
-          const Divider(height: 1, color: Colors.white12),
-          Padding(
-            padding: 16.p,
-            child: Column(
-              children: [
-                // Report Bug — available to EVERY role/department (no access
-                // gate). Opens the Help Desk to raise a bug / feature request
-                // and track its status.
+          // ── BOTTOM SECTION (pinned) — account & support quick actions, kept
+          //    visually SEPARATE from the scrolling feature nav above so they
+          //    don't read as "more features". ──────────────────────────────────
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.12)),
+          if (isCollapsed)
+            // Icon-rail (tablet): keep the vertical icon stack.
+            Padding(
+              padding: 12.p,
+              child: Column(children: [
                 _SidebarItem(
                   icon: Icons.bug_report_outlined,
                   title: 'Report Bug',
-                  isCollapsed: isCollapsed,
+                  isCollapsed: true,
                   isSelected: currentPath.startsWith('/helpdesk'),
                   onTap: () => context.go('/helpdesk'),
                 ),
                 8.h,
-                // Backup Data — each department exports its own data as JSON;
-                // IT/admin also get a full-database backup. The screen only
-                // shows what the signed-in user is allowed to export.
                 _SidebarItem(
                   icon: Icons.cloud_download_outlined,
                   title: 'Backup Data',
-                  isCollapsed: isCollapsed,
+                  isCollapsed: true,
                   isSelected: currentPath.startsWith('/backup'),
                   onTap: () => context.go('/backup'),
                 ),
@@ -1416,7 +1468,7 @@ class Sidebar extends ConsumerWidget {
                 _SidebarItem(
                   icon: Icons.account_circle_outlined,
                   title: 'My Profile',
-                  isCollapsed: isCollapsed,
+                  isCollapsed: true,
                   isSelected: currentPath == '/profile',
                   onTap: () => context.go('/profile'),
                 ),
@@ -1424,39 +1476,107 @@ class Sidebar extends ConsumerWidget {
                 _SidebarItem(
                   icon: Icons.logout_rounded,
                   title: 'Logout',
-                  isCollapsed: isCollapsed,
+                  isCollapsed: true,
                   isSelected: false,
-                  onTap: () async {
-                    final confirm = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Confirm Logout'),
-                        content: const Text('Are you sure you want to log out?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                            child: const Text('Logout'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirm == true) {
-                      await ref.read(authControllerProvider).logout();
-                    }
-                  },
+                  onTap: () => _confirmLogout(context, ref),
                 ),
-              ],
+              ]),
+            )
+          else
+            // Full sidebar / mobile drawer: a compact, tinted action bar.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(children: [
+                  _footerAction(context, Icons.bug_report_outlined, 'Support',
+                      currentPath.startsWith('/helpdesk'), () => context.go('/helpdesk')),
+                  _footerAction(context, Icons.cloud_download_outlined, 'Backup',
+                      currentPath.startsWith('/backup'), () => context.go('/backup')),
+                  _footerAction(context, Icons.account_circle_outlined, 'Profile',
+                      currentPath == '/profile', () => context.go('/profile')),
+                  _footerAction(context, Icons.logout_rounded, 'Logout', false,
+                      () => _confirmLogout(context, ref), keepDrawer: true),
+                ]),
+              ),
             ),
-          ),
-          16.h,
+          8.h,
         ],
       ),
     );
+  }
+
+  /// A compact icon+label action tile for the pinned footer bar. Navigation
+  /// actions also close the mobile drawer (skipped for Logout).
+  Widget _footerAction(BuildContext context, IconData icon, String label,
+      bool selected, VoidCallback onTap,
+      {bool keepDrawer = false}) {
+    final color =
+        selected ? Colors.white : Colors.white.withValues(alpha: 0.72);
+    return Expanded(
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () {
+            onTap();
+            if (!keepDrawer) {
+              final s = Scaffold.maybeOf(context);
+              if (s?.isDrawerOpen ?? false) s!.closeDrawer();
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              color: selected ? Colors.white.withValues(alpha: 0.10) : null,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 20, color: color),
+                3.h,
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: color)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await ref.read(authControllerProvider).logout();
+    }
   }
 
   Widget _buildLogo(BuildContext context, {required bool isCollapsed}) {

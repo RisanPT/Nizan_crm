@@ -629,7 +629,7 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
       );
 
   static double mediaHalf(BuildContext context) =>
-      (MediaQuery.of(context).size.width - 14 * 2 - 12) / 2;
+      (MediaQuery.sizeOf(context).width - 14 * 2 - 12) / 2;
 
   Widget _pill(String text, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),

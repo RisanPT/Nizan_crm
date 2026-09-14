@@ -62,15 +62,24 @@ final itTaskServiceProvider = Provider((ref) => ITTaskService(ref.watch(dioProvi
 final tasksProvider = FutureProvider.family<List<ITTask>, String>(
     (ref, projectId) => ref.watch(itTaskServiceProvider).getTasks(projectId: projectId));
 
+/// Every IT task across all projects (for the cross-project Roadmap).
+final allTasksProvider = FutureProvider<List<ITTask>>(
+    (ref) => ref.watch(itTaskServiceProvider).getTasks());
+
+/// Tasks assigned to the logged-in user across all projects (My Tasks).
+final myTasksProvider = FutureProvider<List<ITTask>>(
+    (ref) => ref.watch(itTaskServiceProvider).getTasks(mine: true));
+
 class ITTaskService {
   final Dio _dio;
   ITTaskService(this._dio);
 
-  Future<List<ITTask>> getTasks({String? projectId, String? status, String? assignedTo}) async {
+  Future<List<ITTask>> getTasks({String? projectId, String? status, String? assignedTo, bool mine = false}) async {
     final res = await _dio.get('/it-tasks', queryParameters: {
       if (projectId != null && projectId.isNotEmpty) 'projectId': projectId,
       if (status != null && status.isNotEmpty) 'status': status,
-      if (assignedTo != null && assignedTo.isNotEmpty) 'assignedTo': assignedTo,
+      if (mine) 'mine': 'true',
+      if (!mine && assignedTo != null && assignedTo.isNotEmpty) 'assignedTo': assignedTo,
     });
     return (res.data as List).map((e) => ITTask.fromJson((e as Map).cast<String, dynamic>())).toList();
   }

@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
@@ -152,7 +153,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
             }
           }
 
-          final isWide = MediaQuery.of(context).size.width >= 900;
+          final isWide = MediaQuery.sizeOf(context).width >= ResponsiveBreakpoints.twoPane;
 
           return RefreshIndicator(
             onRefresh: () async {

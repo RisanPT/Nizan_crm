@@ -1,6 +1,8 @@
 // Data models for the Month-End Review (GET /reports/month-end) and the Monthly
 // Planning targets (GET/PUT /reports/targets).
 
+import 'package:nizan_crm/features/finance/data/tax_filing.dart';
+
 double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
 double? _dn(dynamic v) => v == null ? null : (v as num?)?.toDouble();
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
@@ -140,9 +142,16 @@ class MonthEndReview {
   // 9. Risk
   final double gstNetPayable, gstOutput, gstInputCredit;
   final List<UnusualTxn> unusualTransactions;
+  final List<TaxFiling> filings;
+  final int filingsOverdue, filingsPending, filingsFiled;
 
   // 10. Governance
   final int openDecisions;
+
+  // Ratios — DSO / DPO / Inventory Turnover / Debt-to-Equity / Free Cash Flow /
+  // CapEx (all computed server-side from the same ledger + period figures).
+  final double capex, operatingCashFlow, freeCashFlow, totalLiabilities, totalEquity;
+  final double? dso, dpo, inventoryTurnover, daysInventory, debtToEquity;
 
   const MonthEndReview({
     required this.month,
@@ -205,7 +214,21 @@ class MonthEndReview {
     required this.gstOutput,
     required this.gstInputCredit,
     required this.unusualTransactions,
+    this.filings = const [],
+    this.filingsOverdue = 0,
+    this.filingsPending = 0,
+    this.filingsFiled = 0,
     required this.openDecisions,
+    this.capex = 0,
+    this.operatingCashFlow = 0,
+    this.freeCashFlow = 0,
+    this.totalLiabilities = 0,
+    this.totalEquity = 0,
+    this.dso,
+    this.dpo,
+    this.inventoryTurnover,
+    this.daysInventory,
+    this.debtToEquity,
   });
 
   factory MonthEndReview.fromJson(Map<String, dynamic> j) {
@@ -283,7 +306,23 @@ class MonthEndReview {
       gstOutput: _d(risk['gstOutput']),
       gstInputCredit: _d(risk['gstInputCredit']),
       unusualTransactions: list(risk['unusualTransactions'], UnusualTxn.fromJson),
+      filings: list(
+          (risk['filings'] as Map<String, dynamic>? ?? const {})['list'],
+          TaxFiling.fromJson),
+      filingsOverdue: _i((risk['filings'] as Map<String, dynamic>? ?? const {})['overdue']),
+      filingsPending: _i((risk['filings'] as Map<String, dynamic>? ?? const {})['pending']),
+      filingsFiled: _i((risk['filings'] as Map<String, dynamic>? ?? const {})['filed']),
       openDecisions: _i(j['openDecisions']),
+      capex: _d(cash['capex']),
+      operatingCashFlow: _d(cash['operatingCashFlow']),
+      freeCashFlow: _d(cash['freeCashFlow']),
+      totalLiabilities: _d(wc['totalLiabilities']),
+      totalEquity: _d(wc['totalEquity']),
+      dso: _dn(ar['dso']),
+      dpo: _dn(ap['dpo']),
+      inventoryTurnover: _dn(wc['inventoryTurnover']),
+      daysInventory: _dn(wc['daysInventory']),
+      debtToEquity: _dn(wc['debtToEquity']),
     );
   }
 }
