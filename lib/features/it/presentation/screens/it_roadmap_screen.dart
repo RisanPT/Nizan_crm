@@ -48,7 +48,8 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
     final crm = context.crmColors;
     final asyncTasks = ref.watch(itAllTasksControllerProvider);
     final filterState = ref.watch(itFilterProvider);
-    final projects = ref.watch(projectsProvider).value ?? const <ITProjectModel>[];
+    final projects = ref.watch(itProjectsProvider).value ?? const <ITProjectModel>[];
+    final itProjectIds = projects.map((p) => p.id).toSet();
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -74,7 +75,10 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
                 ),
               ]),
             ),
-            data: (allTasks) {
+            data: (allTasksRaw) {
+              // Scope the IT Roadmap to IT-department projects only; company
+              // (non-IT) projects live in the Company Projects portfolio.
+              final allTasks = allTasksRaw.where((t) => itProjectIds.contains(t.projectId)).toList();
               final filtered = ref.watch(filteredTasksProvider(allTasks));
               return _viewMode == ITRoadmapViewMode.timeline
                   ? ITInteractiveGantt(
@@ -175,6 +179,7 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
           tooltip: 'Refresh',
           onPressed: () {
             ref.read(itAllTasksControllerProvider.notifier).refresh();
+            ref.invalidate(itProjectsProvider);
             ref.invalidate(projectsProvider);
           },
           icon: const Icon(Icons.refresh),
@@ -513,7 +518,7 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
   }
 
   void _openCreateTaskDialog() {
-    final projects = ref.read(projectsProvider).value ?? const <ITProjectModel>[];
+    final projects = ref.read(itProjectsProvider).value ?? const <ITProjectModel>[];
     if (projects.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please create a project first before adding tasks.')),
@@ -524,6 +529,7 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
     showTaskEditor(context, ref, projects.first.id, allTasks: allTasks).then((saved) {
       if (saved == true) {
         ref.read(itAllTasksControllerProvider.notifier).refresh();
+        ref.invalidate(itProjectsProvider);
         ref.invalidate(projectsProvider);
       }
     });

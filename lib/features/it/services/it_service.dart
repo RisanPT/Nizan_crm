@@ -31,35 +31,61 @@ final itEmployeesProvider = Provider<List<Employee>>((ref) {
     ..sort((a, b) => a.name.compareTo(b.name));
 });
 
-/// The assignable employees for a specific project.
-/// Scopes strictly to:
-/// 1. The Project Head / Manager (`project.managerId`)
-/// 2. The Project's Assigned Team Members (`project.memberIds`)
-/// If a project has assigned members, only those specific people are shown/selectable
-/// inside the project (task assignee dropdowns, PlutoGrid, task details, OKRs).
+/// The assignable employees for a specific project (task assignee dropdowns,
+/// PlutoGrid, task details, OKR Project Head).
+///
+/// Projects are now company-wide and department-scoped, so the pool is drawn
+/// from ALL active employees — not IT only — in priority order:
+/// 1. If the project names an explicit team (manager + members), that team IS
+///    the pool, whatever department each person is in.
+/// 2. Otherwise, everyone in the project's own department (`targetDepartment`,
+///    e.g. Finance/Sales/IT).
+/// 3. Fallback to all active employees so the picker is never empty.
 final projectEmployeesProvider = Provider.family<List<Employee>, String?>((ref, projectId) {
-  final allIt = ref.watch(itEmployeesProvider);
+  final allActive = ref.watch(activeEmployeesProvider);
   if (projectId == null || projectId.isEmpty) {
-    return allIt;
+    return allActive;
   }
 
   final projects = ref.watch(projectsProvider).value ?? const <Project>[];
   final project = projects.where((p) => p.id == projectId).firstOrNull;
   if (project == null) {
-    return allIt;
+    return allActive;
   }
 
+  // 1. Explicit team (manager + members), across any department.
   final allowedIds = <String>{
     if (project.managerId.isNotEmpty) project.managerId,
     ...project.memberIds,
   };
-
-  if (allowedIds.isEmpty) {
-    return allIt;
+  if (allowedIds.isNotEmpty) {
+    final team = allActive.where((e) => allowedIds.contains(e.id)).toList();
+    if (team.isNotEmpty) return team;
   }
 
-  final scoped = allIt.where((e) => allowedIds.contains(e.id)).toList();
-  return scoped.isNotEmpty ? scoped : allIt;
+  // 2/3. Scope to the project's department, falling back to everyone.
+  return ref.watch(departmentEmployeesProvider(project.targetDepartment));
+});
+
+// ── Company-wide employee pickers (for cross-department project creation) ──────
+/// All active employees, sorted by name.
+final activeEmployeesProvider = Provider<List<Employee>>((ref) {
+  final all = ref.watch(employeesProvider).value ?? const <Employee>[];
+  return all.where((e) => e.status.toLowerCase() == 'active').toList()
+    ..sort((a, b) => a.name.compareTo(b.name));
+});
+
+/// Active employees scoped to a department (by Employee.department name or
+/// category, case-insensitive). Falls back to everyone if none are tagged to
+/// that department, so the picker is never empty.
+final departmentEmployeesProvider = Provider.family<List<Employee>, String?>((ref, dept) {
+  final all = ref.watch(activeEmployeesProvider);
+  final d = (dept ?? '').toLowerCase().trim();
+  if (d.isEmpty || d == 'all') return all;
+  final scoped = all
+      .where((e) => (e.department ?? '').toLowerCase().trim() == d || e.category.toLowerCase().trim() == d)
+      .toList();
+  return scoped.isNotEmpty ? scoped : all;
 });
 
 // ── Projects ─────────────────────────────────────────────────────────────────
@@ -68,15 +94,32 @@ final projectServiceProvider = Provider((ref) => ProjectService(ref.watch(dioPro
 final projectsProvider = FutureProvider<List<Project>>(
     (ref) => ref.watch(projectServiceProvider).getProjects());
 
+/// Company-wide projects, optionally filtered to one department (the top-level
+/// Company Projects portfolio). Server scopes what each user may see.
+final companyProjectsProvider = FutureProvider.family<List<Project>, String?>(
+    (ref, department) => ref.watch(projectServiceProvider).getProjects(department: department));
+
+/// The department key that identifies IT projects. Case-insensitive on the
+/// server, so it matches both legacy 'it' and normalized 'IT'.
+const kItDepartment = 'IT';
+
+/// IT-department projects ONLY — powers the IT-branded views (the IT Projects
+/// list and the IT Roadmap). The top-level Company Projects portfolio uses
+/// [companyProjectsProvider] and shows every department (IT included).
+/// Distinct from [projectsProvider], which stays unfiltered because task/detail
+/// screens and pickers look projects up by id from the full accessible set.
+final itProjectsProvider = companyProjectsProvider(kItDepartment);
+
 class ProjectService {
   final Dio _dio;
   ProjectService(this._dio);
 
-  Future<List<Project>> getProjects({String? status, String? priority, String? search}) async {
+  Future<List<Project>> getProjects({String? status, String? priority, String? search, String? department}) async {
     final res = await _dio.get('/projects', queryParameters: {
       if (status != null && status.isNotEmpty) 'status': status,
       if (priority != null && priority.isNotEmpty) 'priority': priority,
       if (search != null && search.isNotEmpty) 'search': search,
+      if (department != null && department.isNotEmpty && department != 'all') 'department': department,
     });
     return (res.data as List).map((e) => Project.fromJson((e as Map).cast<String, dynamic>())).toList();
   }

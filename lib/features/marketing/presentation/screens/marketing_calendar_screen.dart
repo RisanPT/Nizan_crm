@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
+import 'package:nizan_crm/features/slots/data/slot_models.dart';
+import 'package:nizan_crm/features/slots/services/slot_service.dart';
 
 /// Sales Calendar — a year-over-year booking comparison for the marketing team.
 /// A navigable month grid where each day is heat-mapped by booking volume and,
@@ -29,6 +31,7 @@ class _MarketingCalendarScreenState
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final year = ref.watch(calendarYearProvider);
+    final basis = ref.watch(calendarBasisProvider);
     final async = ref.watch(bookingCalendarProvider);
 
     return Scaffold(
@@ -58,7 +61,7 @@ class _MarketingCalendarScreenState
                     ],
                   ),
                 ),
-                _yearDropdown(crm, year),
+                _yearButton(crm, year),
               ],
             ),
             14.hg,
@@ -77,19 +80,37 @@ class _MarketingCalendarScreenState
               data: (d) {
                 // Clamp displayed month if it somehow drifted out of range.
                 final m = _month.clamp(0, 11);
+
+                // Slot-availability overlay — only in EVENT-date mode, since
+                // slots are event-day capacity (meaningless against sales dates).
+                final slotsByDay = <String, DaySlot>{};
+                if (basis == 'event') {
+                  final ma = ref
+                      .watch(monthAvailabilityProvider((year: d.year, month: m + 1)))
+                      .value;
+                  if (ma != null) {
+                    for (final day in ma.days) {
+                      slotsByDay[_ymd(day.date)] = day;
+                    }
+                  }
+                }
+
+                final calSubtitle = basis == 'sales'
+                    ? 'By SALES date (when the booking was made) — hover or tap a day to compare with ${d.prevYear}'
+                    : 'By EVENT date — hover or tap a day for details, slots left, and the same date in ${d.prevYear}';
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _metricToggleRow(crm),
+                    _controlsRow(crm, basis),
                     12.hg,
                     _summaryCard(crm, isMobile, d),
                     14.hg,
                     _card(
                       crm,
                       'Calendar',
-                      _calendarBody(context, crm, isMobile, d, m),
-                      subtitle:
-                          'Hover (or tap) any day to compare it with the same date in ${d.prevYear}',
+                      _calendarBody(context, crm, isMobile, d, m, slotsByDay),
+                      subtitle: calSubtitle,
                     ),
                     14.hg,
                     _card(crm, 'Monthly comparison — ${d.year} vs ${d.prevYear}',
@@ -219,7 +240,7 @@ class _MarketingCalendarScreenState
 
   // ── Calendar body: month nav + weekday header + day grid + legend ──
   Widget _calendarBody(BuildContext context, CrmTheme crm, bool isMobile,
-      CalendarComparison d, int m) {
+      CalendarComparison d, int m, Map<String, DaySlot> slotsByDay) {
     final year = d.year;
     final first = DateTime(year, m + 1, 1);
     final daysInMonth = DateTime(year, m + 2, 0).day;
@@ -235,7 +256,8 @@ class _MarketingCalendarScreenState
     final cells = <Widget>[
       for (var i = 0; i < leadingBlanks; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
-        _dayCell(context, crm, DateTime(year, m + 1, day), d, monthMax),
+        _dayCell(context, crm, DateTime(year, m + 1, day), d, monthMax,
+            slotsByDay[_ymd(DateTime(year, m + 1, day))]),
     ];
 
     const week = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -300,13 +322,13 @@ class _MarketingCalendarScreenState
           children: cells,
         ),
         14.hg,
-        _legend(crm),
+        _legend(crm, slotsByDay.isNotEmpty),
       ],
     );
   }
 
   Widget _dayCell(BuildContext context, CrmTheme crm, DateTime date,
-      CalendarComparison d, double monthMax) {
+      CalendarComparison d, double monthMax, DaySlot? slot) {
     final cur = d.curFor(date);
     final prev = d.prevSameDay(date);
     final curV = _cellVal(cur);
@@ -329,7 +351,7 @@ class _MarketingCalendarScreenState
         : '';
 
     return Tooltip(
-      richMessage: _tooltipSpan(crm, date, cur, prev),
+      richMessage: _tooltipSpan(crm, date, cur, prev, slot),
       waitDuration: const Duration(milliseconds: 150),
       preferBelow: false,
       decoration: BoxDecoration(
@@ -338,7 +360,7 @@ class _MarketingCalendarScreenState
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: InkWell(
-        onTap: () => _showDayDetail(context, crm, date, cur, prev),
+        onTap: () => _showDayDetail(context, crm, date, cur, prev, slot),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
@@ -353,13 +375,19 @@ class _MarketingCalendarScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('${date.day}',
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: darkCell
-                          ? Colors.white.withValues(alpha: 0.9)
-                          : crm.textSecondary)),
+              Row(
+                children: [
+                  Text('${date.day}',
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: darkCell
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : crm.textSecondary)),
+                  const Spacer(),
+                  if (slot != null && _isFutureOrToday(date)) _slotChip(slot, darkCell),
+                ],
+              ),
               Expanded(
                 child: Center(
                   child: Text(centerLabel,
@@ -402,7 +430,7 @@ class _MarketingCalendarScreenState
   }
 
   InlineSpan _tooltipSpan(
-      CrmTheme crm, DateTime date, DayStat cur, DayStat prev) {
+      CrmTheme crm, DateTime date, DayStat cur, DayStat prev, DaySlot? slot) {
     final white = const TextStyle(color: Colors.white, fontSize: 11.5);
     final whiteBold = const TextStyle(
         color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800);
@@ -411,6 +439,7 @@ class _MarketingCalendarScreenState
     final dcolor = dB > 0
         ? const Color(0xFF4ADE80)
         : (dB < 0 ? const Color(0xFFFF8A80) : Colors.white);
+    final showSlot = slot != null && _isFutureOrToday(date);
     return TextSpan(children: [
       TextSpan(text: '${_dow(date)}, ${date.day} ${_monShort(date.month)} ${date.year}\n', style: whiteBold),
       TextSpan(
@@ -423,14 +452,31 @@ class _MarketingCalendarScreenState
               '${prev.revenue > 0 ? ' · ${_money(prev.revenue)}' : ''}\n',
           style: dim),
       TextSpan(
-          text: 'Δ ${dB >= 0 ? '+' : ''}$dB booking${dB.abs() == 1 ? '' : 's'} YoY',
+          text: 'Δ ${dB >= 0 ? '+' : ''}$dB booking${dB.abs() == 1 ? '' : 's'} YoY'
+              '${showSlot ? '\n' : ''}',
           style: TextStyle(
               color: dcolor, fontSize: 11.5, fontWeight: FontWeight.w700)),
+      if (showSlot)
+        TextSpan(
+          text: slot.blocked
+              ? 'Slots: blocked by HR'
+              : slot.unavailable
+                  ? 'Slots: FULL (${slot.total.booked}/${slot.total.capacity})'
+                  : 'Slots left: ${slot.available}/${slot.total.capacity}'
+                      '  ·  AM ${slot.morning.available}/${slot.morning.capacity}'
+                      ' · PM ${slot.evening.available}/${slot.evening.capacity}',
+          style: TextStyle(
+              color: slot.unavailable
+                  ? const Color(0xFFFF8A80)
+                  : const Color(0xFF7DD3FC),
+              fontSize: 11,
+              fontWeight: FontWeight.w700),
+        ),
     ]);
   }
 
   void _showDayDetail(BuildContext context, CrmTheme crm, DateTime date,
-      DayStat cur, DayStat prev) {
+      DayStat cur, DayStat prev, DaySlot? slot) {
     final dB = cur.bookings - prev.bookings;
     final dR = cur.revenue - prev.revenue;
     showDialog<void>(
@@ -468,6 +514,12 @@ class _MarketingCalendarScreenState
                 ),
               ],
             ),
+            if (slot != null && _isFutureOrToday(date)) ...[
+              12.hg,
+              Divider(color: crm.border, height: 1),
+              12.hg,
+              _slotDetail(crm, slot),
+            ],
           ],
         ),
         actions: [
@@ -532,7 +584,7 @@ class _MarketingCalendarScreenState
     );
   }
 
-  Widget _legend(CrmTheme crm) {
+  Widget _legend(CrmTheme crm, bool showSlots) {
     Widget item(Color c, String label) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -567,12 +619,85 @@ class _MarketingCalendarScreenState
         16.wg,
         Text('▲/▼ vs same day last year',
             style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+        if (showSlots) ...[
+          16.wg,
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.event_seat_outlined, size: 13, color: crm.textSecondary),
+            5.wg,
+            Text('N = slots left (blue) · full (red), today & later',
+                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+          ]),
+        ],
       ],
     );
   }
 
-  // ── Controls ──
-  Widget _metricToggleRow(CrmTheme crm) {
+  // Compact per-cell "slots left" badge (event-date mode, today & future).
+  Widget _slotChip(DaySlot slot, bool darkCell) {
+    final full = slot.unavailable;
+    final base = full ? const Color(0xFFDC2626) : const Color(0xFF0369A1);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0.5),
+      decoration: BoxDecoration(
+        color: base.withValues(alpha: darkCell ? 0.35 : 0.14),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text('${slot.available}',
+          style: TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.w900,
+              color: darkCell ? Colors.white : base)),
+    );
+  }
+
+  // Full slot-availability breakdown for the day-detail dialog.
+  Widget _slotDetail(CrmTheme crm, DaySlot slot) {
+    final full = slot.unavailable;
+    Widget half(String label, SlotHalf h) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            4.hg,
+            Text('${h.available} left',
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: h.isFull ? const Color(0xFFDC2626) : crm.textPrimary)),
+            Text('${h.booked}/${h.capacity} booked',
+                style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+          ]),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.event_seat_outlined, size: 15, color: crm.textSecondary),
+        6.wg,
+        Text('Slot availability',
+            style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
+        const Spacer(),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: (full ? const Color(0xFFDC2626) : const Color(0xFF16A34A))
+                .withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(100),
+          ),
+          child: Text(
+            slot.blocked
+                ? 'Blocked by HR'
+                : (full ? 'Full' : '${slot.available} slots left'),
+            style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: full ? const Color(0xFFDC2626) : const Color(0xFF16A34A)),
+          ),
+        ),
+      ]),
+      10.hg,
+      Row(children: [half('Morning', slot.morning), 12.wg, half('Evening', slot.evening)]),
+    ]);
+  }
+
+  // ── Controls: metric (Bookings|Revenue) + date basis (Event|Sales) ──
+  Widget _controlsRow(CrmTheme crm, String basis) {
     Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
           onTap: onTap,
           child: Container(
@@ -588,52 +713,170 @@ class _MarketingCalendarScreenState
                     color: active ? Colors.white : crm.textSecondary)),
           ),
         );
-    return Row(
-      children: [
-        Container(
+    Widget group(List<Widget> children) => Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
             color: crm.surface,
             borderRadius: BorderRadius.circular(100),
             border: Border.all(color: crm.border),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              seg('Bookings', !_revenue, () => setState(() => _revenue = false)),
-              seg('Revenue', _revenue, () => setState(() => _revenue = true)),
-            ],
-          ),
-        ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: children),
+        );
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        group([
+          seg('Bookings', !_revenue, () => setState(() => _revenue = false)),
+          seg('Revenue', _revenue, () => setState(() => _revenue = true)),
+        ]),
+        group([
+          seg('Event date', basis == 'event',
+              () => ref.read(calendarBasisProvider.notifier).state = 'event'),
+          seg('Sales date', basis == 'sales',
+              () => ref.read(calendarBasisProvider.notifier).state = 'sales'),
+        ]),
       ],
     );
   }
 
-  Widget _yearDropdown(CrmTheme crm, int value) {
-    final now = DateTime.now().year;
-    final years = [for (var y = now; y >= now - 5; y--) y];
-    if (!years.contains(value)) years.add(value);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: crm.border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: value,
-          isDense: true,
-          items: [
-            for (final y in years)
-              DropdownMenuItem(value: y, child: Text('$y')),
+  // Calendar-year range for the picker: a few past years for history through
+  // 2035 for forward planning (future events + slot capacity).
+  static const int _minYear = 2021;
+  static const int _maxYear = 2035;
+
+  // Trigger button that opens the year-grid picker.
+  Widget _yearButton(CrmTheme crm, int value) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => _pickYear(crm, value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: crm.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_month_outlined, size: 16, color: crm.primary),
+            8.wg,
+            Text('$value',
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: crm.textPrimary)),
+            2.wg,
+            Icon(Icons.keyboard_arrow_down, size: 18, color: crm.textSecondary),
           ],
-          onChanged: (v) {
-            if (v != null) {
-              ref.read(calendarYearProvider.notifier).state = v;
-              ref.invalidate(bookingCalendarProvider);
-            }
-          },
+        ),
+      ),
+    );
+  }
+
+  // A calendar-style year picker: a grid of years, current selection filled,
+  // "this year" ringed. Nicer + far more scannable than a long dropdown.
+  Future<void> _pickYear(CrmTheme crm, int selected) async {
+    final now = DateTime.now().year;
+    final years = [for (var y = _minYear; y <= _maxYear; y++) y];
+
+    final picked = await showDialog<int>(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: crm.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Icon(Icons.calendar_month_outlined, size: 18, color: crm.primary),
+                  8.wg,
+                  Text('Select year',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: crm.textPrimary)),
+                  const Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
+                  ),
+                ]),
+                14.hg,
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 10,
+                      crossAxisSpacing: 10,
+                      childAspectRatio: 2.2,
+                      children: [
+                        for (final y in years)
+                          _yearTile(crm, y, y == selected, y == now,
+                              () => Navigator.pop(ctx, y)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (picked != null && picked != ref.read(calendarYearProvider)) {
+      ref.read(calendarYearProvider.notifier).state = picked;
+      ref.invalidate(bookingCalendarProvider);
+    }
+  }
+
+  Widget _yearTile(
+      CrmTheme crm, int year, bool selected, bool isNow, VoidCallback onTap) {
+    final borderColor = selected
+        ? crm.primary
+        : (isNow ? crm.primary.withValues(alpha: 0.55) : crm.border);
+    return Material(
+      color: selected ? crm.primary : crm.background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: borderColor, width: (isNow && !selected) ? 1.5 : 1),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('$year',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: selected ? Colors.white : crm.textPrimary)),
+              if (isNow)
+                Text('this year',
+                    style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? Colors.white.withValues(alpha: 0.85)
+                            : crm.textSecondary)),
+            ],
+          ),
         ),
       ),
     );
@@ -777,6 +1020,16 @@ class _MarketingCalendarScreenState
     final n = DateTime.now();
     return d.year == n.year && d.month == n.month && d.day == n.day;
   }
+
+  // Slot availability only makes sense for days you can still sell into.
+  bool _isFutureOrToday(DateTime d) {
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    return !DateTime(d.year, d.month, d.day).isBefore(today);
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   static const _months = [
     'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',

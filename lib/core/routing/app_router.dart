@@ -102,6 +102,7 @@ import 'package:nizan_crm/features/reports/presentation/screens/company_reports_
 import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_project_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/company_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_roadmap_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_my_tasks_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
@@ -284,6 +285,7 @@ bool isRouteAllowed(String path, Access access,
         access.canSeeSales;
   }
   if (path.startsWith('/it/')) return access.canSeeIt;
+  if (path.startsWith('/projects')) return access.canSeePlanning; // company-wide projects (department-scoped server-side)
   if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
   if (path.startsWith('/backup')) return true; // screen self-scopes; backend enforces per-target access
   if (path.startsWith('/company-finance')) {
@@ -493,6 +495,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Financial Report';
           } else if (state.uri.path == '/company-reports') {
             title = 'Company Reports';
+          } else if (state.uri.path == '/projects') {
+            title = 'Company Projects';
           } else if (state.uri.path == '/company-finance') {
             title = 'Finance Dashboard';
           } else if (state.uri.path == '/company-finance/month-end') {
@@ -1061,12 +1065,39 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               int initialIndex = 0;
               if (tabParam == 'okr' || tabParam == '4') {
                 initialIndex = 4;
+              } else if (tabParam == 'docs' || tabParam == 'srs') {
+                initialIndex = 5;
               } else if (tabParam != null) {
                 initialIndex = int.tryParse(tabParam) ?? 0;
               }
               return ITProjectScreen(
                 projectId: state.pathParameters['id'] ?? '',
                 initialIndex: initialIndex,
+                backRoute: '/it/projects',
+              );
+            },
+          ),
+          // Company-wide Projects (Planning) — same Project system, top-level.
+          GoRoute(
+            path: '/projects',
+            builder: (context, state) => const CompanyProjectsScreen(),
+          ),
+          GoRoute(
+            path: '/projects/:id',
+            builder: (context, state) {
+              final tabParam = state.uri.queryParameters['tab'];
+              int initialIndex = 0;
+              if (tabParam == 'okr' || tabParam == '4') {
+                initialIndex = 4;
+              } else if (tabParam == 'docs' || tabParam == 'srs') {
+                initialIndex = 5;
+              } else if (tabParam != null) {
+                initialIndex = int.tryParse(tabParam) ?? 0;
+              }
+              return ITProjectScreen(
+                projectId: state.pathParameters['id'] ?? '',
+                initialIndex: initialIndex,
+                backRoute: '/projects',
               );
             },
           ),

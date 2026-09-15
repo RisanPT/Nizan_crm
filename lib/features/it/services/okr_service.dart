@@ -11,6 +11,12 @@ final projectOKRsProvider = FutureProvider.family<List<OKRModel>, String?>((ref,
   return service.getOKRs(projectId: projectId);
 });
 
+/// Planning OKRs (company + department level, not tied to any project) — powers
+/// the Company Planning Dashboard.
+final planningOkrsProvider = FutureProvider<List<OKRModel>>((ref) async {
+  return ref.watch(okrServiceProvider).getOKRs(companyScope: true);
+});
+
 class OKRService {
   final Dio _dio;
   OKRService(this._dio);
@@ -21,9 +27,12 @@ class OKRService {
     String? status,
     bool? completed,
     String? search,
+    bool companyScope = false,
   }) async {
     final query = <String, dynamic>{};
-    if (projectId != null && projectId.isNotEmpty && projectId != 'all') {
+    if (companyScope) {
+      query['scope'] = 'company';
+    } else if (projectId != null && projectId.isNotEmpty && projectId != 'all') {
       query['projectId'] = projectId;
     }
     if (department != null && department.isNotEmpty) {

@@ -602,6 +602,14 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath.startsWith('/company-reports'),
                       onTap: () => context.go('/company-reports'),
                     ),
+                  if (access.canSeePlanning)
+                    _SidebarItem(
+                      icon: Icons.hub_outlined,
+                      title: 'Company Projects',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/projects' || currentPath.startsWith('/projects/'),
+                      onTap: () => context.go('/projects'),
+                    ),
                   // Client reviews — CRM / sales / accounts / full access.
                   if (access.isFullAccess ||
                       access.role == AppRole.crm ||

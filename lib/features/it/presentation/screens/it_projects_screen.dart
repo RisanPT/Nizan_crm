@@ -43,7 +43,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final async = ref.watch(projectsProvider);
+    final async = ref.watch(itProjectsProvider);
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
     final isManager = access.isITManager;
@@ -87,7 +87,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
               ),
             ],
             const Spacer(),
-            IconButton(onPressed: () => ref.invalidate(projectsProvider), icon: const Icon(Icons.refresh)),
+            IconButton(onPressed: () => ref.invalidate(itProjectsProvider), icon: const Icon(Icons.refresh)),
           ]),
         ),
         Expanded(
@@ -105,7 +105,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
               }).toList();
 
               return RefreshIndicator(
-                onRefresh: () async => ref.invalidate(projectsProvider),
+                onRefresh: () async => ref.invalidate(itProjectsProvider),
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
                   children: [
@@ -435,6 +435,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
     if (ok != true) return;
     try {
       await ref.read(projectServiceProvider).deleteProject(p.id);
+      ref.invalidate(itProjectsProvider);
       ref.invalidate(projectsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Project deleted')));
     } catch (e) {
@@ -565,6 +566,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
       },
     );
     if (saved == true) {
+      ref.invalidate(itProjectsProvider);
       ref.invalidate(projectsProvider);
       messenger.showSnackBar(SnackBar(content: Text(isEdit ? 'Project updated' : 'Project created')));
     }

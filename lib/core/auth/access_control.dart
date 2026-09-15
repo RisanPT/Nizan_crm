@@ -107,6 +107,8 @@ class Access {
         return role.canSeeCEOReport;
       case 'it':
         return role.canSeeIt;
+      case 'planning':
+        return role.canSeePlanning;
       case 'leave':
         return role.canSeeLeaveRequests;
       default:
@@ -153,6 +155,11 @@ class Access {
   // matrix entry yet, so it's driven by the granted 'it' permission (admin/
   // manager see it via the isFullAccess bypass).
   bool get canSeeIt => isFullAccess || has('it', false);
+
+  /// Company-wide Projects / Planning — a top-level, department-scoped module
+  /// (content is scoped server-side). Visible to all roles by default, like
+  /// Company Reports; admins can still gate it via the `planning` permission.
+  bool get canSeePlanning => isFullAccess || has('planning', role.canSeePlanning);
 
   /// True when user is an IT Project Manager who can create, edit, delete, and
   /// control all projects across the organization.

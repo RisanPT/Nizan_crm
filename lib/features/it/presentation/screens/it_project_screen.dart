@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_edito
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_wbs_view.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_kanban_body.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_okr_view.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/it_project_docs_view.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/okr_notifier.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
@@ -21,9 +22,19 @@ import 'package:nizan_crm/features/it/services/it_service.dart';
 /// 3. WBS (Work breakdown structure table)
 /// 4. Kanban (Status board)
 class ITProjectScreen extends ConsumerWidget {
-  const ITProjectScreen({super.key, required this.projectId, this.initialIndex = 0});
+  const ITProjectScreen({
+    super.key,
+    required this.projectId,
+    this.initialIndex = 0,
+    this.backRoute = '/it/projects',
+  });
   final String projectId;
   final int initialIndex;
+
+  /// Where the back button returns to — depends on which list opened this
+  /// detail (`/it/projects` from the IT screen, `/projects` from Company
+  /// Projects), since the same screen serves both routes.
+  final String backRoute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -31,14 +42,21 @@ class ITProjectScreen extends ConsumerWidget {
     final asyncTasks = ref.watch(itProjectTasksControllerProvider(projectId));
     final tasks = asyncTasks.value ?? const <ITTaskModel>[];
 
-    final projectName = ref.watch(projectsProvider).maybeWhen(
-          data: (list) => list.where((p) => p.id == projectId).map((p) => p.name).firstOrNull ?? 'Project',
-          orElse: () => 'Project',
+    final project = ref.watch(projectsProvider).maybeWhen(
+          data: (list) => list.where((p) => p.id == projectId).firstOrNull,
+          orElse: () => null,
         );
+    final projectName = project?.name ?? 'Project';
+    // Kanban is an IT-only feature — company (non-IT) projects get no Board tab.
+    // Default to IT while the project list is still loading so IT detail views
+    // (the common case) don't briefly lose the tab.
+    final isItProject =
+        (project?.targetDepartment ?? kItDepartment).toLowerCase().trim() == kItDepartment.toLowerCase();
+    final tabCount = isItProject ? 6 : 5;
 
     return DefaultTabController(
-      length: 5,
-      initialIndex: initialIndex.clamp(0, 4),
+      length: tabCount,
+      initialIndex: initialIndex.clamp(0, tabCount - 1),
       child: Scaffold(
         backgroundColor: crm.background,
         body: Column(children: [
@@ -51,7 +69,7 @@ class ITProjectScreen extends ConsumerWidget {
             child: Column(children: [
               Row(children: [
                 IconButton(
-                  onPressed: () => context.go('/it/projects'),
+                  onPressed: () => context.go(backRoute),
                   icon: const Icon(Icons.arrow_back),
                   tooltip: 'Back to Projects',
                 ),
@@ -92,12 +110,13 @@ class ITProjectScreen extends ConsumerWidget {
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
                 labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                tabs: const [
-                  Tab(text: 'Spreadsheet', icon: Icon(Icons.table_chart_outlined, size: 17)),
-                  Tab(text: 'Timeline', icon: Icon(Icons.timeline_outlined, size: 17)),
-                  Tab(text: 'WBS', icon: Icon(Icons.account_tree_outlined, size: 17)),
-                  Tab(text: 'Board', icon: Icon(Icons.view_kanban_outlined, size: 17)),
-                  Tab(text: "OKR's & KR's", icon: Icon(Icons.track_changes_outlined, size: 17)),
+                tabs: [
+                  const Tab(text: 'Spreadsheet', icon: Icon(Icons.table_chart_outlined, size: 17)),
+                  const Tab(text: 'Timeline', icon: Icon(Icons.timeline_outlined, size: 17)),
+                  const Tab(text: 'WBS', icon: Icon(Icons.account_tree_outlined, size: 17)),
+                  if (isItProject) const Tab(text: 'Board', icon: Icon(Icons.view_kanban_outlined, size: 17)),
+                  const Tab(text: "OKR's & KR's", icon: Icon(Icons.track_changes_outlined, size: 17)),
+                  const Tab(text: 'Docs', icon: Icon(Icons.description_outlined, size: 17)),
                 ],
               ),
             ]),
@@ -110,8 +129,9 @@ class ITProjectScreen extends ConsumerWidget {
                 ITDataGridView(tasks: list, allTasks: list, projectId: projectId),
                 ITInteractiveGantt(tasks: list, allTasks: list, projectId: projectId),
                 ITWbsView(projectId: projectId, tasks: list),
-                ITKanbanBody(projectId: projectId, tasks: list),
+                if (isItProject) ITKanbanBody(projectId: projectId, tasks: list),
                 ITOkrView(projectId: projectId, projectName: projectName),
+                ITProjectDocsView(projectId: projectId, projectName: projectName),
               ]),
             ),
           ),

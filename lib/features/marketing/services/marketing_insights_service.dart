@@ -372,10 +372,12 @@ class MarketingInsightsService {
     }
   }
 
-  Future<CalendarComparison> getCalendar({required int year}) async {
+  /// [basis] = 'event' (bookingDate, the event day) or 'sales' (createdAt, the
+  /// day the booking was made).
+  Future<CalendarComparison> getCalendar({required int year, String basis = 'event'}) async {
     try {
-      final res = await _dio
-          .get('/marketing/calendar', queryParameters: {'year': year});
+      final res = await _dio.get('/marketing/calendar',
+          queryParameters: {'year': year, 'basis': basis});
       return CalendarComparison.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       throw Exception(_msg(e, 'Failed to load the booking calendar'));
@@ -412,8 +414,12 @@ final reEngagementProvider = FutureProvider<ReEngagementResult>((ref) async {
 /// Selected calendar year for the YoY comparison calendar (defaults to now).
 final calendarYearProvider = StateProvider<int>((ref) => DateTime.now().year);
 
+/// Which date drives the calendar: 'event' (event day) or 'sales' (booked day).
+final calendarBasisProvider = StateProvider<String>((ref) => 'event');
+
 final bookingCalendarProvider =
     FutureProvider<CalendarComparison>((ref) async {
   final year = ref.watch(calendarYearProvider);
-  return ref.watch(marketingInsightsServiceProvider).getCalendar(year: year);
+  final basis = ref.watch(calendarBasisProvider);
+  return ref.watch(marketingInsightsServiceProvider).getCalendar(year: year, basis: basis);
 });

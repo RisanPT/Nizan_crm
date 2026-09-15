@@ -99,6 +99,10 @@ enum AppRole {
   /// so it is broadly available; per-report access is enforced on the server.
   bool get canSeeCompanyReports => true;
 
+  /// Company Projects / Planning — broadly available like Company Reports;
+  /// which projects a user actually sees is scoped by department on the server.
+  bool get canSeePlanning => true;
+
   /// Accounts payables (vendor bills / GST). Accounts team + inventory manager.
   bool get canSeePayables =>
       isFullAccess || this == accounts || this == inventoryManager;

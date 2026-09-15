@@ -140,6 +140,8 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('it.okrs', "OKR's & Key Results"),
     AppSubFeature('it.manage', 'Project Manager (All Projects Control)'),
   ]),
+  AppFeature('planning', 'Company Projects', 'Company-wide, per-department project planning',
+      Icons.hub_outlined),
   AppFeature('leave', 'Leave Requests', 'Apply for and review leave',
       Icons.event_busy_outlined),
   AppFeature('settings', 'Settings', 'Users, roles and configuration',

@@ -18,6 +18,10 @@ Future<bool?> showOKREditorDialog(
   required String? projectId,
   OKRModel? existing,
   String? parentObjectiveId,
+  // When provided (Company Planning Dashboard), the editor shows a "Scope"
+  // dropdown (Company-wide + these departments) and writes `department` on the
+  // OKR. projectId stays null for these planning objectives.
+  List<String>? planningDepartments,
 }) {
   final width = MediaQuery.of(context).size.width;
   final isDesktop = width >= 720;
@@ -34,21 +38,26 @@ Future<bool?> showOKREditorDialog(
           projectId: projectId,
           existing: existing,
           parentObjectiveId: parentObjectiveId,
+          planningDepartments: planningDepartments,
         ),
       ),
     ),
   );
 }
 
+const _companyScopeValue = 'Company';
+
 class _OKREditorForm extends HookConsumerWidget {
   final String? projectId;
   final OKRModel? existing;
   final String? parentObjectiveId;
+  final List<String>? planningDepartments;
 
   const _OKREditorForm({
     this.projectId,
     this.existing,
     this.parentObjectiveId,
+    this.planningDepartments,
   });
 
   @override
@@ -69,6 +78,12 @@ class _OKREditorForm extends HookConsumerWidget {
 
     final startDate = useState<DateTime?>(existing?.startDate);
     final deadline = useState<DateTime?>(existing?.deadline);
+
+    // Planning scope (company-wide vs a department) — dashboard mode only.
+    final planningMode = planningDepartments != null;
+    final scope = useState<String>(
+      (existing?.department.isNotEmpty ?? false) ? existing!.department : _companyScopeValue,
+    );
 
     final keyResults = useState<List<KeyResultItem>>(
       existing?.keyResults ?? const [],
@@ -103,6 +118,7 @@ class _OKREditorForm extends HookConsumerWidget {
           'keyResults': keyResults.value.map((e) => e.toJson()).toList(),
           'documents': documents.value.map((e) => e.toJson()).toList(),
           if (parentObjectiveId != null) 'parentObjectiveId': parentObjectiveId,
+          if (planningMode) 'department': scope.value,
         };
 
         final notifier = ref.read(projectOKRsNotifierProvider(projectId).notifier);
@@ -212,6 +228,30 @@ class _OKREditorForm extends HookConsumerWidget {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Scope (Company Planning Dashboard only): company-wide or a department.
+            if (planningMode) ...[
+              DropdownButtonFormField<String>(
+                initialValue: [_companyScopeValue, ...planningDepartments!].contains(scope.value)
+                    ? scope.value
+                    : _companyScopeValue,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: 'Scope',
+                  prefixIcon: const Icon(Icons.hub_outlined, size: 18),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                items: [
+                  const DropdownMenuItem(value: _companyScopeValue, child: Text('Company-wide')),
+                  for (final d in planningDepartments!) DropdownMenuItem(value: d, child: Text(d)),
+                ],
+                onChanged: (v) {
+                  if (v != null) scope.value = v;
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
 
             // Project Head / Assignee
             EmployeePickerField(
