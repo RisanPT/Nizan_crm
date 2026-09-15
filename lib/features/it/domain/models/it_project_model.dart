@@ -48,6 +48,8 @@ class ITProjectModel {
   final DateTime? startDate;
   final DateTime? endDate;
   final DateTime? targetReleaseDate;
+  final List<String> memberIds;
+  final List<String> memberNames;
   final int progress; // 0..100
   final int totalTasks;
   final int completedTasks;
@@ -61,6 +63,8 @@ class ITProjectModel {
     this.targetDepartment = 'it',
     this.managerId = '',
     this.managerName = '',
+    this.memberIds = const [],
+    this.memberNames = const [],
     this.status = 'planning',
     this.priority = 'medium',
     this.phase = 'discovery',
@@ -74,6 +78,18 @@ class ITProjectModel {
 
   factory ITProjectModel.fromJson(Map<String, dynamic> j) {
     final mgr = j['managerId'];
+    final rawMembers = (j['members'] as List?) ?? const [];
+    final mIds = <String>[];
+    final mNames = <String>[];
+    for (final m in rawMembers) {
+      if (m is Map) {
+        mIds.add((m['_id'] ?? m['id'] ?? '').toString());
+        mNames.add((m['name'] ?? '').toString());
+      } else if (m != null) {
+        mIds.add(m.toString());
+      }
+    }
+
     return ITProjectModel(
       id: (j['_id'] ?? j['id'] ?? '').toString(),
       name: (j['name'] ?? '').toString(),
@@ -83,6 +99,8 @@ class ITProjectModel {
       targetDepartment: (j['targetDepartment'] ?? 'it').toString(),
       managerId: mgr is Map ? (mgr['_id'] ?? '').toString() : (mgr ?? '').toString(),
       managerName: mgr is Map ? (mgr['name'] ?? '').toString() : '',
+      memberIds: mIds,
+      memberNames: mNames,
       status: (j['status'] ?? 'planning').toString(),
       priority: (j['priority'] ?? 'medium').toString(),
       phase: (j['phase'] ?? 'discovery').toString(),
@@ -102,6 +120,7 @@ class ITProjectModel {
         'type': type,
         'targetDepartment': targetDepartment,
         'managerId': managerId.isNotEmpty ? managerId : null,
+        'members': memberIds,
         'status': status,
         'priority': priority,
         'phase': phase,

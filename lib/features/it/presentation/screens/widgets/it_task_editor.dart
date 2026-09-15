@@ -44,7 +44,7 @@ Future<bool?> showTaskEditor(
     return sibs.map((t) => t.order).reduce((a, b) => a > b ? a : b) + 1;
   }
 
-  final employees = ref.read(itEmployeesProvider);
+  final employees = ref.read(projectEmployeesProvider(projectId));
   final title = TextEditingController(text: existing?.title ?? '');
   final desc = TextEditingController(text: existing?.description ?? '');
   final hours = TextEditingController(

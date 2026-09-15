@@ -55,7 +55,7 @@ class _OKREditorForm extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final isEdit = existing != null;
-    final employees = ref.watch(itEmployeesProvider);
+    final employees = ref.watch(projectEmployeesProvider(projectId));
 
     final objectiveCtrl = useTextEditingController(text: existing?.objective ?? '');
     final descCtrl = useTextEditingController(text: existing?.description ?? '');

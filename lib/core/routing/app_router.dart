@@ -1056,8 +1056,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/it/projects/:id',
-            builder: (context, state) =>
-                ITProjectScreen(projectId: state.pathParameters['id'] ?? ''),
+            builder: (context, state) {
+              final tabParam = state.uri.queryParameters['tab'];
+              int initialIndex = 0;
+              if (tabParam == 'okr' || tabParam == '4') {
+                initialIndex = 4;
+              } else if (tabParam != null) {
+                initialIndex = int.tryParse(tabParam) ?? 0;
+              }
+              return ITProjectScreen(
+                projectId: state.pathParameters['id'] ?? '',
+                initialIndex: initialIndex,
+              );
+            },
           ),
           GoRoute(
             path: '/it/roadmap',

@@ -327,7 +327,7 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   }
 
   Widget _buildSpecTab(CrmTheme crm) {
-    final employees = ref.watch(itEmployeesProvider);
+    final employees = ref.watch(projectEmployeesProvider(widget.task.projectId));
     final availablePredecessors = widget.allTasks.where((t) => t.id != widget.task.id).toList();
 
     return SingleChildScrollView(

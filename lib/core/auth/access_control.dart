@@ -48,19 +48,23 @@ class Access {
   bool get _usesFallback => granted.isEmpty;
 
   /// True when [key] is granted; falls back to the hard-coded default.
+  /// Admin/Manager always have blanket access across all features.
   /// Parent-aware: a module counts as visible if either the parent key OR any
   /// of its sub-keys (`parent.child`) is granted.
   bool has(String key, bool fallback) {
+    if (isFullAccess) return true;
     if (_usesFallback) return fallback;
     return granted.contains(key) || granted.any((k) => k.startsWith('$key.'));
   }
 
-  /// True when a specific sub-section (`sales.leads`) is allowed.
+  /// True when a specific sub-section (`sales.leads`, `it.projects`) is allowed.
+  /// Admin/Manager always have blanket access across all sub-features.
   /// Backward compatible:
   ///  • a role with NO explicit permissions uses the parent's role default;
   ///  • granting the parent key alone means the whole module (all sub-sections);
   ///  • otherwise the exact sub-key must be present.
   bool canSeeSub(String subKey) {
+    if (isFullAccess) return true;
     final dot = subKey.indexOf('.');
     final parent = dot == -1 ? subKey : subKey.substring(0, dot);
     if (_usesFallback) return _parentFallback(parent);
@@ -101,6 +105,8 @@ class Access {
         return role.canManageMarketing;
       case 'reports':
         return role.canSeeCEOReport;
+      case 'it':
+        return role.canSeeIt;
       case 'leave':
         return role.canSeeLeaveRequests;
       default:
@@ -147,6 +153,16 @@ class Access {
   // matrix entry yet, so it's driven by the granted 'it' permission (admin/
   // manager see it via the isFullAccess bypass).
   bool get canSeeIt => isFullAccess || has('it', false);
+
+  /// True when user is an IT Project Manager who can create, edit, delete, and
+  /// control all projects across the organization.
+  bool get isITManager =>
+      isFullAccess ||
+      role == AppRole.admin ||
+      role == AppRole.manager ||
+      isDepartmentHead ||
+      canSeeSub('it.manage');
+
   bool get canSeeLeaveRequests => has('leave', role.canSeeLeaveRequests);
 
   /// Settings stays admin/manager-only even if granted, to protect the role

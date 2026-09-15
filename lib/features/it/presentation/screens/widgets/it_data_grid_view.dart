@@ -487,7 +487,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
       final tm = ITSubTeam.fromString(val.toString());
       updates['subTeam'] = tm.slug;
     } else if (field == 'assignee') {
-      final employees = ref.read(itEmployeesProvider);
+      final employees = ref.read(projectEmployeesProvider(widget.projectId));
       final match = employees.where((e) => e.name == val.toString()).firstOrNull;
       updates['assignedTo'] = match?.id;
     } else if (field == 'startDate') {
@@ -522,7 +522,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final employees = ref.watch(itEmployeesProvider);
+    final employees = ref.watch(projectEmployeesProvider(widget.projectId));
 
     return Stack(
       children: [

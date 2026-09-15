@@ -633,7 +633,7 @@ class Sidebar extends ConsumerWidget {
                     onTap: () => onItExpandToggle(!itExpanded || itUserCollapsed),
                   ),
                   if (!isCollapsed && effectiveItExpanded) ...[
-                    if (access.canSeeIt)
+                    if (access.canSeeSub('it.projects'))
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
@@ -644,7 +644,7 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/it/projects'),
                         ),
                       ),
-                    if (access.canSeeIt)
+                    if (access.canSeeSub('it.roadmap'))
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
@@ -655,7 +655,7 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/it/roadmap'),
                         ),
                       ),
-                    if (access.canSeeIt)
+                    if (access.canSeeSub('it.my_tasks'))
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
@@ -666,7 +666,7 @@ class Sidebar extends ConsumerWidget {
                           onTap: () => context.go('/it/my-tasks'),
                         ),
                       ),
-                    if (access.canSeeIt)
+                    if (access.canSeeSub('it.tickets'))
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(

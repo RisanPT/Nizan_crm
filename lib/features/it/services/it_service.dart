@@ -21,14 +21,45 @@ bool isItEmployee(Employee e) {
       dept == 'information technology';
 }
 
-/// Active IT-department staff only — used by every IT assignment picker
-/// (project manager, task assignee, ticket triage / promote-to-task).
+/// Active IT-department staff only — used by cross-project assignment pickers
+/// (e.g. creating/editing projects in the Projects screen).
 final itEmployeesProvider = Provider<List<Employee>>((ref) {
   final all = ref.watch(employeesProvider).value ?? const <Employee>[];
   return all
       .where((e) => e.status.toLowerCase() == 'active' && isItEmployee(e))
       .toList()
     ..sort((a, b) => a.name.compareTo(b.name));
+});
+
+/// The assignable employees for a specific project.
+/// Scopes strictly to:
+/// 1. The Project Head / Manager (`project.managerId`)
+/// 2. The Project's Assigned Team Members (`project.memberIds`)
+/// If a project has assigned members, only those specific people are shown/selectable
+/// inside the project (task assignee dropdowns, PlutoGrid, task details, OKRs).
+final projectEmployeesProvider = Provider.family<List<Employee>, String?>((ref, projectId) {
+  final allIt = ref.watch(itEmployeesProvider);
+  if (projectId == null || projectId.isEmpty) {
+    return allIt;
+  }
+
+  final projects = ref.watch(projectsProvider).value ?? const <Project>[];
+  final project = projects.where((p) => p.id == projectId).firstOrNull;
+  if (project == null) {
+    return allIt;
+  }
+
+  final allowedIds = <String>{
+    if (project.managerId.isNotEmpty) project.managerId,
+    ...project.memberIds,
+  };
+
+  if (allowedIds.isEmpty) {
+    return allIt;
+  }
+
+  final scoped = allIt.where((e) => allowedIds.contains(e.id)).toList();
+  return scoped.isNotEmpty ? scoped : allIt;
 });
 
 // ── Projects ─────────────────────────────────────────────────────────────────

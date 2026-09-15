@@ -21,8 +21,9 @@ import 'package:nizan_crm/features/it/services/it_service.dart';
 /// 3. WBS (Work breakdown structure table)
 /// 4. Kanban (Status board)
 class ITProjectScreen extends ConsumerWidget {
-  const ITProjectScreen({super.key, required this.projectId});
+  const ITProjectScreen({super.key, required this.projectId, this.initialIndex = 0});
   final String projectId;
+  final int initialIndex;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,6 +38,7 @@ class ITProjectScreen extends ConsumerWidget {
 
     return DefaultTabController(
       length: 5,
+      initialIndex: initialIndex.clamp(0, 4),
       child: Scaffold(
         backgroundColor: crm.background,
         body: Column(children: [

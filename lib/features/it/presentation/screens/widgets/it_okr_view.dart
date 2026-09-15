@@ -35,7 +35,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final asyncOkrs = ref.watch(projectOKRsNotifierProvider(widget.projectId));
-    final employees = ref.watch(itEmployeesProvider);
+    final employees = ref.watch(projectEmployeesProvider(widget.projectId));
 
     return Scaffold(
       backgroundColor: crm.background,

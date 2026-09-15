@@ -123,6 +123,9 @@ enum AppRole {
   /// Leave requests
   bool get canSeeLeaveRequests => this == artist || isFullAccess;
 
+  /// IT / Projects module (projects, roadmap, tasks, OKRs, tickets)
+  bool get canSeeIt => isFullAccess;
+
   // ── Sub-permissions ───────────────────────────────────────────────────────
 
   /// Can verify/reject collections and expenses (accounts team + admin/manager)
