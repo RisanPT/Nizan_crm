@@ -38,8 +38,10 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final access = Access.of(ref.watch(authSessionProvider));
-    final canCreate = access.isFullAccess || access.isDepartmentHead;
-    final isLeadership = access.isFullAccess || access.isDepartmentHead;
+    final canCreate =
+        access.isFullAccess || access.isDepartmentHead || access.canManageAllPlanning;
+    final isLeadership =
+        access.isFullAccess || access.isDepartmentHead || access.canManageAllPlanning;
     final mode = isLeadership ? (_mode ?? 'dashboard') : 'portfolio';
     final depts = (ref.watch(departmentsProvider).value ?? const <Department>[])
         .where((d) => d.active)
@@ -346,7 +348,9 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     final isEdit = existing != null;
     final myDept = ref.read(myDepartmentNameProvider);
     final deptNames = depts.map((d) => d.name).toList();
-    final lockDept = !access.isFullAccess; // department heads create only for their own dept
+    // Department heads create only for their own dept; full-access + planning
+    // leads (Executive Coordinator) can target any department.
+    final lockDept = !(access.isFullAccess || access.canManageAllPlanning);
 
     final name = TextEditingController(text: existing?.name ?? '');
     final desc = TextEditingController(text: existing?.description ?? '');

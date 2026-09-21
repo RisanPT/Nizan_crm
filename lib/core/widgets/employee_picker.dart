@@ -52,11 +52,35 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
     super.dispose();
   }
 
-  List<String> get _departments {
+  // Best short descriptor when department isn't set — the role/makeup label the
+  // rest of the app shows (MUA, Hair And Saree, Fleet Driver, …).
+  String _descriptor(Employee e) {
+    for (final v in [e.role, e.specialization, e.artistRole, e.category]) {
+      final s = (v ?? '').trim();
+      if (s.isNotEmpty) return s;
+    }
+    return '';
+  }
+
+  // Chip dimension: filter by department when the list spans ≥2 departments;
+  // otherwise fall back to the role/category descriptor so there's still a
+  // useful filter (e.g. an all-artist list filters by MUA / Hair And Saree).
+  late final bool _useDept = () {
     final set = <String>{};
     for (final e in widget.employees) {
       final d = (e.department ?? '').trim();
       if (d.isNotEmpty) set.add(d);
+    }
+    return set.length > 1;
+  }();
+
+  String _groupOf(Employee e) => _useDept ? (e.department ?? '').trim() : _descriptor(e);
+
+  List<String> get _groups {
+    final set = <String>{};
+    for (final e in widget.employees) {
+      final g = _groupOf(e).trim();
+      if (g.isNotEmpty) set.add(g);
     }
     final list = set.toList()..sort();
     return list;
@@ -65,9 +89,11 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
   List<Employee> get _filtered {
     final q = _query.trim().toLowerCase();
     return widget.employees.where((e) {
-      if (_dept.isNotEmpty && (e.department ?? '').trim() != _dept) return false;
+      if (_dept.isNotEmpty && _groupOf(e).trim() != _dept) return false;
       if (q.isEmpty) return true;
-      final hay = '${e.name} ${e.role ?? ''} ${e.artistRole} ${e.department ?? ''}'.toLowerCase();
+      final hay =
+          '${e.name} ${e.role ?? ''} ${e.specialization} ${e.artistRole} ${e.category} ${e.department ?? ''}'
+              .toLowerCase();
       return hay.contains(q);
     }).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -76,7 +102,7 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final depts = _departments;
+    final groups = _groups;
     final results = _filtered;
 
     return DraggableScrollableSheet(
@@ -129,8 +155,9 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
                 ),
               ),
             ),
-            // Department filter chips (only when the list spans multiple depts)
-            if (depts.length > 1)
+            // Filter chips — by department, or by role/category when the list
+            // has no departments. Only shown when there's more than one group.
+            if (groups.length > 1)
               SizedBox(
                 height: 44,
                 child: ListView(
@@ -138,7 +165,7 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   children: [
                     _deptChip(crm, 'All', _dept.isEmpty, () => setState(() => _dept = '')),
-                    for (final d in depts) _deptChip(crm, d, _dept == d, () => setState(() => _dept = d)),
+                    for (final g in groups) _deptChip(crm, g, _dept == g, () => setState(() => _dept = g)),
                   ],
                 ),
               ),
@@ -155,7 +182,7 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
                         final e = results[i];
                         final isSel = e.id == widget.selectedId;
                         final subtitle = [
-                          if ((e.role ?? '').trim().isNotEmpty) e.role!.trim(),
+                          if (_descriptor(e).isNotEmpty) _descriptor(e),
                           if ((e.department ?? '').trim().isNotEmpty) e.department!.trim(),
                         ].join(' · ');
                         return ListTile(

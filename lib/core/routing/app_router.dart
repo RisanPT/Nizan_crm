@@ -50,6 +50,7 @@ import '../../features/marketing/presentation/screens/content_dashboard_screen.d
 import '../../features/marketing/presentation/screens/marketing_insights_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_analytics_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_calendar_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_leads_report_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_reengagement_screen.dart';
 import '../../features/marketing/presentation/screens/campaigns_screen.dart';
 import '../../presentation/screens/settings_screen.dart';
@@ -237,6 +238,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/re-engagement')) return 'marketing.insights';
   if (path.startsWith('/marketing/analytics')) return 'marketing.analytics';
   if (path.startsWith('/marketing/calendar')) return 'marketing.calendar';
+  if (path.startsWith('/marketing/leads-report')) return 'marketing.leads_report';
   if (path.startsWith('/marketing/campaigns')) return 'marketing.campaigns';
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
@@ -491,6 +493,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/cancelled') {
             title = 'Cancelled Works';
+          } else if (state.uri.path == '/sales/calendar') {
+            title = 'Sales Calendar';
           } else if (state.uri.path == '/reports/analyst') {
             title = 'Financial Report';
           } else if (state.uri.path == '/company-reports') {
@@ -627,6 +631,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Marketing Analytics';
           } else if (state.uri.path == '/marketing/calendar') {
             title = 'Sales Calendar';
+          } else if (state.uri.path == '/marketing/leads-report') {
+            title = 'Leads Report';
           } else if (state.uri.path == '/marketing/campaigns') {
             title = 'Campaigns';
           } else if (state.uri.path == '/marketing/re-engagement') {
@@ -817,6 +823,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/sales/cancelled',
             builder: (context, state) => const CancelledWorksScreen(),
           ),
+          // Same Sales Calendar the Marketing team uses, mounted for Sales too.
+          GoRoute(
+            path: '/sales/calendar',
+            builder: (context, state) => const MarketingCalendarScreen(),
+          ),
           GoRoute(
             path: '/notifications',
             builder: (context, state) => const NotificationsScreen(),
@@ -937,6 +948,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/marketing/calendar',
             builder: (context, state) => const MarketingCalendarScreen(),
+          ),
+          GoRoute(
+            path: '/marketing/leads-report',
+            builder: (context, state) => const MarketingLeadsReportScreen(),
           ),
           GoRoute(
             path: '/marketing/campaigns',

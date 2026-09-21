@@ -14,6 +14,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/dashboard_report_service.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/lead_cluster_popup.dart';
 import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
 import 'package:nizan_crm/features/marketing/services/campaign_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -243,6 +244,36 @@ Future<void> _launchCall(BuildContext context, String phone) async {
 // ─────────────────────────────────────────────────────────
 //  Screen
 // ─────────────────────────────────────────────────────────
+// Header chip that reopens the demand-alert popup (25+ leads, same date + place).
+Widget _clusterBadge(
+    BuildContext context, WidgetRef ref, CrmTheme crm, List<LeadCluster> clusters) {
+  return InkWell(
+    borderRadius: BorderRadius.circular(100),
+    onTap: () => showLeadClusterPopup(context, ref, clusters),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: crm.warning.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: crm.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.groups_2_rounded, size: 15, color: crm.warning),
+          const SizedBox(width: 5),
+          Text(
+            clusters.length == 1
+                ? '1 demand alert'
+                : '${clusters.length} demand alerts',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: crm.warning),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class SalesLeadsScreen extends HookConsumerWidget {
   const SalesLeadsScreen({super.key});
 
@@ -336,6 +367,19 @@ class SalesLeadsScreen extends HookConsumerWidget {
 
     final asyncPaginatedLeads = ref.watch(paginatedLeadsProvider(filter));
 
+    // ── Demand alert: 25+ leads sharing the same event date + place ──
+    // Auto-pop once per visit; the header badge reopens it on demand.
+    final clustersAsync = ref.watch(leadClustersProvider);
+    final clusters = clustersAsync.asData?.value ?? const <LeadCluster>[];
+    final clusterPopupShown = useRef(false);
+    if (clusters.isNotEmpty && !clusterPopupShown.value) {
+      clusterPopupShown.value = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        showLeadClusterPopup(context, ref, clusters);
+      });
+    }
+
     void onFilterChange<T>(ValueNotifier<T> notifier, T newValue) {
       if (notifier.value != newValue) {
         notifier.value = newValue;
@@ -353,12 +397,20 @@ class SalesLeadsScreen extends HookConsumerWidget {
             24.h,
             // On mobile the app bar already shows "Leads Management", so keep the
             // in-body header compact and drop the redundant subtitle.
-            Text(
-              'All Leads',
-              style: (isMobile
-                      ? Theme.of(context).textTheme.titleLarge
-                      : Theme.of(context).textTheme.headlineSmall)
-                  ?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    'All Leads',
+                    style: (isMobile
+                            ? Theme.of(context).textTheme.titleLarge
+                            : Theme.of(context).textTheme.headlineSmall)
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (clusters.isNotEmpty) _clusterBadge(context, ref, crm, clusters),
+              ],
             ),
             if (!isMobile) ...[
               8.h,
@@ -853,7 +905,7 @@ class _AddLeadCard extends HookConsumerWidget {
                 isMobile ? 20 : 24,
               ),
               child: _LeadForm(
-                onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
+                onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
               ),
             ),
         ],
@@ -1829,7 +1881,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                   child: Consumer(
                     builder: (ctx, ref, _) => _LeadForm(
                       initialLead: lead,
-                      onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
+                      onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
                     ),
                   ),
                 ),
@@ -1871,7 +1923,7 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                 Consumer(
                   builder: (ctx, ref, _) => _LeadForm(
                     initialLead: lead,
-                    onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider),
+                    onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
                   ),
                 ),
               ],
@@ -1910,7 +1962,7 @@ Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) asyn
   if (confirmed != true) return;
   try {
     await ref.read(leadServiceProvider).deleteLead(lead.id);
-    ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider);
+    ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2283,6 +2335,14 @@ class _LeadCardState extends State<_LeadCard> {
                       valueColor: widget.assignedName == null ? Colors.red : crm.primary,
                     ),
                   ],
+                  if (lead.createdByName.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _InfoRow(
+                      icon: Icons.person_add_alt_outlined,
+                      label: 'Added by',
+                      value: lead.createdByName,
+                    ),
+                  ],
                   // Fixed-height grid cells push the actions to the bottom; the
                   // content-sized mobile card just leaves a small gap.
                   if (widget.flexible) const SizedBox(height: 12) else const Spacer(),
@@ -2637,7 +2697,7 @@ void _showRecordOutcomeDialog(BuildContext context, WidgetRef ref, Lead lead) {
   showDialog(
     context: context,
     builder: (context) {
-      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider));
+      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider));
     },
   );
 }

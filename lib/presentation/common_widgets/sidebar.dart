@@ -592,6 +592,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/sales/cancelled'),
                           ),
                         ),
+                      // Same YoY Sales Calendar the Marketing team has.
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.calendar_today_outlined,
+                          title: 'Sales Calendar',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/sales/calendar',
+                          onTap: () => context.go('/sales/calendar'),
+                        ),
+                      ),
                     ],
                   ],
                   if (access.canSeeCompanyReports)
@@ -1224,6 +1235,17 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/marketing/calendar',
                             onTap: () => context.go('/marketing/calendar'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.leads_report'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.assessment_outlined,
+                            title: 'Leads Report',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/leads-report',
+                            onTap: () => context.go('/marketing/leads-report'),
                           ),
                         ),
                       if (access.canSeeSub('marketing.campaigns'))

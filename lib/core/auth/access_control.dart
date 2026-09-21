@@ -161,6 +161,12 @@ class Access {
   /// Company Reports; admins can still gate it via the `planning` permission.
   bool get canSeePlanning => isFullAccess || has('planning', role.canSeePlanning);
 
+  /// Full command over the Company Projects portfolio — sees the leadership
+  /// Planning Dashboard and can create/manage projects in ANY department.
+  /// Admin/manager, or a role granted `planning.manage` (e.g. Executive
+  /// Coordinator). Mirrors backend `projectAccess.seesAllProjects`.
+  bool get canManageAllPlanning => isFullAccess || canSeeSub('planning.manage');
+
   /// True when user is an IT Project Manager who can create, edit, delete, and
   /// control all projects across the organization.
   bool get isITManager =>

@@ -13,6 +13,7 @@ import '../../core/utils/responsive_builder.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/employee_service.dart';
 import '../../core/models/employee.dart';
+import '../../core/widgets/employee_picker.dart';
 import '../../services/user_service.dart';
 import '../../services/zone_service.dart';
 import '../../services/state_service.dart';
@@ -273,55 +274,17 @@ class SettingsScreen extends HookConsumerWidget {
                         else if (asyncEmployees.hasError)
                           const Text('Could not load employees')
                         else
-                          DropdownButtonFormField<String>(
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Link to Employee Profile (Optional)',
-                              prefixIcon: Icon(Icons.link_outlined),
-                              helperText:
-                                  'Connects user to an employee profile for geographic limits',
-                            ),
-                            initialValue: selEmployeeId.isEmpty ? null : selEmployeeId,
-                            // Selected display stays single-line so the 2-line
-                            // menu items don't overflow the form field.
-                            selectedItemBuilder: (context) => employees
-                                .map(
-                                  (e) => Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      e.name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            items: employees
-                                .map(
-                                  (e) => DropdownMenuItem(
-                                    value: e.id,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(e.name),
-                                        Text(
-                                          e.specialization.isNotEmpty
-                                              ? e.specialization
-                                              : e.artistRole,
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => selEmployeeId = v ?? ''),
+                          // Searchable + filterable picker (name / role / dept)
+                          // instead of a long unscrollable dropdown menu.
+                          EmployeePickerField(
+                            employees: employees,
+                            selectedId:
+                                selEmployeeId.isEmpty ? null : selEmployeeId,
+                            label: 'Link to Employee Profile (Optional)',
+                            icon: Icons.link_outlined,
+                            allowUnassign: true,
+                            onChanged: (e) =>
+                                setState(() => selEmployeeId = e?.id ?? ''),
                           ),
 
                         16.h,

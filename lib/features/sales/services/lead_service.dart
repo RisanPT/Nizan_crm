@@ -2,6 +2,64 @@ import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/core/models/paginated_response.dart';
 
+/// A single lead inside a demand cluster (same event date + same place).
+class LeadClusterItem {
+  final String id;
+  final String name;
+  final String phone;
+  final String status;
+  final String priority;
+  final DateTime? enquiryDate;
+  final String location;
+
+  const LeadClusterItem({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.status,
+    required this.priority,
+    required this.enquiryDate,
+    required this.location,
+  });
+
+  factory LeadClusterItem.fromJson(Map<String, dynamic> j) => LeadClusterItem(
+        id: (j['_id'] ?? j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        phone: (j['phone'] ?? '').toString(),
+        status: (j['status'] ?? 'New').toString(),
+        priority: (j['priority'] ?? 'Warm').toString(),
+        enquiryDate: j['enquiryDate'] != null
+            ? DateTime.tryParse(j['enquiryDate'].toString())?.toLocal()
+            : null,
+        location: (j['location'] ?? '').toString(),
+      );
+}
+
+/// A group of leads all enquiring for the SAME event date at the SAME place,
+/// whose size has reached the alert threshold. Powers the Leads demand popup.
+class LeadCluster {
+  final String date; // 'YYYY-MM-DD' (the event date being enquired for)
+  final String place;
+  final int count;
+  final List<LeadClusterItem> leads;
+
+  const LeadCluster({
+    required this.date,
+    required this.place,
+    required this.count,
+    required this.leads,
+  });
+
+  factory LeadCluster.fromJson(Map<String, dynamic> j) => LeadCluster(
+        date: (j['date'] ?? '').toString(),
+        place: (j['place'] ?? '').toString(),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+        leads: ((j['leads'] as List?) ?? const [])
+            .map((e) => LeadClusterItem.fromJson((e as Map).cast<String, dynamic>()))
+            .toList(),
+      );
+}
+
 class LeadFilter {
   final int page;
   final int limit;
@@ -50,6 +108,80 @@ class LeadFilter {
       priority.hashCode;
 }
 
+/// A single {label, count} slice of a lead report (by source / status / …).
+class LeadReportBucket {
+  final String key;
+  final int count;
+  const LeadReportBucket({required this.key, required this.count});
+  factory LeadReportBucket.fromJson(Map<String, dynamic> j) => LeadReportBucket(
+        key: (j['key'] ?? 'Unknown').toString(),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// One daily point of the report trend line.
+class LeadReportPoint {
+  final String date; // 'YYYY-MM-DD'
+  final int count;
+  const LeadReportPoint({required this.date, required this.count});
+  factory LeadReportPoint.fromJson(Map<String, dynamic> j) => LeadReportPoint(
+        date: (j['date'] ?? '').toString(),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// A day/week/month lead report with a like-for-like previous-period comparison.
+class LeadsReport {
+  final String period;
+  final int total, prevTotal, converted, prevConverted, conversionRate, lost;
+  final int followUpsDue, followUpsOverdue;
+  final List<LeadReportBucket> bySource, byStatus, byPriority, byAddedBy, byAssignee;
+  final List<LeadReportPoint> series;
+
+  const LeadsReport({
+    this.period = 'day',
+    this.total = 0,
+    this.prevTotal = 0,
+    this.converted = 0,
+    this.prevConverted = 0,
+    this.conversionRate = 0,
+    this.lost = 0,
+    this.followUpsDue = 0,
+    this.followUpsOverdue = 0,
+    this.bySource = const [],
+    this.byStatus = const [],
+    this.byPriority = const [],
+    this.byAddedBy = const [],
+    this.byAssignee = const [],
+    this.series = const [],
+  });
+
+  factory LeadsReport.fromJson(Map<String, dynamic> j) {
+    List<LeadReportBucket> buckets(dynamic v) => ((v as List?) ?? const [])
+        .map((e) => LeadReportBucket.fromJson((e as Map).cast<String, dynamic>()))
+        .toList();
+    return LeadsReport(
+      period: (j['period'] ?? 'day').toString(),
+      total: (j['total'] as num?)?.toInt() ?? 0,
+      prevTotal: (j['prevTotal'] as num?)?.toInt() ?? 0,
+      converted: (j['converted'] as num?)?.toInt() ?? 0,
+      prevConverted: (j['prevConverted'] as num?)?.toInt() ?? 0,
+      conversionRate: (j['conversionRate'] as num?)?.toInt() ?? 0,
+      lost: (j['lost'] as num?)?.toInt() ?? 0,
+      followUpsDue: (j['followUpsDue'] as num?)?.toInt() ?? 0,
+      followUpsOverdue: (j['followUpsOverdue'] as num?)?.toInt() ?? 0,
+      bySource: buckets(j['bySource']),
+      byStatus: buckets(j['byStatus']),
+      byPriority: buckets(j['byPriority']),
+      byAddedBy: buckets(j['byAddedBy']),
+      byAssignee: buckets(j['byAssignee']),
+      series: ((j['series'] as List?) ?? const [])
+          .map((e) => LeadReportPoint.fromJson((e as Map).cast<String, dynamic>()))
+          .toList(),
+    );
+  }
+}
+
 class LeadService {
   final Dio _dio;
 
@@ -93,6 +225,38 @@ class LeadService {
       }
     } on DioException catch (e) {
       throw Exception('Failed to load leads: ${e.message}');
+    }
+  }
+
+  /// Leads that pile up on the same event date + same place (>= [threshold]).
+  Future<List<LeadCluster>> getLeadClusters({int threshold = 25}) async {
+    try {
+      final response = await _dio.get(
+        '/leads/clusters',
+        queryParameters: {'threshold': threshold},
+      );
+      final data = response.data;
+      final list = (data is Map ? data['clusters'] : data) as List? ?? const [];
+      return list
+          .map((e) => LeadCluster.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to load lead clusters'));
+    }
+  }
+
+  /// Day / week / month lead report around [date] (date-only; the server anchors
+  /// the period in IST). [period] is 'day', 'week' or 'month'.
+  Future<LeadsReport> getLeadsReport({required String period, required DateTime date}) async {
+    String two(int n) => n.toString().padLeft(2, '0');
+    try {
+      final res = await _dio.get('/leads/report', queryParameters: {
+        'period': period,
+        'date': '${date.year}-${two(date.month)}-${two(date.day)}',
+      });
+      return LeadsReport.fromJson((res.data as Map).cast<String, dynamic>());
+    } on DioException catch (e) {
+      throw Exception(_message(e, 'Failed to load the lead report'));
     }
   }
 

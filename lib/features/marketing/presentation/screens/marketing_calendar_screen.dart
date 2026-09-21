@@ -13,6 +13,14 @@ import 'package:nizan_crm/features/slots/services/slot_service.dart';
 /// on hover (or tap), shows this year's bookings/revenue beside the EXACT same
 /// date one year earlier, with the delta. Plus YoY summary cards and a 12-month
 /// this-year-vs-last-year strip. Built on `bookingDate` (the real event date).
+/// One "prodate" — a peak event day (>= the threshold bookings) for the list.
+class _Prodate {
+  final DateTime date;
+  final int bookings;
+  final double revenue;
+  const _Prodate({required this.date, required this.bookings, required this.revenue});
+}
+
 class MarketingCalendarScreen extends ConsumerStatefulWidget {
   const MarketingCalendarScreen({super.key});
 
@@ -25,6 +33,11 @@ class _MarketingCalendarScreenState
     extends ConsumerState<MarketingCalendarScreen> {
   int _month = DateTime.now().month - 1; // 0-11, displayed month
   bool _revenue = false; // metric: bookings ⇄ revenue
+
+  // Prodate finder: an EVENT date with >= [_minProdate] bookings is a "prodate"
+  // (a productive/peak day). Default 16 == "more than 15". Adjustable in the UI.
+  int _minProdate = 16;
+  bool _prodatesOnly = false; // dim non-prodate days so the peaks stand out
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +108,25 @@ class _MarketingCalendarScreenState
                   }
                 }
 
+                // Prodate finder — EVENT-date mode only (a prodate is a peak
+                // EVENT day). Days this year with >= _minProdate bookings.
+                final prodateActive = basis == 'event';
+                final prodateDays = <String>{};
+                final prodates = <_Prodate>[];
+                if (prodateActive) {
+                  d.current.forEach((key, v) {
+                    if (v.bookings >= _minProdate) {
+                      prodateDays.add(key);
+                      final dt = DateTime.tryParse(key);
+                      if (dt != null) {
+                        prodates.add(_Prodate(
+                            date: dt, bookings: v.bookings, revenue: v.revenue));
+                      }
+                    }
+                  });
+                  prodates.sort((a, b) => a.date.compareTo(b.date));
+                }
+
                 final calSubtitle = basis == 'sales'
                     ? 'By SALES date (when the booking was made) — hover or tap a day to compare with ${d.prevYear}'
                     : 'By EVENT date — hover or tap a day for details, slots left, and the same date in ${d.prevYear}';
@@ -102,14 +134,15 @@ class _MarketingCalendarScreenState
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _controlsRow(crm, basis),
+                    _controlsRow(crm, basis, prodateActive ? prodates : null),
                     12.hg,
                     _summaryCard(crm, isMobile, d),
                     14.hg,
                     _card(
                       crm,
                       'Calendar',
-                      _calendarBody(context, crm, isMobile, d, m, slotsByDay),
+                      _calendarBody(context, crm, isMobile, d, m, slotsByDay,
+                          prodateDays, prodateActive && _prodatesOnly),
                       subtitle: calSubtitle,
                     ),
                     14.hg,
@@ -240,7 +273,8 @@ class _MarketingCalendarScreenState
 
   // ── Calendar body: month nav + weekday header + day grid + legend ──
   Widget _calendarBody(BuildContext context, CrmTheme crm, bool isMobile,
-      CalendarComparison d, int m, Map<String, DaySlot> slotsByDay) {
+      CalendarComparison d, int m, Map<String, DaySlot> slotsByDay,
+      Set<String> prodateDays, bool dimNonProdate) {
     final year = d.year;
     final first = DateTime(year, m + 1, 1);
     final daysInMonth = DateTime(year, m + 2, 0).day;
@@ -257,7 +291,8 @@ class _MarketingCalendarScreenState
       for (var i = 0; i < leadingBlanks; i++) const SizedBox.shrink(),
       for (var day = 1; day <= daysInMonth; day++)
         _dayCell(context, crm, DateTime(year, m + 1, day), d, monthMax,
-            slotsByDay[_ymd(DateTime(year, m + 1, day))]),
+            slotsByDay[_ymd(DateTime(year, m + 1, day))],
+            prodateDays.contains(_ymd(DateTime(year, m + 1, day))), dimNonProdate),
     ];
 
     const week = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -322,13 +357,14 @@ class _MarketingCalendarScreenState
           children: cells,
         ),
         14.hg,
-        _legend(crm, slotsByDay.isNotEmpty),
+        _legend(crm, slotsByDay.isNotEmpty, prodateDays.isNotEmpty || dimNonProdate),
       ],
     );
   }
 
   Widget _dayCell(BuildContext context, CrmTheme crm, DateTime date,
-      CalendarComparison d, double monthMax, DaySlot? slot) {
+      CalendarComparison d, double monthMax, DaySlot? slot, bool isProdate,
+      bool dimNonProdate) {
     final cur = d.curFor(date);
     final prev = d.prevSameDay(date);
     final curV = _cellVal(cur);
@@ -350,8 +386,14 @@ class _MarketingCalendarScreenState
         ? (_revenue ? _compact(cur.revenue) : '${cur.bookings}')
         : '';
 
-    return Tooltip(
-      richMessage: _tooltipSpan(crm, date, cur, prev, slot),
+    // Prodate = a peak EVENT day (>= _minProdate bookings). Gold ring + 🔥.
+    final borderColor = isToday
+        ? crm.primary
+        : (isProdate ? _prodateColor : crm.border);
+    final borderWidth = isToday ? 1.6 : (isProdate ? 2.2 : 1.0);
+
+    Widget cell = Tooltip(
+      richMessage: _tooltipSpan(crm, date, cur, prev, slot, isProdate),
       waitDuration: const Duration(milliseconds: 150),
       preferBelow: false,
       decoration: BoxDecoration(
@@ -360,16 +402,13 @@ class _MarketingCalendarScreenState
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: InkWell(
-        onTap: () => _showDayDetail(context, crm, date, cur, prev, slot),
+        onTap: () => _showDayDetail(context, crm, date, cur, prev, slot, isProdate),
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isToday ? crm.primary : crm.border,
-              width: isToday ? 1.6 : 1,
-            ),
+            border: Border.all(color: borderColor, width: borderWidth),
           ),
           padding: const EdgeInsets.all(4),
           child: Column(
@@ -377,6 +416,10 @@ class _MarketingCalendarScreenState
             children: [
               Row(
                 children: [
+                  if (isProdate) ...[
+                    const Text('🔥', style: TextStyle(fontSize: 10)),
+                    2.wg,
+                  ],
                   Text('${date.day}',
                       style: TextStyle(
                           fontSize: 10.5,
@@ -404,6 +447,11 @@ class _MarketingCalendarScreenState
         ),
       ),
     );
+    // "Prodates only" → fade the rest so the peaks pop.
+    if (dimNonProdate && !isProdate) {
+      cell = Opacity(opacity: 0.3, child: cell);
+    }
+    return cell;
   }
 
   // Tiny YoY indicator inside a day cell.
@@ -430,7 +478,8 @@ class _MarketingCalendarScreenState
   }
 
   InlineSpan _tooltipSpan(
-      CrmTheme crm, DateTime date, DayStat cur, DayStat prev, DaySlot? slot) {
+      CrmTheme crm, DateTime date, DayStat cur, DayStat prev, DaySlot? slot,
+      bool isProdate) {
     final white = const TextStyle(color: Colors.white, fontSize: 11.5);
     final whiteBold = const TextStyle(
         color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800);
@@ -472,11 +521,17 @@ class _MarketingCalendarScreenState
               fontSize: 11,
               fontWeight: FontWeight.w700),
         ),
+      if (isProdate)
+        TextSpan(
+          text: '\n🔥 Prodate — ${cur.bookings} bookings (≥ $_minProdate)',
+          style: const TextStyle(
+              color: Color(0xFFFBBF24), fontSize: 11, fontWeight: FontWeight.w800),
+        ),
     ]);
   }
 
   void _showDayDetail(BuildContext context, CrmTheme crm, DateTime date,
-      DayStat cur, DayStat prev, DaySlot? slot) {
+      DayStat cur, DayStat prev, DaySlot? slot, bool isProdate) {
     final dB = cur.bookings - prev.bookings;
     final dR = cur.revenue - prev.revenue;
     showDialog<void>(
@@ -494,6 +549,31 @@ class _MarketingCalendarScreenState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (isProdate) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _prodateColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _prodateColor.withValues(alpha: 0.4)),
+                ),
+                child: Row(children: [
+                  const Text('🔥', style: TextStyle(fontSize: 14)),
+                  8.wg,
+                  Expanded(
+                    child: Text(
+                      'Prodate — ${cur.bookings} bookings (≥ $_minProdate). A peak event day.',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: _prodateColor),
+                    ),
+                  ),
+                ]),
+              ),
+              12.hg,
+            ],
             _detailRow(crm, '${date.year}', cur, highlight: true),
             10.hg,
             _detailRow(
@@ -584,7 +664,7 @@ class _MarketingCalendarScreenState
     );
   }
 
-  Widget _legend(CrmTheme crm, bool showSlots) {
+  Widget _legend(CrmTheme crm, bool showSlots, bool showProdate) {
     Widget item(Color c, String label) => Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -625,6 +705,22 @@ class _MarketingCalendarScreenState
             Icon(Icons.event_seat_outlined, size: 13, color: crm.textSecondary),
             5.wg,
             Text('N = slots left (blue) · full (red), today & later',
+                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+          ]),
+        ],
+        if (showProdate) ...[
+          16.wg,
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 15,
+              height: 15,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: _prodateColor, width: 2),
+              ),
+            ),
+            5.wg,
+            Text('🔥 prodate (≥ $_minProdate bookings)',
                 style: TextStyle(fontSize: 11, color: crm.textSecondary)),
           ]),
         ],
@@ -697,7 +793,8 @@ class _MarketingCalendarScreenState
   }
 
   // ── Controls: metric (Bookings|Revenue) + date basis (Event|Sales) ──
-  Widget _controlsRow(CrmTheme crm, String basis) {
+  // [prodates] non-null (event mode) → show the Prodate Finder controls.
+  Widget _controlsRow(CrmTheme crm, String basis, List<_Prodate>? prodates) {
     Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
           onTap: onTap,
           child: Container(
@@ -737,8 +834,219 @@ class _MarketingCalendarScreenState
           seg('Sales date', basis == 'sales',
               () => ref.read(calendarBasisProvider.notifier).state = 'sales'),
         ]),
+        // Two small pills (not one wide one) so they wrap cleanly on phones.
+        if (prodates != null) ...[
+          _prodateThresholdPill(crm),
+          _prodateViewPill(crm, prodates),
+        ],
       ],
     );
+  }
+
+  BoxDecoration get _prodatePillDeco => BoxDecoration(
+        color: _prodateColor.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: _prodateColor.withValues(alpha: 0.45)),
+      );
+
+  // Pill 1: adjustable "Prodate ≥ N" threshold with −/+ steppers.
+  Widget _prodateThresholdPill(CrmTheme crm) {
+    Widget stepBtn(IconData icon, VoidCallback onTap) => InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(100),
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Icon(icon, size: 16, color: _prodateColor),
+          ),
+        );
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: _prodatePillDeco,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Text('🔥', style: TextStyle(fontSize: 12)),
+        4.wg,
+        Text('Prodate ≥',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _prodateColor)),
+        4.wg,
+        stepBtn(Icons.remove_circle_outline,
+            () => setState(() => _minProdate = (_minProdate - 1).clamp(2, 200))),
+        SizedBox(
+          width: 22,
+          child: Text('$_minProdate',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: crm.textPrimary)),
+        ),
+        stepBtn(Icons.add_circle_outline,
+            () => setState(() => _minProdate = (_minProdate + 1).clamp(2, 200))),
+      ]),
+    );
+  }
+
+  // Pill 2: "Only" toggle + tappable "N this year" opening the year list.
+  Widget _prodateViewPill(CrmTheme crm, List<_Prodate> prodates) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: _prodatePillDeco,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        GestureDetector(
+          onTap: () => setState(() => _prodatesOnly = !_prodatesOnly),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(_prodatesOnly ? Icons.check_box : Icons.check_box_outline_blank,
+                size: 16, color: _prodateColor),
+            3.wg,
+            Text('Only', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _prodateColor)),
+          ]),
+        ),
+        6.wg,
+        Container(width: 1, height: 18, color: _prodateColor.withValues(alpha: 0.3)),
+        6.wg,
+        // Tap → the whole-year prodate list (no month navigation needed).
+        InkWell(
+          onTap: () => _showProdatesDialog(crm, prodates),
+          borderRadius: BorderRadius.circular(100),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('${prodates.length} this year',
+                  style: TextStyle(
+                      fontSize: 11.5, fontWeight: FontWeight.w800, color: _prodateColor)),
+              2.wg,
+              Icon(Icons.format_list_bulleted_rounded, size: 14, color: _prodateColor),
+            ]),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // The whole-year prodate list in one dialog — every peak event date, grouped
+  // by month, so the team sees them all without paging the calendar.
+  void _showProdatesDialog(CrmTheme crm, List<_Prodate> prodates) {
+    final year = ref.read(calendarYearProvider);
+    showDialog<void>(
+      context: context,
+      builder: (dctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 460),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: crm.surface,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Text('🔥', style: TextStyle(fontSize: 18)),
+                8.wg,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Prodates in $year',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
+                              color: crm.textPrimary)),
+                      2.hg,
+                      Text('${prodates.length} peak day${prodates.length == 1 ? '' : 's'} · ≥ $_minProdate bookings',
+                          style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => Navigator.pop(dctx),
+                  icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
+                ),
+              ]),
+              14.hg,
+              if (prodates.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 28),
+                  child: Center(
+                    child: Text('No prodates at ≥ $_minProdate bookings this year.',
+                        style: TextStyle(color: crm.textSecondary)),
+                  ),
+                )
+              else
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: _prodateRows(dctx, crm, prodates),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Prodate rows grouped under month headers (chronological).
+  List<Widget> _prodateRows(BuildContext dctx, CrmTheme crm, List<_Prodate> prodates) {
+    final rows = <Widget>[];
+    int? lastMonth;
+    for (final p in prodates) {
+      if (p.date.month != lastMonth) {
+        lastMonth = p.date.month;
+        rows.add(Padding(
+          padding: EdgeInsets.only(top: rows.isEmpty ? 0 : 14, bottom: 6),
+          child: Text('${_monthName(p.date.month - 1)} ${p.date.year}',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: crm.textSecondary,
+                  letterSpacing: 0.3)),
+        ));
+      }
+      rows.add(InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () {
+          // Jump the calendar to that month (optional convenience).
+          setState(() => _month = p.date.month - 1);
+          Navigator.pop(dctx);
+        },
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: _prodateColor.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _prodateColor.withValues(alpha: 0.25)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                  color: _prodateColor, shape: BoxShape.circle),
+            ),
+            10.wg,
+            Expanded(
+              child: Text('${_dow(p.date)}, ${p.date.day} ${_monShort(p.date.month)} ${p.date.year}',
+                  style: TextStyle(
+                      fontSize: 13.5, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+            ),
+            Text('${p.bookings} bookings',
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w900, color: _prodateColor)),
+            if (p.revenue > 0) ...[
+              8.wg,
+              Text(_money(p.revenue),
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+            ],
+            4.wg,
+            Icon(Icons.chevron_right, size: 16, color: crm.textSecondary),
+          ]),
+        ),
+      ));
+    }
+    return rows;
   }
 
   // Calendar-year range for the picker: a few past years for history through
@@ -987,6 +1295,10 @@ class _MarketingCalendarScreenState
     Color(0xFF4BAE68), // 3 (light text)
     Color(0xFF1F7A44), // 4 — busiest (light text)
   ];
+
+  // Amber ring/marker for "prodates" (peak event days) — distinct from the
+  // green booking heat so peaks pop against it.
+  static const Color _prodateColor = Color(0xFFB45309);
 
   // Absolute booking-count → level (0 empty, 1..4). Absolute (not per-month)
   // buckets mean the same colour always represents the same day volume.

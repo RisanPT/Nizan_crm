@@ -37,7 +37,9 @@ class CompanyPlanningDashboard extends ConsumerWidget {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final access = Access.of(ref.watch(authSessionProvider));
-    final isFull = access.isFullAccess;
+    // "Sees all" = admin/manager OR an Executive Coordinator (planning.manage):
+    // company-wide scope. A department head is scoped to their own department.
+    final isFull = access.isFullAccess || access.canManageAllPlanning;
     final myDept = ref.watch(myDepartmentNameProvider);
     final scopeDept = isFull ? null : (myDept.isEmpty ? null : myDept);
 
@@ -263,7 +265,7 @@ class CompanyPlanningDashboard extends ConsumerWidget {
       );
 
   Widget _okrSection(BuildContext context, CrmTheme crm, Access access, List<OKRModel> okrs, Future<void> Function({OKRModel? existing}) openOkr) {
-    final canManage = access.isFullAccess || access.isDepartmentHead;
+    final canManage = access.isFullAccess || access.isDepartmentHead || access.canManageAllPlanning;
     // Group by bucket.
     final groups = <String, List<OKRModel>>{};
     for (final o in okrs) {

@@ -19,6 +19,8 @@ class Lead {
   /// How many times a follow-up has been scheduled for this lead.
   final int followUpCount;
   final String? assignedTo; // ID of the assigned salesman user
+  /// Display name of the user who ENTERED this lead (blank for legacy leads).
+  final String createdByName;
   final String status;
 
   /// How likely the lead is to close: Hot / Warm / Cold. Tracked separately
@@ -60,6 +62,7 @@ class Lead {
     this.followUpDate,
     this.followUpCount = 0,
     this.assignedTo,
+    this.createdByName = '',
     required this.status,
     this.priority = 'Warm',
     this.bookingId,
@@ -111,6 +114,7 @@ class Lead {
       assignedTo: json['assignedTo'] is Map
           ? json['assignedTo']['_id'] as String?
           : json['assignedTo'] as String?,
+      createdByName: json['createdByName'] as String? ?? '',
       status: json['status'] as String? ?? 'New',
       priority: json['priority'] as String? ?? 'Warm',
       bookingId: json['bookingId'] is Map
@@ -206,6 +210,7 @@ class Lead {
       followUpDate: followUpDate ?? this.followUpDate,
       followUpCount: followUpCount ?? this.followUpCount,
       assignedTo: assignedTo ?? this.assignedTo,
+      createdByName: createdByName,
       status: status ?? this.status,
       priority: priority ?? this.priority,
       reason: reason ?? this.reason,
