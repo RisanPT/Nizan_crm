@@ -36,6 +36,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late List<DateTime> _dropdownMonths;
 
   int _activeTab = 0; // 0: Operations, 1: Sales
+  // Shared Operations-tab period filter: drives the Lead growth chart AND the
+  // Lead sources donut + Enquiries-by-location map (one filter, everything moves).
+  String _leadPeriod = 'Monthly'; // 'Monthly' | 'Weekly' | 'Daily'
   String _salesRange = 'Last 30 days'; // 'Last 7 days', 'Last 30 days', 'Last 6 months', 'Custom'
   bool _compareEnabled = true;
   DateTimeRange? _customDateRange;
@@ -863,6 +866,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     bool isDesktop,
     bool isTablet,
   ) {
+    // Leads inside the currently-selected period window (Monthly/Weekly/Daily).
+    // Shared by the Lead growth chart, Lead sources and the map so one toggle
+    // moves the whole tab.
+    final periodLeads = _leadsInPeriod(leads, _leadPeriod);
+
+    // Real month-over-month trends for the KPI badges.
+    final prevMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
+    final int prevEnquiries = _leadsInMonth(leads, prevMonth);
+    final int prevBookings = _bookingsInMonth(bookings, prevMonth);
+    final double prevConversion =
+        prevEnquiries > 0 ? (prevBookings / prevEnquiries) * 100 : 0.0;
+    final double bookingsGrowth = _momPct(bookingsCount, prevBookings);
+    final double conversionGrowth = _momPct(conversionRate, prevConversion);
+    // Enquiries MoM == the Monthly-growth headline, so reuse [growthRate].
+
+    // Real last-6-months mini-series for the card sparklines.
+    final months = _last6Months(_selectedMonth);
+    final enquiriesSeries =
+        months.map((m) => _leadsInMonth(leads, m).toDouble()).toList();
+    final bookingsSeries =
+        months.map((m) => _bookingsInMonth(bookings, m).toDouble()).toList();
+    final conversionSeries = months.map((m) {
+      final e = _leadsInMonth(leads, m);
+      return e > 0 ? (_bookingsInMonth(bookings, m) / e) * 100 : 0.0;
+    }).toList();
+    final revenueSeries = months.map((m) => _revenueInMonth(bookings, m)).toList();
+    final growthSeries = months.map((m) {
+      final pm = DateTime(m.year, m.month - 1, 1);
+      return _momPct(_leadsInMonth(leads, m), _leadsInMonth(leads, pm));
+    }).toList();
+
     return SingleChildScrollView(
       padding: 24.p,
       child: Column(
@@ -896,9 +930,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     value: enquiriesCount.toString().replaceAllMapped(
                         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
                         (Match m) => '${m[1]},'),
-                    trend: '${filteredLeads.isNotEmpty ? "+100" : "0"}%',
-                    isPositive: true,
-                    sparklineData: const [10, 12, 11, 15, 14, 18, 17, 22],
+                    trend: _trendLabel(growthRate),
+                    isPositive: isGrowthPositive,
+                    sparklineData: enquiriesSeries,
                     sparklineColor: const Color(0xFFCBA052),
                     icon: Icons.people_outline,
                     gradientColors: [
@@ -912,9 +946,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     value: bookingsCount.toString().replaceAllMapped(
                         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
                         (Match m) => '${m[1]},'),
-                    trend: '${bookingsCount > 0 ? "+100" : "0"}%',
-                    isPositive: true,
-                    sparklineData: const [8, 9, 7, 10, 12, 11, 14],
+                    trend: _trendLabel(bookingsGrowth),
+                    isPositive: bookingsGrowth >= 0,
+                    sparklineData: bookingsSeries,
                     sparklineColor: const Color(0xFFD46A92),
                     icon: Icons.calendar_month_outlined,
                     gradientColors: [
@@ -926,9 +960,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _MetricCard(
                     title: 'CONVERSION RATE',
                     value: '${conversionRate.toStringAsFixed(1)}%',
-                    trend: '${conversionRate > 0 ? "+100" : "0"}%',
-                    isPositive: true,
-                    sparklineData: const [28, 30, 29, 32, 31, 34],
+                    trend: _trendLabel(conversionGrowth),
+                    isPositive: conversionGrowth >= 0,
+                    sparklineData: conversionSeries,
                     sparklineColor: const Color(0xFF7A6BB9),
                     icon: Icons.adjust_outlined,
                     gradientColors: [
@@ -940,9 +974,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _MetricCard(
                     title: 'REVENUE GENERATED',
                     value: formatCurrency(totalRevenue),
-                    trend: '${isRevenueGrowthPositive ? "+" : ""}${revenueGrowth.toStringAsFixed(1)}%',
+                    trend: _trendLabel(revenueGrowth),
                     isPositive: isRevenueGrowthPositive,
-                    sparklineData: const [5, 6, 7, 9, 8, 11, 12],
+                    sparklineData: revenueSeries,
                     sparklineColor: const Color(0xFFCBA052),
                     icon: Icons.wallet_giftcard_outlined,
                     gradientColors: [
@@ -954,9 +988,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   _MetricCard(
                     title: 'MONTHLY GROWTH',
                     value: '${growthRate.toStringAsFixed(1)}%',
-                    trend: '${isGrowthPositive ? "+" : ""}${growthRate.toStringAsFixed(1)}%',
+                    trend: _trendLabel(growthRate),
                     isPositive: isGrowthPositive,
-                    sparklineData: const [16, 15, 13, 14, 12, 13, 11],
+                    sparklineData: growthSeries,
                     sparklineColor: const Color(0xFF6C96C8),
                     icon: Icons.trending_up,
                     gradientColors: [
@@ -976,13 +1010,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               children: [
                 Expanded(
                   flex: 2,
-                  child: _LeadGrowthCard(leads: leads),
+                  child: _LeadGrowthCard(
+                    leads: leads,
+                    period: _leadPeriod,
+                    onPeriodChanged: (p) => setState(() => _leadPeriod = p),
+                  ),
                 ),
                 24.w,
                 Expanded(
                   flex: 1,
                   child: _LeadSourcesCard(
-                    leads: filteredLeads,
+                    leads: periodLeads,
                   ),
                 ),
               ],
@@ -990,16 +1028,20 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           else
             Column(
               children: [
-                _LeadGrowthCard(leads: leads),
+                _LeadGrowthCard(
+                  leads: leads,
+                  period: _leadPeriod,
+                  onPeriodChanged: (p) => setState(() => _leadPeriod = p),
+                ),
                 24.h,
                 _LeadSourcesCard(
-                  leads: filteredLeads,
+                  leads: periodLeads,
                 ),
               ],
             ),
           32.h,
           _EnquiriesByLocationCard(
-            leads: filteredLeads,
+            leads: periodLeads,
           ),
         ],
       ),
@@ -1075,72 +1117,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       l.createdAt.year == _selectedMonth.year && l.createdAt.month == _selectedMonth.month
     ).toList();
 
-    final filteredBookings = bookings.where((b) =>
-      b.bookingDate.year == _selectedMonth.year && b.bookingDate.month == _selectedMonth.month
-    ).toList();
+    final prevMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
 
     final int enquiriesCount = filteredLeads.length;
-    
-    // Converted or booked leads represent bookings count
-    final int bookingsCount = filteredLeads.where((l) => 
-      l.bookedDate != null || 
-      l.status.toLowerCase() == 'converted'
-    ).length;
-    
-    final double conversionRate = enquiriesCount > 0 
-        ? (bookingsCount / enquiriesCount) * 100 
+
+    // Real bookings for the month (events dated this month, excluding
+    // cancelled/postponed) — same source as the Revenue card.
+    final int bookingsCount = _bookingsInMonth(bookings, _selectedMonth);
+
+    final double conversionRate = enquiriesCount > 0
+        ? (bookingsCount / enquiriesCount) * 100
         : 0.0;
 
-    // Calculate monthly growth dynamically comparing selected month with previous month
-    final prevMonth = DateTime(_selectedMonth.year, _selectedMonth.month - 1, 1);
-    final leadsThisMonth = filteredLeads.length;
-    final leadsLastMonth = leads.where((l) => 
-      l.createdAt.year == prevMonth.year && 
-      l.createdAt.month == prevMonth.month
-    ).length;
-
-    double growthRate = 0.0;
-    if (leadsLastMonth > 0) {
-      growthRate = ((leadsThisMonth - leadsLastMonth) / leadsLastMonth) * 100;
-    } else if (leadsThisMonth > 0) {
-      growthRate = 100.0; // infinite growth since last month was 0
-    }
+    // Monthly growth = lead volume this month vs last month.
+    final double growthRate =
+        _momPct(enquiriesCount, _leadsInMonth(leads, prevMonth));
     final bool isGrowthPositive = growthRate >= 0;
 
-    // Revenue generated from completed bookings in the database for the selected month
-    double totalRevenue = filteredBookings
-        .where((b) => b.status.toLowerCase() == 'completed')
-        .fold<double>(0, (sum, b) => sum + b.totalPrice);
-    
-    if (totalRevenue == 0) {
-      // Fallback to active bookings total price
-      final activeBookingsTotal = filteredBookings
-          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
-          .fold<double>(0, (sum, b) => sum + b.totalPrice);
-      totalRevenue = activeBookingsTotal;
-    }
-
-    // Calculate monthly revenue growth comparing selected month with previous month
-    final prevMonthBookings = bookings.where((b) =>
-      b.bookingDate.year == prevMonth.year && b.bookingDate.month == prevMonth.month
-    ).toList();
-    double prevRevenue = prevMonthBookings
-        .where((b) => b.status.toLowerCase() == 'completed')
-        .fold<double>(0, (sum, b) => sum + b.totalPrice);
-    if (prevRevenue == 0) {
-      filteredBookings
-          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
-          .fold<double>(0, (sum, b) => sum + b.totalPrice);
-      prevRevenue = prevMonthBookings
-          .where((b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed')
-          .fold<double>(0, (sum, b) => sum + b.totalPrice);
-    }
-    double revenueGrowth = 0.0;
-    if (prevRevenue > 0) {
-      revenueGrowth = ((totalRevenue - prevRevenue) / prevRevenue) * 100;
-    } else if (totalRevenue > 0) {
-      revenueGrowth = 100.0;
-    }
+    // Revenue for the month + real month-over-month growth.
+    final double totalRevenue = _revenueInMonth(bookings, _selectedMonth);
+    final double prevRevenue = _revenueInMonth(bookings, prevMonth);
+    final double revenueGrowth = _momPct(totalRevenue, prevRevenue);
     final bool isRevenueGrowthPositive = revenueGrowth >= 0;
 
     String formatCurrency(double amount) {
@@ -1234,6 +1231,79 @@ String _monthName(int month) {
   ];
   return months[month - 1];
 }
+
+/// Inclusive start date of the selected Operations period window.
+/// Monthly = start of the current year, Weekly = start of the week 12 weeks
+/// back, Daily = 14 days back (today inclusive).
+DateTime _periodStart(String period, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  switch (period) {
+    case 'Daily':
+      return today.subtract(const Duration(days: 13)); // last 14 days
+    case 'Weekly':
+      final startOfThisWeek = today.subtract(Duration(days: today.weekday - 1));
+      return startOfThisWeek.subtract(const Duration(days: 7 * 11)); // last 12 weeks
+    default: // Monthly
+      return DateTime(now.year, 1, 1);
+  }
+}
+
+/// Leads whose creation date falls inside the selected period window. Shared by
+/// the Lead growth chart, Lead sources donut and the Enquiries map.
+List<Lead> _leadsInPeriod(List<Lead> leads, String period) {
+  final start = _periodStart(period, DateTime.now());
+  return leads.where((l) {
+    final d = DateTime(l.createdAt.year, l.createdAt.month, l.createdAt.day);
+    return !d.isBefore(start);
+  }).toList();
+}
+
+// ---- KPI aggregation helpers (real data, shared by the metric cards, their
+// month-over-month trend badges, and the 6-month sparkline series) ----------
+
+/// Leads created in the given calendar month.
+int _leadsInMonth(List<Lead> leads, DateTime m) => leads
+    .where((l) => l.createdAt.year == m.year && l.createdAt.month == m.month)
+    .length;
+
+/// Real bookings whose event date falls in the month, excluding cancelled and
+/// postponed (same population the Revenue card sums).
+int _bookingsInMonth(List<Booking> bookings, DateTime m) => bookings
+    .where((b) =>
+        b.bookingDate.year == m.year &&
+        b.bookingDate.month == m.month &&
+        b.status.toLowerCase() != 'cancelled' &&
+        b.status.toLowerCase() != 'postponed')
+    .length;
+
+/// Revenue for the month: completed bookings if any, else active (non-cancelled,
+/// non-postponed) bookings.
+double _revenueInMonth(List<Booking> bookings, DateTime m) {
+  final monthly = bookings
+      .where((b) => b.bookingDate.year == m.year && b.bookingDate.month == m.month);
+  final completed = monthly
+      .where((b) => b.status.toLowerCase() == 'completed')
+      .fold<double>(0, (sum, b) => sum + b.totalPrice);
+  if (completed > 0) return completed;
+  return monthly
+      .where((b) =>
+          b.status.toLowerCase() != 'cancelled' &&
+          b.status.toLowerCase() != 'postponed')
+      .fold<double>(0, (sum, b) => sum + b.totalPrice);
+}
+
+/// Month-over-month percentage change (100% when growing from zero).
+double _momPct(num current, num previous) {
+  if (previous > 0) return ((current - previous) / previous) * 100;
+  if (current > 0) return 100.0;
+  return 0.0;
+}
+
+/// The 6 calendar months ending at (and including) [month]; index 5 = [month].
+List<DateTime> _last6Months(DateTime month) =>
+    List.generate(6, (i) => DateTime(month.year, month.month - (5 - i), 1));
+
+String _trendLabel(double pct) => '${pct >= 0 ? "+" : ""}${pct.toStringAsFixed(1)}%';
 
 // HEADER WIDGET
 class _DashboardHeader extends StatelessWidget {
@@ -1589,64 +1659,133 @@ class _SparklinePainter extends CustomPainter {
 }
 
 // LEAD GROWTH BAR CHART CARD
-class _LeadGrowthCard extends StatefulWidget {
+// Controlled by the parent's shared Operations period ([period] +
+// [onPeriodChanged]) so the Monthly/Weekly/Daily toggle re-buckets this chart
+// and, in the parent, filters the Lead sources donut and the map to match.
+class _LeadGrowthCard extends StatelessWidget {
   final List<Lead> leads;
-  const _LeadGrowthCard({required this.leads});
+  final String period; // 'Monthly' | 'Weekly' | 'Daily'
+  final ValueChanged<String> onPeriodChanged;
 
-  @override
-  State<_LeadGrowthCard> createState() => _LeadGrowthCardState();
-}
+  const _LeadGrowthCard({
+    required this.leads,
+    required this.period,
+    required this.onPeriodChanged,
+  });
 
-class _LeadGrowthCardState extends State<_LeadGrowthCard> {
-  String _activeTab = 'Monthly';
+  // Buckets the leads into the chart series for the selected period, plus the
+  // window total and the period-over-period trend of the latest bucket.
+  ({
+    List<double> values,
+    List<String> labels,
+    int total,
+    double trendPct,
+    bool trendPositive,
+  }) _buildSeries() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    late List<double> values;
+    late List<String> labels;
+    int curIdx;
+    int prevIdx;
+
+    if (period == 'Daily') {
+      const days = 14;
+      values = List.filled(days, 0.0);
+      labels = List.filled(days, '');
+      final start = today.subtract(const Duration(days: days - 1));
+      for (final l in leads) {
+        final d = DateTime(l.createdAt.year, l.createdAt.month, l.createdAt.day);
+        final idx = d.difference(start).inDays;
+        if (idx >= 0 && idx < days) values[idx] += 1.0;
+      }
+      for (int i = 0; i < days; i++) {
+        final d = start.add(Duration(days: i));
+        labels[i] = (i % 3 == 0 || i == days - 1) ? '${d.day}/${d.month}' : '';
+      }
+      curIdx = days - 1; // today
+      prevIdx = days - 2; // yesterday
+    } else if (period == 'Weekly') {
+      const weeks = 12;
+      values = List.filled(weeks, 0.0);
+      labels = List.filled(weeks, '');
+      final startOfThisWeek = today.subtract(Duration(days: today.weekday - 1));
+      final start = startOfThisWeek.subtract(const Duration(days: 7 * (weeks - 1)));
+      for (final l in leads) {
+        final d = DateTime(l.createdAt.year, l.createdAt.month, l.createdAt.day);
+        final idx = d.difference(start).inDays ~/ 7;
+        if (idx >= 0 && idx < weeks) values[idx] += 1.0;
+      }
+      for (int i = 0; i < weeks; i++) {
+        final d = start.add(Duration(days: 7 * i));
+        labels[i] = (i % 2 == 0 || i == weeks - 1) ? '${d.day}/${d.month}' : '';
+      }
+      curIdx = weeks - 1; // this week
+      prevIdx = weeks - 2; // last week
+    } else {
+      // Monthly: 12 months of the current year.
+      values = List.filled(12, 0.0);
+      labels = const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      for (final l in leads) {
+        if (l.createdAt.year == now.year) values[l.createdAt.month - 1] += 1.0;
+      }
+      curIdx = now.month - 1; // this month
+      prevIdx = now.month - 2; // last month (-1 if January)
+    }
+
+    final total = values.fold<double>(0.0, (s, v) => s + v).toInt();
+
+    double trendPct = 0.0;
+    bool trendPositive = true;
+    final double cur = (curIdx >= 0 && curIdx < values.length) ? values[curIdx] : 0.0;
+    final double prev = (prevIdx >= 0 && prevIdx < values.length) ? values[prevIdx] : 0.0;
+    if (prev > 0) {
+      trendPct = ((cur - prev) / prev) * 100;
+      trendPositive = trendPct >= 0;
+    } else if (cur > 0) {
+      trendPct = 100.0;
+      trendPositive = true;
+    }
+
+    return (
+      values: values,
+      labels: labels,
+      total: total,
+      trendPct: trendPct,
+      trendPositive: trendPositive,
+    );
+  }
+
+  String get _subtitle {
+    switch (period) {
+      case 'Daily':
+        return '— last fourteen days';
+      case 'Weekly':
+        return '— last twelve weeks';
+      default:
+        return '— twelve months, climbing';
+    }
+  }
+
+  String get _totalLabel {
+    switch (period) {
+      case 'Daily':
+        return 'LAST 14 DAYS';
+      case 'Weekly':
+        return 'LAST 12 WEEKS';
+      default:
+        return 'YTD';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final bool hasData = widget.leads.isNotEmpty;
-    
-    // Default YTD totals and monthly counts if no data
-    String ytdValue = '0';
-    String trendValue = '0.0%';
-    bool isTrendPositive = true;
-    double maxY = 10.0;
-    
-    List<double> barValues = List.filled(12, 0.0);
-
-    if (hasData) {
-      ytdValue = widget.leads.length.toString();
-      
-      // Calculate growth trend
-      final startOfThisMonth = DateTime(now.year, now.month, 1);
-      final startOfLastMonth = DateTime(now.year, now.month - 1, 1);
-      
-      final leadsThisMonth = widget.leads.where((l) => l.createdAt.isAfter(startOfThisMonth)).length;
-      final leadsLastMonth = widget.leads.where((l) => 
-        l.createdAt.isAfter(startOfLastMonth) && 
-        l.createdAt.isBefore(startOfThisMonth)
-      ).length;
-
-      if (leadsLastMonth > 0) {
-        final pct = ((leadsThisMonth - leadsLastMonth) / leadsLastMonth) * 100;
-        trendValue = '${pct >= 0 ? "+" : ""}${pct.toStringAsFixed(1)}%';
-        isTrendPositive = pct >= 0;
-      } else {
-        trendValue = leadsThisMonth > 0 ? '+100.0%' : '0.0%';
-        isTrendPositive = true;
-      }
-
-      // Group leads by month for the current year
-      final monthlyCounts = List<double>.filled(12, 0.0);
-      for (final lead in widget.leads) {
-        if (lead.createdAt.year == now.year) {
-          monthlyCounts[lead.createdAt.month - 1] += 1.0;
-        }
-      }
-      barValues = monthlyCounts;
-      
-      final peak = barValues.reduce((a, b) => a > b ? a : b);
-      maxY = peak > 0 ? peak : 10.0;
-    }
+    final series = _buildSeries();
+    final values = series.values;
+    final peak = values.isEmpty ? 0.0 : values.reduce((a, b) => a > b ? a : b);
+    final double maxY = peak > 0 ? peak : 10.0;
+    final trendValue = '${series.trendPct >= 0 ? "+" : ""}${series.trendPct.toStringAsFixed(1)}%';
+    final double barWidth = values.length > 12 ? 12.0 : 18.0;
 
     return Card(
       color: Colors.white,
@@ -1675,7 +1814,7 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                       ),
                     ),
                     Text(
-                      '— twelve months, climbing',
+                      _subtitle,
                       style: GoogleFonts.cormorantGaramond(
                         fontStyle: FontStyle.italic,
                         fontSize: 14,
@@ -1695,13 +1834,9 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                   ),
                   child: Row(
                     children: ['Monthly', 'Weekly', 'Daily'].map((tab) {
-                      final isSelected = tab == _activeTab;
+                      final isSelected = tab == period;
                       return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _activeTab = tab;
-                          });
-                        },
+                        onTap: () => onPeriodChanged(tab),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
@@ -1740,7 +1875,7 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 Text(
-                  ytdValue,
+                  series.total.toString(),
                   style: GoogleFonts.inter(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
@@ -1753,12 +1888,12 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: isTrendPositive ? const Color(0xFF0B5B37) : const Color(0xFF7B1B2A),
+                    color: series.trendPositive ? const Color(0xFF0B5B37) : const Color(0xFF7B1B2A),
                   ),
                 ),
                 const Spacer(),
                 Text(
-                  'YTD',
+                  _totalLabel,
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -1795,21 +1930,9 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                         reservedSize: 24,
                         getTitlesWidget: (value, meta) {
                           const style = TextStyle(color: Color(0xFF7B8694), fontSize: 10, fontWeight: FontWeight.w500);
-                          String text = '';
-                          switch (value.toInt()) {
-                            case 0: text = 'Jan'; break;
-                            case 1: text = 'Feb'; break;
-                            case 2: text = 'Mar'; break;
-                            case 3: text = 'Apr'; break;
-                            case 4: text = 'May'; break;
-                            case 5: text = 'Jun'; break;
-                            case 6: text = 'Jul'; break;
-                            case 7: text = 'Aug'; break;
-                            case 8: text = 'Sep'; break;
-                            case 9: text = 'Oct'; break;
-                            case 10: text = 'Nov'; break;
-                            case 11: text = 'Dec'; break;
-                          }
+                          final i = value.toInt();
+                          final text = (i >= 0 && i < series.labels.length) ? series.labels[i] : '';
+                          if (text.isEmpty) return const SizedBox.shrink();
                           return SideTitleWidget(
                             meta: meta,
                             space: 6,
@@ -1824,7 +1947,10 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
                   ),
                   gridData: const FlGridData(show: false),
                   borderData: FlBorderData(show: false),
-                  barGroups: List.generate(12, (index) => _makeBarGroup(index, barValues[index], maxY)),
+                  barGroups: List.generate(
+                    values.length,
+                    (index) => _makeBarGroup(index, values[index], maxY, barWidth),
+                  ),
                 ),
               ),
             ),
@@ -1834,14 +1960,14 @@ class _LeadGrowthCardState extends State<_LeadGrowthCard> {
     );
   }
 
-  BarChartGroupData _makeBarGroup(int x, double y, double maxY) {
+  BarChartGroupData _makeBarGroup(int x, double y, double maxY, double width) {
     return BarChartGroupData(
       x: x,
       barRods: [
         BarChartRodData(
           toY: y,
           color: const Color(0xFFCBA052), // gold
-          width: 18,
+          width: width,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
           backDrawRodData: BackgroundBarChartRodData(
             show: true,

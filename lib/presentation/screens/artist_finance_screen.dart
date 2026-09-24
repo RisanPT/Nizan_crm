@@ -1527,7 +1527,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ),
                             // Filter out 'split' — split payments are recorded
                             // as two separate entries and cannot be re-combined.
-                            value: selPayMode == 'split' ? 'cash' : selPayMode,
+                            initialValue: selPayMode == 'split' ? 'cash' : selPayMode,
                             items: _paymentModes
                                 .where((m) => m.$1 != 'split')
                                 .map<DropdownMenuItem<String>>((m) =>
@@ -1634,7 +1634,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                   existing.attachmentUrl!,
                                                   fit: BoxFit.cover,
                                                   errorBuilder:
-                                                      (_, __, ___) =>
+                                                      (_, _, _) =>
                                                           const SizedBox(),
                                                 ),
                                               ),

@@ -330,7 +330,12 @@ bool isRouteAllowed(String path, Access access,
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canManageMarketing;
   }
-  if (path.startsWith('/trials')) return access.canSeeBookings;
+  // Gate on the dedicated Trials permission (matches the sidebar's
+  // access.canSeeTrials). Using canSeeBookings here meant a role granted
+  // "Trials" but not "Bookings" (e.g. HR) saw the menu item yet got bounced on
+  // open. canSeeTrials falls back to canSeeBookings for permission-less legacy
+  // roles, so nothing changes for them.
+  if (path.startsWith('/trials')) return access.canSeeTrials;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
   if (path.startsWith('/reports')) return access.canSeeCEOReport;
   if (path.startsWith('/settings')) return access.canSeeSettings;
