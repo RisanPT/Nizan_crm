@@ -536,7 +536,10 @@ class _MarketingCalendarScreenState
     final dR = cur.revenue - prev.revenue;
     showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
+      // Keep the dialog's own context: closing with the outer page context
+      // resolves to the shell Navigator and pops the whole route instead of
+      // just this dialog. Matches the other dialogs in this file.
+      builder: (dctx) => AlertDialog(
         backgroundColor: crm.surface,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -604,7 +607,7 @@ class _MarketingCalendarScreenState
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dctx).pop(),
             child: const Text('Close'),
           ),
         ],

@@ -10,6 +10,10 @@ class _StatCardWithIcon extends StatelessWidget {
   final Color color;
   final double width;
 
+  /// Exact figure behind an abbreviated [value] (e.g. '₹2,51,18,500' for
+  /// '₹2.51Cr'). Shown on hover/long-press so nothing is lost by abbreviating.
+  final String? exactValue;
+
   const _StatCardWithIcon({
     required this.title,
     required this.value,
@@ -17,89 +21,111 @@ class _StatCardWithIcon extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.width,
+    this.exactValue,
   });
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) {
+        return Transform.translate(
+          offset: Offset(0, 20 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: child,
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
+        );
+      },
+      child: Container(
+        width: width,
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Colored accent strip along the top.
-          Container(height: 3, color: color),
+          // Subtler colored accent strip along the top.
+          Container(height: 4, color: color.withValues(alpha: 0.8)),
           Padding(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(9),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
+                        color: color.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
                       ),
-                      child: Icon(icon, color: color, size: 19),
+                      child: Icon(icon, color: color, size: 20),
                     ),
-                    10.w,
+                    12.w,
                     Expanded(
                       child: Text(
-                        title.toUpperCase(),
+                        title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                             color: crm.textSecondary,
-                            fontSize: 11,
-                            letterSpacing: 0.4,
+                            fontSize: 13,
+                            letterSpacing: 0.3,
                             height: 1.2,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
                 ),
-                14.h,
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      color: crm.textPrimary,
-                      fontSize: 25,
-                      height: 1.0,
-                      fontWeight: FontWeight.w800),
+                16.h,
+                Tooltip(
+                  // No tooltip when the figure is already shown in full.
+                  message: exactValue ?? '',
+                  waitDuration: const Duration(milliseconds: 400),
+                  child: Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: crm.textPrimary,
+                        fontSize: 28,
+                        height: 1.1,
+                        letterSpacing: -0.5,
+                        fontWeight: FontWeight.w800),
+                  ),
                 ),
                 if (subtitle != null) ...[
-                  5.h,
+                  6.h,
                   Text(
                     subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         color: crm.textSecondary,
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w500),
                   ),
                 ],
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -268,12 +294,14 @@ class _DesktopBookingRow extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<bool?> onSelectChanged;
   final VoidCallback onDelete;
+  final VoidCallback? onRowTap;
 
   const _DesktopBookingRow({
     required this.booking,
     required this.isSelected,
     required this.onSelectChanged,
     required this.onDelete,
+    this.onRowTap,
   });
 
   @override
@@ -285,20 +313,29 @@ class _DesktopBookingRow extends StatelessWidget {
             .toDouble();
 
     return InkWell(
-      onTap: () => context.go('/booking/manage/${booking.id}'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      onTap: onRowTap ?? () => context.go('/booking/manage/${booking.id}'),
+      hoverColor: crmColors.primary.withValues(alpha: 0.03),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: crmColors.border.withValues(alpha: 0.3))),
+          color: isSelected ? crmColors.primary.withValues(alpha: 0.05) : null,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
         child: Row(
           children: [
             SizedBox(
               width: 44,
-              child: Checkbox(value: isSelected, onChanged: onSelectChanged),
+              child: Checkbox(
+                value: isSelected, 
+                onChanged: onSelectChanged,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
             ),
             Expanded(
               flex: 2,
               child: Text(
                 '#${booking.displayBookingNumber}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
               ),
             ),
             Expanded(
@@ -308,6 +345,7 @@ class _DesktopBookingRow extends StatelessWidget {
                 style: TextStyle(
                   color: crmColors.textSecondary,
                   fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
               ),
             ),
@@ -318,16 +356,26 @@ class _DesktopBookingRow extends StatelessWidget {
                 style: TextStyle(
                   color: crmColors.textSecondary,
                   fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
               ),
             ),
-            Expanded(flex: 2, child: Text(booking.customerName)),
+            Expanded(
+              flex: 2, 
+              child: Text(
+                booking.customerName,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+              ),
+            ),
             Expanded(
               flex: 2,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(booking.service),
+                  Text(
+                    booking.service,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
                   if (booking.duplicateCount > 1)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -349,13 +397,16 @@ class _DesktopBookingRow extends StatelessWidget {
             ),
             Expanded(
               child: Text('₹${_money(booking.advanceAmount)}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
             Expanded(
               child: Text('₹${_money(booking.totalPrice)}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
             Expanded(
               child: Text('₹${_money(balance)}',
-                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
             SizedBox(
               width: 60,
               child: Align(
@@ -366,6 +417,7 @@ class _DesktopBookingRow extends StatelessWidget {
                   icon: Icon(
                     Icons.delete_outline,
                     color: crmColors.destructive,
+                    size: 20,
                   ),
                 ),
               ),
@@ -382,12 +434,14 @@ class _MobileBookingCard extends StatelessWidget {
   final bool isSelected;
   final ValueChanged<bool?> onSelectChanged;
   final VoidCallback onDelete;
+  final VoidCallback? onRowTap;
 
   const _MobileBookingCard({
     required this.booking,
     required this.isSelected,
     required this.onSelectChanged,
     required this.onDelete,
+    this.onRowTap,
   });
 
   @override
@@ -400,116 +454,114 @@ class _MobileBookingCard extends StatelessWidget {
 
     final accent = _statusColorFor(booking.status);
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: crmColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: isSelected ? accent : crmColors.border,
-            width: isSelected ? 1.5 : 1),
+            color: isSelected ? accent : crmColors.border.withValues(alpha: 0.5),
+            width: isSelected ? 2 : 1),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 16,
               offset: const Offset(0, 4)),
         ],
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => context.go('/booking/manage/${booking.id}'),
-        // IntrinsicHeight bounds the Row's height so the full-height accent bar
-        // (crossAxisAlignment.stretch) can size to the card instead of forcing
-        // infinite height inside a scroll view.
+        onTap: onRowTap ?? () => context.go('/booking/manage/${booking.id}'),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Container(width: 4, color: accent),
+              Container(width: 5, color: accent),
               Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: Checkbox(
-                              value: isSelected,
-                              onChanged: onSelectChanged,
-                              visualDensity: VisualDensity.compact),
-                        ),
-                        8.w,
-                        Expanded(
-                          child: Text(
-                            booking.customerName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 15.5, fontWeight: FontWeight.w800),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: Checkbox(
+                                value: isSelected,
+                                onChanged: onSelectChanged,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                visualDensity: VisualDensity.compact),
                           ),
-                        ),
-                        _StatusChip(status: booking.status),
-                      ],
-                    ),
-                    6.h,
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '#${booking.displayBookingNumber}  ·  ${booking.service}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: crmColors.textSecondary,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600),
+                          10.w,
+                          Expanded(
+                            child: Text(
+                              booking.customerName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.w800),
+                            ),
                           ),
-                        ),
-                        if (booking.duplicateCount > 1) ...[
-                          6.w,
-                          _DuplicateBadge(count: booking.duplicateCount),
+                          _StatusChip(status: booking.status),
                         ],
-                      ],
-                    ),
-                    12.h,
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: [
-                        _MiniFinance(
-                            label: 'Advance',
-                            value: '₹${_money(booking.advanceAmount)}'),
-                        _MiniFinance(
-                            label: 'Total',
-                            value: '₹${_money(booking.totalPrice)}'),
-                        _MiniFinance(
-                            label: 'Balance', value: '₹${_money(balance)}'),
-                        _MiniFinance(
-                            label: 'Date',
-                            value: _formatDate(booking.bookingDate)),
-                      ],
-                    ),
-                    4.h,
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: onDelete,
-                        style: TextButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: crmColors.destructive),
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Delete'),
                       ),
-                    ),
-                  ],
+                      10.h,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '#${booking.displayBookingNumber}  ·  ${booking.service}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: crmColors.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          if (booking.duplicateCount > 1) ...[
+                            8.w,
+                            _DuplicateBadge(count: booking.duplicateCount),
+                          ],
+                        ],
+                      ),
+                      16.h,
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _MiniFinance(
+                              label: 'Advance',
+                              value: '₹${_money(booking.advanceAmount)}'),
+                          _MiniFinance(
+                              label: 'Total',
+                              value: '₹${_money(booking.totalPrice)}'),
+                          _MiniFinance(
+                              label: 'Balance', value: '₹${_money(balance)}'),
+                          _MiniFinance(
+                              label: 'Date',
+                              value: _formatDate(booking.bookingDate)),
+                        ],
+                      ),
+                      8.h,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: onDelete,
+                          style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              foregroundColor: crmColors.destructive),
+                          icon: const Icon(Icons.delete_outline, size: 18),
+                          label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -658,8 +710,314 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+/// Indian digit grouping (2,51,18,500 — not 25,118,500), matching
+/// monthly_bookings_screen and the Accounts module. The rupee symbol is NOT
+/// included: every call site writes its own '₹' prefix.
+final _inrGrouped = NumberFormat.decimalPattern('en_IN');
+
 String _money(double value) {
-  return value.toStringAsFixed(0);
+  if (value.isNaN || value.isInfinite) return '0';
+  return _inrGrouped.format(value.round());
+}
+
+/// Money as ONE story instead of three unrelated tiles: what was booked, what
+/// has come in, and what is still owed. The sales team's daily question is
+/// "how much is left to collect", and a bar answers it at a glance where three
+/// separate numbers made them do the subtraction themselves.
+class _CollectionSummaryCard extends StatelessWidget {
+  final double booked;
+  final double collected;
+  final double outstanding;
+  final double pct; // 0..1
+  final String scopeLabel;
+
+  const _CollectionSummaryCard({
+    required this.booked,
+    required this.collected,
+    required this.outstanding,
+    required this.pct,
+    required this.scopeLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: crm.textSecondary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.payments_outlined, size: 18, color: crm.textSecondary),
+              ),
+              12.w,
+              Expanded(
+                child: Text('COLLECTION  ·  $scopeLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        letterSpacing: 0.5,
+                        fontWeight: FontWeight.w700,
+                        color: crm.textSecondary)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: crm.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('${(pct * 100).round()}% collected',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: crm.success)),
+              ),
+            ],
+          ),
+          20.h,
+          Tooltip(
+            message: '₹${_money(booked)}',
+            waitDuration: const Duration(milliseconds: 400),
+            child: Text('₹${_moneyCompact(booked)} booked',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 32, height: 1.1, letterSpacing: -0.5, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+          ),
+          20.h,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 12,
+              backgroundColor: crm.warning.withValues(alpha: 0.15),
+              valueColor: AlwaysStoppedAnimation<Color>(crm.success),
+            ),
+          ),
+          16.h,
+          Row(
+            children: [
+              Expanded(
+                child: _CollectionLeg(
+                  dot: crm.success,
+                  label: 'Collected',
+                  value: '₹${_moneyCompact(collected)}',
+                  exact: '₹${_money(collected)}',
+                ),
+              ),
+              Expanded(
+                child: _CollectionLeg(
+                  dot: crm.warning,
+                  label: 'Still to collect',
+                  value: '₹${_moneyCompact(outstanding)}',
+                  exact: '₹${_money(outstanding)}',
+                  alignEnd: true,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CollectionLeg extends StatelessWidget {
+  final Color dot;
+  final String label;
+  final String value;
+  final String exact;
+  final bool alignEnd;
+
+  const _CollectionLeg({
+    required this.dot,
+    required this.label,
+    required this.value,
+    required this.exact,
+    this.alignEnd = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Column(
+      crossAxisAlignment: alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: alignEnd ? MainAxisAlignment.end : MainAxisAlignment.start,
+          children: [
+            Container(width: 8, height: 8, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+            6.w,
+            Flexible(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: crm.textSecondary)),
+            ),
+          ],
+        ),
+        4.h,
+        Tooltip(
+          message: exact,
+          waitDuration: const Duration(milliseconds: 400),
+          child: Text(value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Status as slices of one whole rather than four separate tiles, so it is
+/// obvious the parts add up to the stated total. Segments are drawn in
+/// proportion, and any status outside the four named ones is kept as "Other"
+/// so nothing silently goes missing.
+class _StatusBreakdownCard extends StatelessWidget {
+  final int total;
+  final int confirmed;
+  final int pending;
+  final int completed;
+  final int cancelled;
+  final int other;
+  final String scopeLabel;
+
+  const _StatusBreakdownCard({
+    required this.total,
+    required this.confirmed,
+    required this.pending,
+    required this.completed,
+    required this.cancelled,
+    required this.other,
+    required this.scopeLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final segs = <(String, int, Color)>[
+      ('Confirmed', confirmed, crm.primary),
+      ('Pending', pending, crm.warning),
+      ('Completed', completed, crm.success),
+      ('Cancelled', cancelled, crm.destructive),
+      if (other > 0) ('Other', other, crm.textSecondary),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: crm.textSecondary.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.donut_small_outlined, size: 18, color: crm.textSecondary),
+              ),
+              12.w,
+              Expanded(
+                child: Text('WORKS BY STATUS  ·  $scopeLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        letterSpacing: 0.5,
+                        fontWeight: FontWeight.w700,
+                        color: crm.textSecondary)),
+              ),
+            ],
+          ),
+          20.h,
+          Text('$total works',
+              style: TextStyle(
+                  fontSize: 32, height: 1.1, letterSpacing: -0.5, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+          20.h,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: SizedBox(
+              height: 12,
+              child: total <= 0
+                  ? Container(color: crm.border)
+                  : Row(
+                      children: [
+                        for (final s in segs)
+                          if (s.$2 > 0) Expanded(flex: s.$2, child: Container(color: s.$3)),
+                      ],
+                    ),
+            ),
+          ),
+          16.h,
+          Wrap(
+            spacing: 20,
+            runSpacing: 12,
+            children: [
+              for (final s in segs)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8, height: 8, decoration: BoxDecoration(color: s.$3, shape: BoxShape.circle)),
+                    8.w,
+                    Text('${s.$1} ${s.$2}',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact form for headline tiles — 2.51Cr / 29.92L — so a crore-scale figure
+/// stays scannable at a glance instead of running to eleven digits. Mirrors
+/// sales_dashboard_screen and accounts_dashboard_screen. Below ₹1 lakh it falls
+/// back to full grouping, and the exact figure is always kept in the tooltip.
+String _moneyCompact(double value) {
+  if (value.isNaN || value.isInfinite) return '0';
+  final v = value.abs();
+  final sign = value < 0 ? '-' : '';
+  if (v >= 10000000) return '$sign${(v / 10000000).toStringAsFixed(2)}Cr';
+  if (v >= 100000) return '$sign${(v / 100000).toStringAsFixed(2)}L';
+  return _money(value);
 }
 
 // Left 70% panel: Today vs Yesterday sales with a trend chip.
@@ -821,13 +1179,17 @@ class _RevenueQuarterPanel extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: crm.textSecondary)),
               6.h,
-              Text('₹${_money(totalRevenue)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: crm.primary)),
+              Tooltip(
+                message: '₹${_money(totalRevenue)}',
+                waitDuration: const Duration(milliseconds: 400),
+                child: Text('₹${_moneyCompact(totalRevenue)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        color: crm.primary)),
+              ),
               2.h,
               Text('FY $fyLabel',
                   style: TextStyle(fontSize: 12, color: crm.textSecondary)),
