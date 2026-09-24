@@ -23,6 +23,11 @@ const _months = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+/// Upper bound for how far ahead the report can be navigated. Matches the
+/// default `maxYear` of [showMonthPicker] so the forward arrow and the picker
+/// agree on the same range.
+const _kMaxReportYear = 2035;
+
 class FinancialAnalystReportScreen extends ConsumerStatefulWidget {
   const FinancialAnalystReportScreen({super.key});
 
@@ -42,18 +47,16 @@ class _FinancialAnalystReportScreenState
   void _shift(int by) =>
       setState(() => _month = DateTime(_month.year, _month.month + by, 1));
 
-  bool get _canGoForward =>
-      _month.isBefore(DateTime(DateTime.now().year, DateTime.now().month, 1));
+  // Bookings are taken in advance, so a future month already carries real
+  // booked revenue (total / advance / balance) worth reporting on. The report
+  // is therefore no longer capped at the current month; the forward arrow is
+  // bounded by the month picker's own upper year so it cannot run away.
+  bool get _canGoForward => _month.isBefore(DateTime(_kMaxReportYear, 12, 1));
 
   Future<void> _pickMonth() async {
     final picked = await showMonthPicker(context, initial: _month);
     if (picked == null) return;
-    final now = DateTime.now();
-    // Never allow a future month (the report is retrospective).
-    final capped = picked.isAfter(DateTime(now.year, now.month, 1))
-        ? DateTime(now.year, now.month, 1)
-        : DateTime(picked.year, picked.month, 1);
-    setState(() => _month = capped);
+    setState(() => _month = DateTime(picked.year, picked.month, 1));
   }
 
   @override

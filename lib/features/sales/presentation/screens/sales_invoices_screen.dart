@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -40,6 +41,18 @@ String _ddMon(DateTime d) {
   return '${d.day} ${m[d.month - 1]}';
 }
 
+/// Booking.status is free-text and written lower-case ('pending', 'completed',
+/// 'cancelled'), and legacy CSV-imported rows can carry different casing or
+/// stray padding. Compare it the same way _StatusChip renders it, so a summary
+/// tile can never silently sit at zero because of a capital letter.
+bool _statusIs(String status, String want) => status.trim().toLowerCase() == want;
+
+/// Whether the summary block (stat cards + today/revenue panels) is showing.
+/// Library-level so the choice survives navigating away and back within the
+/// session — someone who works from the booking list keeps it collapsed and
+/// lands on the list instead of scrolling past the dashboard every time.
+bool _summaryExpanded = true;
+
 class SalesBookingsScreen extends HookConsumerWidget {
   const SalesBookingsScreen({super.key});
 
@@ -55,7 +68,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final duplicatesOnly = useState(false);
     final isMonthlyView = useState(false);
     final selectedFY = useState<String>('2026-27');
-    final dateBasis = useState<String>('event_date');
+    // Sales & Invoices opens on the booking (added) date — that is how the
+    // sales team works the list. 'event_date' is still selectable in the
+    // dropdown, and whichever is chosen carries through to /sales/quarterly.
+    final dateBasis = useState<String>('booking_date');
+    final selectedPanelBooking = useState<Booking?>(null);
+    final showSummary = useState(_summaryExpanded);
     const pageSize = 20;
 
     final selectedZoneId = useState<String>('');
@@ -220,7 +238,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
     });
 
 
-    final totalSalesValue = geoFilteredAllBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.totalPrice : sum);
+    // NOTE: the old all-time "Total Sales Value" tile was removed — showing an
+    // all-time figure beside an FY figure (₹2.54Cr vs ₹2.51Cr) under near
+    // identical labels was a main source of the "which number is right?"
+    // confusion. Everything in the summary is now FY-scoped and consistent.
     final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.advanceAmount : sum);
 
     // ── Today vs Yesterday · Total revenue · Q1–Q4 works (selected FY) ──────
@@ -230,6 +251,27 @@ class SalesBookingsScreen extends HookConsumerWidget {
       final s = b.status.toLowerCase();
       return s != 'cancelled' && s != 'postponed' && s != 'rejected';
     }
+
+    // ── Figures for the grouped summary blocks ───────────────────────────────
+    // Every number below is derived from the SAME population (fyBookings), so
+    // the parts genuinely reconcile with the whole. The old status tiles
+    // counted only the visible page while "Total Bookings" counted every page,
+    // so they could never add up — which is what made the screen look wrong.
+    final fyBookedValue =
+        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice);
+    final fyOutstanding =
+        (fyBookedValue - advanceCollectedFY) < 0 ? 0.0 : fyBookedValue - advanceCollectedFY;
+    final fyCollectedPct = fyBookedValue <= 0 ? 0.0 : (advanceCollectedFY / fyBookedValue).clamp(0.0, 1.0);
+
+    final fyWorksTotal = countPackages(fyBookings);
+    final fyConfirmed = countPackages(fyBookings.where((b) => _statusIs(b.status, 'confirmed')));
+    final fyPending = countPackages(fyBookings.where((b) => _statusIs(b.status, 'pending')));
+    final fyCompleted = countPackages(fyBookings.where((b) => _statusIs(b.status, 'completed')));
+    final fyCancelled = countPackages(fyBookings.where((b) => _statusIs(b.status, 'cancelled')));
+    // Anything with another status (draft, postponed, rejected, blank) so the
+    // segments always sum to the stated total rather than quietly losing rows.
+    final fyOtherStatus =
+        fyWorksTotal - fyConfirmed - fyPending - fyCompleted - fyCancelled;
     bool onSameDay(DateTime a, DateTime b) =>
         a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -659,12 +701,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
             bookings.isNotEmpty &&
             bookings.every((booking) => selectedIds.value.contains(booking.id));
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        Widget mainContent = CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                child:               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
@@ -697,8 +739,44 @@ class SalesBookingsScreen extends HookConsumerWidget {
                   ),
                 ],
               ),
-              24.h,
-              LayoutBuilder(
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child:               Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    showSummary.value = !showSummary.value;
+                    _summaryExpanded = showSummary.value;
+                  },
+                  icon: Icon(
+                    showSummary.value
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 20,
+                  ),
+                  label: Text(
+                    showSummary.value ? 'Hide summary' : 'Show summary',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: crmColors.textSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+              ),
+            ),
+            if (showSummary.value)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Column(
+                    children: [
+                                    LayoutBuilder(
                 builder: (context, constraints) {
                   int columns = isMobile ? 2 : 4;
                   double spacing = 16.0;
@@ -710,7 +788,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     children: [
                       _StatCardWithIcon(
                         title: "Forecast Sales",
-                        value: '₹${_money(forecastSales)}',
+                        value: '₹${_moneyCompact(forecastSales)}',
+                        exactValue: '₹${_money(forecastSales)}',
                         subtitle: 'Current Month',
                         icon: Icons.trending_up,
                         color: crmColors.primary,
@@ -718,7 +797,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
                       ),
                       _StatCardWithIcon(
                         title: "Forecast Collection",
-                        value: '₹${_money(forecastCollection)}',
+                        value: '₹${_moneyCompact(forecastCollection)}',
+                        exactValue: '₹${_money(forecastCollection)}',
                         subtitle: 'Remaining Balance',
                         icon: Icons.account_balance_wallet,
                         color: crmColors.success,
@@ -795,298 +875,578 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ],
                   ),
                 ),
-              24.h,
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: crmColors.border),
+              ],
+                  ),
                 ),
-                child: Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    DropdownButton<String>(
-                      value: selectedFY.value,
-                      onChanged: (val) {
-                        if (val != null) selectedFY.value = val;
-                      },
-                      items: financialYears.map((fy) {
-                        return DropdownMenuItem(
-                          value: fy,
-                          child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        );
-                      }).toList(),
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
+              ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child:               Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: crmColors.surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: crmColors.border.withValues(alpha: 0.5)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
                     ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    DropdownButton<String>(
-                      value: dateBasis.value,
-                      onChanged: (val) {
-                        if (val != null) dateBasis.value = val;
-                      },
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'event_date',
-                          child: Text('By Event Date', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        DropdownMenuItem(
-                          value: 'booking_date',
-                          child: Text('By Booking Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.filter_alt_outlined, size: 20, color: crmColors.textSecondary),
+                        8.w,
+                        Text(
+                          'Filter & Search',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: crmColors.textSecondary,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ],
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
                     ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    // ── Date range search (filters by the basis above) ──
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showMonthRangePicker(
-                          context,
-                          initial: (dateFrom.value != null && dateTo.value != null)
-                              ? DateTimeRange(start: dateFrom.value!, end: dateTo.value!)
-                              : null,
-                        );
-                        if (picked != null) {
-                          dateFrom.value = picked.start;
-                          dateTo.value = picked.end;
-                          pageState.value = 1;
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.date_range, size: 18, color: crmColors.textPrimary),
-                          const SizedBox(width: 6),
-                          Text(
-                            (dateFrom.value != null && dateTo.value != null)
-                                ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)}'
-                                : 'Date range',
-                            style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
+                    16.h,
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        // FY & Date Basis Group
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: crmColors.primary.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: crmColors.primary.withValues(alpha: 0.1)),
                           ),
-                          if (dateFrom.value != null || dateTo.value != null) ...[
-                            const SizedBox(width: 4),
-                            InkWell(
-                              onTap: () {
-                                dateFrom.value = null;
-                                dateTo.value = null;
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              DropdownButton<String>(
+                                value: selectedFY.value,
+                                onChanged: (val) {
+                                  if (val != null) selectedFY.value = val;
+                                },
+                                items: financialYears.map((fy) {
+                                  return DropdownMenuItem(
+                                    value: fy,
+                                    child: Text('FY $fy', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  );
+                                }).toList(),
+                                style: TextStyle(color: crmColors.primary, fontSize: 13.5, fontWeight: FontWeight.bold),
+                                underline: const SizedBox(),
+                                icon: Icon(Icons.keyboard_arrow_down, color: crmColors.primary, size: 18),
+                              ),
+                              Container(margin: const EdgeInsets.symmetric(horizontal: 8), width: 1, height: 20, color: crmColors.primary.withValues(alpha: 0.2)),
+                              DropdownButton<String>(
+                                value: dateBasis.value,
+                                onChanged: (val) {
+                                  if (val != null) dateBasis.value = val;
+                                },
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'event_date',
+                                    child: Text('Event Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'booking_date',
+                                    child: Text('Booking Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                                style: TextStyle(color: crmColors.primary, fontSize: 13.5, fontWeight: FontWeight.bold),
+                                underline: const SizedBox(),
+                                icon: Icon(Icons.keyboard_arrow_down, color: crmColors.primary, size: 18),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Date Range
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showMonthRangePicker(
+                              context,
+                              initial: (dateFrom.value != null && dateTo.value != null)
+                                  ? DateTimeRange(start: dateFrom.value!, end: dateTo.value!)
+                                  : null,
+                            );
+                            if (picked != null) {
+                              dateFrom.value = picked.start;
+                              dateTo.value = picked.end;
+                              pageState.value = 1;
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.date_range, size: 18, color: crmColors.textPrimary),
+                                8.w,
+                                Text(
+                                  (dateFrom.value != null && dateTo.value != null)
+                                      ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)}'
+                                      : 'Date range',
+                                  style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.bold),
+                                ),
+                                if (dateFrom.value != null || dateTo.value != null) ...[
+                                  4.w,
+                                  InkWell(
+                                    onTap: () {
+                                      dateFrom.value = null;
+                                      dateTo.value = null;
+                                      pageState.value = 1;
+                                    },
+                                    child: Icon(Icons.close, size: 16, color: crmColors.textSecondary),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        // ── Zone Dropdown ──
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: DropdownButton<String>(
+                            value: selectedZoneId.value.isEmpty ? 'all' : selectedZoneId.value,
+                            onChanged: (val) {
+                              selectedZoneId.value = val == 'all' ? '' : val!;
+                              selectedStateId.value = '';
+                              selectedRegionId.value = '';
+                              selectedDistrictId.value = '';
+                            },
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All Zones', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              ...allZones.map((z) => DropdownMenuItem(
+                                    value: z.id,
+                                    child: Text(z.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  )),
+                            ],
+                            style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                          ),
+                        ),
+                        // ── State Dropdown ──
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: DropdownButton<String>(
+                            value: selectedStateId.value.isEmpty ? 'all' : selectedStateId.value,
+                            onChanged: (val) {
+                              selectedStateId.value = val == 'all' ? '' : val!;
+                              selectedRegionId.value = '';
+                              selectedDistrictId.value = '';
+                            },
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All States', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              ...filteredStates.map((s) => DropdownMenuItem(
+                                    value: s.id,
+                                    child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  )),
+                            ],
+                            style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                          ),
+                        ),
+                        // ── Region Dropdown ──
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: DropdownButton<String>(
+                            value: selectedRegionId.value.isEmpty ? 'all' : selectedRegionId.value,
+                            onChanged: (val) {
+                              selectedRegionId.value = val == 'all' ? '' : val!;
+                              selectedDistrictId.value = '';
+                            },
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All Regions', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              ...filteredRegions.map((r) => DropdownMenuItem(
+                                    value: r.id,
+                                    child: Text(r.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  )),
+                            ],
+                            style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                          ),
+                        ),
+                        // ── District Dropdown ──
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: crmColors.border),
+                          ),
+                          child: DropdownButton<String>(
+                            value: selectedDistrictId.value.isEmpty ? 'all' : selectedDistrictId.value,
+                            onChanged: (val) {
+                              selectedDistrictId.value = val == 'all' ? '' : val!;
+                            },
+                            items: [
+                              const DropdownMenuItem(
+                                value: 'all',
+                                child: Text('All Districts', style: TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                              ...filteredDistricts.map((d) => DropdownMenuItem(
+                                    value: d.id,
+                                    child: Text(d.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  )),
+                            ],
+                            style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.keyboard_arrow_down, size: 18),
+                          ),
+                        ),
+                        // ── Added By (who entered the booking) Dropdown ──
+                        if (canFilterByCreator) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: DropdownButton<String>(
+                              value: selectedCreatorId.value.isEmpty ||
+                                      !creatorOptions.containsKey(selectedCreatorId.value)
+                                  ? 'all'
+                                  : selectedCreatorId.value,
+                              onChanged: (val) {
+                                selectedCreatorId.value = (val == null || val == 'all') ? '' : val;
                                 pageState.value = 1;
                               },
-                              child: Icon(Icons.close, size: 16, color: crmColors.textSecondary),
+                              items: [
+                                const DropdownMenuItem(
+                                  value: 'all',
+                                  child: Text('Added By: All', style: TextStyle(fontWeight: FontWeight.bold)),
+                                ),
+                                ...creators.map((e) => DropdownMenuItem(
+                                      value: e.key,
+                                      child: Text(e.value, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    )),
+                              ],
+                              style: TextStyle(color: crmColors.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w600),
+                              underline: const SizedBox(),
+                              icon: const Icon(Icons.person_pin_outlined, size: 18),
+                            ),
+                          ),
+                        ],
+                        // View Toggle
+                        SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: false,
+                              label: Text('List View'),
+                              icon: Icon(Icons.format_list_bulleted, size: 18),
+                            ),
+                            ButtonSegment(
+                              value: true,
+                              label: Text('Monthly View'),
+                              icon: Icon(Icons.bar_chart, size: 18),
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    // ── Zone Dropdown ──
-                    DropdownButton<String>(
-                      value: selectedZoneId.value.isEmpty ? 'all' : selectedZoneId.value,
-                      onChanged: (val) {
-                        selectedZoneId.value = val == 'all' ? '' : val!;
-                        selectedStateId.value = '';
-                        selectedRegionId.value = '';
-                        selectedDistrictId.value = '';
-                      },
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'all',
-                          child: Text('All Zones', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        ...allZones.map((z) => DropdownMenuItem(
-                              value: z.id,
-                              child: Text(z.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            )),
-                      ],
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-
-                    // ── State Dropdown ──
-                    DropdownButton<String>(
-                      value: selectedStateId.value.isEmpty ? 'all' : selectedStateId.value,
-                      onChanged: (val) {
-                        selectedStateId.value = val == 'all' ? '' : val!;
-                        selectedRegionId.value = '';
-                        selectedDistrictId.value = '';
-                      },
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'all',
-                          child: Text('All States', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        ...filteredStates.map((s) => DropdownMenuItem(
-                              value: s.id,
-                              child: Text(s.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            )),
-                      ],
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-
-                    // ── Region Dropdown ──
-                    DropdownButton<String>(
-                      value: selectedRegionId.value.isEmpty ? 'all' : selectedRegionId.value,
-                      onChanged: (val) {
-                        selectedRegionId.value = val == 'all' ? '' : val!;
-                        selectedDistrictId.value = '';
-                      },
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'all',
-                          child: Text('All Regions', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        ...filteredRegions.map((r) => DropdownMenuItem(
-                              value: r.id,
-                              child: Text(r.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            )),
-                      ],
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-
-                    // ── District Dropdown ──
-                    DropdownButton<String>(
-                      value: selectedDistrictId.value.isEmpty ? 'all' : selectedDistrictId.value,
-                      onChanged: (val) {
-                        selectedDistrictId.value = val == 'all' ? '' : val!;
-                      },
-                      items: [
-                        const DropdownMenuItem(
-                          value: 'all',
-                          child: Text('All Districts', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                        ...filteredDistricts.map((d) => DropdownMenuItem(
-                              value: d.id,
-                              child: Text(d.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            )),
-                      ],
-                      style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                      underline: const SizedBox(),
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                    ),
-                    // ── Added By (who entered the booking) Dropdown ──
-                    if (canFilterByCreator) ...[
-                      if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                      DropdownButton<String>(
-                        value: selectedCreatorId.value.isEmpty ||
-                                !creatorOptions.containsKey(selectedCreatorId.value)
-                            ? 'all'
-                            : selectedCreatorId.value,
-                        onChanged: (val) {
-                          selectedCreatorId.value = (val == null || val == 'all') ? '' : val;
-                          pageState.value = 1;
-                        },
-                        items: [
-                          const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('Added By: All', style: TextStyle(fontWeight: FontWeight.bold)),
+                          selected: {isMonthlyView.value},
+                          onSelectionChanged: (val) {
+                            isMonthlyView.value = val.first;
+                          },
+                          style: ButtonStyle(
+                            visualDensity: VisualDensity.compact,
                           ),
-                          ...creators.map((e) => DropdownMenuItem(
-                                value: e.key,
-                                child: Text(e.value, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              )),
-                        ],
-                        style: TextStyle(color: crmColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
-                        underline: const SizedBox(),
-                        icon: const Icon(Icons.person_pin_outlined, size: 18),
-                      ),
-                    ],
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          label: Text('List View'),
-                          icon: Icon(Icons.check),
                         ),
-                        ButtonSegment(
-                          value: true,
-                          label: Text('Monthly Summary'),
-                          icon: Icon(Icons.bar_chart),
+                        // Search
+                        SizedBox(
+                          width: isMobile ? double.infinity : 300,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: crmColors.input,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: crmColors.border),
+                            ),
+                            child: TextFormField(
+                              controller: searchCtrl,
+                              onFieldSubmitted: (value) {
+                                final trimmed = value.trim();
+                                searchQuery.value = trimmed;
+                                if (trimmed.isEmpty) {
+                                  searchCtrl.clear();
+                                }
+                              },
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              decoration: InputDecoration(
+                                hintText: 'Search clients, packages...',
+                                hintStyle: TextStyle(color: crmColors.textSecondary, fontSize: 14),
+                                prefixIcon: const Icon(Icons.search, size: 18),
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                                suffixIcon: searchQuery.value.isEmpty
+                                    ? IconButton(
+                                        onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                        icon: const Icon(Icons.search, size: 18),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                      )
+                                    : Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            onPressed: () => searchQuery.value = searchCtrl.text.trim(),
+                                            icon: const Icon(Icons.search, size: 18),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                          8.w,
+                                          IconButton(
+                                            onPressed: () {
+                                              searchCtrl.clear();
+                                              searchQuery.value = '';
+                                            },
+                                            icon: const Icon(Icons.close, size: 18),
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                          ),
+                                          12.w,
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => duplicatesOnly.value = !duplicatesOnly.value,
+                          icon: const Icon(Icons.copy_all_outlined, size: 18),
+                          label: const Text('Duplicates', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: duplicatesOnly.value ? crmColors.primary.withValues(alpha: 0.1) : Colors.transparent,
+                            side: BorderSide(color: duplicatesOnly.value ? crmColors.primary : crmColors.border),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          ),
                         ),
                       ],
-                      selected: {isMonthlyView.value},
-                      onSelectionChanged: (val) {
-                        isMonthlyView.value = val.first;
-                      },
-                      style: ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    SizedBox(
-                      width: isMobile ? double.infinity : 300,
-                      child: TextFormField(
-                        controller: searchCtrl,
-                        onFieldSubmitted: (value) {
-                          final trimmed = value.trim();
-                          searchQuery.value = trimmed;
-                          if (trimmed.isEmpty) {
-                            searchCtrl.clear();
-                          }
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'Search clients, packages...',
-                          hintStyle: TextStyle(color: crmColors.textSecondary, fontSize: 14),
-                          prefixIcon: const Icon(Icons.search, size: 20),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                          suffixIcon: searchQuery.value.isEmpty
-                              ? IconButton(
-                                  onPressed: () => searchQuery.value = searchCtrl.text.trim(),
-                                  icon: const Icon(Icons.search, size: 20),
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      onPressed: () => searchQuery.value = searchCtrl.text.trim(),
-                                      icon: const Icon(Icons.search, size: 20),
-                                    ),
-                                    IconButton(
-                                      onPressed: () {
-                                        searchCtrl.clear();
-                                        searchQuery.value = '';
-                                      },
-                                      icon: const Icon(Icons.close, size: 20),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                    if (!isMobile) Container(width: 1, height: 24, color: crmColors.border),
-                    OutlinedButton.icon(
-                      onPressed: () => duplicatesOnly.value = !duplicatesOnly.value,
-                      icon: const Icon(Icons.copy_all_outlined, size: 18),
-                      label: const Text('Duplicates'),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: duplicatesOnly.value ? crmColors.primary.withValues(alpha: 0.1) : Colors.transparent,
-                        side: BorderSide(color: duplicatesOnly.value ? crmColors.primary : Colors.transparent),
-                      ),
                     ),
                   ],
                 ),
               ),
-              20.h,
-              Row(
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child:               Builder(builder: (_) {
+                String nameFor(Iterable<dynamic> src, String id) {
+                  for (final e in src) {
+                    if (e.id == id) return e.name as String;
+                  }
+                  return id;
+                }
+
+                final chips = <MapEntry<String, VoidCallback>>[];
+
+                if (dateFrom.value != null && dateTo.value != null) {
+                  chips.add(MapEntry(
+                    '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)}',
+                    () {
+                      dateFrom.value = null;
+                      dateTo.value = null;
+                      pageState.value = 1;
+                    },
+                  ));
+                }
+                if (selectedZoneId.value.isNotEmpty) {
+                  chips.add(MapEntry('Zone: ${nameFor(allZones, selectedZoneId.value)}', () {
+                    selectedZoneId.value = '';
+                    selectedStateId.value = '';
+                    selectedRegionId.value = '';
+                    selectedDistrictId.value = '';
+                    pageState.value = 1;
+                  }));
+                }
+                if (selectedStateId.value.isNotEmpty) {
+                  chips.add(MapEntry('State: ${nameFor(allStates, selectedStateId.value)}', () {
+                    selectedStateId.value = '';
+                    selectedRegionId.value = '';
+                    selectedDistrictId.value = '';
+                    pageState.value = 1;
+                  }));
+                }
+                if (selectedRegionId.value.isNotEmpty) {
+                  chips.add(MapEntry('Region: ${nameFor(allRegions, selectedRegionId.value)}', () {
+                    selectedRegionId.value = '';
+                    selectedDistrictId.value = '';
+                    pageState.value = 1;
+                  }));
+                }
+                if (selectedDistrictId.value.isNotEmpty) {
+                  chips.add(MapEntry('District: ${nameFor(allDistricts, selectedDistrictId.value)}', () {
+                    selectedDistrictId.value = '';
+                    pageState.value = 1;
+                  }));
+                }
+                if (selectedCreatorId.value.isNotEmpty) {
+                  final who = creatorOptions[selectedCreatorId.value] ?? 'Unknown';
+                  chips.add(MapEntry('Added by: $who', () {
+                    selectedCreatorId.value = '';
+                    pageState.value = 1;
+                  }));
+                }
+                if (duplicatesOnly.value) {
+                  chips.add(MapEntry('Duplicates only', () => duplicatesOnly.value = false));
+                }
+                if (searchQuery.value.isNotEmpty) {
+                  chips.add(MapEntry('Search: "${searchQuery.value}"', () {
+                    searchCtrl.clear();
+                    searchQuery.value = '';
+                  }));
+                }
+
+                if (chips.isEmpty) return const SizedBox.shrink();
+
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text('${chips.length} filter${chips.length == 1 ? '' : 's'} active',
+                          style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w700,
+                              color: crmColors.textSecondary)),
+                      for (final c in chips)
+                        InputChip(
+                          label: Text(c.key, style: const TextStyle(fontSize: 12.5)),
+                          onDeleted: c.value,
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          backgroundColor: crmColors.primary.withValues(alpha: 0.06),
+                          side: BorderSide(color: crmColors.primary.withValues(alpha: 0.25)),
+                        ),
+                      TextButton.icon(
+                        onPressed: () {
+                          for (final c in chips) {
+                            c.value();
+                          }
+                        },
+                        icon: const Icon(Icons.clear_all_rounded, size: 17),
+                        label: const Text('Clear all',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
+                        style: TextButton.styleFrom(
+                          foregroundColor: crmColors.destructive,
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              ),
+            ),
+            if (showSummary.value)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                                    24.h,
+              Text(
+                'Summary of filtered results',
+                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              4.h,
+              Text(
+                'Reflects the filters above, across all pages.',
+                style: TextStyle(fontSize: 12.5, color: crmColors.textSecondary),
+              ),
+              16.h,
+                      24.h,
+                                    // Money and status as two grouped stories instead of six
+              // equal-weight tiles. Both read from the SAME FY population, so
+              // the parts reconcile with the whole — the old tiles counted the
+              // visible page against an all-pages total and never added up.
+              Builder(builder: (_) {
+                final scopeLabel = (dateFrom.value != null && dateTo.value != null)
+                    ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)}'
+                    : 'FY ${selectedFY.value}';
+
+                final collection = _CollectionSummaryCard(
+                  booked: fyBookedValue,
+                  collected: advanceCollectedFY,
+                  outstanding: fyOutstanding,
+                  pct: fyCollectedPct,
+                  scopeLabel: scopeLabel,
+                );
+                final status = _StatusBreakdownCard(
+                  total: fyWorksTotal,
+                  confirmed: fyConfirmed,
+                  pending: fyPending,
+                  completed: fyCompleted,
+                  cancelled: fyCancelled,
+                  other: fyOtherStatus < 0 ? 0 : fyOtherStatus,
+                  scopeLabel: scopeLabel,
+                );
+
+                if (isMobile) {
+                  return Column(children: [collection, 16.h, status]);
+                }
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: collection),
+                    16.w,
+                    Expanded(child: status),
+                  ],
+                );
+              }),
+                    ],
+                  ),
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.all(24),
+              sliver: SliverToBoxAdapter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                                  Row(
                 children: [
                   if (!isMobile) ...[
                     Checkbox(
@@ -1141,82 +1501,6 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ),
                 ],
               ),
-              24.h,
-              Text(
-                'General Summary',
-                style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              16.h,
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  int columns = isMobile ? 2 : 5;
-                  double spacing = 16.0;
-                  double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-                  return Wrap(
-                    spacing: spacing,
-                    runSpacing: spacing,
-                    children: [
-                      // How many bookings match the current filter (all pages).
-                      // With a date range + "By Booking Date" this is exactly
-                      // "how many bookings added" in e.g. March–August.
-                      _StatCardWithIcon(
-                        title: 'Total Bookings',
-                        value: '${response.totalItems}',
-                        subtitle: (dateFrom.value != null && dateTo.value != null)
-                            ? '${_ddMon(dateFrom.value!)} – ${_ddMon(dateTo.value!)} · ${dateBasis.value == 'booking_date' ? 'added' : 'event'}'
-                            : (dateBasis.value == 'booking_date'
-                                ? 'Added · FY ${selectedFY.value}'
-                                : 'FY ${selectedFY.value}'),
-                        icon: Icons.receipt_long_outlined,
-                        color: Colors.indigo,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: 'Total Sales Value',
-                        value: '₹${_money(totalSalesValue)}',
-                        subtitle: 'Across all bookings',
-                        icon: Icons.monetization_on_outlined,
-                        color: Colors.amber.shade700,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: 'Advance Collected',
-                        value: '₹${_money(advanceCollectedFY)}',
-                        subtitle: 'FY ${selectedFY.value}',
-                        icon: Icons.payments_outlined,
-                        color: Colors.teal,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: 'Pending Works',
-                        value: '${countPackages(bookings.where((b) => b.status == 'Pending'))}',
-                        subtitle: 'Currently active',
-                        icon: Icons.pending_actions,
-                        color: Colors.orange,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: 'Completed Overall',
-                        value: '${countPackages(bookings.where((b) => b.status == 'Completed'))}',
-                        subtitle: 'Successfully delivered',
-                        icon: Icons.task_alt,
-                        color: Colors.green,
-                        width: itemWidth,
-                      ),
-                      _StatCardWithIcon(
-                        title: 'Cancelled',
-                        value: '${countPackages(bookings.where((b) => b.status == 'Cancelled'))}',
-                        subtitle: 'Bookings lost',
-                        icon: Icons.cancel_outlined,
-                        color: Colors.red,
-                        width: itemWidth,
-                      ),
-                    ],
-                  );
-                },
-              ),
-              24.h,
               if (duplicatesOnly.value)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -1308,6 +1592,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             const Divider(height: 1),
                             ...bookings.map(
                               (booking) => _DesktopBookingRow(
+                                onRowTap: () => selectedPanelBooking.value = booking,
                                 booking: booking,
                                 isSelected: selectedIds.value.contains(
                                   booking.id,
@@ -1345,10 +1630,163 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ? () => pageState.value += 1
                     : null,
               ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: mainContent),
+            if (!isMobile && selectedPanelBooking.value != null)
+              Container(
+                width: 420,
+                decoration: BoxDecoration(
+                  color: crmColors.surface,
+                  border: Border(left: BorderSide(color: crmColors.border)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 15,
+                      offset: const Offset(-5, 0),
+                    )
+                  ],
+                ),
+                child: _QuickViewSidePanel(
+                  booking: selectedPanelBooking.value!,
+                  onClose: () => selectedPanelBooking.value = null,
+                ),
+              ),
+          ],
+        );
+
+      },
+    );
+  }
+}
+class _QuickViewSidePanel extends StatelessWidget {
+  final Booking booking;
+  final VoidCallback onClose;
+
+  const _QuickViewSidePanel({required this.booking, required this.onClose});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final crmColors = context.crmColors;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: crmColors.border)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Quick View',
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                onPressed: onClose,
+                icon: const Icon(Icons.close),
+                splashRadius: 20,
+              ),
             ],
           ),
-        );
-      },
+        ),
+        // Body
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  booking.customerName,
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                8.h,
+                Row(
+                  children: [
+                    Icon(Icons.event, size: 16, color: crmColors.textSecondary),
+                    4.w,
+                    Text(
+                      'Event: ${booking.bookingDate.day}/${booking.bookingDate.month}/${booking.bookingDate.year}',
+                      style: TextStyle(color: crmColors.textSecondary, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+                24.h,
+                _DetailRow('Status', booking.status.toUpperCase(), crmColors),
+                _DetailRow('Advance', '₹${booking.advanceAmount}', crmColors),
+                _DetailRow('Total', '₹${booking.totalPrice}', crmColors),
+                _DetailRow('Balance', '₹${booking.totalPrice - booking.advanceAmount}', crmColors),
+                24.h,
+                Text(
+                  'Packages',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: crmColors.textSecondary),
+                ),
+                12.h,
+                ...booking.bookingItems.map((item) => Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: crmColors.primary.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: crmColors.primary.withValues(alpha: 0.1)),
+                  ),
+                  child: Text(item.service, style: const TextStyle(fontWeight: FontWeight.w600)),
+                )),
+              ],
+            ),
+          ),
+        ),
+        // Footer Actions
+        Padding(
+          padding: const EdgeInsets.all(24),
+          child: ElevatedButton.icon(
+            onPressed: () => context.push('/booking/manage/${booking.id}'),
+            icon: const Icon(Icons.open_in_new, size: 18),
+            label: const Text('Open Full Details'),
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              backgroundColor: crmColors.primary,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        )
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final dynamic crmColors;
+
+  const _DetailRow(this.label, this.value, this.crmColors);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: crmColors.textSecondary, fontWeight: FontWeight.w500)),
+          Text(value, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+        ],
+      ),
     );
   }
 }
