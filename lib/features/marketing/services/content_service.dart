@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/error/errors.dart';
 import '../../../providers/dio_provider.dart';
 import '../data/content_item.dart';
 
@@ -51,32 +52,42 @@ class ContentService {
     DateTime? to,
     String? status,
     String? platform,
-  }) async {
-    final res = await _dio.get('/content', queryParameters: {
-      if (from != null) 'from': from.toIso8601String(),
-      if (to != null) 'to': to.toIso8601String(),
-      if (status != null && status.isNotEmpty) 'status': status,
-      if (platform != null && platform.isNotEmpty) 'platform': platform,
-    });
-    return (res.data as List)
-        .map((e) => ContentItem.fromJson((e as Map).cast<String, dynamic>()))
-        .toList();
-  }
+  }) =>
+      _guard('load content', () async {
+        final res = await _dio.get('/content', queryParameters: {
+          if (from != null) 'from': from.toIso8601String(),
+          if (to != null) 'to': to.toIso8601String(),
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (platform != null && platform.isNotEmpty) 'platform': platform,
+        });
+        return (res.data as List)
+            .map((e) => ContentItem.fromJson((e as Map).cast<String, dynamic>()))
+            .toList();
+      });
 
-  Future<ContentItem> createItem(Map<String, dynamic> body) async {
-    final res = await _dio.post('/content', data: body);
-    return ContentItem.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<ContentItem> createItem(Map<String, dynamic> body) => _guard('create the post', () async {
+        final res = await _dio.post('/content', data: body);
+        return ContentItem.fromJson((res.data as Map).cast<String, dynamic>());
+      });
 
-  Future<ContentItem> updateItem(String id, Map<String, dynamic> body) async {
-    final res = await _dio.put('/content/$id', data: body);
-    return ContentItem.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<ContentItem> updateItem(String id, Map<String, dynamic> body) => _guard('update the post', () async {
+        final res = await _dio.put('/content/$id', data: body);
+        return ContentItem.fromJson((res.data as Map).cast<String, dynamic>());
+      });
 
-  Future<void> deleteItem(String id) => _dio.delete('/content/$id');
+  Future<void> deleteItem(String id) => _guard('delete the post', () => _dio.delete('/content/$id'));
 
-  Future<ContentStats> getStats() async {
-    final res = await _dio.get('/content/stats');
-    return ContentStats.fromJson((res.data as Map).cast<String, dynamic>());
+  Future<ContentStats> getStats() => _guard('load content stats', () async {
+        final res = await _dio.get('/content/stats');
+        return ContentStats.fromJson((res.data as Map).cast<String, dynamic>());
+      });
+
+  /// Runs an API call and rethrows any failure as an [AppException].
+  Future<T> _guard<T>(String action, Future<T> Function() call) async {
+    try {
+      return await call();
+    } catch (e) {
+      throw AppException(e, action: action);
+    }
   }
 }

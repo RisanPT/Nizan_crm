@@ -14,6 +14,8 @@ class InventoryProduct {
   final int lowStockThreshold;
   final String owner; // employeeId, or '' for studio inventory
   final String notes;
+  final DateTime? createdAt; // when the product was added (server timestamp)
+  final DateTime? updatedAt;
 
   const InventoryProduct({
     required this.id,
@@ -31,6 +33,8 @@ class InventoryProduct {
     this.lowStockThreshold = 2,
     this.owner = '',
     this.notes = '',
+    this.createdAt,
+    this.updatedAt,
   });
 
   bool get isOut => quantity == 0;
@@ -69,6 +73,8 @@ class InventoryProduct {
       lowStockThreshold: (json['lowStockThreshold'] as num?)?.toInt() ?? 2,
       owner: _asId(json['owner']),
       notes: json['notes'] as String? ?? '',
+      createdAt: _parseDate(json['createdAt'])?.toLocal(),
+      updatedAt: _parseDate(json['updatedAt'])?.toLocal(),
     );
   }
 

@@ -45,7 +45,7 @@ class _StatCardWithIcon extends StatelessWidget {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+          border: Border.all(color: crm.border.faded(0.5)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.02),
@@ -317,7 +317,7 @@ class _DesktopBookingRow extends StatelessWidget {
       hoverColor: crmColors.primary.withValues(alpha: 0.03),
       child: Container(
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: crmColors.border.withValues(alpha: 0.3))),
+          border: Border(bottom: BorderSide(color: crmColors.border.faded(0.3))),
           color: isSelected ? crmColors.primary.withValues(alpha: 0.05) : null,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
@@ -459,7 +459,7 @@ class _MobileBookingCard extends StatelessWidget {
         color: crmColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: isSelected ? accent : crmColors.border.withValues(alpha: 0.5),
+            color: isSelected ? accent : crmColors.border.faded(0.5),
             width: isSelected ? 2 : 1),
         boxShadow: [
           BoxShadow(
@@ -747,7 +747,7 @@ class _CollectionSummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),
@@ -929,7 +929,7 @@ class _StatusBreakdownCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.02),

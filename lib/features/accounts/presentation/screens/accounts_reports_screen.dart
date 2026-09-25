@@ -8,6 +8,7 @@ import 'package:nizan_crm/features/accounts/controllers/account_report_provider.
 import 'package:nizan_crm/features/accounts/presentation/screens/staff_reports_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/report_access_picker.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Human-readable file size.
 String _fmtSize(int bytes) {
@@ -32,11 +33,17 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
   Future<void> _uploadReport() async {
     final crm = context.crmColors;
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'xls', 'xlsx', 'csv'],
-      withData: true,
-    );
+    final FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'xls', 'xlsx', 'csv'],
+        withData: true,
+      );
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e, fallback: "Couldn't open the file picker.");
+      return;
+    }
     if (result == null) return;
 
     final file = result.files.single;
@@ -144,19 +151,15 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
             bytes: file.bytes,
             sharedWith: shareIds,
           );
+          if (mounted) ref.refreshData.accountReports();
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Upload successful!')),
             );
           }
-          ref.invalidate(accountReportsProvider);
         } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(friendlyErrorMessage(e))),
-            );
-          }
+          if (mounted) showErrorSnackBar(context, e);
         }
       }
     }
@@ -180,8 +183,18 @@ class _AccountsReportsScreenState extends ConsumerState<AccountsReportsScreen> {
         onRefresh: () async => ref.invalidate(accountReportsProvider),
         child: asyncReports.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => Center(
-            child: Text(friendlyErrorMessage(error), style: TextStyle(color: crm.destructive)),
+          // Scrollable so pull-to-refresh still works on the error state.
+          error: (error, _) => LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: box.maxHeight,
+                child: AppErrorView(
+                  error: error,
+                  onRetry: () => ref.invalidate(accountReportsProvider),
+                ),
+              ),
+            ),
           ),
           data: (reports) {
             if (reports.isEmpty) {

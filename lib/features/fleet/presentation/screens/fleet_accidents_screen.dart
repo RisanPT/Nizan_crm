@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'fleet_mobile_ui.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 bool _isResolved(String status) {
   final s = status.toLowerCase();
@@ -37,12 +38,8 @@ class FleetAccidentsScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: accidentsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(
-          child: Text(
-            'Failed to load accidents: $err',
-            style: TextStyle(color: crmColors.textSecondary),
-          ),
-        ),
+        error: (err, stack) => AppErrorView(
+            error: err, onRetry: () => ref.invalidate(managerAccidentsProvider)),
         data: (accidents) {
           final open = accidents.where((a) => !_isResolved(a.status)).length;
           final resolved = accidents.where((a) => _isResolved(a.status)).length;

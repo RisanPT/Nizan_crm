@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
@@ -125,7 +126,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(journalEntriesProvider(_filter))),
           ]),
           data: (all) {
             final entries = all.where(_matchesSearch).toList();
@@ -287,7 +288,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
     if (picked == null || !context.mounted) return;
     try {
       await ref.read(accountingServiceProvider).setLockDate(picked);
-      ref.invalidate(accountingSettingsProvider);
+      ref.refreshData.accountingSettings();
       messenger.showSnackBar(SnackBar(content: Text('Books closed through ${DateFormat('d MMM yyyy').format(picked)}')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -317,7 +318,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
     if (ok != true || !context.mounted) return;
     try {
       await ref.read(accountingServiceProvider).setLockDate(null);
-      ref.invalidate(accountingSettingsProvider);
+      ref.refreshData.accountingSettings();
       messenger.showSnackBar(const SnackBar(content: Text('Books reopened')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -331,7 +332,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Padding(
@@ -360,7 +361,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
               ),
           ]),
         ),
-        Divider(height: 1, color: crm.border.withValues(alpha: 0.6)),
+        Divider(height: 1, color: crm.border.faded(0.6)),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 10),
           child: Column(children: [
@@ -441,8 +442,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
     try {
       final posted = await ref.read(accountingServiceProvider).backfill();
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-      ref.invalidate(journalEntriesProvider);
-      ref.invalidate(trialBalanceProvider);
+      ref.refreshData.financeReports();
       messenger.showSnackBar(SnackBar(content: Text('Posted $posted voucher${posted == 1 ? '' : 's'} from operations')));
     } catch (e) {
       if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
@@ -469,8 +469,7 @@ class _JournalVoucherScreenState extends ConsumerState<JournalVoucherScreen> {
     if (ok != true) return;
     try {
       await ref.read(accountingServiceProvider).voidJournal(e.id);
-      ref.invalidate(journalEntriesProvider);
-      ref.invalidate(trialBalanceProvider);
+      ref.refreshData.financeReports();
       messenger.showSnackBar(const SnackBar(content: Text('Voucher voided')));
     } catch (err) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(err))));
@@ -545,8 +544,7 @@ class _VoucherDialogState extends ConsumerState<_VoucherDialog> {
         'narration': _narration.text.trim(),
         'lines': lines,
       });
-      ref.invalidate(journalEntriesProvider);
-      ref.invalidate(trialBalanceProvider);
+      ref.refreshData.financeReports();
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Voucher posted')));
     } catch (e) {
@@ -595,7 +593,7 @@ class _VoucherDialogState extends ConsumerState<_VoucherDialog> {
           14.h,
           accountsAsync.when(
             loading: () => const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())),
-            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(chartAccountsProvider('all'))),
             data: (accounts) {
               if (accounts.isEmpty) {
                 return Padding(

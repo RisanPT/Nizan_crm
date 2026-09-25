@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -192,15 +193,10 @@ class _OperationsSalariesScreenState
                             paymentDate: paymentDate,
                             notes: notesCtrl.text.trim(),
                           );
-                      ref.invalidate(opsSalariesProvider);
-                      ref.invalidate(salariesProvider);
+                      ref.refreshData.salaries();
                       if (ctx.mounted) Navigator.of(ctx).pop();
                     } catch (e) {
-                      if (ctx.mounted) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text(friendlyErrorMessage(e))),
-                        );
-                      }
+                      if (ctx.mounted) showErrorSnackBar(ctx, e);
                     }
                   },
                   child: const Text('Confirm Payout',
@@ -397,13 +393,10 @@ class _OperationsSalariesScreenState
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (err, _) => Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(friendlyErrorMessage(err)),
+              error: (err, _) => AppErrorView(
+                error: err,
+                compact: true,
+                onRetry: () => ref.invalidate(opsSalariesProvider),
               ),
               data: (result) {
                 final stats = result.stats;
@@ -565,8 +558,10 @@ class _OperationsSalariesScreenState
             Expanded(
               child: salariesAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, _) =>
-                    Center(child: Text(friendlyErrorMessage(err))),
+                error: (err, _) => AppErrorView(
+                  error: err,
+                  onRetry: () => ref.invalidate(opsSalariesProvider),
+                ),
                 data: (result) {
                   final list = result.salaries;
                   if (list.isEmpty) {

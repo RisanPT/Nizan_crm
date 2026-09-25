@@ -9,6 +9,8 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 
 Color projectStatusColor(String s) => switch (s) {
       'active' => const Color(0xFF2E8B57),
@@ -93,7 +95,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+            error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(itProjectsProvider)),
             data: (projects) {
               final filtered = projects.where((p) {
                 if (_status != 'all' && p.status != _status) return false;
@@ -336,7 +338,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: crm.border.withValues(alpha: 0.4),
+                        color: crm.border.faded(0.4),
                         borderRadius: BorderRadius.circular(5),
                       ),
                       child: Row(
@@ -435,8 +437,8 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
     if (ok != true) return;
     try {
       await ref.read(projectServiceProvider).deleteProject(p.id);
-      ref.invalidate(itProjectsProvider);
-      ref.invalidate(projectsProvider);
+      refreshAllItTaskViews(ref); // projects + their (now deleted) tasks
+      ref.refreshData.okrs();
       messenger.showSnackBar(const SnackBar(content: Text('Project deleted')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -566,8 +568,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
       },
     );
     if (saved == true) {
-      ref.invalidate(itProjectsProvider);
-      ref.invalidate(projectsProvider);
+      ref.refreshData.projects();
       messenger.showSnackBar(SnackBar(content: Text(isEdit ? 'Project updated' : 'Project created')));
     }
   }

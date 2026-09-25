@@ -10,6 +10,7 @@ import '../../service/timebox_service.dart';
 import 'attendance_summary_screen.dart' show attendanceColor;
 import 'attendance_detail_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _months = [
   '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -37,7 +38,12 @@ class AttendancePayrollScreen extends HookConsumerWidget {
       syncing.value = true;
       try {
         final result = await ref.read(timeboxServiceProvider).syncEmployees();
+        // Not refreshData.hr(): it also resets the selected month
+        // (timeboxMonthProvider). Refresh the attendance data explicitly.
         ref.invalidate(payrollPreviewProvider);
+        ref.invalidate(attendanceSummaryProvider);
+        ref.invalidate(timeboxEmployeesProvider);
+        ref.refreshData.employees(); // Timebox IDs bound onto CRM employees
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -49,12 +55,10 @@ class AttendancePayrollScreen extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        syncing.value = false;
+        if (context.mounted) syncing.value = false;
       }
     }
 
@@ -84,6 +88,8 @@ class AttendancePayrollScreen extends HookConsumerWidget {
         final msg = await ref
             .read(timeboxServiceProvider)
             .generatePayroll(from: month.from, to: month.to);
+        ref.refreshData.salaries(); // salary slips created/updated
+        ref.invalidate(payrollPreviewProvider);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(msg), backgroundColor: crm.success),
@@ -91,12 +97,10 @@ class AttendancePayrollScreen extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        busy.value = false;
+        if (context.mounted) busy.value = false;
       }
     }
 

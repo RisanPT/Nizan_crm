@@ -27,6 +27,7 @@ import '../../core/utils/booking_print_service.dart';
 import '../../core/providers/trial_provider.dart';
 import '../../core/models/trial.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 
 class ArtistFinanceScreen extends HookConsumerWidget {
@@ -366,6 +367,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       var selDate = prefilledDate ?? DateTime.now();
       XFile? attachmentFile;
       bool isUploading = false;
+      // Split payments are two requests; if the cash half saved but the UPI
+      // half failed, a retry must not log the cash half a second time.
+      bool splitCashSaved = false;
       final formKey = GlobalKey<FormState>();
 
       await showModalBottomSheet(
@@ -776,7 +780,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
                                         if (payMode == 'split') {
                                           final cashAmt = double.tryParse(cashAmountCtrl.text.trim()) ?? 0;
-                                          if (cashAmt > 0) {
+                                          if (cashAmt > 0 && !splitCashSaved) {
                                             await ref
                                                 .read(collectionServiceProvider)
                                                 .createCollection(
@@ -793,6 +797,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                   notes: '${notesCtrl.text.trim()} (Split Cash)'.trim(),
                                                   attachmentUrl: null,
                                                 );
+                                            splitCashSaved = true;
+                                            ref.refreshData.collections();
+                                            ref.refreshData.trials(); // trial paid / balance
                                           }
                                           if (upiAmt > 0) {
                                             await ref
@@ -831,8 +838,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               );
                                         }
 
-                                        ref.invalidate(collectionsProvider);
-                                        ref.invalidate(artistCollectionsProvider);
+                                        ref.refreshData.collections();
+                                        ref.refreshData.trials(); // trial paid / balance
 
                                         if (ctx.mounted) {
                                           if (payMode == 'split') {
@@ -882,11 +889,17 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                           Navigator.pop(ctx);
                                         }
                                       } catch (e) {
-                                        setState(() => isUploading = false);
                                         if (ctx.mounted) {
-                                          ScaffoldMessenger.of(ctx).showSnackBar(
-                                            SnackBar(content: Text(friendlyErrorMessage(e))),
-                                          );
+                                          setState(() => isUploading = false);
+                                          if (splitCashSaved) {
+                                            showWarningSnackBar(
+                                              ctx,
+                                              'Cash part saved, but the UPI part failed: '
+                                              '${friendlyErrorMessage(e)} Tap again to retry the UPI part.',
+                                            );
+                                          } else {
+                                            showErrorSnackBar(ctx, e);
+                                          }
                                         }
                                       }
                                     },
@@ -1357,19 +1370,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                 receiptImage: uploadedUrl ?? '',
                                               );
                                         }
-                                        ref.invalidate(expensesProvider);
-                                        ref.invalidate(artistExpensesProvider);
+                                        ref.refreshData.expenses();
                                         if (ctx.mounted) Navigator.pop(ctx);
                                       } catch (e) {
-                                        setState(() => isUploading = false);
                                         if (ctx.mounted) {
-                                          ScaffoldMessenger.of(
-                                            ctx,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(friendlyErrorMessage(e)),
-                                            ),
-                                          );
+                                          setState(() => isUploading = false);
+                                          showErrorSnackBar(ctx, e);
                                         }
                                       }
                                     },
@@ -1724,18 +1730,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               // file was actually picked.
                                               attachmentUrl: uploadedUrl,
                                             );
-                                        ref.invalidate(collectionsProvider);
-                                        ref.invalidate(
-                                            artistCollectionsProvider);
+                                        ref.refreshData.collections();
+                                        ref.refreshData.trials(); // trial paid / balance
                                         if (ctx.mounted) Navigator.pop(ctx);
                                       } catch (e) {
-                                        setState(() => isUploading = false);
                                         if (ctx.mounted) {
-                                          ScaffoldMessenger.of(ctx).showSnackBar(
-                                            SnackBar(
-                                                content: Text(
-                                                    friendlyErrorMessage(e))),
-                                          );
+                                          setState(() => isUploading = false);
+                                          showErrorSnackBar(ctx, e);
                                         }
                                       }
                                     },
@@ -1771,20 +1772,17 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           await ref
               .read(collectionServiceProvider)
               .verifyCollection(id: id, status: action, verifiedBy: verifiedBy);
-          ref.invalidate(collectionsProvider);
-          ref.invalidate(artistCollectionsProvider);
+          ref.refreshData.collections();
+          ref.refreshData.trials(); // trial paid / balance
         } else {
           await ref
               .read(expenseServiceProvider)
               .verifyExpense(id: id, status: action, verifiedBy: verifiedBy);
-          ref.invalidate(expensesProvider);
-          ref.invalidate(artistExpensesProvider);
+          ref.refreshData.expenses();
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+          showErrorSnackBar(context, e);
         }
       }
     }
@@ -1818,12 +1816,11 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       try {
         if (isCollection) {
           await ref.read(collectionServiceProvider).deleteCollection(id);
-          ref.invalidate(collectionsProvider);
-          ref.invalidate(artistCollectionsProvider);
+          ref.refreshData.collections();
+          ref.refreshData.trials(); // trial paid / balance
         } else {
           await ref.read(expenseServiceProvider).deleteExpense(id);
-          ref.invalidate(expensesProvider);
-          ref.invalidate(artistExpensesProvider);
+          ref.refreshData.expenses();
         }
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1832,9 +1829,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+          showErrorSnackBar(context, e);
         }
       }
     }
@@ -2056,9 +2051,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   );
                                 } catch (e) {
                                   if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(friendlyErrorMessage(e))),
-                                    );
+                                    showErrorSnackBar(context, e);
                                   }
                                 }
                               },
@@ -3048,9 +3041,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   }
                                 } catch (e) {
                                   if (ctx.mounted) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      SnackBar(content: Text(friendlyErrorMessage(e))),
-                                    );
+                                    showErrorSnackBar(ctx, e);
                                   }
                                 }
                               },
@@ -3333,7 +3324,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                 backgroundColor: crm.background,
                 child: Container(
                   decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+                    border: Border(bottom: BorderSide(color: crm.border.faded(0.5))),
                   ),
                   child: Row(
                     children: [
@@ -3407,15 +3398,21 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           children: [
             asyncCollections.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => isScopedToOwn && myEmployeeId.isNotEmpty
+                    ? ref.invalidate(artistCollectionsProvider(myEmployeeId))
+                    : ref.invalidate(collectionsProvider),
               ),
               data: (_) => collectionsTab(filteredCollections),
             ),
             asyncExpenses.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => isScopedToOwn && myEmployeeId.isNotEmpty
+                    ? ref.invalidate(artistExpensesProvider(myEmployeeId))
+                    : ref.invalidate(expensesProvider),
               ),
               data: (_) => expensesTab(filteredExpenses),
             ),
@@ -4133,7 +4130,7 @@ class _FinanceEntryCard extends StatelessWidget {
                 ),
               ],
               12.h,
-              Divider(height: 1, color: crm.border.withValues(alpha: 0.5)),
+              Divider(height: 1, color: crm.border.faded(0.5)),
               12.h,
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -4236,17 +4233,17 @@ class _ImageViewerDialog extends StatefulWidget {
 class _ImageViewerDialogState extends State<_ImageViewerDialog> {
   bool _isDownloading = false;
 
+  /// Lets network errors propagate (instead of swallowing them) so the
+  /// snackbar can say "no internet" rather than a generic failure.
   Future<Uint8List?> _fetchImageBytes() async {
-    try {
-      final dio = Dio();
-      final response = await dio.get<List<int>>(
-        widget.url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      if (response.statusCode == 200 && response.data != null) {
-        return Uint8List.fromList(response.data!);
-      }
-    } catch (_) {}
+    final dio = Dio();
+    final response = await dio.get<List<int>>(
+      widget.url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (response.statusCode == 200 && response.data != null) {
+      return Uint8List.fromList(response.data!);
+    }
     return null;
   }
 
@@ -4261,7 +4258,9 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
     setState(() => _isDownloading = true);
     try {
       final bytes = await _fetchImageBytes();
-      if (bytes == null) throw Exception('Failed to download image');
+      if (bytes == null) {
+        throw const AppException(null, action: 'download the image');
+      }
       await downloadImage(
         bytes,
         _fileName(),
@@ -4274,13 +4273,7 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isDownloading = false);
@@ -4291,7 +4284,9 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
     setState(() => _isDownloading = true);
     try {
       final bytes = await _fetchImageBytes();
-      if (bytes == null) throw Exception('Failed to load image for sharing');
+      if (bytes == null) {
+        throw const AppException(null, action: 'load the image for sharing');
+      }
       final xFile = XFile.fromData(bytes, mimeType: 'image/jpeg', name: _fileName());
       await Share.shareXFiles(
         [xFile],
@@ -4303,13 +4298,7 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
       );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isDownloading = false);

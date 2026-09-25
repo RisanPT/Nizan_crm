@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/reviews/data/review.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 String _date(DateTime? d) => d == null ? '' : '${d.day} ${_mon[d.month]} ${d.year}';
@@ -461,12 +462,11 @@ class _ReviewDetailScreenState extends ConsumerState<ReviewDetailScreen> {
             referralOpportunity: _referral,
             managerComments: _commentsCtrl.text.trim(),
           );
-      ref.invalidate(reviewsProvider);
+      // List, analytics and artist performance all derive from these flags.
+      ref.refreshData.reviews();
       messenger.showSnackBar(const SnackBar(content: Text('Saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red));
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

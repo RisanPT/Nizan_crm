@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart' show priorityColor;
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_common.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_editor.dart';
@@ -36,7 +37,7 @@ class ITMyTasksScreen extends ConsumerWidget {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+            error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(myTasksProvider)),
             data: (tasks) => _build(context, ref, crm, tasks),
           ),
         ),
@@ -196,8 +197,7 @@ class ITMyTasksScreen extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(itTaskServiceProvider).updateTask(t.id, {'status': status});
-      ref.invalidate(myTasksProvider);
-      ref.invalidate(projectsProvider);
+      refreshAllItTaskViews(ref);
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
@@ -206,7 +206,7 @@ class ITMyTasksScreen extends ConsumerWidget {
   Future<void> _quickPercent(BuildContext context, WidgetRef ref, ITTask t) async {
     double p = t.percentComplete.toDouble();
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await showModalBottomSheet<bool>(
+    await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
@@ -234,6 +234,7 @@ class ITMyTasksScreen extends ConsumerWidget {
                 onPressed: () async {
                   try {
                     await ref.read(itTaskServiceProvider).updateTask(t.id, {'percentComplete': p.round()});
+                    refreshAllItTaskViews(ref);
                     if (ctx.mounted) Navigator.pop(ctx, true);
                   } catch (e) {
                     messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -246,20 +247,13 @@ class ITMyTasksScreen extends ConsumerWidget {
         ),
       ),
     );
-    if (saved == true) {
-      ref.invalidate(myTasksProvider);
-      ref.invalidate(projectsProvider);
-    }
   }
 
   Future<void> _openEditor(BuildContext context, WidgetRef ref, ITTask t) async {
     // Parent dropdown should list only this task's project.
     final all = ref.read(myTasksProvider).value ?? const <ITTask>[];
     final sameProject = all.where((e) => e.projectId == t.projectId).toList();
-    final saved = await showTaskEditor(context, ref, t.projectId, existing: t, allTasks: sameProject);
-    if (saved == true) {
-      ref.invalidate(myTasksProvider);
-      ref.invalidate(projectsProvider);
-    }
+    // The editor refreshes every task view itself on a successful save.
+    await showTaskEditor(context, ref, t.projectId, existing: t, allTasks: sameProject);
   }
 }

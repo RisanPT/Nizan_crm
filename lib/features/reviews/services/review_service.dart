@@ -2,9 +2,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/reviews/data/review.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class ReviewService {
   final Dio _dio;
@@ -28,8 +28,8 @@ class ReviewService {
       return (res.data as List)
           .map((e) => Review.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load reviews'));
+    } catch (e) {
+      throw AppException(e, action: 'load reviews');
     }
   }
 
@@ -38,8 +38,8 @@ class ReviewService {
     try {
       final res = await _dio.post('/reviews/for-booking/$bookingId');
       return (res.data['reviewUrl'] ?? '').toString();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to get the review link'));
+    } catch (e) {
+      throw AppException(e, action: 'get the review link');
     }
   }
 
@@ -47,9 +47,8 @@ class ReviewService {
     try {
       final res = await _dio.get('/reviews/artist/$employeeId');
       return ArtistReviewPerformance.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(
-          friendlyErrorMessage(e, fallback: 'Failed to load artist reviews'));
+    } catch (e) {
+      throw AppException(e, action: 'load artist reviews');
     }
   }
 
@@ -57,8 +56,8 @@ class ReviewService {
     try {
       final res = await _dio.get('/reviews/analytics');
       return ReviewAnalytics.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load insights'));
+    } catch (e) {
+      throw AppException(e, action: 'load insights');
     }
   }
 
@@ -66,8 +65,8 @@ class ReviewService {
     try {
       final res = await _dio.get('/reviews/$id');
       return Review.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load review'));
+    } catch (e) {
+      throw AppException(e, action: 'load review');
     }
   }
 
@@ -90,8 +89,8 @@ class ReviewService {
         'managerComments': ?managerComments,
       });
       return Review.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to update review'));
+    } catch (e) {
+      throw AppException(e, action: 'update review');
     }
   }
 }

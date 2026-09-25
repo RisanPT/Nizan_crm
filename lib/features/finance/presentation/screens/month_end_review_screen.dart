@@ -162,7 +162,7 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
         Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.textSecondary)),
@@ -189,7 +189,7 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+          border: Border.all(color: crm.border.faded(0.6)),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),

@@ -5,6 +5,7 @@ import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dar
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import '../../core/error/errors.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/employee.dart';
 
@@ -16,6 +17,7 @@ import '../common_widgets/paginated_footer.dart';
 import '../common_widgets/export_report_dialog.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class FuelExpensesScreen extends HookConsumerWidget {
   const FuelExpensesScreen({super.key});
@@ -130,6 +132,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
       var selectedCategory = expense?.category ?? 'fuel';
       var paymentMode = expense?.paymentMode ?? 'cash';
       var selectedDate = expense?.date ?? DateTime.now();
+      var saving = false;
 
       await showDialog(
         context: context,
@@ -356,27 +359,36 @@ class FuelExpensesScreen extends HookConsumerWidget {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    await ref.read(fuelExpenseServiceProvider).saveFuelExpense(
-                          id: expense?.id,
-                          vehicleId: selectedVehicleId,
-                          driverId: selectedDriverId,
-                          category: selectedCategory,
-                          date: selectedDate,
-                          odometerKm:
-                              double.tryParse(odometerCtrl.text.trim()) ?? 0,
-                          liters:
-                              double.tryParse(litersCtrl.text.trim()) ?? 0,
-                          totalAmount:
-                              double.tryParse(amountCtrl.text.trim()) ?? 0,
-                          paymentMode: paymentMode,
-                          station: stationCtrl.text.trim(),
-                          notes: notesCtrl.text.trim(),
-                        );
-                    ref.invalidate(fuelExpensesProvider);
-                    ref.invalidate(paginatedFuelExpensesProvider);
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
+                  onPressed: saving
+                      ? null
+                      : () async {
+                    setState(() => saving = true);
+                    try {
+                      await ref.read(fuelExpenseServiceProvider).saveFuelExpense(
+                            id: expense?.id,
+                            vehicleId: selectedVehicleId,
+                            driverId: selectedDriverId,
+                            category: selectedCategory,
+                            date: selectedDate,
+                            odometerKm:
+                                double.tryParse(odometerCtrl.text.trim()) ?? 0,
+                            liters:
+                                double.tryParse(litersCtrl.text.trim()) ?? 0,
+                            totalAmount:
+                                double.tryParse(amountCtrl.text.trim()) ?? 0,
+                            paymentMode: paymentMode,
+                            station: stationCtrl.text.trim(),
+                            notes: notesCtrl.text.trim(),
+                          );
+                      ref.refreshData.fuelExpenses();
+                      if (dialogContext.mounted) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                    } catch (e) {
+                      if (dialogContext.mounted) {
+                        setState(() => saving = false);
+                        showErrorSnackBar(dialogContext, e);
+                      }
                     }
                   },
                   child: const Text('Save'),
@@ -524,11 +536,9 @@ class FuelExpensesScreen extends HookConsumerWidget {
         Expanded(
           child: asyncExpenses.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load fuel expenses: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
+            error: (error, stack) => AppErrorView(
+              error: error,
+              onRetry: () => ref.invalidate(paginatedFuelExpensesProvider),
             ),
             data: (response) {
               final expenses = response.items;
@@ -780,14 +790,17 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                               ),
                                             );
                                             if (confirm == true) {
-                                              await ref
-                                                  .read(
-                                                      fuelExpenseServiceProvider)
-                                                  .deleteFuelExpense(exp.id);
-                                              ref.invalidate(
-                                                  fuelExpensesProvider);
-                                              ref.invalidate(
-                                                  paginatedFuelExpensesProvider);
+                                              try {
+                                                await ref
+                                                    .read(
+                                                        fuelExpenseServiceProvider)
+                                                    .deleteFuelExpense(exp.id);
+                                                ref.refreshData.fuelExpenses();
+                                              } catch (e) {
+                                                if (context.mounted) {
+                                                  showErrorSnackBar(context, e);
+                                                }
+                                              }
                                             }
                                           }
                                         },
@@ -908,11 +921,16 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await ref
-                                      .read(fuelExpenseServiceProvider)
-                                      .deleteFuelExpense(expense.id);
-                                  ref.invalidate(fuelExpensesProvider);
-                                  ref.invalidate(paginatedFuelExpensesProvider);
+                                  try {
+                                    await ref
+                                        .read(fuelExpenseServiceProvider)
+                                        .deleteFuelExpense(expense.id);
+                                    ref.refreshData.fuelExpenses();
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      showErrorSnackBar(context, e);
+                                    }
+                                  }
                                 }
                               }
                             },

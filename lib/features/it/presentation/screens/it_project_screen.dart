@@ -93,12 +93,8 @@ class ITProjectScreen extends ConsumerWidget {
                 const SizedBox(width: 6),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(backgroundColor: crm.primary),
-                  onPressed: () => showTaskEditor(context, ref, projectId, allTasks: tasks).then((s) {
-                    if (s == true) {
-                      ref.read(itProjectTasksControllerProvider(projectId).notifier).refresh();
-                      ref.invalidate(projectsProvider);
-                    }
-                  }),
+                  // The editor refreshes every task view itself on save.
+                  onPressed: () => showTaskEditor(context, ref, projectId, allTasks: tasks),
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Add Ticket'),
                 ),
@@ -124,7 +120,10 @@ class ITProjectScreen extends ConsumerWidget {
           Expanded(
             child: asyncTasks.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => ref.read(itProjectTasksControllerProvider(projectId).notifier).refresh(),
+              ),
               data: (list) => TabBarView(children: [
                 ITDataGridView(tasks: list, allTasks: list, projectId: projectId),
                 ITInteractiveGantt(tasks: list, allTasks: list, projectId: projectId),

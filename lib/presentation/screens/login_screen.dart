@@ -4,6 +4,7 @@ import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
+import '../../core/error/errors.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -38,16 +39,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             password: _passwordController.text,
             // You might need to pass role or something here if backend requires it
           );
-    } catch (_) {
+    } catch (e) {
+      // Shows the backend's reason (e.g. "Invalid email or password") or, when
+      // the network is down, "Can't reach the server…".
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            ref.read(authStateProvider).errorMessage ??
-                'Unable to sign in',
-          ),
-        ),
-      );
+      showErrorSnackBar(context, e, fallback: 'Unable to sign in. Please try again.');
     }
   }
 
@@ -301,7 +297,7 @@ class _LoginCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crmColors.surface,
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: crmColors.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crmColors.border.faded(0.5)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),

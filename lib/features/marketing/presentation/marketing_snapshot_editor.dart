@@ -7,6 +7,7 @@ import '../data/marketing_models.dart';
 import '../services/marketing_service.dart';
 import 'widgets/marketing_widgets.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Weekly snapshot metrics. (key, label)
 const marketingMetricFields = <(String, String)>[
@@ -177,8 +178,7 @@ Future<bool> showSnapshotEditor(
           await ref
               .read(marketingServiceProvider)
               .upsertSnapshot(competitor.id, data);
-          ref.invalidate(competitorsProvider);
-          ref.invalidate(rankingsProvider);
+          ref.refreshData.competitors();
           saved = true;
           if (dctx.mounted) Navigator.pop(dctx);
           messenger.showSnackBar(

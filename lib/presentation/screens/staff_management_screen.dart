@@ -21,6 +21,7 @@ import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
 import 'staff_details_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
   const StaffManagementScreen({super.key});
@@ -221,6 +222,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       var stateId = employee?.stateId ?? '';
       var districtId = employee?.districtId ?? '';
       var pincodeId = employee?.pincodeId ?? '';
+      var saving = false;
 
       await showDialog(
         context: context,
@@ -951,7 +953,9 @@ class StaffManagementScreen extends HookConsumerWidget {
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
+                    onPressed: saving
+                        ? null
+                        : () async {
                       if (nameCtrl.text.trim().isEmpty) {
                         ScaffoldMessenger.of(dialogContext).showSnackBar(
                           const SnackBar(
@@ -970,6 +974,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           ? roleOrDesignationCtrl.text.trim()
                           : (isAdministrative ? 'Staff' : (artistRole == 'driver' ? 'Driver' : 'Artist'));
 
+                      setModalState(() => saving = true);
                       try {
                         await ref
                             .read(employeeServiceProvider)
@@ -1004,19 +1009,17 @@ class StaffManagementScreen extends HookConsumerWidget {
                               panNumber: panNumberCtrl.text.trim(),
                             );
 
-                        ref.invalidate(employeesProvider);
-                        ref.invalidate(paginatedEmployeesProvider);
+                        ref.refreshData.employees();
+                        ref.refreshData.hr(); // salary fields feed the payroll preview
 
                         if (dialogContext.mounted) {
                           Navigator.of(dialogContext).pop();
                         }
                       } catch (e) {
                         if (dialogContext.mounted) {
-                          ScaffoldMessenger.of(dialogContext).showSnackBar(
-                            SnackBar(
-                                content: Text(friendlyErrorMessage(e,
-                                    fallback: 'Failed to save staff'))),
-                          );
+                          setModalState(() => saving = false);
+                          showErrorSnackBar(dialogContext, e,
+                              fallback: 'Failed to save staff');
                         }
                       }
                     },
@@ -1546,11 +1549,9 @@ class StaffManagementScreen extends HookConsumerWidget {
         Expanded(
           child: asyncEmployees.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load staff: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
+            error: (error, stack) => AppErrorView(
+              error: error,
+              onRetry: () => ref.invalidate(paginatedEmployeesProvider),
             ),
             data: (response) {
               final employees = response.items;
@@ -1864,8 +1865,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                             await ref
                                 .read(employeeServiceProvider)
                                 .deleteEmployee(employee.id);
-                            ref.invalidate(employeesProvider);
-                            ref.invalidate(paginatedEmployeesProvider);
+                            ref.refreshData.employees();
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Staff member deleted')),
@@ -1873,9 +1873,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                             }
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(friendlyErrorMessage(e))),
-                              );
+                              showErrorSnackBar(context, e);
                             }
                           }
                         }

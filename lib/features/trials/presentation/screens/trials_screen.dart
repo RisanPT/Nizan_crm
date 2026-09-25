@@ -110,9 +110,9 @@ class _TrialsScreenState extends ConsumerState<TrialsScreen> {
           Expanded(
             child: trialsAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Text(friendlyErrorMessage(e),
-                    style: TextStyle(color: crmColors.textSecondary)),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(trialsProvider),
               ),
               data: (trials) => _buildContent(context, crmColors, trials),
             ),
@@ -662,7 +662,7 @@ class _InfoChip extends StatelessWidget {
         accent ? const Color(0xFF8B5CF6) : crmColors.textSecondary;
     final bg = accent
         ? const Color(0xFF8B5CF6).withValues(alpha: 0.1)
-        : crmColors.border.withValues(alpha: 0.5);
+        : crmColors.border.faded(0.5);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

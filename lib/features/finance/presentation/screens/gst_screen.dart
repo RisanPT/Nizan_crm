@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
 import 'package:nizan_crm/features/finance/data/gst_models.dart';
@@ -69,13 +70,13 @@ class _GstScreenState extends ConsumerState<GstScreen> {
             12.h,
             summary.when(
               loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+              error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(gstSummaryProvider(_range))),
               data: (s) => _summaryCard(crm, s),
             ),
             18.h,
             gstr1.when(
               loading: () => const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+              error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(gstr1Provider(_range))),
               data: (r) => _gstr1Section(context, crm, r),
             ),
           ],
@@ -151,7 +152,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(payable ? 'NET GST PAYABLE' : 'NET GST CREDIT (refundable)',
@@ -159,7 +160,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
         4.h,
         Text(_money(s.netPayable.abs()), style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: color)),
         14.h,
-        Divider(height: 1, color: crm.border.withValues(alpha: 0.6)),
+        Divider(height: 1, color: crm.border.faded(0.6)),
         12.h,
         _row(crm, 'Output CGST', s.outputCgst),
         _row(crm, 'Output SGST', s.outputSgst),
@@ -213,7 +214,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+          border: Border.all(color: crm.border.faded(0.8)),
         ),
         child: Row(children: [
           _tot(crm, '${r.count}', 'Invoices', crm.primary),
@@ -247,7 +248,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
               decoration: BoxDecoration(
                 color: crm.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+                border: Border.all(color: crm.border.faded(0.8)),
               ),
               child: Column(children: [
                 Container(
@@ -262,7 +263,7 @@ class _GstScreenState extends ConsumerState<GstScreen> {
                 for (final row in filtered.take(_visible))
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+                    decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
                     child: Row(children: [
                       Expanded(
                         flex: 3,
@@ -364,9 +365,8 @@ class _GstSettingsDialogState extends ConsumerState<_GstSettingsDialog> {
             gstin: _gstin.text.trim(),
             homeStateCode: _state.text.trim(),
           ));
-      ref.invalidate(gstSettingsProvider);
-      ref.invalidate(gstSummaryProvider);
-      ref.invalidate(gstr1Provider);
+      ref.refreshData.accountingSettings();
+      ref.refreshData.financeReports(); // GST summary / GSTR-1
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('GST settings saved — re-sync the ledger to re-split existing sales.')));
     } catch (e) {
@@ -388,7 +388,7 @@ class _GstSettingsDialogState extends ConsumerState<_GstSettingsDialog> {
         padding: const EdgeInsets.all(22),
         child: async.when(
           loading: () => const SizedBox(height: 120, child: Center(child: CircularProgressIndicator())),
-          error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+          error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(gstSettingsProvider)),
           data: (loaded) {
             _seed(loaded);
             final s = _s!;

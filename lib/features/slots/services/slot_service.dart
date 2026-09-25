@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class SlotService {
   final Dio _dio;
@@ -13,8 +13,8 @@ class SlotService {
     try {
       final res = await _dio.get('/slots/month', queryParameters: {'year': year, 'month': month});
       return MonthAvailability.fromJson((res.data as Map).cast<String, dynamic>());
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load slot availability'));
+    } catch (e) {
+      throw AppException(e, action: 'load slot availability');
     }
   }
 
@@ -22,8 +22,8 @@ class SlotService {
     try {
       final res = await _dio.get('/slots/defaults');
       return SlotDefaults.fromJson((res.data as Map).cast<String, dynamic>());
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load defaults'));
+    } catch (e) {
+      throw AppException(e, action: 'load defaults');
     }
   }
 
@@ -31,8 +31,8 @@ class SlotService {
     try {
       final res = await _dio.put('/slots/defaults', data: {'morning': morning, 'evening': evening});
       return SlotDefaults.fromJson((res.data as Map).cast<String, dynamic>());
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to update default capacity'));
+    } catch (e) {
+      throw AppException(e, action: 'update default capacity');
     }
   }
 
@@ -44,8 +44,8 @@ class SlotService {
         'morning': morning,
         'evening': evening,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to set the day\'s capacity'));
+    } catch (e) {
+      throw AppException(e, action: 'set the day\'s capacity');
     }
   }
 
@@ -53,8 +53,8 @@ class SlotService {
   Future<void> clearDay(DateTime date) async {
     try {
       await _dio.delete('/slots/day', queryParameters: {'date': date.toIso8601String()});
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to reset the day'));
+    } catch (e) {
+      throw AppException(e, action: 'reset the day');
     }
   }
 }

@@ -1042,15 +1042,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
       if (asyncArtistBookings.hasError) {
         return Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Text(
-                'Error loading bookings: ${asyncArtistBookings.error}',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ),
+          body: AppErrorView(
+            error: asyncArtistBookings.error,
+            onRetry: () => ref.invalidate(artistAssignedWorksProvider(1)),
           ),
         );
       }
@@ -1155,6 +1149,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final packages = asyncPackages.value;
       final employees = asyncEmployees.value;
 
+      final loadError =
+          asyncBookings.error ?? asyncPackages.error ?? asyncEmployees.error;
+      if (loadError != null &&
+          (asyncBookings.value == null || packages == null || employees == null)) {
+        if (!context.mounted) return;
+        showErrorSnackBar(context, loadError);
+        return;
+      }
+
       if (asyncBookings.value == null || packages == null || employees == null) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1186,6 +1189,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         child: Column(
           children: [
             buildTabBar(),
+            // Without this, a failed load just shows zeros that look real.
+            if ((asyncBookings.error ??
+                    asyncLeads.error ??
+                    asyncCollections.error) !=
+                null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: AppErrorView(
+                  error: asyncBookings.error ??
+                      asyncLeads.error ??
+                      asyncCollections.error,
+                  compact: true,
+                  title: 'Some dashboard data could not be loaded',
+                  onRetry: () {
+                    ref.invalidate(bookingProvider);
+                    ref.invalidate(leadsProvider);
+                    ref.invalidate(collectionsProvider);
+                  },
+                ),
+              ),
             Expanded(
               child: getTabContent(
                 userName,
@@ -1261,7 +1284,7 @@ class _DashboardHeader extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crmColors.border.withValues(alpha: 0.08)),
+        border: Border.all(color: crmColors.border.faded(0.08)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<DateTime>(
@@ -2353,7 +2376,7 @@ class _EnquiriesByLocationCard extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: const Color(0xFFF9F7FF).withValues(alpha: 0.5),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: crmColors.border.withValues(alpha: 0.04)),
+                          border: Border.all(color: crmColors.border.faded(0.04)),
                         ),
                         child: buildMapWidget(),
                       ),
@@ -2382,7 +2405,7 @@ class _EnquiriesByLocationCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: const Color(0xFFF9F7FF).withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: crmColors.border.withValues(alpha: 0.04)),
+                      border: Border.all(color: crmColors.border.faded(0.04)),
                     ),
                     child: buildMapWidget(),
                   ),
@@ -2963,7 +2986,7 @@ class _ArtistMiniCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+          border: Border.all(color: crm.border.faded(0.5)),
           boxShadow: dimmed
               ? null
               : [
@@ -3326,12 +3349,7 @@ Future<void> _runWithReportLoader({
     await action();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorMessage(e)),
-          backgroundColor: crmColors.destructive,
-        ),
-      );
+      showErrorSnackBar(context, e);
     }
   } finally {
     if (dialogNavigator != null && dialogNavigator!.mounted) {

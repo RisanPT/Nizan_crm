@@ -1112,6 +1112,17 @@ class CalendarScreen extends HookConsumerWidget {
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Bookings failed to load (offline, server error…): say so with a
+            // retry instead of silently showing an empty calendar.
+            if (asyncBookings.hasError && !asyncBookings.isLoading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AppErrorView(
+                  error: asyncBookings.error,
+                  compact: true,
+                  onRetry: () => ref.invalidate(bookingProvider),
+                ),
+              ),
             // ── Page header ──────────────────────────────────────────────────
             if (!isMobile) ...[
               Row(
@@ -2844,6 +2855,23 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     'postponed',
   ];
 
+  // Bookings saved from this dialog — the entries passed in are a snapshot,
+  // so without this a second save (or another package of the same booking)
+  // would be built on the pre-save booking and silently undo the first edit.
+  final Map<String, Booking> _savedById = {};
+
+  /// Freshest known copy of [b]: the live cache, else what we just saved,
+  /// else the snapshot the dialog was opened with.
+  Booking _latest(Booking b, {bool watch = false}) {
+    final cache = (watch ? ref.watch(bookingProvider) : ref.read(bookingProvider))
+            .value ??
+        const <Booking>[];
+    for (final x in cache) {
+      if (x.id == b.id) return x;
+    }
+    return _savedById[b.id] ?? b;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2856,7 +2884,6 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   Future<void> _downloadPdf({BookingDisplayEntry? only}) async {
     final entries = only != null ? [only] : widget.entries;
     if (entries.isEmpty) return;
-    final messenger = ScaffoldMessenger.of(context);
     final bookingsById = <String, Booking>{};
     for (final e in entries) {
       bookingsById[e.booking.id] = e.booking;
@@ -2872,7 +2899,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
         artistName: widget.title,
       );
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _pdfBusy = false);
     }
@@ -2890,7 +2917,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => f.saving = true);
     try {
-      final booking = f.entry.booking;
+      final booking = _latest(f.entry.booking);
       final idx = f.entry.bookingItemIndex;
       final isMultiItem = booking.bookingItems.length > 1;
 
@@ -2968,10 +2995,12 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
           internalRemarks: f.remarks.text.trim(),
         );
       }
-      await ref.read(bookingProvider.notifier).updateBooking(updated);
+      final saved =
+          await ref.read(bookingProvider.notifier).updateBooking(updated);
       ref.invalidate(bookingProvider);
       if (!mounted) return;
       setState(() {
+        _savedById[saved.id] = saved;
         f.saving = false;
         f.editing = false;
       });
@@ -2979,7 +3008,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => f.saving = false);
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      showErrorSnackBar(context, e);
     }
   }
 
@@ -3212,7 +3241,7 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   // The view/edit content + action buttons for one work.
   Widget _formBody(_WorkForm f) {
     final crm = widget.crm;
-    final b = f.entry.booking;
+    final b = _latest(f.entry.booking, watch: true);
     String dot(String a, String c) =>
         [a, c].where((e) => e.trim().isNotEmpty).join(' · ');
 

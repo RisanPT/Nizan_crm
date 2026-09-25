@@ -4,6 +4,7 @@ import '../core/models/geographic_state.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final stateServiceProvider = Provider<StateService>((ref) {
   return StateService(ref.watch(dioProvider));
@@ -42,8 +43,8 @@ class StateService {
       return data
           .map((item) => GeographicState.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load states: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load states');
     }
   }
 
@@ -67,8 +68,8 @@ class StateService {
         response.data as Map<String, dynamic>,
         GeographicState.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load states: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load states');
     }
   }
 
@@ -91,16 +92,16 @@ class StateService {
           : await _dio.post('/states', data: payload);
 
       return GeographicState.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save state: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save state');
     }
   }
 
   Future<void> deleteState(String id) async {
     try {
       await _dio.delete('/states/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete state: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete state');
     }
   }
 }

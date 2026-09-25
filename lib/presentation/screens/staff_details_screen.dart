@@ -12,6 +12,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
@@ -84,12 +85,12 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
           pincodeId: _employee.pincodeId,
         );
 
+        if (!mounted) return;
         setState(() {
           _employee = updatedEmployee;
         });
 
-        ref.invalidate(employeesProvider);
-        ref.invalidate(paginatedEmployeesProvider);
+        ref.refreshData.employees();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -99,9 +100,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) {
@@ -116,9 +115,11 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
     final amountCtrl = TextEditingController();
     final reasonCtrl = TextEditingController();
     
+    var saving = false;
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
         title: const Text('Add Salary Increment'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -138,35 +139,52 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () async {
+            onPressed: saving
+                ? null
+                : () async {
               final newSalary = double.tryParse(amountCtrl.text);
               if (newSalary == null || newSalary <= 0) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid salary amount')));
+                showWarningSnackBar(context, 'Invalid salary amount');
                 return;
               }
+              setDialogState(() => saving = true);
               try {
                 await ref.read(employeeServiceProvider).addIncrement(
                   _employee.id,
                   newSalary: newSalary,
                   reason: reasonCtrl.text,
                 );
-                
-                final updatedEmp = await ref.read(employeeServiceProvider).getEmployeeById(_employee.id);
-                setState(() => _employee = updatedEmp);
-                ref.invalidate(employeesProvider);
-                ref.invalidate(paginatedEmployeesProvider);
-                ref.invalidate(staffIncrementsProvider(_employee.id));
-                
-                if (ctx.mounted) Navigator.pop(ctx);
               } catch (e) {
                 if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                  setDialogState(() => saving = false);
+                  showErrorSnackBar(ctx, e);
+                }
+                return;
+              }
+
+              // The increment is saved; refreshing the profile is best-effort
+              // so a failed reload doesn't invite a duplicate increment.
+              ref.refreshData.employees();
+              ref.refreshData.hr(); // base salary drives the payroll preview
+              ref.invalidate(staffIncrementsProvider(_employee.id));
+              try {
+                final updatedEmp = await ref
+                    .read(employeeServiceProvider)
+                    .getEmployeeById(_employee.id);
+                if (mounted) setState(() => _employee = updatedEmp);
+              } catch (_) {
+                if (mounted) {
+                  showWarningSnackBar(context,
+                      'Increment saved, but the profile could not be refreshed.');
                 }
               }
+
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text('Save'),
           ),
         ],
+      ),
       ),
     );
   }
@@ -215,8 +233,12 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 padding: EdgeInsets.symmetric(vertical: 12),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (e, _) => Text('Scorecard unavailable',
-                  style: TextStyle(color: crmColors.textSecondary)),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () =>
+                    ref.invalidate(employeeEvaluationsProvider(_employee.id)),
+              ),
               data: (list) {
                 if (list.isEmpty) {
                   return Text(
@@ -572,7 +594,12 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                               );
                             },
                             loading: () => const CircularProgressIndicator(),
-                            error: (err, stack) => Text(friendlyErrorMessage(err)),
+                            error: (err, stack) => AppErrorView(
+                              error: err,
+                              compact: true,
+                              onRetry: () => ref.invalidate(
+                                  staffIncrementsProvider(_employee.id)),
+                            ),
                           );
                         },
                       ),

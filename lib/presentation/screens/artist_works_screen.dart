@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/upload_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 Future<void> _openMapUrl(String url, BuildContext context) async {
   final uri = Uri.tryParse(url.trim());
@@ -49,9 +50,13 @@ Future<void> _makePhoneCall(String phoneNumber, BuildContext context) async {
   final cleanPhone = phoneNumber.replaceAll(RegExp(r'\s+'), '');
   final uri = Uri.tryParse('tel:$cleanPhone');
   if (uri == null) return;
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri);
-  } else if (context.mounted) {
+  var ok = false;
+  try {
+    if (await canLaunchUrl(uri)) ok = await launchUrl(uri);
+  } catch (_) {
+    ok = false; // reported below
+  }
+  if (!ok && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Could not launch phone call for $phoneNumber.')),
     );
@@ -69,9 +74,15 @@ Future<void> _openWhatsApp(String phoneNumber, BuildContext context) async {
   }
   final uri = Uri.tryParse('https://wa.me/$cleanPhone');
   if (uri == null) return;
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } else if (context.mounted) {
+  var ok = false;
+  try {
+    if (await canLaunchUrl(uri)) {
+      ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  } catch (_) {
+    ok = false; // reported below
+  }
+  if (!ok && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Could not launch WhatsApp for $phoneNumber.')),
     );
@@ -842,7 +853,8 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
             notes: _notesCtrl.text.trim(),
             attachmentUrl: uploadedUrl,
           );
-      ref.invalidate(artistCollectionsProvider);
+      ref.refreshData.collections();
+      ref.refreshData.trials(); // trial paid / balance
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -854,9 +866,7 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -2609,9 +2619,7 @@ class _ExpandedDetails extends ConsumerWidget {
                       );
                     } catch (e) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(friendlyErrorMessage(e))),
-                        );
+                        showErrorSnackBar(context, e);
                       }
                     }
                   },
@@ -2711,9 +2719,7 @@ class _ExpandedDetails extends ConsumerWidget {
       await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
 
       // Invalidate the cache to reload
-      ref.invalidate(paginatedBookingsProvider);
-      ref.invalidate(artistAssignedWorksProvider);
-      ref.invalidate(bookingProvider);
+      ref.refreshData.bookings();
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2725,12 +2731,7 @@ class _ExpandedDetails extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -2974,7 +2975,11 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
             ),
             error: (err, _) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 20.0),
-              child: Text(friendlyErrorMessage(err)),
+              child: AppErrorView(
+                error: err,
+                compact: true,
+                onRetry: () => ref.invalidate(addonServicesProvider),
+              ),
             ),
           ),
         ],
@@ -3030,9 +3035,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
       await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
 
       // Invalidate the cache to reload
-      ref.invalidate(paginatedBookingsProvider);
-      ref.invalidate(artistAssignedWorksProvider);
-      ref.invalidate(bookingProvider);
+      ref.refreshData.bookings();
 
       if (context.mounted) {
         Navigator.pop(context);
@@ -3049,16 +3052,7 @@ class _AddAddonSheetState extends ConsumerState<_AddAddonSheet> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              widget.existingAddon != null
-                  ? 'Failed to update add-on: $e'
-                  : 'Failed to add add-on: $e'
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) {
@@ -3366,6 +3360,7 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
   String get _dataKey => 'work_timer_data_${widget.booking.id}';
 
   String _timerState = 'idle'; // 'idle', 'running', 'paused', 'completed'
+  bool _completing = false;
   int _remainingSeconds = _threeHoursSeconds;
   DateTime? _startTime;
   Timer? _timer;
@@ -3499,32 +3494,41 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
   }
 
   Future<void> _completeTimer() async {
-    _timer?.cancel();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_stateKey, 'completed');
-
-    if (mounted) {
-      setState(() {
-        _timerState = 'completed';
-      });
-    }
-
+    if (_completing) return;
+    _completing = true;
     try {
-      await ref.read(bookingProvider.notifier).updateBooking(
-        widget.booking.copyWith(status: 'completed'),
-      );
+      // Save to the server FIRST. Previously the timer was marked completed
+      // locally before the request, so a failed request (e.g. no internet)
+      // left the work looking finished here while the booking was never
+      // updated, with no way to retry.
+      try {
+        await ref.read(bookingProvider.notifier).updateBooking(
+          widget.booking.copyWith(status: 'completed'),
+        );
+      } catch (e) {
+        if (mounted) showErrorSnackBar(context, e);
+        return;
+      }
+
+      _timer?.cancel();
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_stateKey, 'completed');
+      } catch (_) {
+        // Local timer persistence is best-effort; the booking is saved.
+      }
+
       if (mounted) {
+        setState(() {
+          _timerState = 'completed';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('✓ Work Marked as Completed')),
         );
       }
       await _depleteInventoryTubes();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
-      }
+    } finally {
+      _completing = false;
     }
   }
 
@@ -3536,7 +3540,7 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
     try {
       final count =
           await ref.read(inventoryServiceProvider).consumeForWork();
-      ref.invalidate(inventoryProductsProvider);
+      ref.refreshData.inventory();
       if (mounted && count > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

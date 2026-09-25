@@ -13,6 +13,7 @@ import 'package:nizan_crm/features/accounts/controllers/collection_controller.da
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/budget_controller.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class AccountsBudgetScreen extends ConsumerStatefulWidget {
   const AccountsBudgetScreen({super.key});
@@ -241,7 +242,15 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
     if (error != null) {
       return SizedBox(
         height: 300,
-        child: Center(child: Text(friendlyErrorMessage(error), style: TextStyle(color: crm.textSecondary))),
+        child: AppErrorView(
+          error: error,
+          compact: true,
+          onRetry: () {
+            ref.invalidate(collectionsProvider);
+            ref.invalidate(expensesProvider);
+            ref.invalidate(bookingProvider);
+          },
+        ),
       );
     }
 
@@ -300,7 +309,16 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
                   );
                 },
                 loading: () => const SizedBox.shrink(),
-                error: (err, stack) => const SizedBox.shrink(),
+                // Budget failed to load: offer a retry instead of silently
+                // hiding the Set Budget button.
+                error: (err, stack) => Tooltip(
+                  message: friendlyErrorMessage(err),
+                  child: TextButton.icon(
+                    onPressed: () => ref.invalidate(currentBudgetProvider),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry budget'),
+                  ),
+                ),
               ),
             ],
           ),
@@ -438,7 +456,7 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
                     show: true,
                     drawVerticalLine: false,
                     horizontalInterval: chartMaxY / 4,
-                    getDrawingHorizontalLine: (v) => FlLine(color: crm.border.withValues(alpha: 0.4), strokeWidth: 1),
+                    getDrawingHorizontalLine: (v) => FlLine(color: crm.border.faded(0.4), strokeWidth: 1),
                   ),
                   borderData: FlBorderData(show: false),
                   titlesData: FlTitlesData(
@@ -825,8 +843,8 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
                   gridData: FlGridData(
                     show: true,
                     horizontalInterval: gridInterval,
-                    getDrawingHorizontalLine: (v) => FlLine(color: crm.border.withValues(alpha: 0.4), strokeWidth: 1),
-                    getDrawingVerticalLine: (v) => FlLine(color: crm.border.withValues(alpha: 0.4), strokeWidth: 1),
+                    getDrawingHorizontalLine: (v) => FlLine(color: crm.border.faded(0.4), strokeWidth: 1),
+                    getDrawingVerticalLine: (v) => FlLine(color: crm.border.faded(0.4), strokeWidth: 1),
                   ),
                   titlesData: FlTitlesData(
                     show: true,
@@ -950,9 +968,15 @@ class _AccountsBudgetScreenState extends ConsumerState<AccountsBudgetScreen> {
               final val = double.tryParse(ctrl.text);
               if (val != null && val >= 0) {
                 final now = DateTime.now();
-                await ref.read(budgetServiceProvider).setBudget(month: now.month, year: now.year, amount: val);
-                ref.invalidate(currentBudgetProvider);
-                if (context.mounted) Navigator.pop(ctx);
+                try {
+                  await ref.read(budgetServiceProvider).setBudget(month: now.month, year: now.year, amount: val);
+                } catch (e) {
+                  // Keep the dialog open so the user can retry.
+                  if (ctx.mounted) showErrorSnackBar(ctx, e);
+                  return;
+                }
+                ref.refreshData.budget();
+                if (ctx.mounted) Navigator.pop(ctx);
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: crm.primary, foregroundColor: Colors.white),

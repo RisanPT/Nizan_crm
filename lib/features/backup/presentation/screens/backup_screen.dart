@@ -29,6 +29,7 @@ class BackupScreen extends HookConsumerWidget {
       final messenger = ScaffoldMessenger.of(context);
       try {
         final bytes = await fetch();
+        if (bytes.isEmpty) throw Exception('The backup came back empty. Please try again.');
         await saveFileBytes(filename, bytes, mime: 'application/json');
         messenger.showSnackBar(SnackBar(content: Text('Backup ready: $filename')));
       } catch (e) {
@@ -55,7 +56,7 @@ class BackupScreen extends HookConsumerWidget {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+            error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(backupTargetsProvider)),
             data: (t) => (t.departments.isEmpty && !t.full)
                 ? Center(child: Text('You don’t have backup access.', style: TextStyle(color: crm.textSecondary)))
                 : ListView(

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class DriverWorksScreen extends ConsumerStatefulWidget {
   const DriverWorksScreen({super.key});
@@ -56,7 +57,7 @@ class _DriverWorksScreenState extends ConsumerState<DriverWorksScreen>
               loading: () => const Center(
                 child: CircularProgressIndicator(color: Color(0xFF4A1942)),
               ),
-              error: (err, stack) => _buildError(err.toString()),
+              error: (err, stack) => _buildError(err),
             ),
           ),
         ],
@@ -648,14 +649,19 @@ class _DriverWorksScreenState extends ConsumerState<DriverWorksScreen>
     );
   }
 
-  Widget _buildError(String err) {
+  Widget _buildError(Object err) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 52, color: Colors.redAccent),
+            Icon(
+                isOfflineError(err)
+                    ? Icons.wifi_off_rounded
+                    : Icons.error_outline_rounded,
+                size: 52,
+                color: Colors.redAccent),
             const SizedBox(height: 16),
             const Text(
               'Failed to load works',
@@ -665,7 +671,7 @@ class _DriverWorksScreenState extends ConsumerState<DriverWorksScreen>
                   color: Color(0xFF1A1A2E)),
             ),
             const SizedBox(height: 8),
-            Text(err,
+            Text(friendlyErrorMessage(err),
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey[500], fontSize: 13)),
             const SizedBox(height: 20),

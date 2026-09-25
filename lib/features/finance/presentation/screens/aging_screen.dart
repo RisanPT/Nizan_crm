@@ -73,7 +73,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
             _toggle(crm, accent),
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(agingProvider(_key))),
           ]),
           data: (r) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -164,7 +164,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.7)),
+        border: Border.all(color: crm.border.faded(0.7)),
       ),
       child: Row(children: [
         seg('receivables', 'Receivables', Icons.call_received_rounded),
@@ -228,7 +228,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
       decoration: BoxDecoration(
         color: emphasize ? color.withValues(alpha: 0.12) : crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: emphasize ? color.withValues(alpha: 0.35) : crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: emphasize ? color.withValues(alpha: 0.35) : crm.border.faded(0.6)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
@@ -265,7 +265,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
               decoration: BoxDecoration(
                 color: crm.surface,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+                border: Border.all(color: crm.border.faded(0.6)),
               ),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(items[i].$1, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: items[i].$3)),
@@ -309,7 +309,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: overdue ? crm.destructive.withValues(alpha: 0.35) : crm.border.withValues(alpha: 0.7)),
+              border: Border.all(color: overdue ? crm.destructive.withValues(alpha: 0.35) : crm.border.faded(0.7)),
             ),
             child: Row(children: [
               Expanded(
@@ -357,7 +357,7 @@ class _AgingScreenState extends ConsumerState<AgingScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }

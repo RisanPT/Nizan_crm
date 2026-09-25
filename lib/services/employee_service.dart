@@ -8,6 +8,7 @@ import '../providers/dio_provider.dart';
 
 import '../core/auth/app_role.dart';
 import '../core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final employeeServiceProvider = Provider<EmployeeService>((ref) {
   return EmployeeService(ref.watch(dioProvider));
@@ -78,8 +79,8 @@ class EmployeeService {
       return employeesList
           .map((item) => Employee.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load employees: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load employees');
     }
   }
 
@@ -87,8 +88,8 @@ class EmployeeService {
     try {
       final response = await _dio.get('/employees/$id');
       return Employee.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to load employee: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load employee');
     }
   }
 
@@ -127,8 +128,8 @@ class EmployeeService {
         response.data as Map<String, dynamic>,
         Employee.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load employees: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load employees');
     }
   }
 
@@ -203,23 +204,16 @@ class EmployeeService {
           : await _dio.post('/employees', data: payload);
 
       return Employee.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      String errorMessage = 'Failed to save employee: ${e.message}';
-      if (e.response != null && e.response!.data != null) {
-        final data = e.response!.data;
-        if (data is Map && data['message'] != null) {
-          errorMessage = data['message'].toString();
-        }
-      }
-      throw Exception(errorMessage);
+    } catch (e) {
+      throw AppException(e, action: 'save employee');
     }
   }
 
   Future<void> deleteEmployee(String id) async {
     try {
       await _dio.delete('/employees/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete employee: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete employee');
     }
   }
 
@@ -228,8 +222,8 @@ class EmployeeService {
       final response = await _dio.get('/employees/$employeeId/increments');
       final data = response.data as List;
       return data.map((item) => SalaryIncrement.fromJson(item as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load increments: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load increments');
     }
   }
 
@@ -241,8 +235,8 @@ class EmployeeService {
         if (effectiveDate != null) 'effectiveDate': effectiveDate.toIso8601String(),
       });
       return SalaryIncrement.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to add increment: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'add increment');
     }
   }
 }

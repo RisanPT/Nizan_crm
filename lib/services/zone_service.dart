@@ -4,6 +4,7 @@ import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../core/models/zone.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final zoneServiceProvider = Provider<ZoneService>((ref) {
   return ZoneService(ref.watch(dioProvider));
@@ -36,8 +37,8 @@ class ZoneService {
       return data
           .map((item) => ZoneModel.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load zones: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load zones');
     }
   }
 
@@ -59,8 +60,8 @@ class ZoneService {
         response.data as Map<String, dynamic>,
         ZoneModel.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load zones: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load zones');
     }
   }
 
@@ -81,16 +82,16 @@ class ZoneService {
           : await _dio.post('/zones', data: payload);
 
       return ZoneModel.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save zone: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save zone');
     }
   }
 
   Future<void> deleteZone(String id) async {
     try {
       await _dio.delete('/zones/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete zone: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete zone');
     }
   }
 }

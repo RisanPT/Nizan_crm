@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class VehicleService {
   final Dio _dio;
@@ -14,8 +15,8 @@ class VehicleService {
       return data
           .map((item) => Vehicle.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load vehicles: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load vehicles');
     }
   }
 
@@ -32,8 +33,8 @@ class VehicleService {
         response.data as Map<String, dynamic>,
         Vehicle.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load vehicles: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load vehicles');
     }
   }
 
@@ -67,21 +68,16 @@ class VehicleService {
           : await _dio.post('/vehicles', data: payload);
 
       return Vehicle.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      String errorMessage = 'Failed to save vehicle: ${e.message}';
-      final data = e.response?.data;
-      if (data is Map && data['message'] != null) {
-        errorMessage = data['message'].toString();
-      }
-      throw Exception(errorMessage);
+    } catch (e) {
+      throw AppException(e, action: 'save vehicle');
     }
   }
 
   Future<void> deleteVehicle(String id) async {
     try {
       await _dio.delete('/vehicles/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete vehicle: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete vehicle');
     }
   }
 }

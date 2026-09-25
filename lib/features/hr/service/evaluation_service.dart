@@ -6,6 +6,7 @@ import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/data/timebox_models.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 typedef EvalPeriod = ({int year, int month});
 
@@ -22,8 +23,8 @@ class EvaluationService {
       return (res.data as List)
           .map((e) => EmployeeEvaluation.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load evaluations'));
+    } catch (e) {
+      throw AppException(e, action: 'load evaluations');
     }
   }
 
@@ -33,8 +34,8 @@ class EvaluationService {
       return (res.data as List)
           .map((e) => EmployeeEvaluation.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load employee evaluations'));
+    } catch (e) {
+      throw AppException(e, action: 'load employee evaluations');
     }
   }
 
@@ -64,24 +65,19 @@ class EvaluationService {
         'notes': notes,
       });
       return EmployeeEvaluation.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save evaluation'));
+    } catch (e) {
+      throw AppException(e, action: 'save evaluation');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/performance/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete evaluation'));
+    } catch (e) {
+      throw AppException(e, action: 'delete evaluation');
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return e.message ?? fallback;
-  }
 }
 
 final evaluationServiceProvider =

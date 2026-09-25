@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/notifications/controllers/notification_providers.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
@@ -51,17 +52,20 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
         color: crm.primary,
         onRefresh: () async {
           ref.invalidate(paginatedLeadsProvider);
-          await ref.read(paginatedLeadsProvider(LeadFilter(limit: 100)).future);
+          try {
+            await ref.read(paginatedLeadsProvider(LeadFilter(limit: 100)).future);
+          } catch (_) {
+            // The failure is shown by the error branch below.
+          }
         },
         child: asyncLeads.when(
           loading: () => Center(child: CircularProgressIndicator(color: crm.primary)),
+          // Kept inside a ListView so pull-to-refresh still works.
           error: (e, _) => ListView(children: [
-            const SizedBox(height: 120),
-            Icon(Icons.cloud_off_rounded, size: 48, color: crm.textSecondary),
-            const SizedBox(height: 12),
-            Center(
-              child: Text('Could not load your dashboard',
-                  style: TextStyle(color: crm.textSecondary)),
+            const SizedBox(height: 80),
+            AppErrorView(
+              error: e,
+              onRetry: () => ref.invalidate(paginatedLeadsProvider),
             ),
           ]),
           data: (page) {

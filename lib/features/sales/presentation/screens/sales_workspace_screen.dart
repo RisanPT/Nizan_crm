@@ -250,8 +250,11 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
           // Package (price shown reflects the selected district)
           asyncPackages.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text(friendlyErrorMessage(e),
-                style: TextStyle(color: crm.destructive)),
+            error: (e, _) => AppErrorView(
+              error: e,
+              compact: true,
+              onRetry: () => ref.invalidate(packagesProvider),
+            ),
             data: (packages) => DropdownButtonFormField<String>(
               isExpanded: true,
               initialValue: _package?.id,
@@ -522,7 +525,13 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
 
   /// Pick an existing service package and add it as a line item (name + price).
   Future<void> _addPackageDialog() async {
-    final packages = await ref.read(packagesProvider.future);
+    final List<ServicePackage> packages;
+    try {
+      packages = await ref.read(packagesProvider.future);
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+      return;
+    }
     if (!mounted) return;
     if (packages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -605,9 +614,7 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
       ));
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _generating = false);

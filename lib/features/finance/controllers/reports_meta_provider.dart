@@ -65,7 +65,7 @@ class ReportsMetaNotifier extends Notifier<ReportsMeta> {
     state = state.copyWith(favorites: favs);
     try {
       await _prefs?.setStringList(_favKey, favs.toList());
-    } catch (_) {}
+    } catch (_) {} // Best-effort local persistence; in-memory state already updated.
   }
 
   Future<void> recordVisit(String key) async {
@@ -76,7 +76,7 @@ class ReportsMetaNotifier extends Notifier<ReportsMeta> {
         _visitKey,
         jsonEncode(visits.map((k, v) => MapEntry(k, v.toIso8601String()))),
       );
-    } catch (_) {}
+    } catch (_) {} // Best-effort local persistence; in-memory state already updated.
   }
 }
 

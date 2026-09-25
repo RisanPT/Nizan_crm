@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/dio_provider.dart';
 import '../core/providers/auth_provider.dart';
+import '../core/error/errors.dart';
 
 final reportServiceProvider = Provider<ReportService>((ref) {
   final dio = ref.watch(dioProvider);
@@ -41,7 +42,8 @@ class ReportService {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-      throw 'Could not launch $uri';
+      // Don't put the URL in the message: it carries the auth token.
+      throw const AppException(null, action: 'open the finance report');
     }
   }
 }

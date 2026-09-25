@@ -22,6 +22,7 @@ import 'package:nizan_crm/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 // ─────────────────────────────────────────────────────────
 //  Smart-paste parser
@@ -234,9 +235,7 @@ Future<void> _launchCall(BuildContext context, String phone) async {
     await launchUrl(uri);
   } else {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot launch call to $cleaned')),
-      );
+      showErrorSnackBar(context, null, fallback: 'Cannot launch call to $cleaned');
     }
   }
 }
@@ -331,8 +330,8 @@ class SalesLeadsScreen extends HookConsumerWidget {
       // list is EVERYONE's leads, so arming an alarm per lead would be wrong.
       if (session?.role != 'sales') return null;
       Future.microtask(() async {
-        await FollowUpAlarmService.instance.requestPermissions();
         try {
+          await FollowUpAlarmService.instance.requestPermissions();
           final res = await ref
               .read(leadServiceProvider)
               .getLeads(LeadFilter(page: 1, limit: 2000, status: 'Follow-up'));
@@ -425,7 +424,11 @@ class SalesLeadsScreen extends HookConsumerWidget {
                 padding: EdgeInsets.all(32.0),
                 child: CircularProgressIndicator(),
               )),
-              error: (err, stack) => AppErrorView(error: err),
+              error: (err, stack) => AppErrorView(
+                error: err,
+                compact: true,
+                onRetry: () => ref.invalidate(paginatedLeadsProvider(filter)),
+              ),
               data: (paginated) {
                 final leads = paginated.items;
 
@@ -904,9 +907,7 @@ class _AddLeadCard extends HookConsumerWidget {
                 isMobile ? 16 : 24,
                 isMobile ? 20 : 24,
               ),
-              child: _LeadForm(
-                onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
-              ),
+              child: const _LeadForm(),
             ),
         ],
       ),
@@ -984,9 +985,8 @@ class _FormGrid extends StatelessWidget {
 // ─────────────────────────────────────────────────────────
 class _LeadForm extends HookConsumerWidget {
   final Lead? initialLead; // null = add new
-  final VoidCallback onSaved;
 
-  const _LeadForm({this.initialLead, required this.onSaved});
+  const _LeadForm({this.initialLead});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1143,8 +1143,9 @@ class _LeadForm extends HookConsumerWidget {
                 // User accepted the duplicate — tell the server to allow it.
                 allowDuplicate = true;
               }
-            } catch (e) {
-              // Ignore search errors and proceed
+            } catch (_) {
+              // Best-effort duplicate pre-check only: the save below still
+              // runs and reports any real failure (offline, server error…).
             }
           }
         }
@@ -1221,7 +1222,9 @@ class _LeadForm extends HookConsumerWidget {
           }
         }
 
-        onSaved();
+        // Refresh here (not via a caller callback) so it runs even if the row
+        // that opened this dialog was rebuilt away meanwhile.
+        ref.refreshData.leads();
         if (context.mounted) {
           if (isEditing) Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1233,12 +1236,10 @@ class _LeadForm extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e))),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        isSaving.value = false;
+        if (context.mounted) isSaving.value = false;
       }
     }
 
@@ -1387,7 +1388,7 @@ class _LeadForm extends HookConsumerWidget {
           ),
           child: InputDecorator(
             decoration: const InputDecoration(
-              labelText: 'Booked Date',
+              labelText: 'Booked On (date of booking)',
               prefixIcon: Icon(Icons.bookmark_added_outlined),
             ),
             child: Row(
@@ -1836,7 +1837,9 @@ bool _isKnownSource(String? s) {
 // ─────────────────────────────────────────────────────────
 //  Edit Lead Dialog / Bottom Sheet
 // ─────────────────────────────────────────────────────────
-Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) async {
+/// Opens the full Edit Lead form (sheet on mobile, dialog on desktop). Public so
+/// the lead detail page reuses the exact same form.
+Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) async {
   final isMobile = ResponsiveBuilder.isMobile(context);
   if (isMobile) {
     await showModalBottomSheet(
@@ -1881,7 +1884,6 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                   child: Consumer(
                     builder: (ctx, ref, _) => _LeadForm(
                       initialLead: lead,
-                      onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
                     ),
                   ),
                 ),
@@ -1923,7 +1925,6 @@ Future<void> _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) asy
                 Consumer(
                   builder: (ctx, ref, _) => _LeadForm(
                     initialLead: lead,
-                    onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider),
                   ),
                 ),
               ],
@@ -1962,7 +1963,7 @@ Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) asyn
   if (confirmed != true) return;
   try {
     await ref.read(leadServiceProvider).deleteLead(lead.id);
-    ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider);
+    ref.refreshData.leads();
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -1973,9 +1974,7 @@ Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Lead lead) asyn
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(friendlyErrorMessage(e))),
-      );
+      showErrorSnackBar(context, e);
     }
   }
 }
@@ -2023,7 +2022,7 @@ class _LeadsTable extends ConsumerWidget {
         flexible: flexible,
         showAssignedTo: isSalesManager,
         assignedName: assignedName,
-        onEdit: () => _showEditDialog(context, ref, lead),
+        onEdit: () => showLeadEditDialog(context, ref, lead),
         onDelete: () => _confirmDelete(context, ref, lead),
         onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
         onConvert: () => convertLeadToBooking(context, lead),
@@ -2256,17 +2255,19 @@ class _LeadCardState extends State<_LeadCard> {
                   const SizedBox(height: 6),
                   _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
                   const SizedBox(height: 6),
+                  // Two separate dates once converted: the event itself (from
+                  // the booking) and the day the booking was made.
                   _InfoRow(
                     icon: Icons.calendar_today_outlined,
                     label: 'Event Date',
-                    value: _fmtDate(lead.enquiryDate),
+                    value: _fmtDate(lead.eventDate ?? lead.enquiryDate),
                   ),
                   if (lead.bookedDate != null || lead.followUpDate != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     if (lead.bookedDate != null)
                       _InfoRow(
                         icon: Icons.bookmark_added_outlined,
-                        label: 'Booked',
+                        label: 'Booked On',
                         value: _fmtDate(lead.bookedDate!),
                         valueColor: const Color(0xFF22C55E),
                       ),
@@ -2585,12 +2586,7 @@ Future<void> _runWithReportLoader({
     await action();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorMessage(e)),
-          backgroundColor: crmColors.destructive,
-        ),
-      );
+      showErrorSnackBar(context, e);
     }
   } finally {
     if (dialogNavigator != null && dialogNavigator!.mounted) {
@@ -2623,9 +2619,7 @@ Future<void> _launchWhatsApp(BuildContext context, String phone) async {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   } else {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cannot open WhatsApp for $cleaned')),
-      );
+      showErrorSnackBar(context, null, fallback: 'Cannot open WhatsApp for $cleaned');
     }
   }
 }
@@ -2697,16 +2691,15 @@ void _showRecordOutcomeDialog(BuildContext context, WidgetRef ref, Lead lead) {
   showDialog(
     context: context,
     builder: (context) {
-      return _RecordOutcomeDialog(lead: lead, onSaved: () => ref..invalidate(leadsProvider)..invalidate(paginatedLeadsProvider)..invalidate(leadClustersProvider));
+      return _RecordOutcomeDialog(lead: lead);
     },
   );
 }
 
 class _RecordOutcomeDialog extends HookConsumerWidget {
   final Lead lead;
-  final VoidCallback onSaved;
 
-  const _RecordOutcomeDialog({required this.lead, required this.onSaved});
+  const _RecordOutcomeDialog({required this.lead});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -2778,7 +2771,9 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
               competitorName: competitorCtrl.text.trim(),
               lostAttachment: lostAttachmentPath.value,
             );
-        onSaved();
+        // Refresh here (not via a caller callback) so it runs even if the row
+        // that opened this dialog was rebuilt away meanwhile.
+        ref.refreshData.leads();
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2792,12 +2787,10 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e))),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        isSaving.value = false;
+        if (context.mounted) isSaving.value = false;
       }
     }
 
@@ -2811,7 +2804,9 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
               approve: approve,
               note: reviewNoteCtrl.text.trim(),
             );
-        onSaved();
+        // Refresh here (not via a caller callback) so it runs even if the row
+        // that opened this dialog was rebuilt away meanwhile.
+        ref.refreshData.leads();
         if (context.mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2825,12 +2820,10 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e))),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        isSaving.value = false;
+        if (context.mounted) isSaving.value = false;
       }
     }
 
@@ -2893,7 +2886,9 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
           }
         }
 
-        onSaved();
+        // Refresh here (not via a caller callback) so it runs even if the row
+        // that opened this dialog was rebuilt away meanwhile.
+        ref.refreshData.leads();
 
         if (context.mounted) {
           Navigator.of(context).pop();
@@ -2910,12 +2905,10 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e))),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
-        isSaving.value = false;
+        if (context.mounted) isSaving.value = false;
       }
     }
 

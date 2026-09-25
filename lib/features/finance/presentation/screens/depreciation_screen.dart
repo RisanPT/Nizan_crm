@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/data/depreciation.dart';
@@ -43,7 +44,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(depreciationScheduleProvider(_asOfIso))),
           ]),
           data: (s) => ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -76,7 +77,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+              border: Border.all(color: crm.border.faded(0.8)),
             ),
             child: Row(children: [
               Icon(Icons.event_outlined, size: 18, color: crm.textSecondary),
@@ -106,7 +107,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Row(children: [
@@ -148,7 +149,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+          border: Border.all(color: crm.border.faded(0.8)),
         ),
         child: Column(children: [
           Icon(Icons.trending_down_outlined, size: 40, color: crm.border),
@@ -168,7 +169,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Container(
@@ -188,7 +189,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
 
   Widget _row(CrmTheme crm, DepreciationRow r) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             flex: 5,
@@ -222,7 +223,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
     final async = ref.watch(depreciationRunsProvider);
     return async.when(
       loading: () => const SizedBox.shrink(),
-      error: (_, _) => const SizedBox.shrink(),
+      error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(depreciationRunsProvider)),
       data: (runs) {
         if (runs.isEmpty) return const SizedBox.shrink();
         return Container(
@@ -230,7 +231,7 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
           decoration: BoxDecoration(
             color: crm.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+            border: Border.all(color: crm.border.faded(0.8)),
           ),
           child: Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -296,10 +297,8 @@ class _DepreciationScreenState extends ConsumerState<DepreciationScreen> {
     setState(() => _busy = true);
     try {
       final res = await ref.read(assetServiceProvider).runDepreciation(asOf: _asOf);
-      ref.invalidate(depreciationScheduleProvider(_asOfIso));
-      ref.invalidate(depreciationRunsProvider);
-      ref.invalidate(assetsProvider);
-      ref.invalidate(assetStatsProvider);
+      // Posts a voucher + changes book values: assets, schedule, runs, ledger.
+      ref.refreshData.assets();
       if (mounted) {
         messenger.showSnackBar(SnackBar(
           content: Text(res.posted

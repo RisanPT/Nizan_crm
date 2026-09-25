@@ -80,7 +80,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: accountsAsync.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(chartAccountsProvider('all'))),
             data: (accounts) {
               final sorted = [...accounts]..sort((a, b) => a.code.compareTo(b.code));
               _accountId ??= sorted.isNotEmpty ? sorted.first.id : null;
@@ -124,7 +124,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       onRefresh: () async => ref.invalidate(ledgerProvider(key)),
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ListView(children: [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))))]),
+        error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => ref.invalidate(ledgerProvider(key)))]),
         data: (l) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
@@ -148,7 +148,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
               decoration: BoxDecoration(
                 color: crm.surface,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+                border: Border.all(color: crm.border.faded(0.8)),
               ),
               child: Row(children: [
                 Expanded(
@@ -188,7 +188,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                   decoration: BoxDecoration(
                     color: crm.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+                    border: Border.all(color: crm.border.faded(0.8)),
                   ),
                   child: Column(children: [
                     // header
@@ -247,15 +247,14 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
 
   Widget _openingRow(CrmTheme crm, AccountLedger l) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
         child: Row(children: [
           Expanded(flex: 4, child: Text('Opening balance', style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: crm.textSecondary))),
           const Expanded(flex: 2, child: SizedBox()),
@@ -272,7 +271,7 @@ class _LedgerScreenState extends ConsumerState<LedgerScreen> {
                 '/company-finance/journal?q=${Uri.encodeComponent(r.voucherNo.trim())}'),
         child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             flex: 4,

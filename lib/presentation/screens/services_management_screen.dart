@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/error/errors.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/list_page_params.dart';
 import '../../core/models/zone.dart';
@@ -16,6 +17,7 @@ import '../../services/zone_service.dart';
 import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class ServicesManagementScreen extends HookConsumerWidget {
   const ServicesManagementScreen({super.key});
@@ -309,11 +311,9 @@ class ServicesManagementScreen extends HookConsumerWidget {
         Expanded(
           child: asyncPackages.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load packages: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
+            error: (error, stack) => AppErrorView(
+              error: error,
+              onRetry: () => ref.invalidate(paginatedPackagesProvider),
             ),
             data: (response) {
               var packages = response.items;
@@ -455,9 +455,12 @@ class ServicesManagementScreen extends HookConsumerWidget {
                                                 ),
                                               );
                                               if (confirm == true) {
-                                                await ref.read(packageServiceProvider).deletePackage(package.id);
-                                                ref.invalidate(packagesProvider);
-                                                ref.invalidate(paginatedPackagesProvider);
+                                                try {
+                                                  await ref.read(packageServiceProvider).deletePackage(package.id);
+                                                  ref.refreshData.packages();
+                                                } catch (e) {
+                                                  if (context.mounted) showErrorSnackBar(context, e);
+                                                }
                                               }
                                             },
                                             tooltip: 'Delete Package',

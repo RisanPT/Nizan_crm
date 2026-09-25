@@ -1,14 +1,11 @@
 import 'package:dio/dio.dart';
-import 'package:nizan_crm/core/error/error_message.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/data/depreciation.dart';
 
 class AssetService {
   final Dio _dio;
   AssetService(this._dio);
-
-  String _msg(DioException e, String fallback) =>
-      friendlyErrorMessage(e, fallback: fallback);
 
   /// [type] = 'digital' | 'physical' | 'all'.
   Future<List<Asset>> getAssets({String type = 'all', String? search}) async {
@@ -20,8 +17,8 @@ class AssetService {
       return (res.data as List)
           .map((e) => Asset.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load assets'));
+    } catch (e) {
+      throw AppException(e, action: 'load assets');
     }
   }
 
@@ -29,8 +26,8 @@ class AssetService {
     try {
       final res = await _dio.get('/assets/stats');
       return AssetStats.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load asset stats'));
+    } catch (e) {
+      throw AppException(e, action: 'load asset stats');
     }
   }
 
@@ -40,16 +37,16 @@ class AssetService {
           ? await _dio.post('/assets', data: body)
           : await _dio.put('/assets/$id', data: body);
       return Asset.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save asset'));
+    } catch (e) {
+      throw AppException(e, action: 'save asset');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/assets/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete asset'));
+    } catch (e) {
+      throw AppException(e, action: 'delete asset');
     }
   }
 
@@ -59,8 +56,8 @@ class AssetService {
       final res = await _dio.get('/assets/depreciation/schedule',
           queryParameters: {if (asOf != null) 'asOf': asOf.toIso8601String()});
       return DepreciationSchedule.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load depreciation schedule'));
+    } catch (e) {
+      throw AppException(e, action: 'load depreciation schedule');
     }
   }
 
@@ -69,8 +66,8 @@ class AssetService {
       final res = await _dio.post('/assets/depreciation/run',
           data: {if (asOf != null) 'asOf': asOf.toIso8601String()});
       return DepreciationRunResult.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to run depreciation'));
+    } catch (e) {
+      throw AppException(e, action: 'run depreciation');
     }
   }
 
@@ -80,8 +77,8 @@ class AssetService {
       return (res.data as List)
           .map((e) => DepreciationRunSummary.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load depreciation runs'));
+    } catch (e) {
+      throw AppException(e, action: 'load depreciation runs');
     }
   }
 }

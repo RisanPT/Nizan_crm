@@ -228,9 +228,13 @@ class _AccountsDashboardScreenState
     if (loading) {
       body = const Center(child: CircularProgressIndicator());
     } else if (error != null) {
-      body = Center(
-        child: Text(friendlyErrorMessage(error),
-            style: TextStyle(color: crm.textSecondary)),
+      body = AppErrorView(
+        error: error,
+        onRetry: () {
+          ref.invalidate(collectionsProvider);
+          ref.invalidate(expensesProvider);
+          ref.invalidate(bookingProvider);
+        },
       );
     } else {
       body = _buildContent(
@@ -1210,7 +1214,7 @@ class _BarPanel extends StatelessWidget {
               drawVerticalLine: false,
               horizontalInterval: maxY / 4,
               getDrawingHorizontalLine: (v) => FlLine(
-                  color: crm.border.withValues(alpha: 0.6), strokeWidth: 1),
+                  color: crm.border.faded(0.6), strokeWidth: 1),
             ),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(

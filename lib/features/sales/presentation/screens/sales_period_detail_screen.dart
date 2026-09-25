@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/crm_user.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
@@ -59,20 +60,13 @@ class SalesPeriodDetailScreen extends ConsumerWidget {
 
     final failure = asyncBookings.error ?? asyncLeads.error ?? asyncUsers.error;
     if (failure != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, size: 36, color: crm.textSecondary),
-              12.h,
-              Text('$failure',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-            ],
-          ),
-        ),
+      return AppErrorView(
+        error: failure,
+        onRetry: () {
+          ref.invalidate(bookingProvider);
+          ref.invalidate(leadsProvider);
+          ref.invalidate(crmUsersProvider);
+        },
       );
     }
 
@@ -302,7 +296,7 @@ class SalesPeriodDetailScreen extends ConsumerWidget {
                   show: true,
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (_) => FlLine(
-                      color: crm.border.withValues(alpha: 0.6), strokeWidth: 1),
+                      color: crm.border.faded(0.6), strokeWidth: 1),
                 ),
                 borderData: FlBorderData(show: false),
                 titlesData: FlTitlesData(

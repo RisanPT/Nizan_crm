@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../core/models/auth_session.dart';
 import '../providers/dio_provider.dart';
+import '../core/error/errors.dart';
 
 class AuthService {
   AuthService()
@@ -28,9 +29,11 @@ class AuthService {
       );
 
       return AuthSession.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (error) {
-      final message = _extractMessage(error) ?? 'Failed to sign in';
-      throw Exception(message);
+    } catch (error) {
+      // Keep the original error: the backend's own message (e.g. invalid email
+      // or password) is shown as-is, and a network failure reads as
+      // "can't reach the server" instead of a generic failure.
+      throw AppException(error, action: 'sign in');
     }
   }
 
@@ -46,17 +49,8 @@ class AuthService {
         'token': token,
         'user': data['user'],
       });
-    } on DioException catch (error) {
-      final message = _extractMessage(error) ?? 'Failed to restore session';
-      throw Exception(message);
+    } catch (error) {
+      throw AppException(error, action: 'restore your session');
     }
-  }
-
-  String? _extractMessage(DioException error) {
-    final data = error.response?.data;
-    if (data is Map<String, dynamic>) {
-      return data['message'] as String? ?? data['details'] as String?;
-    }
-    return error.message;
   }
 }

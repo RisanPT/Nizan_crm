@@ -76,7 +76,8 @@ class _DriverReviewsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => AppErrorView(error: e),
+      error: (e, st) => AppErrorView(
+          error: e, onRetry: () => ref.invalidate(managerReviewsProvider)),
     );
   }
 }
@@ -115,7 +116,8 @@ class _AccidentsTab extends ConsumerWidget {
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, st) => AppErrorView(error: e),
+      error: (e, st) => AppErrorView(
+          error: e, onRetry: () => ref.invalidate(managerAccidentsProvider)),
     );
   }
 }

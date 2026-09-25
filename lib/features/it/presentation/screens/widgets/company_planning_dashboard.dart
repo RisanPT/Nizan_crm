@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -96,6 +97,18 @@ class CompanyPlanningDashboard extends ConsumerWidget {
               label: const Text('Full portfolio'),
             ),
           ]),
+          // Don't let a failed load masquerade as "0 projects / 0 OKRs".
+          if (projectsAsync.hasError || okrsAsync.hasError) ...[
+            const SizedBox(height: 10),
+            AppErrorView(
+              error: projectsAsync.error ?? okrsAsync.error,
+              compact: true,
+              onRetry: () {
+                ref.invalidate(companyProjectsProvider);
+                ref.invalidate(planningOkrsProvider);
+              },
+            ),
+          ],
           const SizedBox(height: 10),
           InvStatGrid(isMobile: isMobile, stats: [
             InvStat('${projects.length}', 'Projects', Icons.hub_outlined, crm.primary),

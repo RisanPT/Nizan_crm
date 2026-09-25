@@ -1,5 +1,5 @@
 import 'package:dio/dio.dart';
-import 'package:nizan_crm/core/error/error_message.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/data/report_models.dart';
@@ -13,9 +13,6 @@ class AccountingService {
   final Dio _dio;
   AccountingService(this._dio);
 
-  String _msg(DioException e, String fallback) =>
-      friendlyErrorMessage(e, fallback: fallback);
-
   // ── Chart of Accounts ──
   Future<List<ChartAccount>> getAccounts({String nature = 'all'}) async {
     try {
@@ -24,8 +21,8 @@ class AccountingService {
       return (res.data as List)
           .map((e) => ChartAccount.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load accounts'));
+    } catch (e) {
+      throw AppException(e, action: 'load accounts');
     }
   }
 
@@ -33,8 +30,8 @@ class AccountingService {
     try {
       final res = await _dio.post('/accounting/accounts/seed');
       return (res.data as Map)['inserted'] as int? ?? 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to seed accounts'));
+    } catch (e) {
+      throw AppException(e, action: 'seed accounts');
     }
   }
 
@@ -44,16 +41,16 @@ class AccountingService {
           ? await _dio.post('/accounting/accounts', data: body)
           : await _dio.put('/accounting/accounts/$id', data: body);
       return ChartAccount.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save account'));
+    } catch (e) {
+      throw AppException(e, action: 'save account');
     }
   }
 
   Future<void> deleteAccount(String id) async {
     try {
       await _dio.delete('/accounting/accounts/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete account'));
+    } catch (e) {
+      throw AppException(e, action: 'delete account');
     }
   }
 
@@ -74,8 +71,8 @@ class AccountingService {
       return (res.data as List)
           .map((e) => JournalEntry.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load journal'));
+    } catch (e) {
+      throw AppException(e, action: 'load journal');
     }
   }
 
@@ -83,16 +80,16 @@ class AccountingService {
     try {
       final res = await _dio.post('/accounting/journal', data: body);
       return JournalEntry.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to post entry'));
+    } catch (e) {
+      throw AppException(e, action: 'post entry');
     }
   }
 
   Future<void> voidJournal(String id) async {
     try {
       await _dio.delete('/accounting/journal/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to void entry'));
+    } catch (e) {
+      throw AppException(e, action: 'void entry');
     }
   }
 
@@ -110,8 +107,8 @@ class AccountingService {
         ),
       );
       return (res.data as Map)['totalPosted'] as int? ?? 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to sync ledger'));
+    } catch (e) {
+      throw AppException(e, action: 'sync ledger');
     }
   }
 
@@ -123,8 +120,8 @@ class AccountingService {
         'to': ?to,
       });
       return TrialBalance.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load trial balance'));
+    } catch (e) {
+      throw AppException(e, action: 'load trial balance');
     }
   }
 
@@ -135,8 +132,8 @@ class AccountingService {
         'to': ?to,
       });
       return PnlReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load P&L'));
+    } catch (e) {
+      throw AppException(e, action: 'load P&L');
     }
   }
 
@@ -145,8 +142,8 @@ class AccountingService {
       final res = await _dio.get('/accounting/balance-sheet',
           queryParameters: {'to': ?to});
       return BalanceSheetReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load balance sheet'));
+    } catch (e) {
+      throw AppException(e, action: 'load balance sheet');
     }
   }
 
@@ -159,8 +156,8 @@ class AccountingService {
         queryParameters: {if (asOf != null && asOf.isNotEmpty) 'asOf': asOf},
       );
       return AgingReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load $kind'));
+    } catch (e) {
+      throw AppException(e, action: 'load $kind');
     }
   }
 
@@ -173,8 +170,8 @@ class AccountingService {
         if (phone.isNotEmpty) 'phone': phone,
       });
       return PartyStatement.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load statement'));
+    } catch (e) {
+      throw AppException(e, action: 'load statement');
     }
   }
 
@@ -183,8 +180,8 @@ class AccountingService {
     try {
       final res = await _dio.get('/accounting/gst/settings');
       return GstSettings.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load GST settings'));
+    } catch (e) {
+      throw AppException(e, action: 'load GST settings');
     }
   }
 
@@ -192,8 +189,8 @@ class AccountingService {
     try {
       final res = await _dio.put('/accounting/gst/settings', data: s.toJson());
       return GstSettings.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save GST settings'));
+    } catch (e) {
+      throw AppException(e, action: 'save GST settings');
     }
   }
 
@@ -204,8 +201,8 @@ class AccountingService {
         'to': ?to,
       });
       return GstSummary.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load GST summary'));
+    } catch (e) {
+      throw AppException(e, action: 'load GST summary');
     }
   }
 
@@ -213,8 +210,8 @@ class AccountingService {
     try {
       final res = await _dio.get('/accounting/settings');
       return AccountingSettings.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load settings'));
+    } catch (e) {
+      throw AppException(e, action: 'load settings');
     }
   }
 
@@ -224,8 +221,8 @@ class AccountingService {
       final res = await _dio.put('/accounting/settings',
           data: {'lockDate': lockDate?.toIso8601String()});
       return AccountingSettings.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update period lock'));
+    } catch (e) {
+      throw AppException(e, action: 'update period lock');
     }
   }
 
@@ -236,8 +233,8 @@ class AccountingService {
         'to': ?to,
       });
       return AccountLedger.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load ledger'));
+    } catch (e) {
+      throw AppException(e, action: 'load ledger');
     }
   }
 
@@ -248,8 +245,8 @@ class AccountingService {
         'to': ?to,
       });
       return Gstr1Report.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load GSTR-1'));
+    } catch (e) {
+      throw AppException(e, action: 'load GSTR-1');
     }
   }
 
@@ -260,8 +257,8 @@ class AccountingService {
       return (res.data as List)
           .map((e) => BankAccountRef.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load bank accounts'));
+    } catch (e) {
+      throw AppException(e, action: 'load bank accounts');
     }
   }
 
@@ -280,8 +277,8 @@ class AccountingService {
         ),
       );
       return ImportResult.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to import statement'));
+    } catch (e) {
+      throw AppException(e, action: 'import statement');
     }
   }
 
@@ -290,8 +287,8 @@ class AccountingService {
       final res = await _dio.get('/accounting/bank/reconciliation',
           queryParameters: {'bankAccountId': bankAccountId});
       return Reconciliation.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load reconciliation'));
+    } catch (e) {
+      throw AppException(e, action: 'load reconciliation');
     }
   }
 
@@ -300,8 +297,8 @@ class AccountingService {
       final res = await _dio.post('/accounting/bank/auto-match',
           data: {'bankAccountId': bankAccountId, 'dateWindowDays': dateWindowDays});
       return (res.data as Map)['matched'] as int? ?? 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to auto-match'));
+    } catch (e) {
+      throw AppException(e, action: 'auto-match transactions');
     }
   }
 
@@ -309,8 +306,8 @@ class AccountingService {
     try {
       await _dio.post('/accounting/bank/match',
           data: {'statementLineId': statementLineId, 'entryId': entryId});
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to match'));
+    } catch (e) {
+      throw AppException(e, action: 'match the transaction');
     }
   }
 
@@ -318,8 +315,8 @@ class AccountingService {
     try {
       await _dio.post('/accounting/bank/unmatch',
           data: {'statementLineId': statementLineId});
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to unmatch'));
+    } catch (e) {
+      throw AppException(e, action: 'unmatch the transaction');
     }
   }
 
@@ -328,8 +325,8 @@ class AccountingService {
       final res = await _dio.delete('/accounting/bank/statement',
           queryParameters: {'bankAccountId': bankAccountId});
       return (res.data as Map)['deleted'] as int? ?? 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to clear statement'));
+    } catch (e) {
+      throw AppException(e, action: 'clear statement');
     }
   }
 }

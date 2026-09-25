@@ -154,7 +154,7 @@ class ItGanttChart extends StatelessWidget {
               padding: EdgeInsets.only(left: 10 + l.depth * 12, right: 6),
               decoration: BoxDecoration(
                 color: l.isGroup ? crm.background : null,
-                border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.5), width: 0.5), right: BorderSide(color: crm.border)),
+                border: Border(bottom: BorderSide(color: crm.border.faded(0.5), width: 0.5), right: BorderSide(color: crm.border)),
               ),
               child: Row(children: [
                 if (l.wbs.isNotEmpty)

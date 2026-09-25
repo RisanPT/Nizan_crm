@@ -11,6 +11,7 @@ import '../../core/utils/kerala_pincodes.dart';
 import '../../models/customer.dart';
 import '../../services/customer_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Last 10 digits of a phone number, ignoring spaces/dashes/country codes —
 /// the reliable key for matching a booking to a client.
@@ -108,6 +109,7 @@ class ClientProfileScreen extends HookConsumerWidget {
           text: current.email.contains('@placeholder') ? '' : current.email);
       String selectedStatus = current.status;
       const statuses = ['Active', 'Inactive', 'Prospect'];
+      var saving = false;
 
       await showDialog(
         context: context,
@@ -154,8 +156,10 @@ class ClientProfileScreen extends HookConsumerWidget {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  Navigator.of(ctx).pop();
+                onPressed: saving
+                    ? null
+                    : () async {
+                  setState(() => saving = true);
                   try {
                     final updated = Customer(
                       id: current.id,
@@ -173,7 +177,10 @@ class ClientProfileScreen extends HookConsumerWidget {
                     await ref
                         .read(customerServiceProvider)
                         .updateCustomer(current.id!, updated);
-                    ref.invalidate(customersProvider);
+                    // Profile + Clients Directory (paginated) + stats.
+                    ref.refreshData.customers();
+                    // Close only once saved, so a failed save keeps the edits.
+                    if (ctx.mounted) Navigator.of(ctx).pop();
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
@@ -183,10 +190,9 @@ class ClientProfileScreen extends HookConsumerWidget {
                       );
                     }
                   } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(friendlyErrorMessage(e))),
-                      );
+                    if (ctx.mounted) {
+                      setState(() => saving = false);
+                      showErrorSnackBar(ctx, e);
                     }
                   }
                 },
@@ -221,14 +227,10 @@ class ClientProfileScreen extends HookConsumerWidget {
       if (confirmed == true) {
         try {
           await ref.read(customerServiceProvider).deleteCustomer(current.id!);
-          ref.invalidate(customersProvider);
+          ref.refreshData.customers();
           if (context.mounted) context.go('/clients');
         } catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(friendlyErrorMessage(e))),
-            );
-          }
+          if (context.mounted) showErrorSnackBar(context, e);
         }
       }
     }
@@ -238,7 +240,14 @@ class ClientProfileScreen extends HookConsumerWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (asyncCustomers.hasError || customer == null) {
+    if (asyncCustomers.hasError && customer == null) {
+      return AppErrorView(
+        error: asyncCustomers.error,
+        onRetry: () => ref.invalidate(customersProvider),
+      );
+    }
+
+    if (customer == null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -398,6 +407,12 @@ class ClientProfileScreen extends HookConsumerWidget {
                 16.h,
                 if (asyncBookings.isLoading)
                   const CircularProgressIndicator()
+                else if (asyncBookings.hasError && bookings.isEmpty)
+                  AppErrorView(
+                    error: asyncBookings.error,
+                    compact: true,
+                    onRetry: () => ref.invalidate(bookingProvider),
+                  )
                 else if (bookings.isEmpty)
                   Padding(
                     padding: const EdgeInsets.all(24),

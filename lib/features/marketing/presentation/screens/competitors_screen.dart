@@ -13,6 +13,7 @@ import '../widgets/csv_upload.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Marketing → Competitor master database. Track competitors, enter weekly data
 /// manually, or bulk-import from CSV. Scores are computed server-side.
@@ -46,14 +47,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
-      ),
+      error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(competitorsProvider)),
       data: (all) {
         final monday = _thisMonday;
         final tracked = all
@@ -386,7 +380,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
             } else {
               await svc.updateCompetitor(existing.id, model);
             }
-            ref.invalidate(competitorsProvider);
+            ref.refreshData.competitors();
             if (dctx.mounted) Navigator.pop(dctx);
             messenger.showSnackBar(
                 SnackBar(content: Text(existing == null ? 'Added' : 'Updated')));
@@ -522,7 +516,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(marketingServiceProvider).deleteCompetitor(c.id);
-      ref.invalidate(competitorsProvider);
+      ref.refreshData.competitors();
       messenger.showSnackBar(const SnackBar(content: Text('Deleted')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -555,7 +549,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
             final res = await ref
                 .read(marketingServiceProvider)
                 .importRows(rows, weekOf: _thisMonday);
-            ref.invalidate(competitorsProvider);
+            ref.refreshData.competitors();
             final errs = (res['errors'] as List?)?.length ?? 0;
             setLocal(() {
               busy = false;
@@ -566,7 +560,7 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
           } catch (e) {
             setLocal(() {
               busy = false;
-              summary = 'Import failed: $e';
+              summary = 'Import failed: ${friendlyErrorMessage(e)}';
             });
           }
         }
@@ -595,7 +589,15 @@ class _CompetitorsScreenState extends ConsumerState<CompetitorsScreen> {
                     onPressed: busy
                         ? null
                         : () async {
-                            final text = await pickCsvFileText();
+                            String? text;
+                            try {
+                              text = await pickCsvFileText();
+                            } catch (_) {
+                              // Picker unavailable on this platform: the
+                              // paste box below still works.
+                              setLocal(() => summary = "Couldn't open the file picker. Paste the CSV below instead.");
+                              return;
+                            }
                             if (text != null) {
                               textCtrl.text = text;
                               setLocal(() => summary = null);

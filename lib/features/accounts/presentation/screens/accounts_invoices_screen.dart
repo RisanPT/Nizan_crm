@@ -420,7 +420,10 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
           );
         },
         loading: () => Center(child: CircularProgressIndicator(color: crm.primary)),
-        error: (err, stack) => AppErrorView(error: err),
+        error: (err, stack) => AppErrorView(
+          error: err,
+          onRetry: () => ref.invalidate(bookingProvider),
+        ),
       ),
     );
   }
@@ -1172,10 +1175,14 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   if (!isTrial) ...[
                     ElevatedButton.icon(
                       onPressed: () async {
-                        await printBookingDetails(
-                          b,
-                          variant: BookingPrintVariant.clientAdvanceReceipt,
-                        );
+                        try {
+                          await printBookingDetails(
+                            b,
+                            variant: BookingPrintVariant.clientAdvanceReceipt,
+                          );
+                        } catch (e) {
+                          if (mounted) showErrorSnackBar(context, e);
+                        }
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.teal.shade700,
@@ -1188,12 +1195,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   ],
                   ElevatedButton.icon(
                     onPressed: () async {
-                      await printBookingDetails(
-                        b,
-                        variant: isTrial
-                            ? BookingPrintVariant.trialInvoice
-                            : BookingPrintVariant.clientInvoice,
-                      );
+                      try {
+                        await printBookingDetails(
+                          b,
+                          variant: isTrial
+                              ? BookingPrintVariant.trialInvoice
+                              : BookingPrintVariant.clientInvoice,
+                        );
+                      } catch (e) {
+                        if (mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: crm.primary,

@@ -13,7 +13,7 @@ class TrialPackageService {
       final data = response.data as List;
       return data.map((json) => TrialPackage.fromJson(json)).toList();
     } catch (e) {
-      throw _handleError(e);
+      throw AppException(e, action: 'load trial packages');
     }
   }
 
@@ -25,7 +25,7 @@ class TrialPackageService {
       );
       return TrialPackage.fromJson(response.data);
     } catch (e) {
-      throw _handleError(e);
+      throw AppException(e, action: 'create the trial package');
     }
   }
 
@@ -37,7 +37,7 @@ class TrialPackageService {
       );
       return TrialPackage.fromJson(response.data);
     } catch (e) {
-      throw _handleError(e);
+      throw AppException(e, action: 'update the trial package');
     }
   }
 
@@ -45,9 +45,7 @@ class TrialPackageService {
     try {
       await _dio.delete('/trial-packages/$id');
     } catch (e) {
-      throw _handleError(e);
+      throw AppException(e, action: 'delete the trial package');
     }
   }
-
-  Exception _handleError(dynamic error) => Exception(friendlyErrorMessage(error));
 }

@@ -100,15 +100,9 @@ class _Gstr3bSummaryScreenState extends ConsumerState<Gstr3bSummaryScreen> {
               ? const Center(child: CircularProgressIndicator())
               : (summaryAsync.hasError || gstr1Async.hasError)
                   ? ListView(children: [
-                      Padding(
-                        padding: const EdgeInsets.all(40),
-                        child: Center(
-                          child: Text(
-                              friendlyErrorMessage(summaryAsync.error ??
-                                  gstr1Async.error!),
-                              style: TextStyle(color: crm.destructive)),
-                        ),
-                      ),
+                      AppErrorView(
+                          error: summaryAsync.error ?? gstr1Async.error,
+                          onRetry: refresh),
                     ])
                   : _body(crm, summaryAsync.value!,
                       gstr1Async.value?.rows ?? const []),
@@ -278,8 +272,7 @@ class _Gstr3bSummaryScreenState extends ConsumerState<Gstr3bSummaryScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }

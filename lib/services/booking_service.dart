@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 
 part 'booking_service.g.dart';
@@ -16,17 +17,6 @@ class BookingService {
 
   BookingService(this._dio);
 
-  String _extractErrorMessage(DioException error, String fallback) {
-    final responseData = error.response?.data;
-    if (responseData is Map<String, dynamic>) {
-      final message = responseData['message']?.toString().trim() ?? '';
-      if (message.isNotEmpty) return message;
-    }
-
-    final dioMessage = error.message?.trim() ?? '';
-    if (dioMessage.isNotEmpty) return dioMessage;
-    return fallback;
-  }
 
   Future<List<Booking>> getBookings() async {
     try {
@@ -35,10 +25,8 @@ class BookingService {
       return data
           .map((e) => Booking.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to load bookings: ${_extractErrorMessage(e, 'Unable to load bookings.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'load bookings');
     }
   }
 
@@ -85,10 +73,8 @@ class BookingService {
       return PaginatedBookingsResponse.fromJson(
         response.data as Map<String, dynamic>,
       );
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to load paginated bookings: ${_extractErrorMessage(e, 'Unable to load paginated bookings.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'load bookings');
     }
   }
 
@@ -96,10 +82,8 @@ class BookingService {
     try {
       final response = await _dio.get('/bookings/$id');
       return Booking.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to fetch booking: ${_extractErrorMessage(e, 'Unable to fetch booking.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'load the booking');
     }
   }
 
@@ -107,10 +91,8 @@ class BookingService {
     try {
       final response = await _dio.post('/bookings', data: booking.toJson());
       return Booking.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to create booking: ${_extractErrorMessage(e, 'Unable to create booking.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create booking');
     }
   }
 
@@ -121,20 +103,16 @@ class BookingService {
         data: booking.toJson(),
       );
       return Booking.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to update booking: ${_extractErrorMessage(e, 'Unable to update booking.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update booking');
     }
   }
 
   Future<void> deleteBooking(String id) async {
     try {
       await _dio.delete('/bookings/$id');
-    } on DioException catch (e) {
-      throw Exception(
-        'Failed to delete booking: ${_extractErrorMessage(e, 'Unable to delete booking.')}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'delete booking');
     }
   }
 }

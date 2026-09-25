@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -10,6 +11,7 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:nizan_crm/features/accounts/services/artist_payout_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Artist profile — the Artist Head's drill-down for one artist: their bookings,
 /// live workload, client rating, revenue contribution, plus roster controls
@@ -31,8 +33,10 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
 
-    final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
-    final bookings = ref.watch(bookingProvider).value ?? const <Booking>[];
+    final employeesAsync = ref.watch(employeesProvider);
+    final bookingsAsync = ref.watch(bookingProvider);
+    final employees = employeesAsync.value ?? const <Employee>[];
+    final bookings = bookingsAsync.value ?? const <Booking>[];
     final perfAsync = ref.watch(artistReviewPerformanceProvider(widget.artistId));
     // Freelance payouts (read-only) — total paid to this artist per booking.
     final payoutsAsync =
@@ -50,6 +54,16 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
         artist = e;
         break;
       }
+    }
+
+    if (artist == null && employeesAsync.hasError) {
+      return Scaffold(
+        backgroundColor: crm.background,
+        body: AppErrorView(
+          error: employeesAsync.error,
+          onRetry: () => ref.invalidate(employeesProvider),
+        ),
+      );
     }
 
     if (artist == null) {
@@ -125,6 +139,15 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
               ],
             ),
             14.hg,
+            if (bookingsAsync.hasError) ...[
+              AppErrorView(
+                error: bookingsAsync.error,
+                compact: true,
+                title: "This artist's bookings could not be loaded",
+                onRetry: () => ref.invalidate(bookingProvider),
+              ),
+              14.hg,
+            ],
 
             _profileCard(crm, artist),
             14.hg,
@@ -323,7 +346,12 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
             14.hg,
             async.when(
               loading: () => _muted(crm, 'Loading reviews…'),
-              error: (_, _) => _muted(crm, 'Reviews unavailable.'),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () => ref.invalidate(
+                    artistReviewPerformanceProvider(widget.artistId)),
+              ),
               data: (p) {
                 if (p.reviewCount == 0) {
                   return _muted(crm, 'No client reviews yet.');
@@ -572,7 +600,7 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
             upiId: a.upiId,
             panNumber: a.panNumber,
           );
-      ref.invalidate(employeesProvider);
+      ref.refreshData.employees();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -581,11 +609,7 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: const Color(0xFFDC2626)),
-      );
+      showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/accounts/data/expense_category.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -19,8 +20,8 @@ class ExpenseCategoryService {
       return (res.data as List)
           .map((e) => ExpenseCategory.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load categories'));
+    } catch (e) {
+      throw AppException(e, action: 'load categories');
     }
   }
 
@@ -31,8 +32,8 @@ class ExpenseCategoryService {
         if (department != null && department.isNotEmpty) 'department': department,
       });
       return ExpenseCategory.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to add category'));
+    } catch (e) {
+      throw AppException(e, action: 'add category');
     }
   }
 
@@ -43,24 +44,19 @@ class ExpenseCategoryService {
         'active': ?active,
       });
       return ExpenseCategory.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update category'));
+    } catch (e) {
+      throw AppException(e, action: 'update category');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/expense-categories/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete category'));
+    } catch (e) {
+      throw AppException(e, action: 'delete category');
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final d = e.response?.data;
-    if (d is Map && d['message'] != null) return d['message'].toString();
-    return '$fallback: ${e.message ?? ''}'.trim();
-  }
 }
 
 final expenseCategoryServiceProvider = Provider<ExpenseCategoryService>(

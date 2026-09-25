@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
@@ -26,11 +27,20 @@ class ArtistHeadDashboardScreen extends ConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final name = ref.watch(authSessionProvider)?.name ?? 'there';
 
-    final bookings = ref.watch(bookingProvider).value ?? const <Booking>[];
-    final leads = ref.watch(leadsProvider).value ?? const [];
-    final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
-    final salResult = ref.watch(salariesProvider).value;
+    final bookingsAsync = ref.watch(bookingProvider);
+    final leadsAsync = ref.watch(leadsProvider);
+    final employeesAsync = ref.watch(employeesProvider);
+    final salariesAsync = ref.watch(salariesProvider);
+    final bookings = bookingsAsync.value ?? const <Booking>[];
+    final leads = leadsAsync.value ?? const [];
+    final employees = employeesAsync.value ?? const <Employee>[];
+    final salResult = salariesAsync.value;
     final reviewsAsync = ref.watch(reviewAnalyticsProvider);
+    // Without this, a failed load just shows zeros that look like real data.
+    final loadError = bookingsAsync.error ??
+        leadsAsync.error ??
+        employeesAsync.error ??
+        salariesAsync.error;
 
     // ── Artists ──
     final artists = employees
@@ -169,6 +179,20 @@ class ArtistHeadDashboardScreen extends ConsumerWidget {
               ],
             ),
             18.gap,
+            if (loadError != null) ...[
+              AppErrorView(
+                error: loadError,
+                compact: true,
+                title: 'Some dashboard data could not be loaded',
+                onRetry: () {
+                  ref.invalidate(bookingProvider);
+                  ref.invalidate(leadsProvider);
+                  ref.invalidate(employeesProvider);
+                  ref.invalidate(salariesProvider);
+                },
+              ),
+              12.gap,
+            ],
 
             // ── KPI row ──
             _wrap(isMobile, [
@@ -548,7 +572,12 @@ class ArtistHeadDashboardScreen extends ConsumerWidget {
         'Top Performing Artists',
         async.when(
           loading: () => _muted(crm, 'Loading…'),
-          error: (_, _) => _muted(crm, 'Ratings unavailable'),
+          error: (e, _) => AppErrorView(
+            error: e,
+            compact: true,
+            onRetry: () => ProviderScope.containerOf(context, listen: false)
+                .invalidate(reviewAnalyticsProvider),
+          ),
           data: (a) => a.perArtist.isEmpty
               ? _muted(crm, 'No reviews yet.')
               : Column(

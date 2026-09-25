@@ -62,9 +62,7 @@ class ExportReportDialog<T> extends HookWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e))),
-          );
+          showErrorSnackBar(context, e);
         }
       } finally {
         isExporting.value = false;

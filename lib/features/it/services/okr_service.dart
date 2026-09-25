@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
 
@@ -48,28 +49,48 @@ class OKRService {
       query['search'] = search;
     }
 
-    final res = await _dio.get('/okrs', queryParameters: query);
-    return (res.data as List)
-        .map((e) => OKRModel.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    try {
+      final res = await _dio.get('/okrs', queryParameters: query);
+      return (res.data as List)
+          .map((e) => OKRModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load OKRs');
+    }
   }
 
   Future<OKRModel> getOKRById(String id) async {
-    final res = await _dio.get('/okrs/$id');
-    return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    try {
+      final res = await _dio.get('/okrs/$id');
+      return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    } catch (e) {
+      throw AppException(e, action: 'load the OKR');
+    }
   }
 
   Future<OKRModel> createOKR(Map<String, dynamic> data) async {
-    final res = await _dio.post('/okrs', data: data);
-    return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    try {
+      final res = await _dio.post('/okrs', data: data);
+      return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    } catch (e) {
+      throw AppException(e, action: 'create the OKR');
+    }
   }
 
   Future<OKRModel> updateOKR(String id, Map<String, dynamic> updates) async {
-    final res = await _dio.put('/okrs/$id', data: updates);
-    return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    try {
+      final res = await _dio.put('/okrs/$id', data: updates);
+      return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    } catch (e) {
+      throw AppException(e, action: 'update the OKR');
+    }
   }
 
   Future<void> deleteOKR(String id) async {
-    await _dio.delete('/okrs/$id');
+    try {
+      await _dio.delete('/okrs/$id');
+    } catch (e) {
+      throw AppException(e, action: 'delete the OKR');
+    }
   }
 }

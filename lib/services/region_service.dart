@@ -4,6 +4,7 @@ import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../core/models/service_region.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final regionServiceProvider = Provider<RegionService>((ref) {
   return RegionService(ref.watch(dioProvider));
@@ -42,8 +43,8 @@ class RegionService {
       return data
           .map((item) => ServiceRegion.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load regions: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load regions');
     }
   }
 
@@ -67,8 +68,8 @@ class RegionService {
         response.data as Map<String, dynamic>,
         ServiceRegion.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load regions: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load regions');
     }
   }
 
@@ -91,16 +92,16 @@ class RegionService {
           : await _dio.post('/regions', data: payload);
 
       return ServiceRegion.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save region: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save region');
     }
   }
 
   Future<void> deleteRegion(String id) async {
     try {
       await _dio.delete('/regions/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete region: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete region');
     }
   }
 }

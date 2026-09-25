@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/error/errors.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/models/addon_service.dart';
 import '../../core/models/list_page_params.dart';
 import '../../core/theme/crm_theme.dart';
 import '../common_widgets/paginated_footer.dart';
 import '../../services/addon_service_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class AddonServicesManagementScreen extends HookConsumerWidget {
   const AddonServicesManagementScreen({super.key});
@@ -40,6 +42,7 @@ class AddonServicesManagementScreen extends HookConsumerWidget {
         text: addonService?.description ?? '',
       );
       var status = addonService?.status ?? 'active';
+      var saving = false;
 
       await showDialog<void>(
         context: context,
@@ -104,22 +107,36 @@ class AddonServicesManagementScreen extends HookConsumerWidget {
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () async {
-                    await ref
-                        .read(addonServiceServiceProvider)
-                        .saveAddonService(
-                          id: addonService?.id,
-                          name: nameCtrl.text.trim(),
-                          price: double.tryParse(priceCtrl.text.trim()) ?? 0,
-                          description: descriptionCtrl.text.trim(),
-                          status: status,
-                        );
-                    ref.invalidate(addonServicesProvider);
-                    ref.invalidate(paginatedAddonServicesProvider);
-                    if (dialogContext.mounted) {
-                      Navigator.of(dialogContext).pop();
-                    }
-                  },
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          setState(() => saving = true);
+                          try {
+                            await ref
+                                .read(addonServiceServiceProvider)
+                                .saveAddonService(
+                                  id: addonService?.id,
+                                  name: nameCtrl.text.trim(),
+                                  price:
+                                      double.tryParse(priceCtrl.text.trim()) ??
+                                          0,
+                                  description: descriptionCtrl.text.trim(),
+                                  status: status,
+                                );
+                            ref.refreshData.addonServices();
+                            if (dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                            }
+                          } catch (e) {
+                            if (dialogContext.mounted) {
+                              showErrorSnackBar(dialogContext, e);
+                            }
+                          } finally {
+                            if (dialogContext.mounted) {
+                              setState(() => saving = false);
+                            }
+                          }
+                        },
                   child: const Text('Save'),
                 ),
               ],
@@ -167,11 +184,9 @@ class AddonServicesManagementScreen extends HookConsumerWidget {
         Expanded(
           child: asyncAddonServices.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load add-on services: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
+            error: (error, stack) => AppErrorView(
+              error: error,
+              onRetry: () => ref.invalidate(paginatedAddonServicesProvider),
             ),
             data: (response) {
               final addonServices = response.items;
@@ -214,11 +229,16 @@ class AddonServicesManagementScreen extends HookConsumerWidget {
                           ),
                           TextButton(
                             onPressed: () async {
-                              await ref
-                                  .read(addonServiceServiceProvider)
-                                  .deleteAddonService(item.id);
-                              ref.invalidate(addonServicesProvider);
-                              ref.invalidate(paginatedAddonServicesProvider);
+                              try {
+                                await ref
+                                    .read(addonServiceServiceProvider)
+                                    .deleteAddonService(item.id);
+                                ref.refreshData.addonServices();
+                              } catch (e) {
+                                if (context.mounted) {
+                                  showErrorSnackBar(context, e);
+                                }
+                              }
                             },
                             child: Text(
                               'Delete',

@@ -39,17 +39,17 @@ class _CollectionImageViewerDialogState
     }
   }
 
+  /// Throws on network failure so callers can tell the user *why* (e.g. no
+  /// internet) instead of a generic "could not load".
   Future<Uint8List?> _fetchBytes() async {
-    try {
-      final dio = Dio();
-      final response = await dio.get<List<int>>(
-        widget.url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-      if (response.statusCode == 200 && response.data != null) {
-        return Uint8List.fromList(response.data!);
-      }
-    } catch (_) {}
+    final dio = Dio();
+    final response = await dio.get<List<int>>(
+      widget.url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    if (response.statusCode == 200 && response.data != null) {
+      return Uint8List.fromList(response.data!);
+    }
     return null;
   }
 
@@ -71,15 +71,7 @@ class _CollectionImageViewerDialogState
         text: 'Collection Screenshot',
       );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }
@@ -94,15 +86,7 @@ class _CollectionImageViewerDialogState
       final xf = XFile.fromData(bytes, mimeType: 'image/jpeg', name: _fileName());
       await Share.shareXFiles([xf], text: 'Collection Screenshot');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _isBusy = false);
     }

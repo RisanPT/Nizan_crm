@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
@@ -74,9 +76,9 @@ class ArtistPayoutsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(artistPayoutsProvider),
                 ),
               ),
               data: (list) {
@@ -403,15 +405,11 @@ class ArtistPayoutsScreen extends ConsumerWidget {
                               bookingId: bookingId ?? '',
                             );
                           }
-                          ref.invalidate(artistPayoutsProvider);
-                          ref.invalidate(artistPayoutsForEmployeeProvider);
+                          ref.refreshData.payouts();
                           if (ctx.mounted) Navigator.pop(ctx);
                         } catch (e) {
                           setLocal(() => saving = false);
-                          if (ctx.mounted) {
-                            _snack(ctx, e.toString().replaceFirst('Exception: ', ''),
-                                isError: true);
-                          }
+                          if (ctx.mounted) showErrorSnackBar(ctx, e);
                         }
                       },
                 child: Text(saving ? 'Saving…' : 'Save'),
@@ -478,13 +476,10 @@ class ArtistPayoutsScreen extends ConsumerWidget {
       Future<void> Function() action, String successMsg) async {
     try {
       await action();
-      ref.invalidate(artistPayoutsProvider);
-      ref.invalidate(artistPayoutsForEmployeeProvider);
+      ref.refreshData.payouts();
       if (context.mounted) _snack(context, successMsg);
     } catch (e) {
-      if (context.mounted) {
-        _snack(context, e.toString().replaceFirst('Exception: ', ''), isError: true);
-      }
+      if (context.mounted) showErrorSnackBar(context, e);
     }
   }
 

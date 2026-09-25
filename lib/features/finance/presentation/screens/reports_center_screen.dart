@@ -78,7 +78,7 @@ class _ReportsCenterScreenState extends ConsumerState<ReportsCenterScreen> {
               child: wide
                   ? Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       SizedBox(width: 240, child: _rail(crm, meta)),
-                      Container(width: 1, color: crm.border.withValues(alpha: 0.6)),
+                      Container(width: 1, color: crm.border.faded(0.6)),
                       Expanded(child: _list(crm, meta, wide)),
                     ])
                   : Column(children: [
@@ -121,7 +121,7 @@ class _ReportsCenterScreenState extends ConsumerState<ReportsCenterScreen> {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       decoration: BoxDecoration(
         color: crm.surface,
-        border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.6))),
+        border: Border(bottom: BorderSide(color: crm.border.faded(0.6))),
       ),
       child: wide
           ? Row(children: [

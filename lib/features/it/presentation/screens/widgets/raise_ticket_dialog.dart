@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/features/it/services/ticket_service.dart';
 
@@ -77,8 +78,7 @@ class _RaiseTicketCard extends HookConsumerWidget {
           'screenshots': screenshots.value,
         });
 
-        ref.invalidate(ticketsProvider);
-        ref.invalidate(ticketStatsProvider);
+        ref.refreshData.tickets();
 
         if (context.mounted) {
           Navigator.of(context).pop(true);

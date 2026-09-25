@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 import 'package:nizan_crm/features/marketing/presentation/widgets/kerala_bookings_map.dart';
@@ -61,10 +62,7 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 60),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+                child: AppErrorView(error: e, onRetry: () => ref.invalidate(marketingInsightsProvider)),
               ),
               data: (d) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/models/crm_user.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/lead_priority.dart';
 import '../../../../core/utils/responsive_builder.dart';
@@ -95,7 +96,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                   style: TextStyle(
                       fontWeight: FontWeight.w700, color: crm.textPrimary)),
               8.h,
-              Text('$failure',
+              Text(friendlyErrorMessage(failure),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: crm.textSecondary)),
               16.h,
@@ -690,7 +691,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                             show: true,
                             drawVerticalLine: false,
                             getDrawingHorizontalLine: (_) => FlLine(
-                                color: crm.border.withValues(alpha: 0.6),
+                                color: crm.border.faded(0.6),
                                 strokeWidth: 1),
                           ),
                           borderData: FlBorderData(show: false),
@@ -767,7 +768,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                             show: true,
                             drawVerticalLine: false,
                             getDrawingHorizontalLine: (_) => FlLine(
-                                color: crm.border.withValues(alpha: 0.6),
+                                color: crm.border.faded(0.6),
                                 strokeWidth: 1),
                           ),
                           borderData: FlBorderData(show: false),
@@ -977,7 +978,7 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
                           value: item.totalLeads == 0 ? 0 : item.conversionRate / 100,
-                          backgroundColor: crm.border.withValues(alpha: 0.5),
+                          backgroundColor: crm.border.faded(0.5),
                           valueColor: AlwaysStoppedAnimation<Color>(item.color),
                           minHeight: 5,
                         ),

@@ -104,7 +104,7 @@ class ReportChrome extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
         decoration: BoxDecoration(
           color: crm.surface,
-          border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.6))),
+          border: Border(bottom: BorderSide(color: crm.border.faded(0.6))),
         ),
         child: Row(children: [
           Expanded(
@@ -153,7 +153,7 @@ class ReportChrome extends StatelessWidget {
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+              border: Border.all(color: crm.border.faded(0.8)),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<DateRangePreset>(

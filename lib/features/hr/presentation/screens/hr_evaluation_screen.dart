@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// HR 5-Pillar Evaluation — score each employee monthly on Learnability,
 /// Responsibility, Punctuality, Commitment, Leadership. Dept heads evaluate
@@ -80,10 +81,9 @@ class HrEvaluationScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 50),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+                child: AppErrorView(
+                    error: e,
+                    onRetry: () => ref.invalidate(evaluationsProvider)),
               ),
               data: (evals) {
                 final byEmp = {for (final ev in evals) ev.employeeId: ev};
@@ -383,14 +383,9 @@ class HrEvaluationScreen extends ConsumerWidget {
                           ref.invalidate(employeeEvaluationsProvider(e.id));
                           if (ctx.mounted) Navigator.pop(ctx);
                         } catch (err) {
-                          setLocal(() => saving = false);
                           if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                              content: Text(err
-                                  .toString()
-                                  .replaceFirst('Exception: ', '')),
-                              backgroundColor: const Color(0xFFDC2626),
-                            ));
+                            setLocal(() => saving = false);
+                            showErrorSnackBar(ctx, err);
                           }
                         }
                       },

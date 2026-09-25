@@ -118,7 +118,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(profitLossProvider(_range))),
           ]),
           data: (r) {
             _last = r;
@@ -138,7 +138,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
                 else
                   compareAsync!.when(
                     loading: () => const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator())),
-                    error: (e, _) => Padding(padding: const EdgeInsets.all(20), child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
+                    error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(profitLossProvider(_compareRange))),
                     data: (prev) => Column(children: _comparedSections(crm, r, prev)),
                   ),
               ],
@@ -161,7 +161,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+              border: Border.all(color: crm.border.faded(0.8)),
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<PnlCompare>(
@@ -268,7 +268,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Padding(
@@ -334,8 +334,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -355,7 +354,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Padding(

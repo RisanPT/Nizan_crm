@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/auth/workspace.dart';
 import '../../../../core/extensions/space_extension.dart';
+import '../../../../core/error/errors.dart';
 import '../../../../core/theme/crm_theme.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
@@ -31,16 +32,40 @@ class MarketingDashboardScreen extends ConsumerWidget {
     final now = DateTime.now();
 
     // ── KPI providers (each degrades independently to "—") ──
-    final leads = ref.watch(leadsProvider).value;
-    final cal = ref.watch(bookingCalendarProvider).value;
-    final camp = ref.watch(campaignsProvider).value;
-    final ins = ref.watch(marketingInsightsProvider).value;
-    final content = ref.watch(contentStatsProvider).value;
-    final reEng = ref.watch(reEngagementProvider).value;
+    final leadsAsync = ref.watch(leadsProvider);
+    final calAsync = ref.watch(bookingCalendarProvider);
+    final campAsync = ref.watch(campaignsProvider);
+    final insAsync = ref.watch(marketingInsightsProvider);
+    final contentAsync = ref.watch(contentStatsProvider);
+    final reEngAsync = ref.watch(reEngagementProvider);
+    final leads = leadsAsync.value;
+    final cal = calAsync.value;
+    final camp = campAsync.value;
+    final ins = insAsync.value;
+    final content = contentAsync.value;
+    final reEng = reEngAsync.value;
 
     // ── Competitor watch (existing logic) ──
-    final competitors = ref.watch(competitorsProvider).value ?? const <Competitor>[];
-    final board = ref.watch(rankingsProvider(null)).value;
+    final competitorsAsync = ref.watch(competitorsProvider);
+    final boardAsync = ref.watch(rankingsProvider(null));
+    final competitors = competitorsAsync.value ?? const <Competitor>[];
+    final board = boardAsync.value;
+
+    // A KPI that failed to load shows a dash; surface why (e.g. offline)
+    // instead of leaving the user guessing.
+    final loadError = <AsyncValue<Object?>>[
+      leadsAsync, calAsync, campAsync, insAsync, contentAsync, reEngAsync, competitorsAsync, boardAsync,
+    ].where((a) => a.hasError).map((a) => a.error).firstOrNull;
+    void reloadAll() {
+      ref.invalidate(leadsProvider);
+      ref.invalidate(bookingCalendarProvider);
+      ref.invalidate(campaignsProvider);
+      ref.invalidate(marketingInsightsProvider);
+      ref.invalidate(contentStatsProvider);
+      ref.invalidate(reEngagementProvider);
+      ref.invalidate(competitorsProvider);
+      ref.invalidate(rankingsProvider(null));
+    }
     final ranks = board?.rankings ?? const <CompetitorRanking>[];
     final scored = competitors.where((c) => c.score > 0).toList();
     final avg = scored.isEmpty
@@ -164,16 +189,7 @@ class MarketingDashboardScreen extends ConsumerWidget {
     ];
 
     return RefreshIndicator(
-      onRefresh: () async {
-        ref.invalidate(leadsProvider);
-        ref.invalidate(bookingCalendarProvider);
-        ref.invalidate(campaignsProvider);
-        ref.invalidate(marketingInsightsProvider);
-        ref.invalidate(contentStatsProvider);
-        ref.invalidate(reEngagementProvider);
-        ref.invalidate(competitorsProvider);
-        ref.invalidate(rankingsProvider(null));
-      },
+      onRefresh: () async => reloadAll(),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding:
@@ -187,6 +203,15 @@ class MarketingDashboardScreen extends ConsumerWidget {
           4.h,
           Text('Leads, campaigns, reviews & content — at a glance.',
               style: TextStyle(fontSize: 13, color: crm.textSecondary)),
+          if (loadError != null) ...[
+            12.h,
+            AppErrorView(
+              error: loadError,
+              compact: true,
+              title: "Some figures couldn't load",
+              onRetry: reloadAll,
+            ),
+          ],
           16.h,
           InvStatGrid(isMobile: isMobile, stats: kpis),
           if (chips.isNotEmpty) ...[

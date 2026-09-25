@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/tax_filing.dart';
 import 'package:nizan_crm/features/finance/services/month_end_service.dart' show Period;
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -15,8 +15,8 @@ class TaxFilingService {
       final res = await _dio.get('/tax-filings',
           queryParameters: {'month': month, 'year': year});
       return TaxFilingBoard.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load tax filings'));
+    } catch (e) {
+      throw AppException(e, action: 'load tax filings');
     }
   }
 
@@ -42,8 +42,8 @@ class TaxFilingService {
         'amount': amount,
         'notes': notes,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to save the filing'));
+    } catch (e) {
+      throw AppException(e, action: 'save the filing');
     }
   }
 }

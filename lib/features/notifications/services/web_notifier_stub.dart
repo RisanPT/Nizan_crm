@@ -4,4 +4,7 @@ bool get supported => false;
 
 Future<void> ensurePermission() async {}
 
-void showWebNotification(String title, String body) {}
+void showWebNotification(String title, String body,
+    {String? id, void Function()? onClick}) {}
+
+void closeWebNotification(String id) {}

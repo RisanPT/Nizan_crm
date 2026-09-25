@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/providers/my_department_provider.dart';
@@ -151,8 +152,20 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     // A single department is selected — organise its reports by folder.
     final deptReports =
         reports.where((r) => r.department == _deptFilter).toList();
-    final folders =
-        ref.watch(reportFoldersProvider(_deptFilter)).value ?? const <ReportFolder>[];
+    final foldersAsync = ref.watch(reportFoldersProvider(_deptFilter));
+    final folders = foldersAsync.value ?? const <ReportFolder>[];
+    // Without the folder list, filed reports can't be grouped (they'd silently
+    // vanish), so say so and offer a retry.
+    final folderError = foldersAsync.hasError
+        ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: AppErrorView(
+              error: foldersAsync.error,
+              compact: true,
+              onRetry: () => ref.invalidate(reportFoldersProvider(_deptFilter)),
+            ),
+          )
+        : null;
 
     if (_folder == _kUnfiled) {
       return [
@@ -168,7 +181,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     }
 
     // All folders → group by folder, with an "Unfiled" bucket at the end.
-    final children = <Widget>[];
+    final children = <Widget>[?folderError];
     for (final f in folders) {
       final inFolder = deptReports.where((r) => r.folderId == f.id).toList();
       children.add(_sectionHeader(Icons.folder_outlined, f.name, inFolder.length));
@@ -392,11 +405,11 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final bytes = await ref.read(companyReportServiceProvider).downloadBytes(r.id);
-      if (bytes.isEmpty) throw Exception('Empty file');
+      if (bytes.isEmpty) throw Exception('The file is empty or no longer available.');
       await saveFileBytes(r.downloadName, bytes);
       messenger.showSnackBar(SnackBar(content: Text('Downloaded ${r.downloadName}')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -420,14 +433,14 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     if (ok != true) return;
     try {
       await ref.read(companyReportServiceProvider).delete(r.id);
-      ref.invalidate(companyReportsProvider);
+      ref.refreshData.companyReports();
       messenger.showSnackBar(const SnackBar(content: Text('Report deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
-  String _err(Object e) => e.toString().replaceFirst('Exception: ', '');
+  String _err(Object e) => friendlyErrorMessage(e);
 
   Future<String?> _promptFolderName(String title, {String initial = ''}) async {
     final ctrl = TextEditingController(text: initial);
@@ -460,7 +473,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(companyReportServiceProvider).createFolder(name, department: dept);
-      ref.invalidate(reportFoldersProvider(dept));
+      ref.refreshData.companyReports();
       messenger.showSnackBar(SnackBar(content: Text('Folder "$name" created')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(_err(e))));
@@ -495,8 +508,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
       final messenger = ScaffoldMessenger.of(context);
       try {
         await ref.read(companyReportServiceProvider).renameFolder(f.id, name);
-        ref.invalidate(reportFoldersProvider(f.department));
-        ref.invalidate(companyReportsProvider);
+        ref.refreshData.companyReports();
         messenger.showSnackBar(const SnackBar(content: Text('Folder renamed')));
       } catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(_err(e))));
@@ -523,8 +535,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
       try {
         await ref.read(companyReportServiceProvider).deleteFolder(f.id);
         if (_folder == f.id) setState(() => _folder = null);
-        ref.invalidate(reportFoldersProvider(f.department));
-        ref.invalidate(companyReportsProvider);
+        ref.refreshData.companyReports();
         messenger.showSnackBar(const SnackBar(content: Text('Folder deleted')));
       } catch (e) {
         messenger.showSnackBar(SnackBar(content: Text(_err(e))));
@@ -584,13 +595,12 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
         final folder =
             await ref.read(companyReportServiceProvider).createFolder(name, department: r.department);
         await ref.read(companyReportServiceProvider).moveToFolder(r.id, folder.id);
-        ref.invalidate(reportFoldersProvider(r.department));
       } else {
         await ref
             .read(companyReportServiceProvider)
             .moveToFolder(r.id, choice.isEmpty ? null : choice);
       }
-      ref.invalidate(companyReportsProvider);
+      ref.refreshData.companyReports();
       messenger.showSnackBar(const SnackBar(content: Text('Report moved')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(_err(e))));
@@ -601,11 +611,17 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     final crm = context.crmColors;
     final messenger = ScaffoldMessenger.of(context);
 
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'png', 'jpg', 'jpeg'],
-      withData: true,
-    );
+    final FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'xls', 'xlsx', 'csv', 'doc', 'docx', 'png', 'jpg', 'jpeg'],
+        withData: true,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e, fallback: "Couldn't open the file picker."))));
+      return;
+    }
     if (result == null) return;
     final file = result.files.single;
     if (file.size > _maxUploadBytes) {
@@ -745,7 +761,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
                               final folder = await ref
                                   .read(companyReportServiceProvider)
                                   .createFolder(name, department: department!);
-                              ref.invalidate(reportFoldersProvider(department!));
+                              ref.refreshData.companyReports();
                               if (ctx.mounted) {
                                 setSheet(() {
                                   folders = [...folders, folder];
@@ -806,10 +822,11 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
                                       visibleToRoles: roles.toList(),
                                       folderId: folderId,
                                     );
+                                ref.refreshData.companyReports();
                                 if (ctx.mounted) Navigator.pop(ctx, true);
                               } catch (e) {
                                 setSheet(() => busy = false);
-                                messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+                                messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                               }
                             },
                       child: Text(busy ? 'Uploading…' : 'Upload'),
@@ -823,7 +840,6 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
       },
     );
     if (saved == true) {
-      ref.invalidate(companyReportsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Report uploaded')));
     }
   }

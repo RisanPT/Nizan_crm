@@ -111,7 +111,9 @@ InventoryImportResult parseInventoryImport(
   } catch (e) {
     return InventoryImportResult(
       items: const [],
-      warnings: ['Could not read the file: $e'],
+      warnings: const [
+          'Could not read the file. Make sure it is a valid .xlsx or .csv file.'
+      ],
       totalRows: 0,
       skipped: 0,
     );

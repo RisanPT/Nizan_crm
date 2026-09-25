@@ -181,18 +181,15 @@ class _AdministrativeDashboardScreenState
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.only(top: 60),
-                child: Center(
-                  child: Column(children: [
-                    Icon(Icons.cloud_off_outlined, size: 44, color: crm.destructive),
-                    12.h,
-                    Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
-                    16.h,
-                    FilledButton.icon(
-                      onPressed: () => ref.invalidate(_adminMonthProvider(_key)),
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                    ),
-                  ]),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () {
+                    // The month aggregate awaits these shared providers too;
+                    // a cached failure there would make Retry fail again.
+                    ref.invalidate(subscriptionStatsProvider);
+                    ref.invalidate(salesReturnsProvider);
+                    ref.invalidate(_adminMonthProvider(_key));
+                  },
                 ),
               ),
               data: (d) => Column(
@@ -224,7 +221,7 @@ class _AdministrativeDashboardScreenState
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+          border: Border.all(color: crm.border.faded(0.6)),
         ),
         child: Text(text, style: TextStyle(color: crm.textSecondary)),
       );
@@ -242,7 +239,7 @@ class _MonthBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.sidebar.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(icon: Icon(Icons.keyboard_arrow_left_rounded, color: crm.accent), onPressed: onPrev),
@@ -287,7 +284,7 @@ class _KpiGrid extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
@@ -355,7 +352,7 @@ class _ChartsRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+          border: Border.all(color: crm.border.faded(0.6)),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 12, offset: const Offset(0, 5))],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -432,7 +429,7 @@ class _DeptBars extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: max > 0 ? (e.value / max).clamp(0.0, 1.0) : 0,
                   minHeight: 8,
-                  backgroundColor: crm.border.withValues(alpha: 0.5),
+                  backgroundColor: crm.border.faded(0.5),
                   valueColor: AlwaysStoppedAnimation(crm.primary),
                 ),
               ),
@@ -463,7 +460,7 @@ class _StatusSplit extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: total > 0 ? (v / total).clamp(0.0, 1.0) : 0,
                 minHeight: 8,
-                backgroundColor: crm.border.withValues(alpha: 0.5),
+                backgroundColor: crm.border.faded(0.5),
                 valueColor: AlwaysStoppedAnimation(color),
               ),
             ),
@@ -496,7 +493,7 @@ class _RecentRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.7)),
+        border: Border.all(color: crm.border.faded(0.7)),
       ),
       child: Row(children: [
         Expanded(

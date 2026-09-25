@@ -94,6 +94,14 @@ class CrmTheme extends ThemeExtension<CrmTheme> {
   }
 }
 
+/// `withValues(alpha: x)` REPLACES a colour's opacity. The theme's border is
+/// black at ~8% opacity, so `crm.border.withValues(alpha: 0.6)` produced a 60%
+/// black (near-black) border. Use `crm.border.faded(0.6)` to get a lighter
+/// version of an already-translucent colour instead: it scales the opacity.
+extension ColorFade on Color {
+  Color faded(double factor) => withValues(alpha: (a * factor).clamp(0.0, 1.0));
+}
+
 extension CrmThemeExtension on BuildContext {
   CrmTheme get crmColors => Theme.of(this).extension<CrmTheme>()!;
 }

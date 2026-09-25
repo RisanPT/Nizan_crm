@@ -227,7 +227,7 @@ class _Controls extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.sidebar.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
       ),
       child: Row(
         children: [
@@ -277,7 +277,7 @@ class _Controls extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         _seg('Event date', eventBasis, crm, () => onBasis(true)),
@@ -297,7 +297,7 @@ class _Controls extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           filled: true,
           fillColor: crm.surface,
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border.withValues(alpha: 0.7))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border.faded(0.7))),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.accent)),
         ),
       ),
@@ -385,7 +385,7 @@ class _Stats extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
@@ -431,7 +431,7 @@ class _BookingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(

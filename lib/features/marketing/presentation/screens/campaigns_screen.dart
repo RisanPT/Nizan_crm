@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/marketing/data/campaign.dart';
@@ -64,10 +66,7 @@ class CampaignsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 50),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+                child: AppErrorView(error: e, onRetry: () => ref.invalidate(campaignsProvider)),
               ),
               data: (board) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,15 +396,12 @@ class CampaignsScreen extends ConsumerWidget {
                               conversions: int.tryParse(convCtrl.text.trim()) ?? 0,
                               notes: notesCtrl.text.trim(),
                             ));
-                        ref.invalidate(campaignsProvider);
+                        ref.refreshData.campaigns();
                         if (ctx.mounted) Navigator.pop(ctx);
                       } catch (e) {
                         setLocal(() => saving = false);
                         if (ctx.mounted) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                            content: Text(e.toString().replaceFirst('Exception: ', '')),
-                            backgroundColor: const Color(0xFFDC2626),
-                          ));
+                          showErrorSnackBar(ctx, e);
                         }
                       }
                     },
@@ -435,13 +431,10 @@ class CampaignsScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(campaignServiceProvider).delete(c.id);
-      ref.invalidate(campaignsProvider);
+      ref.refreshData.campaigns();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: const Color(0xFFDC2626),
-        ));
+        showErrorSnackBar(context, e);
       }
     }
   }

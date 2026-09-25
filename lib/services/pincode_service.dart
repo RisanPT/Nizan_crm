@@ -4,6 +4,7 @@ import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../core/models/pincode.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final pincodeServiceProvider = Provider<PincodeService>((ref) {
   return PincodeService(ref.watch(dioProvider));
@@ -42,8 +43,8 @@ class PincodeService {
       return data
           .map((item) => Pincode.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load pincodes: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load pincodes');
     }
   }
 
@@ -67,8 +68,8 @@ class PincodeService {
         response.data as Map<String, dynamic>,
         Pincode.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load pincodes: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load pincodes');
     }
   }
 
@@ -91,16 +92,16 @@ class PincodeService {
           : await _dio.post('/pincodes', data: payload);
 
       return Pincode.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save pincode: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save pincode');
     }
   }
 
   Future<void> deletePincode(String id) async {
     try {
       await _dio.delete('/pincodes/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete pincode: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete pincode');
     }
   }
 }

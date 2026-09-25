@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/models/salary.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -63,8 +64,8 @@ class SalaryService {
           : const SalaryStats();
 
       return SalaryQueryResult(salaries: salaries, stats: stats);
-    } on DioException catch (e) {
-      throw Exception('Failed to load salaries: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load salaries');
     }
   }
 
@@ -78,13 +79,8 @@ class SalaryService {
         'year': year,
       });
       return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to generate monthly payroll: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'generate monthly payroll');
     }
   }
 
@@ -92,13 +88,8 @@ class SalaryService {
     try {
       final response = await _dio.post('/salaries', data: payload);
       return Salary.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to create salary slip: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create salary slip');
     }
   }
 
@@ -106,13 +97,8 @@ class SalaryService {
     try {
       final response = await _dio.put('/salaries/$id', data: payload);
       return Salary.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to update salary slip: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update salary slip');
     }
   }
 
@@ -120,8 +106,8 @@ class SalaryService {
     try {
       final response = await _dio.put('/salaries/$id/approve');
       return Salary.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to approve salary: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'approve salary');
     }
   }
 
@@ -140,21 +126,16 @@ class SalaryService {
         if (notes != null && notes.isNotEmpty) 'notes': notes,
       });
       return Salary.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to record salary payment: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'record salary payment');
     }
   }
 
   Future<void> deleteSalary(String id) async {
     try {
       await _dio.delete('/salaries/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete salary slip: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete salary slip');
     }
   }
 
@@ -168,13 +149,8 @@ class SalaryService {
         'year': year,
       });
       return response.data as Map<String, dynamic>;
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to submit payroll to accounts: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'submit payroll to accounts');
     }
   }
 }

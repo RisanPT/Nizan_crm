@@ -11,6 +11,8 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class FleetVehiclesScreen extends HookConsumerWidget {
   const FleetVehiclesScreen({super.key});
@@ -250,6 +252,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                 ),
                 ElevatedButton(
                   onPressed: () async {
+                    try {
                     await ref.read(vehicleServiceProvider).saveVehicle(
                           id: vehicle?.id,
                           name: nameCtrl.text.trim(),
@@ -262,10 +265,15 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                           driverId: driverId,
                           ownershipType: ownershipType,
                         );
-                    ref.invalidate(vehiclesProvider);
-                    ref.invalidate(paginatedVehiclesProvider);
+                    ref.refreshData.vehicles();
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
+                    }
+                    } catch (e) {
+                      // Keep the dialog open so the user can fix and retry.
+                      if (dialogContext.mounted) {
+                        showErrorSnackBar(dialogContext, e);
+                      }
                     }
                   },
                   child: const Text('Save'),
@@ -323,14 +331,18 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         ),
       );
       if (confirm == true) {
-        await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
-        ref.invalidate(vehiclesProvider);
-        ref.invalidate(paginatedVehiclesProvider);
+        try {
+          await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
+          ref.refreshData.vehicles();
+        } catch (e) {
+          if (context.mounted) showErrorSnackBar(context, e);
+        }
       }
     }
 
     Future<void> changeStatus(Vehicle v, String newStatus) async {
       if (newStatus == v.status) return;
+      try {
       await ref.read(vehicleServiceProvider).saveVehicle(
             id: v.id,
             name: v.name,
@@ -343,8 +355,10 @@ class FleetVehiclesScreen extends HookConsumerWidget {
             driverId: v.driver?.id,
             ownershipType: v.ownershipType,
           );
-      ref.invalidate(vehiclesProvider);
-      ref.invalidate(paginatedVehiclesProvider);
+      ref.refreshData.vehicles();
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      }
     }
 
     Widget statusPill(Vehicle v, Color accent) {
@@ -531,12 +545,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: asyncAllVehicles.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(
-            child: Text(
-              'Failed to load vehicles: $error',
-              style: TextStyle(color: crmColors.textSecondary),
-            ),
-          ),
+          error: (error, stack) => AppErrorView(
+            error: error, onRetry: () => ref.invalidate(vehiclesProvider)),
           data: (all) {
             final running = all.where((v) => v.status == 'running').length;
             final service = all.where((v) => v.status == 'under_service').length;
@@ -666,12 +676,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
         Expanded(
           child: asyncVehicles.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load vehicles: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-            ),
+            error: (error, stack) => AppErrorView(
+            error: error, onRetry: () => ref.invalidate(paginatedVehiclesProvider)),
             data: (response) {
               final vehicles = response.items;
               if (vehicles.isEmpty) {
@@ -810,9 +816,12 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                               ),
                                             );
                                             if (confirm == true) {
-                                              await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
-                                              ref.invalidate(vehiclesProvider);
-                                              ref.invalidate(paginatedVehiclesProvider);
+                                              try {
+                                                await ref.read(vehicleServiceProvider).deleteVehicle(v.id);
+                                                ref.refreshData.vehicles();
+                                              } catch (e) {
+                                                if (context.mounted) showErrorSnackBar(context, e);
+                                              }
                                             }
                                           }
                                         },
@@ -866,20 +875,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: accentColor),
                                             onChanged: (newStatus) async {
                                               if (newStatus != null && newStatus != v.status) {
-                                                await ref.read(vehicleServiceProvider).saveVehicle(
-                                                  id: v.id,
-                                                  name: v.name,
-                                                  registrationNumber: v.registrationNumber,
-                                                  type: v.type,
-                                                  status: newStatus,
-                                                  brand: v.brand,
-                                                  fuelType: v.fuelType,
-                                                  notes: v.notes,
-                                                  driverId: v.driver?.id,
-                                                  ownershipType: v.ownershipType,
-                                                );
-                                                ref.invalidate(vehiclesProvider);
-                                                ref.invalidate(paginatedVehiclesProvider);
+                                                await changeStatus(v, newStatus);
                                               }
                                             },
                                             items: const [

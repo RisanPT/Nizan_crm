@@ -7,6 +7,7 @@ import 'package:nizan_crm/features/inventory/controllers/inventory_controller.da
 import 'package:nizan_crm/features/inventory/presentation/screens/barcode_scanner_page.dart';
 import 'inventory_widgets.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Add / edit a single inventory product. Used by Stock List and by the
 /// artist "My Inventory" screen.
@@ -96,10 +97,11 @@ Future<void> showProductDialog(
                 // keep 'new'
               }
             }
-          } catch (_) {
+          } catch (e) {
             lookupNote = null;
+            if (context.mounted) showErrorSnackBar(context, e);
           }
-          setState(() => looking = false);
+          if (context.mounted) setState(() => looking = false);
         }
 
         return AlertDialog(
@@ -363,16 +365,14 @@ Future<void> showProductDialog(
                                 int.tryParse(usageCtrl.text.trim()) ?? 10,
                             expiry: expiry,
                           );
-                      ref.invalidate(inventoryProductsProvider);
+                      ref.refreshData.inventory();
                       if (dialogContext.mounted) {
                         Navigator.of(dialogContext).pop();
                       }
                     } catch (e) {
                       setState(() => saving = false);
                       if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(friendlyErrorMessage(e))),
-                        );
+                        showErrorSnackBar(dialogContext, e);
                       }
                     }
                   },

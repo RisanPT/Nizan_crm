@@ -11,6 +11,7 @@ import '../../../../services/role_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../core/models/employee.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Scoped user-management screen for Department Heads.
 ///
@@ -48,7 +49,7 @@ class TeamManagementScreen extends HookConsumerWidget {
                 .toList();
       },
       loading: () => <CrmUser>[],
-      error: (e, _) => <CrmUser>[],
+      error: (e, _) => <CrmUser>[], // body's .when shows the error state
     );
 
     Future<void> openMemberDialog([CrmUser? user]) async {
@@ -264,18 +265,10 @@ class TeamManagementScreen extends HookConsumerWidget {
                               selEmployeeId.isEmpty ? null : selEmployeeId,
                         );
                       }
-                      ref.invalidate(crmUsersProvider);
-                      ref.invalidate(employeesProvider);
+                      ref.refreshData.crmUsers();
                       if (ctx.mounted) Navigator.pop(ctx);
                     } catch (e) {
-                      if (ctx.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                              content: Text(e
-                                  .toString()
-                                  .replaceFirst('Exception: ', ''))),
-                        );
-                      }
+                      if (ctx.mounted) showErrorSnackBar(ctx, e);
                     }
                   },
                   child: Text(user == null ? 'Add Member' : 'Save Changes'),
@@ -312,7 +305,8 @@ class TeamManagementScreen extends HookConsumerWidget {
       ),
       body: asyncUsers.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorView(error: e),
+        error: (e, _) => AppErrorView(
+            error: e, onRetry: () => ref.invalidate(crmUsersProvider)),
         data: (_) {
           if (myTeam.isEmpty) {
             return Center(
@@ -360,13 +354,10 @@ class TeamManagementScreen extends HookConsumerWidget {
                           role: user.role,
                           active: !user.active,
                         );
-                    ref.invalidate(crmUsersProvider);
-                    ref.invalidate(employeesProvider);
+                    ref.refreshData.crmUsers();
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(friendlyErrorMessage(e))),
-                      );
+                      showErrorSnackBar(context, e);
                     }
                   }
                 },

@@ -53,15 +53,9 @@ class ITProjectDocsView extends ConsumerWidget {
       Expanded(
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () => ref.read(projectDocsNotifierProvider(projectId).notifier).refresh(),
-                child: const Text('Retry'),
-              ),
-            ]),
+          error: (e, _) => AppErrorView(
+            error: e,
+            onRetry: () => ref.read(projectDocsNotifierProvider(projectId).notifier).refresh(),
           ),
           data: (docs) => docs.isEmpty
               ? _empty(crm, context, ref, isManager)
@@ -259,7 +253,13 @@ class ITProjectDocsView extends ConsumerWidget {
     final token = ref.read(authSessionProvider)?.token ?? '';
     final url = '$apiBaseUrl/project-docs/${d.id}/versions/${v.version}/download?fmt=pdf&inline=1&token=$token';
     final uri = Uri.tryParse(url);
-    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    var opened = false;
+    try {
+      opened = uri != null && await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false; // reported below
+    }
+    if (!opened) {
       messenger.showSnackBar(const SnackBar(content: Text('Could not open the PDF')));
     }
   }
@@ -395,11 +395,17 @@ class ITProjectDocsView extends ConsumerWidget {
         return StatefulBuilder(
           builder: (ctx, setSheet) {
             Future<void> pick(bool isPdf) async {
-              final res = await FilePicker.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: isPdf ? ['pdf'] : ['doc', 'docx'],
-                withData: true,
-              );
+              final FilePickerResult? res;
+              try {
+                res = await FilePicker.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: isPdf ? ['pdf'] : ['doc', 'docx'],
+                  withData: true,
+                );
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e, fallback: "Couldn't open the file picker."))));
+                return;
+              }
               if (res == null) return;
               final f = res.files.single;
               if (f.size > _maxUploadBytes) {

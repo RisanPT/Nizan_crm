@@ -29,6 +29,7 @@ import 'package:nizan_crm/core/utils/whatsapp_service.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// 'YYYY-MM-DD' key used for a booking's per-date map overrides (`dateMaps`).
 String _dateKey(DateTime d) =>
@@ -73,6 +74,30 @@ class ManageBookingScreen extends HookConsumerWidget {
         ),
         body: Center(
           child: CircularProgressIndicator(color: crmColors.primary),
+        ),
+      );
+    }
+
+    // The booking couldn't be loaded (offline, server error…) and isn't in the
+    // local cache either — show why, with a retry, instead of "not found".
+    if (bookingId != 'new' &&
+        asyncSingleBooking != null &&
+        asyncSingleBooking.hasError &&
+        !(ref.watch(bookingProvider).value ?? const <Booking>[])
+            .any((b) => b.id == bookingId)) {
+      return Scaffold(
+        backgroundColor: crmColors.background,
+        appBar: AppBar(
+          backgroundColor: crmColors.surface,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back, color: crmColors.textPrimary),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: AppErrorView(
+          error: asyncSingleBooking.error,
+          onRetry: () => ref.invalidate(singleBookingProvider(bookingId)),
         ),
       );
     }
@@ -1261,12 +1286,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               .updateBooking(updatedBooking);
         } catch (error) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to save changes: $error'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            showErrorSnackBar(context, error);
           }
           return;
         }
@@ -1275,13 +1295,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           await showPrintDialog(savedBooking);
         } catch (error) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                    'Booking saved, but WhatsApp action failed: $error'),
-                backgroundColor: Colors.orange,
-              ),
-            );
+            showWarningSnackBar(context,
+                'Booking saved, but the print/WhatsApp step failed: ${friendlyErrorMessage(error)}');
           }
         }
         if (context.mounted) {
@@ -1339,7 +1354,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                   12.w,
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await showPrintDialog(buildCurrentBookingSnapshot());
+                      try {
+                        await showPrintDialog(buildCurrentBookingSnapshot());
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     icon: const Icon(Icons.print_outlined, size: 18),
                     label: const Text('Print'),
@@ -1347,7 +1366,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                   12.w,
                   OutlinedButton.icon(
                     onPressed: () async {
-                      await WhatsAppService.sendInvoiceMessage(booking);
+                      try {
+                        await WhatsAppService.sendInvoiceMessage(booking);
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     icon: const Icon(Icons.chat_outlined, size: 18),
                     label: const Text('WhatsApp'),
@@ -1360,20 +1383,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                   // opens WhatsApp with a short review-request message.
                   OutlinedButton.icon(
                     onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
                       try {
                         final link = await ref
                             .read(reviewServiceProvider)
                             .getReviewLink(booking.id);
+                        // May have just created the review record.
+                        ref.refreshData.reviews();
                         await WhatsAppService.sendReviewRequest(booking, link);
                       } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                e.toString().replaceFirst('Exception: ', '')),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
+                        if (context.mounted) showErrorSnackBar(context, e);
                       }
                     },
                     icon: const Icon(Icons.rate_review_outlined, size: 18),
@@ -1413,14 +1431,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                             } catch (error) {
                               if (context.mounted) {
                                 isDeleting.value = false;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Failed to delete booking: $error',
-                                    ),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
+                                showErrorSnackBar(context, error);
                               }
                             }
                           },
@@ -2008,14 +2019,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                                   .updateBooking(updatedBooking);
                             } catch (error) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Failed to save changes: $error',
-                                    ),
-                                    backgroundColor: Colors.red,
-                                  ),
-                                );
+                                showErrorSnackBar(context, error);
                               }
                               return;
                             }
@@ -2028,14 +2032,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                               await showPrintDialog(savedBooking);
                             } catch (error) {
                               if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      'Booking saved, but WhatsApp action failed: $error',
-                                    ),
-                                    backgroundColor: Colors.orange,
-                                  ),
-                                );
+                                showWarningSnackBar(context,
+                                    'Booking saved, but the print/WhatsApp step failed: ${friendlyErrorMessage(error)}');
                               }
                             }
 
@@ -2843,10 +2841,14 @@ class ManageBookingScreen extends HookConsumerWidget {
                             totalPrice: item.totalPrice,
                             advanceAmount: item.advanceAmount,
                           );
-                          await printBookingDetails(
-                            singleItemBooking,
-                            variant: BookingPrintVariant.clientConfirmation,
-                          );
+                          try {
+                            await printBookingDetails(
+                              singleItemBooking,
+                              variant: BookingPrintVariant.clientConfirmation,
+                            );
+                          } catch (e) {
+                            if (context.mounted) showErrorSnackBar(context, e);
+                          }
                         },
                       ),
                       if (items.length > 1)
@@ -3375,9 +3377,12 @@ class ManageBookingScreen extends HookConsumerWidget {
           if (asyncEmployees.isLoading)
             const LinearProgressIndicator(minHeight: 2)
           else if (asyncEmployees.hasError)
-            Text(
-              'Unable to load staff right now.',
-              style: TextStyle(color: Colors.red.shade400),
+            AppErrorView(
+              error: asyncEmployees.error,
+              compact: true,
+              title: 'Unable to load staff',
+              onRetry: () => ProviderScope.containerOf(context, listen: false)
+                  .invalidate(employeesProvider),
             )
           else if (selectableStaff.isEmpty)
             Container(
@@ -3720,9 +3725,12 @@ class ManageBookingScreen extends HookConsumerWidget {
         if (asyncPackages.hasError)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text(
-              'Could not load packages.',
-              style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+            child: AppErrorView(
+              error: asyncPackages.error,
+              compact: true,
+              title: 'Could not load packages',
+              onRetry: () => ProviderScope.containerOf(context, listen: false)
+                  .invalidate(packagesProvider),
             ),
           ),
       ],
@@ -3914,9 +3922,12 @@ class ManageBookingScreen extends HookConsumerWidget {
         if (asyncAddonServices.hasError)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Could not load add-on services.',
-              style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+            child: AppErrorView(
+              error: asyncAddonServices.error,
+              compact: true,
+              title: 'Could not load add-on services',
+              onRetry: () => ProviderScope.containerOf(context, listen: false)
+                  .invalidate(addonServicesProvider),
             ),
           ),
         if (addons.value.isEmpty)
@@ -4656,22 +4667,13 @@ class ManageBookingScreen extends HookConsumerWidget {
       await ref.read(bookingProvider.notifier).updateBooking(updated);
     } catch (error) {
       if (context.mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(error)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, error);
       }
       return;
     }
     if (!context.mounted) return;
     messenger.showSnackBar(const SnackBar(content: Text('Package removed.')));
-
-    // Invalidate singleBookingProvider so that when we navigate back to the
-    // booking detail the page fetches fresh data and doesn't show the removed
-    // package from the stale local cache.
-    ref.invalidate(singleBookingProvider(booking.id));
+    // (updateBooking already refreshed singleBookingProvider and the lists.)
 
     // Indices shift after removal, so any `?entry=` in the URL may now point
     // at the wrong package. Reset to the booking's default (first) entry.
@@ -4822,12 +4824,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       await ref.read(bookingProvider.notifier).updateBooking(updated);
     } catch (error) {
       if (context.mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(error)),
-            backgroundColor: Colors.red,
-          ),
-        );
+        showErrorSnackBar(context, error);
       }
       return;
     }

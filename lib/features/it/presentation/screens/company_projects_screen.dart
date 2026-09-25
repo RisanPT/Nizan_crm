@@ -12,6 +12,8 @@ import 'package:nizan_crm/features/org/data/department.dart';
 import 'package:nizan_crm/features/org/services/department_service.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart' show projectStatusColor, priorityColor;
 import 'package:nizan_crm/features/it/presentation/screens/widgets/company_planning_dashboard.dart';
 
@@ -103,7 +105,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     final async = ref.watch(companyProjectsProvider(_dept == 'all' ? null : _dept));
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+      error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(companyProjectsProvider)),
       data: (projects) {
         final filtered = projects.where((p) {
           if (_status != 'all' && p.status != _status) return false;
@@ -336,8 +338,8 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     if (ok != true) return;
     try {
       await ref.read(projectServiceProvider).deleteProject(p.id);
-      ref.invalidate(companyProjectsProvider);
-      ref.invalidate(projectsProvider);
+      refreshAllItTaskViews(ref); // projects + their (now deleted) tasks
+      ref.refreshData.okrs();
       messenger.showSnackBar(const SnackBar(content: Text('Project deleted')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -485,8 +487,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
       },
     );
     if (saved == true) {
-      ref.invalidate(companyProjectsProvider);
-      ref.invalidate(projectsProvider);
+      ref.refreshData.projects();
       messenger.showSnackBar(SnackBar(content: Text(isEdit ? 'Project updated' : 'Project created')));
     }
   }

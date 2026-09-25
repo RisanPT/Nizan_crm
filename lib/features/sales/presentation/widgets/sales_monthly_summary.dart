@@ -36,7 +36,10 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => AppErrorView(error: err),
+      error: (err, _) => AppErrorView(
+        error: err,
+        onRetry: () => ref.invalidate(bookingProvider),
+      ),
       data: (allBookings) {
         bool bookingMatchesGeoFilters(Booking b) {
           if (districtId != null && districtId!.isNotEmpty && b.districtId != districtId) {
@@ -472,7 +475,7 @@ class _FYPerformanceChart extends StatelessWidget {
                           children: List.generate(5, (index) {
                             return Container(
                               height: 1,
-                              color: crmColors.border.withValues(alpha: 0.15),
+                              color: crmColors.border.faded(0.15),
                             );
                           }),
                         ),
@@ -715,12 +718,7 @@ Future<void> _runWithReportLoader({
     await action();
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyErrorMessage(e)),
-          backgroundColor: crmColors.destructive,
-        ),
-      );
+      showErrorSnackBar(context, e);
     }
   } finally {
     if (dialogNavigator != null && dialogNavigator!.mounted) {

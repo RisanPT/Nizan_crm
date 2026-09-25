@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../core/network/connectivity.dart';
 import '../core/providers/auth_provider.dart';
 
 part 'dio_provider.g.dart';
@@ -15,11 +16,18 @@ Dio dio(Ref ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: apiBaseUrl,
-      connectTimeout: const Duration(seconds: 60),
+      // Fail fast when the server can't be reached at all, so the user sees
+      // "can't connect" in seconds rather than after a minute.
+      connectTimeout: const Duration(seconds: 20),
+      // Heavy reports/exports can legitimately take a while to answer.
       receiveTimeout: const Duration(seconds: 60),
       sendTimeout: kIsWeb ? null : const Duration(seconds: 60),
     ),
   );
+
+  // Lets the offline banner probe the server (`GET /api`, unauthenticated).
+  final connectivity = ref.read(connectivityProvider.notifier);
+  connectivity.ping = () => dio.get<dynamic>('');
 
   dio.interceptors.add(
     InterceptorsWrapper(
@@ -41,6 +49,8 @@ Dio dio(Ref ref) {
       },
     ),
   );
+  dio.interceptors
+      .add(ConnectivityInterceptor(() => ref.read(connectivityProvider.notifier)));
 
   return dio;
 }

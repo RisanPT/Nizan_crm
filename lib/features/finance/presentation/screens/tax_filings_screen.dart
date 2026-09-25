@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/finance/data/tax_filing.dart';
@@ -79,12 +81,10 @@ class _TaxFilingsScreenState extends ConsumerState<TaxFilingsScreen> {
                 padding: EdgeInsets.symmetric(vertical: 50),
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 50),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(
+                    taxFilingBoardProvider((month: _month, year: _year))),
               ),
               data: (board) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -286,14 +286,16 @@ class _TaxFilingsScreenState extends ConsumerState<TaxFilingsScreen> {
             FilledButton(
               onPressed: saving
                   ? null
-                  : () {
+                  : () async {
                       setLocal(() => saving = true);
-                      _save(ctx, f,
+                      final ok = await _save(ctx, f,
                           status: 'filed',
                           filedDate: filedDate,
                           arn: arnCtrl.text.trim(),
                           amount: double.tryParse(amountCtrl.text.trim()) ?? 0,
                           notes: notesCtrl.text.trim());
+                      // Re-enable the button after a failed save.
+                      if (!ok && ctx.mounted) setLocal(() => saving = false);
                     },
               child: Text(saving ? 'Saving…' : 'Save'),
             ),
@@ -303,7 +305,7 @@ class _TaxFilingsScreenState extends ConsumerState<TaxFilingsScreen> {
     );
   }
 
-  Future<void> _save(BuildContext ctx, TaxFiling f,
+  Future<bool> _save(BuildContext ctx, TaxFiling f,
       {required String status,
       DateTime? filedDate,
       String arn = '',
@@ -320,15 +322,14 @@ class _TaxFilingsScreenState extends ConsumerState<TaxFilingsScreen> {
             amount: amount,
             notes: notes,
           );
-      ref.invalidate(taxFilingBoardProvider((month: _month, year: _year)));
+      ref.refreshData.taxFilings();
       if (ctx.mounted) Navigator.pop(ctx);
+      return true;
     } catch (e) {
       if (ctx.mounted) {
-        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: const Color(0xFFDC2626),
-        ));
+        showErrorSnackBar(ctx, e);
       }
+      return false;
     }
   }
 

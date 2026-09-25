@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/hr/data/timebox_models.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -76,9 +77,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             month: month,
             year: year,
           );
-      ref.invalidate(salariesProvider);
-      ref.invalidate(adminSalariesProvider);
-      ref.invalidate(opsSalariesProvider);
+      ref.refreshData.salaries();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -90,12 +89,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isGenerating = false);
@@ -140,10 +134,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             from: tbMonth.from,
             to: tbMonth.to,
           );
-      ref.invalidate(salariesProvider);
-      ref.invalidate(adminSalariesProvider);
-      ref.invalidate(opsSalariesProvider);
-      ref.invalidate(payrollPreviewProvider);
+      ref.refreshData.salaries();
+      ref.refreshData.hr(); // payroll preview
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -156,12 +148,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isTimeboxGenerating = false);
@@ -188,9 +175,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             month: month,
             year: year,
           );
-      ref.invalidate(salariesProvider);
-      ref.invalidate(adminSalariesProvider);
-      ref.invalidate(opsSalariesProvider);
+      ref.refreshData.salaries();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -202,12 +187,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -345,15 +325,11 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                       'notes': notesCtrl.text.trim(),
                     },
                   );
-                  ref.invalidate(salariesProvider);
-                  ref.invalidate(adminSalariesProvider);
-                  ref.invalidate(opsSalariesProvider);
+                  ref.refreshData.salaries();
                   if (ctx.mounted) Navigator.of(ctx).pop();
                 } catch (e) {
                   if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      SnackBar(content: Text(friendlyErrorMessage(e))),
-                    );
+                    showErrorSnackBar(ctx, e);
                   }
                 }
               },
@@ -539,15 +515,11 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             double.tryParse(dedCtrl.text.trim()) ?? 0,
                         'notes': notesCtrl.text.trim(),
                       });
-                      ref.invalidate(salariesProvider);
-                      ref.invalidate(adminSalariesProvider);
-                      ref.invalidate(opsSalariesProvider);
+                      ref.refreshData.salaries();
                       if (ctx.mounted) Navigator.of(ctx).pop();
                     } catch (e) {
                       if (ctx.mounted) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text(friendlyErrorMessage(e))),
-                        );
+                        showErrorSnackBar(ctx, e);
                       }
                     }
                   },
@@ -846,13 +818,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (err, _) => Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(friendlyErrorMessage(err)),
+              error: (err, _) => AppErrorView(
+                error: err,
+                compact: true,
+                onRetry: () => ref.invalidate(salariesProvider),
               ),
               data: (result) {
                 final stats = result.stats;
@@ -1008,7 +977,15 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             if (_tabController.index == 0)
               payrollPreviewAsync.when(
                 loading: () => const SizedBox.shrink(),
-                error: (e, st) => const SizedBox.shrink(),
+                error: (e, st) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: AppErrorView(
+                    error: e,
+                    compact: true,
+                    title: 'Timebox attendance could not be loaded',
+                    onRetry: () => ref.invalidate(payrollPreviewProvider),
+                  ),
+                ),
                 data: (preview) {
                   if (preview.rows.isEmpty) return const SizedBox.shrink();
                   return Container(
@@ -1118,7 +1095,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             Expanded(
               child: salariesAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (err, _) => Center(child: Text(friendlyErrorMessage(err))),
+                error: (err, _) => AppErrorView(
+                  error: err,
+                  onRetry: () => ref.invalidate(salariesProvider),
+                ),
                 data: (result) {
                   final list = result.salaries;
                   if (list.isEmpty) {
@@ -1421,10 +1401,14 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                   icon: const Icon(Icons.check_circle_outline,
                       size: 18, color: Colors.blue),
                   onPressed: () async {
-                    await ref
-                        .read(salaryServiceProvider)
-                        .approveSalary(s.id);
-                    ref.invalidate(salariesProvider);
+                    try {
+                      await ref
+                          .read(salaryServiceProvider)
+                          .approveSalary(s.id);
+                      ref.refreshData.salaries();
+                    } catch (e) {
+                      if (mounted) showErrorSnackBar(context, e);
+                    }
                   },
                 ),
               if (!s.isPaid)
@@ -1433,10 +1417,14 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                   icon: const Icon(Icons.delete_outline,
                       size: 18, color: Colors.red),
                   onPressed: () async {
-                    await ref
-                        .read(salaryServiceProvider)
-                        .deleteSalary(s.id);
-                    ref.invalidate(salariesProvider);
+                    try {
+                      await ref
+                          .read(salaryServiceProvider)
+                          .deleteSalary(s.id);
+                      ref.refreshData.salaries();
+                    } catch (e) {
+                      if (mounted) showErrorSnackBar(context, e);
+                    }
                   },
                 ),
             ],

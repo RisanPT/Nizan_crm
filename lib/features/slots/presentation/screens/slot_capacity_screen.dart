@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/models/blocked_date.dart';
 import 'package:nizan_crm/services/blocked_date_service.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
@@ -31,8 +32,19 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
   ({int year, int month}) get _key => (year: _month.year, month: _month.month);
 
   Future<void> _reload() async {
-    ref.invalidate(monthAvailabilityProvider(_key));
-    ref.invalidate(slotDefaultsProvider);
+    // Every month (not just the visible one), defaults and blocked dates —
+    // the booking forms read other months' availability too.
+    ref.refreshData.slots();
+  }
+
+  Future<void> _pickMonth() async {
+    final picked = await showDialog<DateTime>(
+      context: context,
+      builder: (_) => _MonthYearPicker(initial: _month),
+    );
+    if (picked != null && mounted) {
+      setState(() => _month = DateTime(picked.year, picked.month));
+    }
   }
 
   Future<void> _manageBlockedDates() async {
@@ -49,6 +61,8 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
     final crm = context.crmColors;
     final defaultsAsync = ref.watch(slotDefaultsProvider);
     final monthAsync = ref.watch(monthAvailabilityProvider(_key));
+    final now = DateTime.now();
+    final isCurrentMonth = _month.year == now.year && _month.month == now.month;
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -58,114 +72,156 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
         foregroundColor: crm.textPrimary,
         elevation: 0,
         actions: [
-          TextButton.icon(
-            onPressed: _manageBlockedDates,
-            icon: const Icon(Icons.event_busy_outlined, size: 18),
-            label: const Text('Blocked Dates'),
-            style: TextButton.styleFrom(foregroundColor: crm.destructive),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _reload,
+            icon: Icon(Icons.refresh_rounded, color: crm.textSecondary),
           ),
-          const SizedBox(width: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: OutlinedButton.icon(
+              onPressed: _manageBlockedDates,
+              icon: const Icon(Icons.event_busy_outlined, size: 18),
+              label: const Text('Blocked Dates'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: crm.destructive,
+                side: BorderSide(color: crm.destructive.withValues(alpha: 0.35)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _reload,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          children: [
-            defaultsAsync.when(
-              loading: () => const SizedBox(height: 90, child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(slotDefaultsProvider)),
-              data: (d) => _DefaultsCard(defaults: d, onSaved: _reload),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
-                Expanded(
-                  child: Text('${_monthNames[_month.month]} ${_month.year}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                ),
-                IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
-              ],
-            ),
-            Text('Tap a day to override its limit for that date.',
-                style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-            const SizedBox(height: 10),
-            monthAsync.when(
-              loading: () => const Padding(padding: EdgeInsets.all(28), child: Center(child: CircularProgressIndicator())),
-              error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(monthAvailabilityProvider(_key))),
-              data: (m) => Column(children: [for (final day in m.days) _dayTile(context, day)]),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+      body: LayoutBuilder(builder: (context, box) {
+        final wide = box.maxWidth >= 1000;
+        final pad = box.maxWidth < 600 ? 14.0 : 22.0;
 
-  Widget _dayTile(BuildContext context, DaySlot d) {
-    final crm = context.crmColors;
-    return InkWell(
-      onTap: () => _editDay(d),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: d.blocked ? crm.destructive.withValues(alpha: 0.06) : crm.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: d.blocked
-                  ? crm.destructive.withValues(alpha: 0.45)
-                  : (d.isOverride ? crm.primary.withValues(alpha: 0.5) : crm.border)),
-        ),
-        child: Row(
+        final monthNav = Row(
           children: [
-            SizedBox(
-              width: 46,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${d.date.day}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text(_weekdays[d.date.weekday], style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-                ],
-              ),
-            ),
+            _NavButton(icon: Icons.chevron_left_rounded, onTap: () => _shift(-1)),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    d.blocked
-                        ? 'BLOCKED'
-                        : (d.total.isFull
-                            ? 'FULL · ${d.total.booked}/${d.total.capacity}'
-                            : '${d.total.booked}/${d.total.capacity} booked'),
-                    style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: (d.blocked || d.total.isFull) ? crm.destructive : crm.textPrimary),
+                  // Tap the title to jump straight to any month / year.
+                  Center(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: _pickMonth,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.calendar_month_outlined,
+                                size: 18, color: crm.primary),
+                            const SizedBox(width: 8),
+                            Text('${_monthNames[_month.month]} ${_month.year}',
+                                style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    color: crm.textPrimary)),
+                            const SizedBox(width: 4),
+                            Icon(Icons.expand_more_rounded,
+                                size: 20, color: crm.textSecondary),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                  Text(
-                    d.blocked
-                        ? 'No bookings allowed'
-                        : 'AM ${d.morning.booked}/${d.morning.capacity} · PM ${d.evening.booked}/${d.evening.capacity}',
-                    style: TextStyle(fontSize: 11, color: crm.textSecondary),
-                  ),
+                  if (!isCurrentMonth)
+                    InkWell(
+                      onTap: () => setState(
+                          () => _month = DateTime(now.year, now.month)),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text('Back to this month',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: crm.primary)),
+                      ),
+                    ),
                 ],
               ),
             ),
-            if (d.blocked)
-              Icon(Icons.block, size: 16, color: crm.destructive)
-            else if (d.isOverride)
-              Icon(Icons.push_pin, size: 15, color: crm.primary),
-            Icon(Icons.chevron_right, color: crm.textSecondary),
+            _NavButton(icon: Icons.chevron_right_rounded, onTap: () => _shift(1)),
           ],
-        ),
-      ),
+        );
+
+        final calendarCard = _Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              monthNav,
+              const SizedBox(height: 4),
+              Text('Tap a day to set a custom limit for that date.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+              const SizedBox(height: 14),
+              monthAsync.when(
+                loading: () => const SizedBox(
+                    height: 320,
+                    child: Center(child: CircularProgressIndicator())),
+                error: (e, _) => AppErrorView(
+                    error: e,
+                    compact: true,
+                    onRetry: () =>
+                        ref.invalidate(monthAvailabilityProvider(_key))),
+                data: (m) => _MonthGrid(
+                  month: _month,
+                  days: m.days,
+                  onTapDay: _editDay,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const _Legend(),
+            ],
+          ),
+        );
+
+        final defaultsCard = defaultsAsync.when(
+          loading: () => const _Panel(
+              child: SizedBox(
+                  height: 160, child: Center(child: CircularProgressIndicator()))),
+          error: (e, _) => _Panel(
+              child: AppErrorView(
+                  error: e,
+                  compact: true,
+                  onRetry: () => ref.invalidate(slotDefaultsProvider))),
+          data: (d) => _DefaultsCard(defaults: d, onSaved: _reload),
+        );
+
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(pad, pad, pad, 32),
+            children: [
+              monthAsync.maybeWhen(
+                data: (m) => _SummaryRow(month: m, width: box.maxWidth - pad * 2),
+                orElse: () => const SizedBox.shrink(),
+              ),
+              if (monthAsync.hasValue) const SizedBox(height: 16),
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 340, child: defaultsCard),
+                    const SizedBox(width: 16),
+                    Expanded(child: calendarCard),
+                  ],
+                )
+              else ...[
+                calendarCard,
+                const SizedBox(height: 16),
+                defaultsCard,
+              ],
+            ],
+          ),
+        );
+      }),
     );
   }
-
   Future<void> _editDay(DaySlot d) async {
     var morning = d.morning.capacity;
     var evening = d.evening.capacity;
@@ -191,17 +247,24 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
                       style: TextStyle(fontSize: 12, color: crm.destructive, fontWeight: FontWeight.w600)),
                 ],
                 const SizedBox(height: 18),
-                _stepper(context, 'Morning slots', morning, (v) => setSheet(() => morning = v)),
+                _stepper(context, 'Morning', morning, (v) => setSheet(() => morning = v),
+                    icon: Icons.wb_sunny_outlined, color: const Color(0xFFD97706)),
                 const SizedBox(height: 12),
-                _stepper(context, 'Evening slots', evening, (v) => setSheet(() => evening = v)),
+                _stepper(context, 'Evening', evening, (v) => setSheet(() => evening = v),
+                    icon: Icons.nights_stay_outlined, color: const Color(0xFF6E1423)),
                 const SizedBox(height: 22),
                 Row(
                   children: [
                     if (d.isOverride)
                       TextButton.icon(
                         onPressed: () async {
-                          await ref.read(slotServiceProvider).clearDay(d.date);
-                          if (ctx.mounted) Navigator.pop(ctx, true);
+                          try {
+                            await ref.read(slotServiceProvider).clearDay(d.date);
+                            if (ctx.mounted) Navigator.pop(ctx, true);
+                          } catch (e) {
+                            // Keep the sheet open so the user can retry.
+                            if (ctx.mounted) showErrorSnackBar(ctx, e);
+                          }
                         },
                         icon: const Icon(Icons.restart_alt),
                         label: const Text('Reset to default'),
@@ -209,9 +272,14 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
                     const Spacer(),
                     FilledButton(
                       onPressed: () async {
-                        await ref.read(slotServiceProvider)
-                            .setDay(date: d.date, morning: morning, evening: evening);
-                        if (ctx.mounted) Navigator.pop(ctx, true);
+                        try {
+                          await ref.read(slotServiceProvider)
+                              .setDay(date: d.date, morning: morning, evening: evening);
+                          if (ctx.mounted) Navigator.pop(ctx, true);
+                        } catch (e) {
+                          // Keep the sheet open so the user can retry.
+                          if (ctx.mounted) showErrorSnackBar(ctx, e);
+                        }
                       },
                       child: const Text('Save'),
                     ),
@@ -250,67 +318,138 @@ class _DefaultsCardState extends ConsumerState<_DefaultsCard> {
   bool _saving = false;
 
   @override
+  void didUpdateWidget(covariant _DefaultsCard old) {
+    super.didUpdateWidget(old);
+    // Pick up the saved values after a reload.
+    if (old.defaults.morning != widget.defaults.morning ||
+        old.defaults.evening != widget.defaults.evening) {
+      _morning = widget.defaults.morning;
+      _evening = widget.defaults.evening;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final dirty = _morning != widget.defaults.morning || _evening != widget.defaults.evening;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border),
-      ),
+    final dirty =
+        _morning != widget.defaults.morning || _evening != widget.defaults.evening;
+    return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Default capacity (every day)',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: crm.textPrimary)),
-          Text('Applies to any day you haven\'t given a custom limit.',
-              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+          Row(children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: crm.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Icon(Icons.tune_rounded, size: 19, color: crm.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Default capacity',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: crm.textPrimary)),
+                  Text('Every day without a custom limit',
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                ],
+              ),
+            ),
+          ]),
+          const SizedBox(height: 16),
+          _stepper(context, 'Morning', _morning,
+              (v) => setState(() => _morning = v),
+              icon: Icons.wb_sunny_outlined, color: const Color(0xFFD97706)),
+          const SizedBox(height: 10),
+          _stepper(context, 'Evening', _evening,
+              (v) => setState(() => _evening = v),
+              icon: Icons.nights_stay_outlined, color: const Color(0xFF6E1423)),
           const SizedBox(height: 14),
-          _stepper(context, 'Morning slots', _morning, (v) => setState(() => _morning = v)),
-          const SizedBox(height: 12),
-          _stepper(context, 'Evening slots', _evening, (v) => setState(() => _evening = v)),
-          const SizedBox(height: 6),
-          const Divider(),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: crm.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Bookings allowed per day',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: crm.textPrimary)),
+                      const SizedBox(height: 2),
+                      Text('A day closes once it reaches this.',
+                          style: TextStyle(
+                              fontSize: 11.5, color: crm.textSecondary)),
+                    ],
+                  ),
+                ),
+                Text('${_morning + _evening}',
+                    style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: crm.primary)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Text('Total bookings allowed per day',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+              if (dirty)
+                TextButton(
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() {
+                            _morning = widget.defaults.morning;
+                            _evening = widget.defaults.evening;
+                          }),
+                  child: const Text('Undo'),
+                ),
               const Spacer(),
-              Text('${_morning + _evening}',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: crm.primary)),
+              FilledButton.icon(
+                onPressed: (!dirty || _saving)
+                    ? null
+                    : () async {
+                        setState(() => _saving = true);
+                        try {
+                          await ref
+                              .read(slotServiceProvider)
+                              .updateDefaults(morning: _morning, evening: _evening);
+                          await widget.onSaved();
+                          if (context.mounted) {
+                            showSuccessSnackBar(context, 'Default capacity saved');
+                          }
+                        } catch (e) {
+                          if (context.mounted) showErrorSnackBar(context, e);
+                        } finally {
+                          if (mounted) setState(() => _saving = false);
+                        }
+                      },
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check_rounded, size: 18),
+                label: Text(_saving ? 'Saving…' : 'Save default'),
+                style: FilledButton.styleFrom(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
             ],
-          ),
-          const SizedBox(height: 4),
-          Text('A day is blocked once its total bookings reach this number.',
-              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: (!dirty || _saving)
-                  ? null
-                  : () async {
-                      final messenger = ScaffoldMessenger.of(context);
-                      setState(() => _saving = true);
-                      try {
-                        await ref.read(slotServiceProvider)
-                            .updateDefaults(morning: _morning, evening: _evening);
-                        await widget.onSaved();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Default capacity saved')),
-                        );
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _saving = false);
-                      }
-                    },
-              child: Text(_saving ? 'Saving…' : 'Save default'),
-            ),
           ),
         ],
       ),
@@ -318,30 +457,452 @@ class _DefaultsCardState extends ConsumerState<_DefaultsCard> {
   }
 }
 
-/// A labelled − value + stepper (0..99).
-Widget _stepper(BuildContext context, String label, int value, ValueChanged<int> onChanged) {
+/// A labelled − value + stepper (0..99) in a soft tile.
+Widget _stepper(
+  BuildContext context,
+  String label,
+  int value,
+  ValueChanged<int> onChanged, {
+  IconData icon = Icons.schedule_rounded,
+  Color? color,
+}) {
   final crm = context.crmColors;
-  return Row(
-    children: [
-      Expanded(child: Text(label, style: TextStyle(fontSize: 14, color: crm.textPrimary))),
-      IconButton(
-        onPressed: value <= 0 ? null : () => onChanged(value - 1),
-        icon: const Icon(Icons.remove_circle_outline),
-      ),
-      SizedBox(
-        width: 34,
-        child: Text('$value',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-      ),
-      IconButton(
-        onPressed: value >= 99 ? null : () => onChanged(value + 1),
-        icon: const Icon(Icons.add_circle_outline),
-      ),
-    ],
+  final c = color ?? crm.primary;
+  Widget btn(IconData i, VoidCallback? onTap) => Material(
+        color: onTap == null ? crm.input : c.withValues(alpha: 0.10),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Icon(i,
+                size: 18,
+                color: onTap == null
+                    ? crm.textSecondary.withValues(alpha: 0.5)
+                    : c),
+          ),
+        ),
+      );
+  return Container(
+    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+    decoration: BoxDecoration(
+      border: Border.all(color: crm.border),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: c),
+        const SizedBox(width: 10),
+        Expanded(
+            child: Text('$label slots',
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: crm.textPrimary))),
+        btn(Icons.remove_rounded, value <= 0 ? null : () => onChanged(value - 1)),
+        SizedBox(
+          width: 40,
+          child: Text('$value',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: crm.textPrimary)),
+        ),
+        btn(Icons.add_rounded, value >= 99 ? null : () => onChanged(value + 1)),
+      ],
+    ),
   );
 }
 
+// ── Layout pieces ───────────────────────────────────────────────────────────
+
+class _Panel extends StatelessWidget {
+  const _Panel({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Material(
+      color: crm.background,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: crm.border),
+          ),
+          child: Icon(icon, color: crm.textPrimary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Utilisation colour: green → amber → red (full) ; grey for blocked/no cap.
+Color _loadColor(CrmTheme crm, DaySlot d) {
+  if (d.blocked) return crm.destructive;
+  final cap = d.total.capacity;
+  if (cap <= 0) return crm.textSecondary;
+  final r = d.total.booked / cap;
+  if (d.total.isFull) return crm.destructive;
+  if (r >= 0.6) return crm.warning;
+  return crm.success;
+}
+
+class _SummaryRow extends StatelessWidget {
+  const _SummaryRow({required this.month, required this.width});
+  final MonthAvailability month;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final days = month.days;
+    final full = days.where((d) => !d.blocked && d.total.isFull).length;
+    final blocked = days.where((d) => d.blocked).length;
+    final custom = days.where((d) => d.isOverride).length;
+    final cap = month.totalCapacity;
+    final util = cap <= 0 ? 0 : (month.totalBooked / cap * 100).round();
+
+    final items = [
+      ('Capacity', '$cap', 'bookings this month', Icons.event_seat_outlined, crm.primary),
+      ('Booked', '${month.totalBooked}', '$util% utilised', Icons.event_available_outlined, crm.accent),
+      ('Available', '${month.totalAvailable}', 'slots left', Icons.event_note_outlined, crm.success),
+      ('Full days', '$full', 'no slots left', Icons.do_not_disturb_on_outlined, crm.warning),
+      ('Blocked days', '$blocked', 'closed for booking', Icons.block_rounded, crm.destructive),
+      ('Custom limits', '$custom', 'days overridden', Icons.push_pin_outlined, const Color(0xFF9E2B43)),
+    ];
+    final cols = width < 520 ? 2 : (width < 1000 ? 3 : 6);
+    const gap = 12.0;
+    final w = (width - gap * (cols - 1)) / cols;
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
+      children: [
+        for (final it in items)
+          SizedBox(
+            width: w,
+            child: Container(
+              height: 100,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: crm.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: crm.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(it.$1,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: crm.textSecondary)),
+                    ),
+                    Icon(it.$4, size: 17, color: it.$5),
+                  ]),
+                  const Spacer(),
+                  Text(it.$2,
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          height: 1,
+                          color: crm.textPrimary)),
+                  const SizedBox(height: 4),
+                  Text(it.$3,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: it.$5)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _MonthGrid extends StatelessWidget {
+  const _MonthGrid(
+      {required this.month, required this.days, required this.onTapDay});
+  final DateTime month;
+  final List<DaySlot> days;
+  final ValueChanged<DaySlot> onTapDay;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final byDay = {for (final d in days) d.date.day: d};
+    final first = DateTime(month.year, month.month, 1);
+    final lead = first.weekday - 1; // Monday-first grid
+    final count = DateTime(month.year, month.month + 1, 0).day;
+    final cells = lead + count;
+    final rows = (cells / 7).ceil();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return LayoutBuilder(builder: (context, box) {
+      final cellW = (box.maxWidth - 6 * 6) / 7;
+      final compact = cellW < 78;
+      final cellH = compact ? 62.0 : 88.0;
+
+      return Column(
+        children: [
+          Row(
+            children: [
+              for (var i = 1; i <= 7; i++)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                        compact ? _weekdays[i].substring(0, 1) : _weekdays[i],
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: i >= 6 ? crm.primary : crm.textSecondary)),
+                  ),
+                ),
+            ],
+          ),
+          for (var r = 0; r < rows; r++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  for (var c = 0; c < 7; c++) ...[
+                    if (c > 0) const SizedBox(width: 6),
+                    Expanded(
+                      child: Builder(builder: (_) {
+                        final dayNum = r * 7 + c - lead + 1;
+                        if (dayNum < 1 || dayNum > count) {
+                          return SizedBox(height: cellH);
+                        }
+                        final d = byDay[dayNum];
+                        final date = DateTime(month.year, month.month, dayNum);
+                        return _DayCell(
+                          day: dayNum,
+                          slot: d,
+                          height: cellH,
+                          compact: compact,
+                          isToday: date == today,
+                          isPast: date.isBefore(today),
+                          onTap: d == null ? null : () => onTapDay(d),
+                        );
+                      }),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      );
+    });
+  }
+}
+
+class _DayCell extends StatelessWidget {
+  const _DayCell({
+    required this.day,
+    required this.slot,
+    required this.height,
+    required this.compact,
+    required this.isToday,
+    required this.isPast,
+    required this.onTap,
+  });
+
+  final int day;
+  final DaySlot? slot;
+  final double height;
+  final bool compact;
+  final bool isToday;
+  final bool isPast;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final d = slot;
+    final color = d == null ? crm.textSecondary : _loadColor(crm, d);
+    final cap = d?.total.capacity ?? 0;
+    final booked = d?.total.booked ?? 0;
+    final frac = d == null || cap <= 0 ? 0.0 : (booked / cap).clamp(0.0, 1.0);
+    final blocked = d?.blocked ?? false;
+
+    final tooltip = d == null
+        ? ''
+        : blocked
+            ? 'Blocked — no bookings'
+            : 'AM ${d.morning.booked}/${d.morning.capacity} · PM ${d.evening.booked}/${d.evening.capacity}'
+                '${d.isOverride ? ' · custom limit' : ''}';
+
+    return Opacity(
+      opacity: isPast ? 0.55 : 1,
+      child: Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 400),
+        child: Material(
+          color: blocked
+              ? crm.destructive.withValues(alpha: 0.07)
+              : color.withValues(alpha: d == null ? 0.0 : 0.05),
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: Container(
+              height: height,
+              padding: EdgeInsets.all(compact ? 5 : 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isToday
+                      ? crm.primary
+                      : (blocked
+                          ? crm.destructive.withValues(alpha: 0.35)
+                          : crm.border),
+                  width: isToday ? 1.6 : 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text('$day',
+                          style: TextStyle(
+                              fontSize: compact ? 12.5 : 14,
+                              fontWeight: FontWeight.w800,
+                              color: isToday ? crm.primary : crm.textPrimary)),
+                      const Spacer(),
+                      if (blocked)
+                        Icon(Icons.block_rounded,
+                            size: compact ? 11 : 14, color: crm.destructive)
+                      else if (d?.isOverride ?? false)
+                        Icon(Icons.push_pin_rounded,
+                            size: compact ? 11 : 13, color: crm.primary),
+                    ],
+                  ),
+                  const Spacer(),
+                  if (d != null && !blocked) ...[
+                    Text(
+                      d.total.isFull ? 'Full' : '$booked/$cap',
+                      maxLines: 1,
+                      overflow: TextOverflow.clip,
+                      style: TextStyle(
+                          fontSize: compact ? 10.5 : 12,
+                          fontWeight: FontWeight.w700,
+                          color: color),
+                    ),
+                    if (!compact) ...[
+                      const SizedBox(height: 1),
+                      Text('${d.total.available} left',
+                          style: TextStyle(
+                              fontSize: 10.5, color: crm.textSecondary)),
+                    ],
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: frac,
+                        minHeight: compact ? 3 : 4,
+                        backgroundColor: crm.input,
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                  ] else if (blocked)
+                    Text(compact ? '—' : 'Blocked',
+                        style: TextStyle(
+                            fontSize: compact ? 10.5 : 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: crm.destructive)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Legend extends StatelessWidget {
+  const _Legend();
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    Widget dot(Color c, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+              width: 10,
+              height: 10,
+              decoration:
+                  BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+        ]);
+    Widget icon(IconData i, Color c, String label) =>
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(i, size: 13, color: c),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+        ]);
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
+      alignment: WrapAlignment.center,
+      children: [
+        dot(crm.success, 'Open'),
+        dot(crm.warning, 'Filling up (60%+)'),
+        dot(crm.destructive, 'Full'),
+        icon(Icons.block_rounded, crm.destructive, 'Blocked'),
+        icon(Icons.push_pin_rounded, crm.primary, 'Custom limit'),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                  border: Border.all(color: crm.primary, width: 1.6),
+                  borderRadius: BorderRadius.circular(3))),
+          const SizedBox(width: 6),
+          Text('Today', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+        ]),
+      ],
+    );
+  }
+}
 /// Manage the shared Blocked Dates list (HR). A blocked date takes no bookings —
 /// the sales team is refused when they try to book it (enforced on the server).
 class _BlockedDatesSheet extends ConsumerStatefulWidget {
@@ -374,30 +935,30 @@ class _BlockedDatesSheetState extends ConsumerState<_BlockedDatesSheet> {
 
   Future<void> _add() async {
     if (_picked == null) return;
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _saving = true);
     try {
       await ref.read(blockedDateServiceProvider)
           .saveBlockedDate(date: _picked!, reason: _reason.text.trim(), active: true);
-      ref.invalidate(blockedDatesProvider);
-      setState(() {
-        _picked = null;
-        _reason.clear();
-      });
+      ref.refreshData.slots(); // blocked list + month availability
+      if (mounted) {
+        setState(() {
+          _picked = null;
+          _reason.clear();
+        });
+      }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _delete(String id) async {
-    final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(blockedDateServiceProvider).deleteBlockedDate(id);
-      ref.invalidate(blockedDatesProvider);
+      ref.refreshData.slots(); // blocked list + month availability
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      if (mounted) showErrorSnackBar(context, e);
     }
   }
 
@@ -483,6 +1044,145 @@ class _BlockedDatesSheetState extends ConsumerState<_BlockedDatesSheet> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dialog to jump to any month: year stepper + 12-month grid.
+class _MonthYearPicker extends StatefulWidget {
+  const _MonthYearPicker({required this.initial});
+  final DateTime initial;
+
+  @override
+  State<_MonthYearPicker> createState() => _MonthYearPickerState();
+}
+
+class _MonthYearPickerState extends State<_MonthYearPicker> {
+  late int _year = widget.initial.year;
+
+  static const _minYear = 2020;
+  static const _maxYear = 2040;
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final now = DateTime.now();
+
+    Widget yearBtn(IconData icon, int delta) {
+      final next = _year + delta;
+      final enabled = next >= _minYear && next <= _maxYear;
+      return IconButton(
+        onPressed: enabled ? () => setState(() => _year = next) : null,
+        icon: Icon(icon),
+      );
+    }
+
+    return Dialog(
+      backgroundColor: crm.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  yearBtn(Icons.chevron_left_rounded, -1),
+                  Expanded(
+                    child: PopupMenuButton<int>(
+                      tooltip: 'Choose year',
+                      initialValue: _year,
+                      onSelected: (y) => setState(() => _year = y),
+                      itemBuilder: (_) => [
+                        for (var y = _maxYear; y >= _minYear; y--)
+                          CheckedPopupMenuItem(
+                              value: y, checked: y == _year, child: Text('$y')),
+                      ],
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('$_year',
+                              style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: crm.textPrimary)),
+                          Icon(Icons.expand_more_rounded,
+                              color: crm.textSecondary),
+                        ],
+                      ),
+                    ),
+                  ),
+                  yearBtn(Icons.chevron_right_rounded, 1),
+                ],
+              ),
+              const SizedBox(height: 10),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2.2,
+                children: [
+                  for (var m = 1; m <= 12; m++)
+                    Builder(builder: (_) {
+                      final selected = _year == widget.initial.year &&
+                          m == widget.initial.month;
+                      final current = _year == now.year && m == now.month;
+                      return Material(
+                        color: selected ? crm.primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () =>
+                              Navigator.pop(context, DateTime(_year, m)),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: selected
+                                    ? crm.primary
+                                    : (current ? crm.primary : crm.border),
+                                width: current && !selected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Text(
+                              _monthNames[m].substring(0, 3),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: selected
+                                    ? Colors.white
+                                    : (current ? crm.primary : crm.textPrimary),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                        context, DateTime(now.year, now.month)),
+                    child: const Text('This month'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

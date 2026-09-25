@@ -68,9 +68,10 @@ class _MarketingLeadsReportScreenState
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 60),
-                child: Center(
-                    child: Text(friendlyErrorMessage(e),
-                        style: TextStyle(color: crm.textSecondary))),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(leadReportProvider((period: _period, date: _dateKey))),
+                ),
               ),
               data: (r) => _report(crm, isMobile, r),
             ),

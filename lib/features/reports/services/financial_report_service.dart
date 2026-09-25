@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/reports/data/financial_analyst_report.dart';
 
@@ -13,8 +14,8 @@ class FinancialReportService {
       final res = await _dio.get('/reports/financial-analyst',
           queryParameters: {if (month.isNotEmpty) 'month': month});
       return FinancialAnalystReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to load report: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load the report');
     }
   }
 }

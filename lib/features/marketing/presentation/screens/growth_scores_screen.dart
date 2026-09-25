@@ -9,6 +9,7 @@ import '../../services/marketing_service.dart';
 import '../widgets/marketing_widgets.dart';
 import '../marketing_snapshot_editor.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Marketing → Weekly Growth Score board. Overall ranking (with signal evidence)
 /// plus the Top-25 Reels / Websites / Collaborations leaderboards (FR-2.4), and
@@ -34,14 +35,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
-      ),
+      error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(rankingsProvider(null))),
       data: (board) {
         return ListView(
           padding:
@@ -340,11 +334,19 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
                                 InkWell(
                                   onTap: () async {
                                     final uri = Uri.tryParse(s.link.trim());
-                                    if (uri != null &&
-                                        await canLaunchUrl(uri)) {
-                                      await launchUrl(uri,
-                                          mode: LaunchMode
-                                              .externalApplication);
+                                    var opened = false;
+                                    try {
+                                      if (uri != null &&
+                                          await canLaunchUrl(uri)) {
+                                        opened = await launchUrl(uri,
+                                            mode: LaunchMode
+                                                .externalApplication);
+                                      }
+                                    } catch (_) {
+                                      opened = false; // reported below
+                                    }
+                                    if (!opened && mounted) {
+                                      showWarningSnackBar(context, "Couldn't open this link.");
                                     }
                                   },
                                   child: Row(
@@ -487,7 +489,13 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
 
   Future<void> _editWeights() async {
     final crm = context.crmColors;
-    final cfg = await ref.read(scoringConfigProvider.future);
+    final ScoringConfig cfg;
+    try {
+      cfg = await ref.read(scoringConfigProvider.future);
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+      return;
+    }
     final keys = cfg.labels.keys.isNotEmpty
         ? cfg.labels.keys.toList()
         : cfg.weights.keys.toList();
@@ -514,8 +522,7 @@ class _GrowthScoresScreenState extends ConsumerState<GrowthScoresScreen> {
             await ref
                 .read(marketingServiceProvider)
                 .updateScoringConfig(weights);
-            ref.invalidate(scoringConfigProvider);
-            ref.invalidate(rankingsProvider);
+            ref.refreshData.competitors();
             if (dctx.mounted) Navigator.pop(dctx);
             messenger.showSnackBar(const SnackBar(
                 content: Text(

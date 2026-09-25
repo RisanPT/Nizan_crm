@@ -35,7 +35,7 @@ class DateFilterChip extends StatelessWidget {
             color: set ? crm.primary.withValues(alpha: 0.10) : crm.surface,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-                color: set ? crm.primary.withValues(alpha: 0.5) : crm.border.withValues(alpha: 0.8)),
+                color: set ? crm.primary.withValues(alpha: 0.5) : crm.border.faded(0.8)),
           ),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             Icon(Icons.event_outlined, size: 15, color: set ? crm.primary : crm.textSecondary),

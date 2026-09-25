@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/budget.dart';
 
 class BudgetService {
@@ -19,8 +20,8 @@ class BudgetService {
       );
       final data = response.data as List;
       return data.map((item) => Budget.fromJson(item as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load budgets: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load budgets');
     }
   }
 
@@ -39,13 +40,8 @@ class BudgetService {
       };
       final response = await _dio.post('/budgets', data: payload);
       return Budget.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to set budget: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'set budget');
     }
   }
 }

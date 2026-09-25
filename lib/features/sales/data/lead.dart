@@ -14,7 +14,13 @@ class Lead {
   final String alternateNumber;
   final DateTime leadDate; // manually set: actual date lead was received
   final DateTime enquiryDate;
+  /// When the booking was MADE (the booking form's "Booking Date (when
+  /// booked)"). Set by the server on conversion.
   final DateTime? bookedDate;
+
+  /// The converted booking's EVENT date (server-managed; resynced when the
+  /// booking is rescheduled). Null for unconverted leads.
+  final DateTime? eventDate;
   final DateTime? followUpDate; // date+time for follow-up reminder
   /// How many times a follow-up has been scheduled for this lead.
   final int followUpCount;
@@ -59,6 +65,7 @@ class Lead {
     required this.leadDate,
     required this.enquiryDate,
     this.bookedDate,
+    this.eventDate,
     this.followUpDate,
     this.followUpCount = 0,
     this.assignedTo,
@@ -106,6 +113,9 @@ class Lead {
           : DateTime.now(),
       bookedDate: json['bookedDate'] != null
           ? DateTime.parse(json['bookedDate'] as String).toLocal()
+          : null,
+      eventDate: json['eventDate'] != null
+          ? DateTime.tryParse(json['eventDate'] as String)?.toLocal()
           : null,
       followUpDate: json['followUpDate'] != null
           ? DateTime.parse(json['followUpDate'] as String).toLocal()
@@ -207,6 +217,7 @@ class Lead {
       leadDate: leadDate ?? this.leadDate,
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
+      eventDate: eventDate,
       followUpDate: followUpDate ?? this.followUpDate,
       followUpCount: followUpCount ?? this.followUpCount,
       assignedTo: assignedTo ?? this.assignedTo,

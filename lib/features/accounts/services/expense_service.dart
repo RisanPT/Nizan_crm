@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/artist_expense.dart';
 
 class ExpenseService {
@@ -25,8 +26,8 @@ class ExpenseService {
       return data
           .map((item) => ArtistExpense.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load expenses: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load expenses');
     }
   }
 
@@ -53,13 +54,8 @@ class ExpenseService {
       };
       final response = await _dio.post('/expenses', data: payload);
       return ArtistExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to create expense: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create expense');
     }
   }
 
@@ -86,13 +82,8 @@ class ExpenseService {
         'receiptImage': ?receiptImage,
       });
       return ArtistExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to update expense: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update expense');
     }
   }
 
@@ -107,16 +98,16 @@ class ExpenseService {
         data: {'status': status, 'verifiedBy': verifiedBy},
       );
       return ArtistExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to verify expense: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'verify expense');
     }
   }
 
   Future<void> deleteExpense(String id) async {
     try {
       await _dio.delete('/expenses/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete expense: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete expense');
     }
   }
 }

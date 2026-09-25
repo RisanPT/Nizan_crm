@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -350,8 +351,8 @@ class MarketingInsightsService {
       final res = await _dio.get('/marketing/insights',
           queryParameters: fyStartYear != null ? {'fy': fyStartYear} : null);
       return MarketingInsights.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load marketing insights'));
+    } catch (e) {
+      throw AppException(e, action: 'load marketing insights');
     }
   }
 
@@ -367,8 +368,8 @@ class MarketingInsightsService {
             .map((e) => ReEngagementClient.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load re-engagement list'));
+    } catch (e) {
+      throw AppException(e, action: 'load re-engagement list');
     }
   }
 
@@ -379,16 +380,11 @@ class MarketingInsightsService {
       final res = await _dio.get('/marketing/calendar',
           queryParameters: {'year': year, 'basis': basis});
       return CalendarComparison.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load the booking calendar'));
+    } catch (e) {
+      throw AppException(e, action: 'load the booking calendar');
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return e.message ?? fallback;
-  }
 }
 
 // ── Providers ────────────────────────────────────────────────────────────────

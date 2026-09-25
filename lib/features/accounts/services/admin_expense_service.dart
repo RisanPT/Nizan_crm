@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
 
 class AdminExpenseStats {
@@ -79,8 +80,8 @@ class AdminExpenseService {
       return list
           .map((item) => AdminExpense.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load administrative expenses: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load administrative expenses');
     }
   }
 
@@ -88,8 +89,8 @@ class AdminExpenseService {
     try {
       final response = await _dio.get('/admin-expenses/stats');
       return AdminExpenseStats.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to load administrative expense statistics: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load administrative expense statistics');
     }
   }
 
@@ -97,13 +98,8 @@ class AdminExpenseService {
     try {
       final response = await _dio.post('/admin-expenses', data: payload);
       return AdminExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to create administrative expense: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create administrative expense');
     }
   }
 
@@ -114,13 +110,8 @@ class AdminExpenseService {
     try {
       final response = await _dio.put('/admin-expenses/$id', data: payload);
       return AdminExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to update administrative expense: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update administrative expense');
     }
   }
 
@@ -131,16 +122,16 @@ class AdminExpenseService {
         data: {'status': status},
       );
       return AdminExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to update expense status: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'update expense status');
     }
   }
 
   Future<void> deleteAdminExpense(String id) async {
     try {
       await _dio.delete('/admin-expenses/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete administrative expense: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete administrative expense');
     }
   }
 }

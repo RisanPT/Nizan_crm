@@ -52,7 +52,7 @@ class ITTicketsDashboardScreen extends HookConsumerWidget {
               children: [
                 stats.when(
                   loading: () => const SizedBox(height: 90, child: Center(child: CircularProgressIndicator())),
-                  error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
+                  error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(ticketStatsProvider)),
                   data: (s) => _statGrid(crm, s),
                 ),
                 const SizedBox(height: 16),
@@ -69,7 +69,7 @@ class ITTicketsDashboardScreen extends HookConsumerWidget {
                   loading: () => const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator())),
                   error: (e, _) => Padding(
                     padding: const EdgeInsets.all(24),
-                    child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
+                    child: AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(ticketsProvider)),
                   ),
                   data: (tickets) => tickets.isEmpty
                       ? Padding(

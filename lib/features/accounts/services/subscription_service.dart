@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/subscription.dart';
 
 class SubscriptionStats {
@@ -76,8 +77,8 @@ class SubscriptionService {
       return list
           .map((item) => Subscription.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load subscriptions: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load subscriptions');
     }
   }
 
@@ -85,8 +86,8 @@ class SubscriptionService {
     try {
       final response = await _dio.get('/subscriptions/stats');
       return SubscriptionStats.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to load subscription statistics: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load subscription statistics');
     }
   }
 
@@ -94,13 +95,8 @@ class SubscriptionService {
     try {
       final response = await _dio.post('/subscriptions', data: payload);
       return Subscription.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to create subscription: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create subscription');
     }
   }
 
@@ -111,21 +107,16 @@ class SubscriptionService {
     try {
       final response = await _dio.put('/subscriptions/$id', data: payload);
       return Subscription.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to update subscription: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update subscription');
     }
   }
 
   Future<void> deleteSubscription(String id) async {
     try {
       await _dio.delete('/subscriptions/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete subscription: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete subscription');
     }
   }
 }

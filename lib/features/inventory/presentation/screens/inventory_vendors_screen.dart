@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class InventoryVendorsScreen extends ConsumerWidget {
   const InventoryVendorsScreen({super.key});
@@ -21,9 +22,8 @@ class InventoryVendorsScreen extends ConsumerWidget {
       isMobile: isMobile,
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-            child: Text(friendlyErrorMessage(e),
-                style: TextStyle(color: crm.textSecondary))),
+        error: (e, _) => AppErrorView(
+            error: e, onRetry: () => ref.invalidate(vendorsProvider)),
         data: (vendors) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -146,11 +146,10 @@ class InventoryVendorsScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(inventoryServiceProvider).deleteVendor(v.id);
-      ref.invalidate(vendorsProvider);
+      ref.refreshData.vendors();
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -245,13 +244,12 @@ Future<void> showVendorDialog(BuildContext context, WidgetRef ref,
                               notes: notes.text.trim(),
                             ),
                           );
-                      ref.invalidate(vendorsProvider);
+                      ref.refreshData.vendors();
                       if (dialogContext.mounted) Navigator.pop(dialogContext);
                     } catch (e) {
                       setState(() => saving = false);
                       if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext)
-                            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                        showErrorSnackBar(dialogContext, e);
                       }
                     }
                   },

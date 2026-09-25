@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/finance/data/bank_account.dart';
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
 
@@ -254,10 +255,11 @@ class BankBalanceScreen extends ConsumerWidget {
                                   asOf: asOf,
                                 );
                               }
+                              ref.refreshData.bankAccounts();
                               if (ctx.mounted) Navigator.pop(ctx, true);
                             } catch (e) {
                               setSheet(() => busy = false);
-                              messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+                              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                             }
                           },
                     child: Text(busy ? 'Saving…' : (editing ? 'Save' : 'Add account')),
@@ -270,7 +272,6 @@ class BankBalanceScreen extends ConsumerWidget {
       },
     );
     if (saved == true) {
-      ref.invalidate(bankAccountsProvider);
       messenger.showSnackBar(SnackBar(content: Text(editing ? 'Account updated' : 'Account added')));
     }
   }
@@ -333,10 +334,11 @@ class BankBalanceScreen extends ConsumerWidget {
                             try {
                               await ref.read(bankAccountServiceProvider)
                                   .recordBalance(a.id, balance: val, asOf: asOf, note: noteCtrl.text.trim());
+                              ref.refreshData.bankAccounts();
                               if (ctx.mounted) Navigator.pop(ctx, true);
                             } catch (e) {
                               setSheet(() => busy = false);
-                              messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+                              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                             }
                           },
                     child: Text(busy ? 'Saving…' : 'Save balance'),
@@ -349,7 +351,6 @@ class BankBalanceScreen extends ConsumerWidget {
       },
     );
     if (saved == true) {
-      ref.invalidate(bankAccountsProvider);
       messenger.showSnackBar(const SnackBar(content: Text('Balance updated')));
     }
   }
@@ -422,10 +423,10 @@ class BankBalanceScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(bankAccountServiceProvider).delete(a.id);
-      ref.invalidate(bankAccountsProvider);
+      ref.refreshData.bankAccounts();
       messenger.showSnackBar(const SnackBar(content: Text('Account deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))));
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 }

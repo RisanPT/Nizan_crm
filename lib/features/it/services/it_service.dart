@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
@@ -114,20 +115,32 @@ class ProjectService {
   final Dio _dio;
   ProjectService(this._dio);
 
-  Future<List<Project>> getProjects({String? status, String? priority, String? search, String? department}) async {
-    final res = await _dio.get('/projects', queryParameters: {
-      if (status != null && status.isNotEmpty) 'status': status,
-      if (priority != null && priority.isNotEmpty) 'priority': priority,
-      if (search != null && search.isNotEmpty) 'search': search,
-      if (department != null && department.isNotEmpty && department != 'all') 'department': department,
-    });
-    return (res.data as List).map((e) => Project.fromJson((e as Map).cast<String, dynamic>())).toList();
+  Future<List<Project>> getProjects({String? status, String? priority, String? search, String? department}) =>
+      _guard('load projects', () async {
+        final res = await _dio.get('/projects', queryParameters: {
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (priority != null && priority.isNotEmpty) 'priority': priority,
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (department != null && department.isNotEmpty && department != 'all') 'department': department,
+        });
+        return (res.data as List).map((e) => Project.fromJson((e as Map).cast<String, dynamic>())).toList();
+      });
+
+  Future<void> saveProject(Map<String, dynamic> body, {String? id}) => _guard('save the project', () async {
+        (id == null || id.isEmpty) ? await _dio.post('/projects', data: body) : await _dio.put('/projects/$id', data: body);
+      });
+
+  Future<void> deleteProject(String id) => _guard('delete the project', () => _dio.delete('/projects/$id'));
+}
+
+/// Runs an API call and rethrows any failure as an [AppException] (keeps the
+/// original error so the UI can tell offline / permission / server message).
+Future<T> _guard<T>(String action, Future<T> Function() call) async {
+  try {
+    return await call();
+  } catch (e) {
+    throw AppException(e, action: action);
   }
-
-  Future<void> saveProject(Map<String, dynamic> body, {String? id}) =>
-      (id == null || id.isEmpty) ? _dio.post('/projects', data: body) : _dio.put('/projects/$id', data: body);
-
-  Future<void> deleteProject(String id) => _dio.delete('/projects/$id');
 }
 
 // ── Tasks (Kanban) ───────────────────────────────────────────────────────────
@@ -148,17 +161,20 @@ class ITTaskService {
   final Dio _dio;
   ITTaskService(this._dio);
 
-  Future<List<ITTask>> getTasks({String? projectId, String? status, String? assignedTo, bool mine = false}) async {
-    final res = await _dio.get('/it-tasks', queryParameters: {
-      if (projectId != null && projectId.isNotEmpty) 'projectId': projectId,
-      if (status != null && status.isNotEmpty) 'status': status,
-      if (mine) 'mine': 'true',
-      if (!mine && assignedTo != null && assignedTo.isNotEmpty) 'assignedTo': assignedTo,
-    });
-    return (res.data as List).map((e) => ITTask.fromJson((e as Map).cast<String, dynamic>())).toList();
-  }
+  Future<List<ITTask>> getTasks({String? projectId, String? status, String? assignedTo, bool mine = false}) =>
+      _guard('load tasks', () async {
+        final res = await _dio.get('/it-tasks', queryParameters: {
+          if (projectId != null && projectId.isNotEmpty) 'projectId': projectId,
+          if (status != null && status.isNotEmpty) 'status': status,
+          if (mine) 'mine': 'true',
+          if (!mine && assignedTo != null && assignedTo.isNotEmpty) 'assignedTo': assignedTo,
+        });
+        return (res.data as List).map((e) => ITTask.fromJson((e as Map).cast<String, dynamic>())).toList();
+      });
 
-  Future<void> createTask(Map<String, dynamic> body) => _dio.post('/it-tasks', data: body);
-  Future<void> updateTask(String id, Map<String, dynamic> body) => _dio.put('/it-tasks/$id', data: body);
-  Future<void> deleteTask(String id) => _dio.delete('/it-tasks/$id');
+  Future<void> createTask(Map<String, dynamic> body) =>
+      _guard('create the task', () => _dio.post('/it-tasks', data: body));
+  Future<void> updateTask(String id, Map<String, dynamic> body) =>
+      _guard('update the task', () => _dio.put('/it-tasks/$id', data: body));
+  Future<void> deleteTask(String id) => _guard('delete the task', () => _dio.delete('/it-tasks/$id'));
 }

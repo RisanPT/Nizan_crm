@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 
 /// One department the current user is allowed to back up.
@@ -36,29 +37,34 @@ class BackupService {
   BackupService(this._dio);
 
   Future<BackupTargets> getTargets() async {
-    final res = await _dio.get('/backup/departments');
-    final m = (res.data as Map);
-    return BackupTargets(
-      full: m['full'] == true,
-      departments: ((m['departments'] as List?) ?? const [])
-          .map((e) => BackupTarget.fromJson(e as Map))
-          .toList(),
-    );
+    try {
+      final res = await _dio.get('/backup/departments');
+      final m = (res.data as Map);
+      return BackupTargets(
+        full: m['full'] == true,
+        departments: ((m['departments'] as List?) ?? const [])
+            .map((e) => BackupTarget.fromJson(e as Map))
+            .toList(),
+      );
+    } catch (e) {
+      throw AppException(e, action: 'load backup options');
+    }
   }
 
-  Future<List<int>> downloadDepartment(String key) async {
-    final res = await _dio.get<List<int>>(
-      '/backup/department/$key',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return res.data ?? const <int>[];
-  }
+  Future<List<int>> downloadDepartment(String key) =>
+      _download('/backup/department/$key');
 
-  Future<List<int>> downloadFull() async {
-    final res = await _dio.get<List<int>>(
-      '/backup/full',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return res.data ?? const <int>[];
+  Future<List<int>> downloadFull() => _download('/backup/full');
+
+  Future<List<int>> _download(String path) async {
+    try {
+      final res = await _dio.get<List<int>>(
+        path,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      return res.data ?? const <int>[];
+    } catch (e) {
+      throw AppException(e, action: 'download the backup');
+    }
   }
 }

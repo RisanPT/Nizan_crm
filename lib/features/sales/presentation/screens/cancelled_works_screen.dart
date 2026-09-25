@@ -35,13 +35,9 @@ class CancelledWorksScreen extends HookConsumerWidget {
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
+      error: (e, _) => AppErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(bookingProvider),
       ),
       data: (all) {
         final cancelled = all
@@ -69,7 +65,6 @@ class CancelledWorksScreen extends HookConsumerWidget {
         Future<void> exportReport() async {
           if (isExporting.value || filtered.isEmpty) return;
           isExporting.value = true;
-          final messenger = ScaffoldMessenger.of(context);
           try {
             await printCancelledWorksReport(
               filtered,
@@ -78,11 +73,9 @@ class CancelledWorksScreen extends HookConsumerWidget {
                   : selectedFy.value,
             );
           } catch (e) {
-            messenger.showSnackBar(
-              SnackBar(content: Text(friendlyErrorMessage(e))),
-            );
+            if (context.mounted) showErrorSnackBar(context, e);
           } finally {
-            isExporting.value = false;
+            if (context.mounted) isExporting.value = false;
           }
         }
 

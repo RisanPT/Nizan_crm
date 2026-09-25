@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/services/upload_service.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class PreTripInspectionScreen extends ConsumerStatefulWidget {
   final String jobId;
@@ -43,7 +45,10 @@ class _PreTripInspectionScreenState
         setState(() => _selectedImages.add(image));
       }
     } catch (e) {
-      _showSnack('Camera error: $e', isError: true);
+      _showSnack(
+          friendlyErrorMessage(e,
+              fallback: 'Could not open the camera. Please try again.'),
+          isError: true);
     }
   }
 
@@ -61,7 +66,10 @@ class _PreTripInspectionScreenState
         });
       }
     } catch (e) {
-      _showSnack('Gallery error: $e', isError: true);
+      _showSnack(
+          friendlyErrorMessage(e,
+              fallback: 'Could not open the gallery. Please try again.'),
+          isError: true);
     }
   }
 
@@ -88,7 +96,9 @@ class _PreTripInspectionScreenState
       await fleetService.startTripWithInspection(widget.jobId, photoUrls);
 
       // ✅ Refresh the jobs provider so dashboard/works screen updates
-      ref.invalidate(driverJobsProvider);
+      ref.refreshData
+        ..fleetJobs()
+        ..bookings(); // jobs are bookings (tripStatus)
 
       if (mounted) {
         _showSnack('Trip started! Drive safe 🚗');
@@ -96,10 +106,11 @@ class _PreTripInspectionScreenState
         context.go('/driver/jobs');
       }
     } catch (e) {
-      final msg = e.toString().replaceFirst('Exception: ', '');
+      final msg = friendlyErrorMessage(e);
       if (mounted) {
         setState(() {
           _errorMessage = msg;
+          _uploadingIndexes.clear();
           _isSubmitting = false;
         });
       }

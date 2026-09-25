@@ -4,6 +4,7 @@ import '../core/models/district.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final districtServiceProvider = Provider<DistrictService>((ref) {
   return DistrictService(ref.watch(dioProvider));
@@ -42,8 +43,8 @@ class DistrictService {
       return data
           .map((item) => District.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load districts: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load districts');
     }
   }
 
@@ -67,8 +68,8 @@ class DistrictService {
         response.data as Map<String, dynamic>,
         District.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load districts: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load districts');
     }
   }
 
@@ -91,16 +92,16 @@ class DistrictService {
           : await _dio.post('/districts', data: payload);
 
       return District.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save district: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save district');
     }
   }
 
   Future<void> deleteDistrict(String id) async {
     try {
       await _dio.delete('/districts/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete district: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete district');
     }
   }
 }

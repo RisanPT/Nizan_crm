@@ -13,6 +13,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/trial_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 // ── Outcome config ─────────────────────────────────────────────────────────
 const _outcomes = [
@@ -203,7 +204,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
         await service.updateTrial(trial);
       }
 
-      ref.read(trialsRefreshTriggerProvider.notifier).update((s) => s + 1);
+      ref.refreshData.trials(); // lists, calendar, artist view + detail
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -216,9 +217,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -246,7 +245,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
     setState(() => _isDeleting = true);
     try {
       await ref.read(trialServiceProvider).deleteTrial(widget.trialId);
-      ref.read(trialsRefreshTriggerProvider.notifier).update((s) => s + 1);
+      ref.refreshData.trials(); // lists, calendar, artist view + detail
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -258,9 +257,7 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) setState(() => _isDeleting = false);
@@ -334,9 +331,11 @@ class _ManageTrialScreenState extends ConsumerState<ManageTrialScreen> {
                 },
                 loading: () => Center(
                     child: CircularProgressIndicator(color: crmColors.primary)),
-                error: (err, _) => Center(
-                    child: Text(friendlyErrorMessage(err),
-                        style: TextStyle(color: crmColors.destructive))),
+                error: (err, _) => AppErrorView(
+                  error: err,
+                  onRetry: () =>
+                      ref.invalidate(singleTrialProvider(widget.trialId)),
+                ),
               ),
             ),
           ],

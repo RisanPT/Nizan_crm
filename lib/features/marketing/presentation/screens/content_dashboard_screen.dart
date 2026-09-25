@@ -39,7 +39,7 @@ class ContentDashboardScreen extends ConsumerWidget {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+            error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(contentStatsProvider)),
             data: (s) => RefreshIndicator(
               onRefresh: () async => ref.invalidate(contentStatsProvider),
               child: ListView(

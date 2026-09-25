@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_common.dart';
 
 /// Opens the create/edit task sheet. Returns `true` when a task was saved.
@@ -277,6 +278,7 @@ Future<bool?> showTaskEditor(
                             } else {
                               await svc.createTask(body);
                             }
+                            refreshAllItTaskViews(ref);
                             if (ctx.mounted) Navigator.pop(ctx, true);
                           } catch (e) {
                             setSheet(() => busy = false);

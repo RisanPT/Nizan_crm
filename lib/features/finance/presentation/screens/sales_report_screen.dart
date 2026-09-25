@@ -227,7 +227,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ListView(children: [
-              Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+              AppErrorView(error: e, onRetry: () => ref.invalidate(salesReportProvider(_key))),
             ]),
             data: (rep) {
               _last = rep;
@@ -309,7 +309,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         // header
@@ -351,7 +351,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
     final canDrill = _drillable && r.id.trim().isNotEmpty;
     final body = Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
             flex: 5,
@@ -427,11 +427,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
           loading: () => const Padding(
               padding: EdgeInsets.all(40),
               child: Center(child: CircularProgressIndicator())),
-          error: (e, _) => Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                  child: Text(friendlyErrorMessage(e),
-                      style: TextStyle(color: crm.destructive)))),
+          error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(bookingProvider)),
           data: (all) {
             final bookings = all
                 .where((b) => _bookingMatches(b, row) && _inDrillRange(b))
@@ -466,7 +462,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
                       decoration: BoxDecoration(
                           border: Border(
                               top: BorderSide(
-                                  color: crm.border.withValues(alpha: 0.4)))),
+                                  color: crm.border.faded(0.4)))),
                       child: Row(children: [
                         Expanded(
                           flex: 6,
@@ -553,7 +549,7 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
       await downloadCsv('${spec.csvName}.csv', rows);
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${spec.title} exported')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (mounted) showErrorSnackBar(context, e);
     }
   }
 }

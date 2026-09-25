@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Accounts → Bills / Payables. Vendor bills (from inventory purchases) with
 /// paid/unpaid + GST tracking, bill viewing, and payment recording — Zoho-style.
@@ -67,13 +68,9 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
 
     return purchasesAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
+      error: (e, _) => AppErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(purchasesProvider),
       ),
       data: (all) {
         // Bills = studio vendor purchases (exclude artist-owned, handled server-side).
@@ -570,13 +567,13 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
                     mode: mode,
                     note: noteCtrl.text.trim(),
                   );
-              ref.invalidate(purchasesProvider);
+              ref.refreshData.purchases();
               if (dctx.mounted) Navigator.pop(dctx);
               messenger.showSnackBar(
                   const SnackBar(content: Text('Payment recorded')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+              if (mounted) showErrorSnackBar(context, e);
             }
           }
 
@@ -701,13 +698,13 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
                     gstAmount: gstEnabled ? gstAmountFor(gstRate) : 0,
                     interState: interState,
                   );
-              ref.invalidate(purchasesProvider);
+              ref.refreshData.purchases();
               if (dctx.mounted) Navigator.pop(dctx);
               messenger
                   .showSnackBar(const SnackBar(content: Text('Bill updated')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+              if (mounted) showErrorSnackBar(context, e);
             }
           }
 
@@ -850,11 +847,11 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(inventoryServiceProvider).setPurchasePaid(b.id, paid);
-      ref.invalidate(purchasesProvider);
+      ref.refreshData.purchases();
       messenger.showSnackBar(
           SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (mounted) showErrorSnackBar(context, e);
     }
   }
 

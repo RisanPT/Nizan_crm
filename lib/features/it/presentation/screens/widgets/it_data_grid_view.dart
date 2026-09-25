@@ -519,6 +519,22 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
     }
   }
 
+  /// Runs a bulk action on the selected rows. On success the selection is
+  /// cleared; on failure the user sees why and the selection is kept so they
+  /// can retry.
+  Future<void> _runBulk(Future<void> Function() action) async {
+    try {
+      await action();
+      if (!mounted) return;
+      _uncheckAllRows();
+      setState(() => _selectedTaskIds.clear());
+    } catch (e) {
+      if (!mounted) return;
+      showErrorSnackBar(context, e);
+      _reloadRows();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
@@ -610,12 +626,9 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
                       SizedBox(width: 6),
                       Text('Status', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                     ]),
-                    onSelected: (st) async {
-                      final notifier = getITTasksNotifier(ref, widget.projectId);
-                      await notifier.bulkUpdateStatus(_selectedTaskIds.toList(), st);
-                      _uncheckAllRows();
-                      setState(() => _selectedTaskIds.clear());
-                    },
+                    onSelected: (st) => _runBulk(
+                      () => getITTasksNotifier(ref, widget.projectId).bulkUpdateStatus(_selectedTaskIds.toList(), st),
+                    ),
                     itemBuilder: (_) => [
                       for (final st in ITTaskStatus.values)
                         PopupMenuItem(
@@ -636,12 +649,9 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
                       SizedBox(width: 6),
                       Text('Assign', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
                     ]),
-                    onSelected: (emp) async {
-                      final notifier = getITTasksNotifier(ref, widget.projectId);
-                      await notifier.bulkReassign(_selectedTaskIds.toList(), emp.id);
-                      _uncheckAllRows();
-                      setState(() => _selectedTaskIds.clear());
-                    },
+                    onSelected: (emp) => _runBulk(
+                      () => getITTasksNotifier(ref, widget.projectId).bulkReassign(_selectedTaskIds.toList(), emp.id),
+                    ),
                     itemBuilder: (_) => [
                       for (final emp in employees)
                         PopupMenuItem(value: emp, child: Text(emp.name)),
@@ -668,10 +678,9 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
                         ),
                       );
                       if (ok == true && mounted) {
-                        final notifier = getITTasksNotifier(ref, widget.projectId);
-                        await notifier.bulkDelete(_selectedTaskIds.toList());
-                        _uncheckAllRows();
-                        setState(() => _selectedTaskIds.clear());
+                        await _runBulk(
+                          () => getITTasksNotifier(ref, widget.projectId).bulkDelete(_selectedTaskIds.toList()),
+                        );
                       }
                     },
                   ),

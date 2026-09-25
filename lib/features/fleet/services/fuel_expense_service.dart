@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class FuelExpenseService {
   final Dio _dio;
@@ -14,8 +15,8 @@ class FuelExpenseService {
       return data
           .map((item) => FuelExpense.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load fuel expenses: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load fuel expenses');
     }
   }
 
@@ -32,8 +33,8 @@ class FuelExpenseService {
         response.data as Map<String, dynamic>,
         FuelExpense.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load fuel expenses: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load fuel expenses');
     }
   }
 
@@ -71,13 +72,8 @@ class FuelExpenseService {
           : await _dio.post('/fuel-expenses', data: payload);
 
       return FuelExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      String errorMessage = 'Failed to save fuel expense: ${e.message}';
-      final data = e.response?.data;
-      if (data is Map && data['message'] != null) {
-        errorMessage = data['message'].toString();
-      }
-      throw Exception(errorMessage);
+    } catch (e) {
+      throw AppException(e, action: 'save fuel expense');
     }
   }
 
@@ -87,19 +83,16 @@ class FuelExpenseService {
       final response =
           await _dio.put('/fuel-expenses/$id', data: {'status': status});
       return FuelExpense.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception((data is Map && data['message'] != null)
-          ? data['message'].toString()
-          : 'Failed to update status: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'update status');
     }
   }
 
   Future<void> deleteFuelExpense(String id) async {
     try {
       await _dio.delete('/fuel-expenses/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete fuel expense: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete fuel expense');
     }
   }
 }

@@ -16,6 +16,8 @@ import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class FuelExpensesScreen extends HookConsumerWidget {
   const FuelExpensesScreen({super.key});
@@ -429,6 +431,7 @@ class FuelExpensesScreen extends HookConsumerWidget {
                         setState(() => vehicleMissing = true);
                         return;
                       }
+                      try {
                       await ref
                           .read(fuelExpenseServiceProvider)
                           .saveFuelExpense(
@@ -448,10 +451,15 @@ class FuelExpensesScreen extends HookConsumerWidget {
                             notes: notesCtrl.text.trim(),
                             billImage: billImage ?? '',
                           );
-                      ref.invalidate(fuelExpensesProvider);
-                      ref.invalidate(paginatedFuelExpensesProvider);
+                      ref.refreshData.fuelExpenses();
                       if (dialogContext.mounted) {
                         Navigator.of(dialogContext).pop();
+                      }
+                      } catch (e) {
+                        // Keep the dialog open so the user can retry.
+                        if (dialogContext.mounted) {
+                          showErrorSnackBar(dialogContext, e);
+                        }
                       }
                     },
                     child: const Text('Save'),
@@ -623,12 +631,8 @@ class FuelExpensesScreen extends HookConsumerWidget {
         Expanded(
           child: asyncExpenses.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load fuel expenses: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-            ),
+            error: (error, stack) => AppErrorView(
+            error: error, onRetry: () => ref.invalidate(paginatedFuelExpensesProvider)),
             data: (response) {
               final expenses = response.items;
               if (expenses.isEmpty) {
@@ -935,17 +939,18 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                               ),
                                             );
                                             if (confirm == true) {
-                                              await ref
-                                                  .read(
-                                                    fuelExpenseServiceProvider,
-                                                  )
-                                                  .deleteFuelExpense(exp.id);
-                                              ref.invalidate(
-                                                fuelExpensesProvider,
-                                              );
-                                              ref.invalidate(
-                                                paginatedFuelExpensesProvider,
-                                              );
+                                              try {
+                                                await ref
+                                                    .read(
+                                                      fuelExpenseServiceProvider,
+                                                    )
+                                                    .deleteFuelExpense(exp.id);
+                                                ref.refreshData.fuelExpenses();
+                                              } catch (e) {
+                                                if (context.mounted) {
+                                                  showErrorSnackBar(context, e);
+                                                }
+                                              }
                                             }
                                           }
                                         },
@@ -1078,11 +1083,16 @@ class FuelExpensesScreen extends HookConsumerWidget {
                                   ),
                                 );
                                 if (confirm == true) {
-                                  await ref
-                                      .read(fuelExpenseServiceProvider)
-                                      .deleteFuelExpense(expense.id);
-                                  ref.invalidate(fuelExpensesProvider);
-                                  ref.invalidate(paginatedFuelExpensesProvider);
+                                  try {
+                                    await ref
+                                        .read(fuelExpenseServiceProvider)
+                                        .deleteFuelExpense(expense.id);
+                                    ref.refreshData.fuelExpenses();
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      showErrorSnackBar(context, e);
+                                    }
+                                  }
                                 }
                               }
                             },

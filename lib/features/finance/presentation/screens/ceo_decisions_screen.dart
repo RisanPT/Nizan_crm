@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/month_end.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/month_year_picker.dart';
@@ -247,11 +248,9 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
     }
   }
 
-  void _invalidate() {
-    ref.invalidate(openDecisionsProvider);
-    ref.invalidate(decisionsProvider(_key));
-    ref.invalidate(monthEndReviewProvider(_key));
-  }
+  // A decision can belong to any month, so refresh every month / the open list
+  // / month-end reviews, not just the one on screen.
+  void _invalidate() => ref.refreshData.monthEnd();
 
   Future<void> _edit(CeoDecision? existing) async {
     final result = await showModalBottomSheet<CeoDecision>(

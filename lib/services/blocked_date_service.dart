@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/blocked_date.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final blockedDateServiceProvider = Provider<BlockedDateService>((ref) {
   return BlockedDateService(ref.watch(dioProvider));
@@ -26,8 +27,8 @@ class BlockedDateService {
       return data
           .map((item) => BlockedDate.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load blocked dates: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load blocked dates');
     }
   }
 
@@ -50,16 +51,16 @@ class BlockedDateService {
           : await _dio.post('/blocked-dates', data: payload);
 
       return BlockedDate.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save blocked date: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save blocked date');
     }
   }
 
   Future<void> deleteBlockedDate(String id) async {
     try {
       await _dio.delete('/blocked-dates/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete blocked date: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete blocked date');
     }
   }
 }

@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/inventory/data/inventory_product.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/data/staff_kit.dart';
 import 'package:nizan_crm/features/inventory/data/vendor.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// Sentinel for optional 'clear vs leave unchanged' update params.
 const Object _unset = Object();
@@ -36,8 +36,8 @@ class InventoryService {
       return data
           .map((e) => InventoryProduct.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load inventory'));
+    } catch (e) {
+      throw AppException(e, action: 'load inventory');
     }
   }
 
@@ -77,16 +77,16 @@ class InventoryService {
           ? await _dio.post('/inventory/products', data: body)
           : await _dio.put('/inventory/products/$id', data: body);
       return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save product'));
+    } catch (e) {
+      throw AppException(e, action: 'save product');
     }
   }
 
   Future<void> deleteProduct(String id) async {
     try {
       await _dio.delete('/inventory/products/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete product'));
+    } catch (e) {
+      throw AppException(e, action: 'delete product');
     }
   }
 
@@ -98,8 +98,8 @@ class InventoryService {
       final res = await _dio.post('/inventory/products/bulk', data: {'items': items});
       final data = res.data as Map<String, dynamic>;
       return (data['inserted'] as num?)?.toInt() ?? 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to import products'));
+    } catch (e) {
+      throw AppException(e, action: 'import products');
     }
   }
 
@@ -111,7 +111,7 @@ class InventoryService {
       return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
-      throw Exception(_msg(e, 'Barcode lookup failed'));
+      throw AppException(e, action: 'look up the barcode');
     }
   }
 
@@ -127,7 +127,7 @@ class InventoryService {
       return ext.isEmpty ? null : ext;
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null; // no public data (normal)
-      throw Exception(_msg(e, 'Barcode lookup service unavailable'));
+      throw AppException(e, action: 'reach the barcode lookup service');
     }
   }
 
@@ -146,8 +146,8 @@ class InventoryService {
         },
       );
       return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update stock'));
+    } catch (e) {
+      throw AppException(e, action: 'update stock');
     }
   }
 
@@ -164,8 +164,8 @@ class InventoryService {
       if (updated is num) return updated.toInt();
       if (updated is List) return updated.length;
       return 0;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update stock'));
+    } catch (e) {
+      throw AppException(e, action: 'update stock');
     }
   }
 
@@ -186,8 +186,8 @@ class InventoryService {
         },
       );
       return StaffKit.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update allocation'));
+    } catch (e) {
+      throw AppException(e, action: 'update allocation');
     }
   }
 
@@ -200,8 +200,8 @@ class InventoryService {
       return data
           .map((e) => Purchase.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load purchases'));
+    } catch (e) {
+      throw AppException(e, action: 'load purchases');
     }
   }
 
@@ -239,8 +239,8 @@ class InventoryService {
         'interState': interState,
       });
       return Purchase.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to record purchase'));
+    } catch (e) {
+      throw AppException(e, action: 'record purchase');
     }
   }
 
@@ -260,8 +260,8 @@ class InventoryService {
         'note': note,
       });
       return Purchase.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to record payment'));
+    } catch (e) {
+      throw AppException(e, action: 'record payment');
     }
   }
 
@@ -298,8 +298,8 @@ class InventoryService {
         'supplier': ?supplier,
       });
       return Purchase.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update bill'));
+    } catch (e) {
+      throw AppException(e, action: 'update bill');
     }
   }
 
@@ -312,8 +312,8 @@ class InventoryService {
       return data
           .map((e) => Vendor.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load vendors'));
+    } catch (e) {
+      throw AppException(e, action: 'load vendors');
     }
   }
 
@@ -324,16 +324,16 @@ class InventoryService {
           : await _dio.put('/inventory/vendors/${vendor.id}',
               data: vendor.toJson());
       return Vendor.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save vendor'));
+    } catch (e) {
+      throw AppException(e, action: 'save vendor');
     }
   }
 
   Future<void> deleteVendor(String id) async {
     try {
       await _dio.delete('/inventory/vendors/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete vendor'));
+    } catch (e) {
+      throw AppException(e, action: 'delete vendor');
     }
   }
 
@@ -341,8 +341,8 @@ class InventoryService {
   Future<void> deletePurchase(String id) async {
     try {
       await _dio.delete('/inventory/purchases/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete purchase'));
+    } catch (e) {
+      throw AppException(e, action: 'delete purchase');
     }
   }
 
@@ -354,8 +354,8 @@ class InventoryService {
         data: {'paid': paid},
       );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update payment status'));
+    } catch (e) {
+      throw AppException(e, action: 'update payment status');
     }
   }
 
@@ -368,8 +368,8 @@ class InventoryService {
       );
       final data = res.data as Map<String, dynamic>;
       return (data['inserted'] as num?)?.toInt() ?? items.length;
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to import inventory'));
+    } catch (e) {
+      throw AppException(e, action: 'import inventory');
     }
   }
 
@@ -382,8 +382,8 @@ class InventoryService {
       return data
           .map((e) => StaffKit.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load staff kits'));
+    } catch (e) {
+      throw AppException(e, action: 'load staff kits');
     }
   }
 
@@ -405,19 +405,16 @@ class InventoryService {
           ? await _dio.post('/inventory/kits', data: body)
           : await _dio.put('/inventory/kits/$id', data: body);
       return StaffKit.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save kit'));
+    } catch (e) {
+      throw AppException(e, action: 'save kit');
     }
   }
 
   Future<void> deleteKit(String id) async {
     try {
       await _dio.delete('/inventory/kits/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete kit'));
+    } catch (e) {
+      throw AppException(e, action: 'delete kit');
     }
   }
-
-  String _msg(DioException e, String fallback) =>
-      friendlyErrorMessage(e, fallback: fallback);
 }

@@ -13,6 +13,7 @@ import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:nizan_crm/presentation/screens/staff_details_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class FleetDriversScreen extends HookConsumerWidget {
   const FleetDriversScreen({super.key});
@@ -284,12 +285,12 @@ class FleetDriversScreen extends HookConsumerWidget {
                                       employeeId: emp.id,
                                     );
                               } catch (e) {
-                                loginError = '$e';
+                                loginError = friendlyErrorMessage(e);
                               }
                             }
 
-                            ref.invalidate(employeesProvider);
-                            ref.invalidate(paginatedEmployeesProvider);
+                            // Also refreshes employees; a login may have been granted.
+                            ref.refreshData.crmUsers();
                             if (dialogContext.mounted) {
                               Navigator.of(dialogContext).pop();
                             }
@@ -320,9 +321,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                           } catch (e) {
                             setState(() => savingDriver = false);
                             if (dialogContext.mounted) {
-                              ScaffoldMessenger.of(dialogContext).showSnackBar(
-                                SnackBar(content: Text(friendlyErrorMessage(e))),
-                              );
+                              showErrorSnackBar(dialogContext, e);
                             }
                           }
                         },
@@ -346,12 +345,8 @@ class FleetDriversScreen extends HookConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: asyncEmployees.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, stack) => Center(
-            child: Text(
-              'Failed to load drivers: $error',
-              style: TextStyle(color: crmColors.textSecondary),
-            ),
-          ),
+          error: (error, stack) => AppErrorView(
+            error: error, onRetry: () => ref.invalidate(employeesProvider)),
           data: (employees) {
             final drivers = employees
                 .where((e) => e.artistRole == 'driver')
@@ -499,12 +494,8 @@ class FleetDriversScreen extends HookConsumerWidget {
         Expanded(
           child: asyncEmployees.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, stack) => Center(
-              child: Text(
-                'Failed to load drivers: $error',
-                style: TextStyle(color: crmColors.textSecondary),
-              ),
-            ),
+            error: (error, stack) => AppErrorView(
+            error: error, onRetry: () => ref.invalidate(employeesProvider)),
             data: (employees) {
               final allDrivers = employees
                   .where((employee) => employee.artistRole == 'driver')
@@ -780,8 +771,8 @@ class FleetDriversScreen extends HookConsumerWidget {
                             await ref
                                 .read(employeeServiceProvider)
                                 .deleteEmployee(employee.id);
-                            ref.invalidate(employeesProvider);
-                            ref.invalidate(paginatedEmployeesProvider);
+                            // Also refreshes employees (linked login may go too).
+                            ref.refreshData.crmUsers();
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Driver deleted')),
@@ -789,9 +780,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                             }
                           } catch (e) {
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(friendlyErrorMessage(e))),
-                              );
+                              showErrorSnackBar(context, e);
                             }
                           }
                         }

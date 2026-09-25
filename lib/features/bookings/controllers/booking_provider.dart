@@ -6,6 +6,10 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:nizan_crm/features/bookings/services/booking_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/controllers/sales_report_provider.dart';
+import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 
 part 'booking_provider.g.dart';
 
@@ -201,8 +205,12 @@ final singleBookingProvider = FutureProvider.autoDispose.family<Booking?, String
   // from the server by id so the manage screen never wrongly says "not found".
   try {
     return await ref.read(bookingServiceProvider).getBookingById(id);
-  } catch (_) {
-    return null;
+  } catch (e) {
+    // Only a real 404 means "no such booking". Anything else (offline, server
+    // error, no permission) must surface as an error so the screen can say so
+    // and offer a retry, instead of wrongly claiming the booking doesn't exist.
+    if (errorKind(e) == 1) return null;
+    rethrow;
   }
 });
 
@@ -265,17 +273,12 @@ class BookingNotifier extends _$BookingNotifier {
       final createdBooking = await service.createBooking(booking);
       if (ref.mounted) {
         state = AsyncData([...state.value ?? [], createdBooking]);
-        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
-        // Invalidate ALL family instances of paginatedBookingsProvider so every
-        // list/summary screen (sales invoices, sales dashboard, accounts, etc.)
-        // reflects the newly created booking immediately — mirrors removeBooking.
-        ref.invalidate(paginatedBookingsProvider);
+        _refreshDependents();
       }
       return createdBooking;
-    } catch (err, stack) {
-      if (ref.mounted) {
-        state = AsyncError(err, stack);
-      }
+    } catch (_) {
+      // Leave the cached list untouched: a failed create must not blank out
+      // the bookings list on every screen. The caller shows the error.
       rethrow;
     }
   }
@@ -306,13 +309,15 @@ class BookingNotifier extends _$BookingNotifier {
           for (final existing in state.value ?? [])
             if (existing.id == booking.id) merged else existing,
         ]);
-        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+        _refreshDependents(bookingId: booking.id);
       }
       return merged;
-    } catch (err, stack) {
+    } catch (_) {
       if (ref.mounted) {
+        // Roll the optimistic edit back. Deliberately NOT AsyncError: one
+        // failed save must not blank out the bookings list on every screen.
+        // The caller shows the error.
         state = previousState;
-        state = AsyncError(err, stack);
       }
       rethrow;
     }
@@ -328,14 +333,8 @@ class BookingNotifier extends _$BookingNotifier {
     try {
       await service.deleteBooking(id);
       if (ref.mounted) {
-        // Bump the refresh trigger so paginatedBookingsProvider re-fetches.
-        ref.read(bookingsRefreshTriggerProvider.notifier).state++;
-        // Invalidate all family instances of paginatedBookingsProvider so every
-        // list screen (dashboard, calendar, etc.) sees the deletion immediately.
-        ref.invalidate(paginatedBookingsProvider);
-        // Invalidate the single-booking cache for the deleted id so navigating
-        // back to its detail page does not show stale data.
-        ref.invalidate(singleBookingProvider(id));
+        // Paginated lists, the deleted id's detail cache, clients, slots…
+        _refreshDependents(bookingId: id);
       }
     } catch (err) {
       if (ref.mounted) {
@@ -347,6 +346,24 @@ class BookingNotifier extends _$BookingNotifier {
       // made the UI report "deleted successfully" while the booking remained.
       rethrow;
     }
+  }
+
+  /// Everything `ref.refreshData.bookings()` refreshes EXCEPT this notifier:
+  /// its in-memory list was already updated (insert/replace/remove) and is the
+  /// source of truth for locally-priced edits, so re-fetching it would discard
+  /// that and re-run the auto-complete sync.
+  void _refreshDependents({String? bookingId}) {
+    ref.read(bookingsRefreshTriggerProvider.notifier).state++;
+    // ALL family instances — every list/summary screen (sales invoices,
+    // dashboards, accounts, artist works…) refetches.
+    ref.invalidate(paginatedBookingsProvider);
+    ref.invalidate(artistAssignedWorksProvider);
+    if (bookingId != null) ref.invalidate(singleBookingProvider(bookingId));
+    ref.invalidate(bookingCalendarProvider);
+    ref.invalidate(salesReportProvider);
+    ref.refreshData.customers(); // clients auto-created / booking counts
+    ref.refreshData.slots(); // slot availability
+    ref.refreshData.leads(); // booking a lead converts it
   }
 
   List<Booking> bookingsForDate(DateTime date) {

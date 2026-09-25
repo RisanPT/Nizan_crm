@@ -16,6 +16,7 @@ import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class AddServiceScreen extends HookConsumerWidget {
   final String? packageId;
@@ -138,7 +139,9 @@ class AddServiceScreen extends HookConsumerWidget {
               districtPrices: districtPrices,
             );
 
-        ref.invalidate(packagesProvider);
+        // Refresh BOTH caches: the Services list reads the paginated one, so
+        // invalidating only packagesProvider left it showing the old list.
+        ref.refreshData.packages();
 
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -155,9 +158,7 @@ class AddServiceScreen extends HookConsumerWidget {
         }
       } catch (e) {
         if (context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+          showErrorSnackBar(context, e);
         }
       } finally {
         isSaving.value = false;
@@ -196,6 +197,28 @@ class AddServiceScreen extends HookConsumerWidget {
       districtPriceControllers: districtPriceControllers,
       basePriceHint: priceCtrl.text,
     );
+
+    // If the lookups failed, don't show a half-empty form: saving an edit
+    // without the district list would silently drop its district prices.
+    final loadError = asyncDistricts.error ??
+        asyncZones.error ??
+        asyncStates.error ??
+        asyncRegions.error ??
+        (packageId != null && existingPackage == null
+            ? asyncPackages.error
+            : null);
+    if (loadError != null) {
+      return AppErrorView(
+        error: loadError,
+        onRetry: () {
+          ref.invalidate(zonesProvider);
+          ref.invalidate(statesProvider);
+          ref.invalidate(regionsProvider);
+          ref.invalidate(districtsProvider);
+          ref.invalidate(packagesProvider);
+        },
+      );
+    }
 
     return SingleChildScrollView(
       child: Column(

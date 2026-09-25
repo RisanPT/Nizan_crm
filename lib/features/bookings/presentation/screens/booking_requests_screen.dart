@@ -40,9 +40,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(error))),
-        );
+        showErrorSnackBar(context, error);
       }
     }
   }
@@ -79,9 +77,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(error))),
-        );
+        showErrorSnackBar(context, error);
       }
     }
   }
@@ -110,9 +106,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(error))),
-        );
+        showErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _bulkSaving = false);
@@ -128,8 +122,10 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     return SelectionArea(
       child: asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) =>
-          Center(child: Text(friendlyErrorMessage(error))),
+      error: (error, stack) => AppErrorView(
+        error: error,
+        onRetry: () => ref.invalidate(bookingProvider),
+      ),
       data: (bookings) {
         final pendingBookings =
             bookings
@@ -874,9 +870,7 @@ class _BookingApprovalDialogState
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(error))),
-        );
+        showErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
 import 'package:nizan_crm/features/it/domain/repositories/it_task_repository.dart';
@@ -189,9 +190,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
         refreshed[rIdx] = saved;
         state = AsyncValue.data(refreshed);
       }
-      if (mod.projectId.isNotEmpty) {
-        ref.invalidate(itProjectTasksControllerProvider(mod.projectId));
-      }
+      _syncOtherTaskViews(ref, fromAll: true);
     } catch (e) {
       final reverted = List<ITTaskModel>.from(state.value ?? updatedList);
       final rIdx = reverted.indexWhere((t) => t.id == taskId);
@@ -223,6 +222,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
         newStartDate: newStart,
         newDueDate: newDue,
       );
+      _syncOtherTaskViews(ref, fromAll: true);
     } catch (e) {
       updatedList[index] = oldTask;
       state = AsyncValue.data(updatedList);
@@ -244,6 +244,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     final map = {for (final t in updated) t.id: t};
     final list = (state.value ?? []).map((t) => map[t.id] ?? t).toList();
     state = AsyncValue.data(list);
+    _syncOtherTaskViews(ref, fromAll: true);
   }
 
   @override
@@ -260,6 +261,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     final map = {for (final t in updated) t.id: t};
     final list = (state.value ?? []).map((t) => map[t.id] ?? t).toList();
     state = AsyncValue.data(list);
+    _syncOtherTaskViews(ref, fromAll: true);
   }
 
   @override
@@ -268,11 +270,19 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     if (current == null || taskIds.isEmpty) return;
 
     final repo = ref.read(itTaskRepositoryProvider);
-    for (final id in taskIds) {
-      await repo.deleteTask(id);
+    final deleted = <String>{};
+    try {
+      for (final id in taskIds) {
+        await repo.deleteTask(id);
+        deleted.add(id);
+      }
+    } finally {
+      // Drop whatever was actually deleted, even if a later delete failed, so
+      // the grid never keeps showing rows that are already gone.
+      final remaining = (state.value ?? current).where((t) => !deleted.contains(t.id)).toList();
+      state = AsyncValue.data(remaining);
+      if (deleted.isNotEmpty) _syncOtherTaskViews(ref, fromAll: true);
     }
-    final remaining = current.where((t) => !taskIds.contains(t.id)).toList();
-    state = AsyncValue.data(remaining);
   }
 
   @override
@@ -357,6 +367,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     if (current != null) {
       state = AsyncValue.data(current.where((t) => t.id != taskId).toList());
     }
+    _syncOtherTaskViews(ref, fromAll: true);
   }
 }
 
@@ -429,7 +440,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
         refreshed[rIdx] = saved;
         state = AsyncValue.data(refreshed);
       }
-      ref.invalidate(itAllTasksControllerProvider);
+      _syncOtherTaskViews(ref, fromAll: false);
     } catch (e) {
       final reverted = List<ITTaskModel>.from(state.value ?? updatedList);
       final rIdx = reverted.indexWhere((t) => t.id == taskId);
@@ -461,7 +472,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
         newStartDate: newStart,
         newDueDate: newDue,
       );
-      ref.invalidate(itAllTasksControllerProvider);
+      _syncOtherTaskViews(ref, fromAll: false);
     } catch (e) {
       updatedList[index] = oldTask;
       state = AsyncValue.data(updatedList);
@@ -483,7 +494,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     final map = {for (final t in updated) t.id: t};
     final list = (state.value ?? []).map((t) => map[t.id] ?? t).toList();
     state = AsyncValue.data(list);
-    ref.invalidate(itAllTasksControllerProvider);
+    _syncOtherTaskViews(ref, fromAll: false);
   }
 
   @override
@@ -500,7 +511,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     final map = {for (final t in updated) t.id: t};
     final list = (state.value ?? []).map((t) => map[t.id] ?? t).toList();
     state = AsyncValue.data(list);
-    ref.invalidate(itAllTasksControllerProvider);
+    _syncOtherTaskViews(ref, fromAll: false);
   }
 
   @override
@@ -509,12 +520,19 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     if (current == null || taskIds.isEmpty) return;
 
     final repo = ref.read(itTaskRepositoryProvider);
-    for (final id in taskIds) {
-      await repo.deleteTask(id);
+    final deleted = <String>{};
+    try {
+      for (final id in taskIds) {
+        await repo.deleteTask(id);
+        deleted.add(id);
+      }
+    } finally {
+      // Drop whatever was actually deleted, even if a later delete failed, so
+      // the grid never keeps showing rows that are already gone.
+      final remaining = (state.value ?? current).where((t) => !deleted.contains(t.id)).toList();
+      state = AsyncValue.data(remaining);
+      if (deleted.isNotEmpty) _syncOtherTaskViews(ref, fromAll: false);
     }
-    final remaining = current.where((t) => !taskIds.contains(t.id)).toList();
-    state = AsyncValue.data(remaining);
-    ref.invalidate(itAllTasksControllerProvider);
   }
 
   @override
@@ -599,7 +617,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     if (current != null) {
       state = AsyncValue.data(current.where((t) => t.id != taskId).toList());
     }
-    ref.invalidate(itAllTasksControllerProvider);
+    _syncOtherTaskViews(ref, fromAll: false);
   }
 }
 
@@ -609,6 +627,32 @@ final itAllTasksControllerProvider =
 final itProjectTasksControllerProvider =
     AsyncNotifierProvider.family<ITProjectTasksNotifier, List<ITTaskModel>, String>(
         (projectId) => ITProjectTasksNotifier(projectId));
+
+/// After a successful task change, refreshes every OTHER view of IT tasks: the
+/// sibling controller (cross-project <-> per-project), the FutureProvider task
+/// lists (My Tasks, roadmap) and project progress/counters. The calling
+/// notifier has already updated its own in-memory state, so it is not
+/// invalidated here.
+void _syncOtherTaskViews(Ref ref, {required bool fromAll}) {
+  if (fromAll) {
+    ref.invalidate(itProjectTasksControllerProvider);
+  } else {
+    ref.invalidate(itAllTasksControllerProvider);
+  }
+  ref.refreshData.tasks();
+  ref.refreshData.projects();
+}
+
+/// For screens that change tasks outside the controllers (direct service calls,
+/// ticket promotion, project deletion): refreshes BOTH task controllers, the
+/// FutureProvider task lists and project progress/counters.
+/// (The central `refreshData.tasks()` doesn't know the two controllers.)
+void refreshAllItTaskViews(WidgetRef ref) {
+  ref.invalidate(itAllTasksControllerProvider);
+  ref.invalidate(itProjectTasksControllerProvider);
+  ref.refreshData.tasks();
+  ref.refreshData.projects();
+}
 
 IITTasksNotifier getITTasksNotifier(WidgetRef ref, String? projectId) {
   if (projectId != null && projectId.isNotEmpty) {

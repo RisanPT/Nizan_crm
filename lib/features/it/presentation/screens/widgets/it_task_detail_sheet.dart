@@ -119,6 +119,17 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
     super.dispose();
   }
 
+  /// The task as currently held by the controller the sheet mutates through,
+  /// so subtasks / comments added here show up immediately (the `widget.task`
+  /// snapshot passed in never changes). Falls back to the snapshot.
+  ITTaskModel _liveTask() {
+    final pid = widget.task.projectId;
+    final AsyncValue<List<ITTaskModel>> tasks = pid.isNotEmpty
+        ? ref.watch(itProjectTasksControllerProvider(pid))
+        : ref.watch(itAllTasksControllerProvider);
+    return tasks.value?.where((t) => t.id == widget.task.id).firstOrNull ?? widget.task;
+  }
+
   Future<void> _saveChanges() async {
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -645,7 +656,7 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   }
 
   Widget _buildSubtasksTab(CrmTheme crm) {
-    final subtasks = widget.task.subtasks;
+    final subtasks = _liveTask().subtasks;
     final notifier = getITTasksNotifier(ref, widget.task.projectId);
 
     return Padding(
@@ -662,8 +673,8 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
               ),
               onSubmitted: (val) {
                 if (val.trim().isNotEmpty) {
-                  notifier.addSubtask(widget.task.id, val.trim());
-                  _subtaskInputController.clear();
+                  _tryAction(() => notifier.addSubtask(widget.task.id, val.trim()),
+                      onSuccess: _subtaskInputController.clear);
                 }
               },
             ),
@@ -673,8 +684,8 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
             style: FilledButton.styleFrom(backgroundColor: crm.primary),
             onPressed: () {
               if (_subtaskInputController.text.trim().isNotEmpty) {
-                notifier.addSubtask(widget.task.id, _subtaskInputController.text.trim());
-                _subtaskInputController.clear();
+                _tryAction(() => notifier.addSubtask(widget.task.id, _subtaskInputController.text.trim()),
+                    onSuccess: _subtaskInputController.clear);
               }
             },
             icon: const Icon(Icons.add, size: 16),
@@ -709,11 +720,11 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
                         ),
                       ),
                       onChanged: (val) {
-                        notifier.toggleSubtask(widget.task.id, item.id, val ?? false);
+                        _tryAction(() => notifier.toggleSubtask(widget.task.id, item.id, val ?? false));
                       },
                       secondary: IconButton(
                         icon: const Icon(Icons.delete_outline, size: 18),
-                        onPressed: () => notifier.removeSubtask(widget.task.id, item.id),
+                        onPressed: () => _tryAction(() => notifier.removeSubtask(widget.task.id, item.id)),
                       ),
                     );
                   },
@@ -724,7 +735,7 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
   }
 
   Widget _buildActivityTab(CrmTheme crm) {
-    final logs = widget.task.activityLogs;
+    final logs = _liveTask().activityLogs;
     final notifier = getITTasksNotifier(ref, widget.task.projectId);
 
     return Padding(
@@ -741,8 +752,8 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
               ),
               onSubmitted: (val) {
                 if (val.trim().isNotEmpty) {
-                  notifier.addActivityComment(widget.task.id, val.trim());
-                  _commentInputController.clear();
+                  _tryAction(() => notifier.addActivityComment(widget.task.id, val.trim()),
+                      onSuccess: _commentInputController.clear);
                 }
               },
             ),
@@ -752,8 +763,8 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
             style: FilledButton.styleFrom(backgroundColor: crm.primary),
             onPressed: () {
               if (_commentInputController.text.trim().isNotEmpty) {
-                notifier.addActivityComment(widget.task.id, _commentInputController.text.trim());
-                _commentInputController.clear();
+                _tryAction(() => notifier.addActivityComment(widget.task.id, _commentInputController.text.trim()),
+                    onSuccess: _commentInputController.clear);
               }
             },
             icon: const Icon(Icons.send, size: 16),
@@ -798,6 +809,17 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
     );
   }
 
+  /// Runs a quick inline action (subtask / comment). The text box is only
+  /// cleared when the save worked, so a failed post is not lost.
+  Future<void> _tryAction(Future<void> Function() action, {VoidCallback? onSuccess}) async {
+    try {
+      await action();
+      if (mounted) onSuccess?.call();
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+
   Widget _buildBottomActionBar(CrmTheme crm) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -826,8 +848,12 @@ class _ITTaskDetailModalState extends ConsumerState<_ITTaskDetailModal> with Sin
             );
             if (confirm == true && mounted) {
               final notifier = getITTasksNotifier(ref, widget.task.projectId);
-              await notifier.deleteTask(widget.task.id);
-              if (mounted) Navigator.pop(context, true);
+              try {
+                await notifier.deleteTask(widget.task.id);
+                if (mounted) Navigator.pop(context, true);
+              } catch (e) {
+                if (mounted) showErrorSnackBar(context, e);
+              }
             }
           },
           icon: const Icon(Icons.delete_outline, size: 18),

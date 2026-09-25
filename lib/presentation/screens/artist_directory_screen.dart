@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -38,7 +39,8 @@ class _ArtistDirectoryScreenState extends ConsumerState<ArtistDirectoryScreen> {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
 
-    final employees = ref.watch(employeesProvider).value ?? const <Employee>[];
+    final asyncEmployees = ref.watch(employeesProvider);
+    final employees = asyncEmployees.value ?? const <Employee>[];
     final bookings = ref.watch(bookingProvider).value ?? const <Booking>[];
     final reviews = ref.watch(reviewAnalyticsProvider).value;
 
@@ -153,7 +155,17 @@ class _ArtistDirectoryScreenState extends ConsumerState<ArtistDirectoryScreen> {
             ),
             18.hg,
 
-            if (artists.isEmpty)
+            if (artists.isEmpty && asyncEmployees.hasError)
+              AppErrorView(
+                error: asyncEmployees.error,
+                onRetry: () => ref.invalidate(employeesProvider),
+              )
+            else if (artists.isEmpty && asyncEmployees.isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (artists.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Center(

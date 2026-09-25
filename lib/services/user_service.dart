@@ -4,6 +4,7 @@ import '../core/models/crm_user.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final userServiceProvider = Provider<UserService>((ref) {
   return UserService(ref.watch(dioProvider));
@@ -36,8 +37,8 @@ class UserService {
       return data
           .map((item) => CrmUser.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to load users'));
+    } catch (e) {
+      throw AppException(e, action: 'load users');
     }
   }
 
@@ -54,8 +55,8 @@ class UserService {
         response.data as Map<String, dynamic>,
         CrmUser.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to load users'));
+    } catch (e) {
+      throw AppException(e, action: 'load users');
     }
   }
 
@@ -99,8 +100,8 @@ class UserService {
       );
 
       return CrmUser.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to create user'));
+    } catch (e) {
+      throw AppException(e, action: 'create user');
     }
   }
 
@@ -145,16 +146,16 @@ class UserService {
       );
 
       return CrmUser.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to update user'));
+    } catch (e) {
+      throw AppException(e, action: 'update user');
     }
   }
 
   Future<void> deleteUser(String id) async {
     try {
       await _dio.delete('/auth/users/$id');
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to delete user'));
+    } catch (e) {
+      throw AppException(e, action: 'delete user');
     }
   }
 
@@ -173,16 +174,9 @@ class UserService {
         'password': password,
         if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
       });
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to grant login access'));
+    } catch (e) {
+      throw AppException(e, action: 'grant login access');
     }
   }
 
-  String _message(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map<String, dynamic>) {
-      return data['message'] as String? ?? fallback;
-    }
-    return e.message ?? fallback;
-  }
 }

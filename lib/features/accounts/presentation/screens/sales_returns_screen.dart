@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/accounts/controllers/sales_return_provider.da
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -64,7 +65,11 @@ class SalesReturnsScreen extends ConsumerWidget {
             14.h,
             statsAsync.when(
               loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () => ref.invalidate(salesReturnStatsProvider),
+              ),
               data: (s) => _StatsRow(stats: s, crm: crm),
             ),
             16.h,
@@ -75,7 +80,10 @@ class SalesReturnsScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(salesReturnsProvider),
+                ),
               ),
               data: (returns) {
                 if (returns.isEmpty) {
@@ -117,10 +125,10 @@ class SalesReturnsScreen extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(salesReturnServiceProvider).updateStatus(r.id, status);
-      _refresh(ref);
+      ref.refreshData.salesReturns();
       messenger.showSnackBar(SnackBar(content: Text('Credit note $status')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (context.mounted) showErrorSnackBar(context, e);
     }
   }
 
@@ -142,17 +150,17 @@ class SalesReturnsScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(salesReturnServiceProvider).delete(r.id);
-      _refresh(ref);
+      ref.refreshData.salesReturns();
       messenger.showSnackBar(const SnackBar(content: Text('Credit note deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (context.mounted) showErrorSnackBar(context, e);
     }
   }
 
   void _openForm(BuildContext context, WidgetRef ref, {SalesReturn? existing}) {
     showDialog(
       context: context,
-      builder: (_) => _CreditNoteDialog(existing: existing, onSaved: () => _refresh(ref)),
+      builder: (_) => _CreditNoteDialog(existing: existing, onSaved: () => ref.refreshData.salesReturns()),
     );
   }
 }
@@ -183,7 +191,7 @@ class _StatsRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -222,7 +230,7 @@ class _ReturnCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -384,7 +392,7 @@ class _CreditNoteDialogState extends ConsumerState<_CreditNoteDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Credit note saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

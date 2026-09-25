@@ -241,7 +241,7 @@ class _ITWbsViewState extends ConsumerState<ITWbsView> {
           color: isTopPhase ? accent.withValues(alpha: 0.08) : (isGroup ? crm.background : crm.surface),
           border: Border(
             left: isTopPhase ? BorderSide(color: accent, width: 3) : BorderSide.none,
-            bottom: BorderSide(color: crm.border.withValues(alpha: 0.6)),
+            bottom: BorderSide(color: crm.border.faded(0.6)),
           ),
         ),
         constraints: const BoxConstraints(minHeight: 44),

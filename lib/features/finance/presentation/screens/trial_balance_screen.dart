@@ -85,7 +85,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ListView(children: [
-                Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+                AppErrorView(error: e, onRetry: () => ref.invalidate(trialBalanceProvider(_asOfIso))),
               ]),
               data: (tb) {
                 _last = tb;
@@ -143,8 +143,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -174,7 +173,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         // header
@@ -198,7 +197,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4))),
+                border: Border(top: BorderSide(color: crm.border.faded(0.4))),
               ),
               child: Row(children: [
                 Expanded(

@@ -158,10 +158,13 @@ StatementImportResult parseBankStatement(
   List<List<dynamic>> rows;
   try {
     rows = lower.endsWith('.csv') ? _readCsv(bytes) : _readXlsx(bytes, sheetName);
-  } catch (e) {
+  } catch (_) {
     return StatementImportResult(
       lines: const [],
-      warnings: ['Could not read the file: $e'],
+      warnings: [
+        'Could not read the file. Make sure it is a valid .xlsx, .xls or .csv '
+            'bank statement and is not password-protected.',
+      ],
       totalRows: 0,
       skipped: 0,
     );

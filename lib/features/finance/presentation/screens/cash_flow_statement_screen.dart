@@ -161,9 +161,9 @@ class _CashFlowStatementScreenState
     if (loading) {
       content = const Center(child: CircularProgressIndicator());
     } else if (error != null) {
-      content = Center(
-          child: Text(friendlyErrorMessage(error),
-              style: TextStyle(color: crm.destructive)));
+      content = ListView(children: [
+        AppErrorView(error: error, onRetry: refresh),
+      ]);
     } else {
       final collections = asyncCollections.value ?? <ArtistCollection>[];
       final artistExpenses = asyncExpenses.value ?? <ArtistExpense>[];
@@ -470,7 +470,7 @@ class _CashFlowStatementScreenState
                     decoration: BoxDecoration(
                         border: Border(
                             top: BorderSide(
-                                color: crm.border.withValues(alpha: 0.4)))),
+                                color: crm.border.faded(0.4)))),
                     child: Row(children: [
                       Expanded(
                         flex: 6,
@@ -663,8 +663,7 @@ class _CashFlowStatementScreenState
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }

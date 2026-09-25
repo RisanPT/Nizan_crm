@@ -118,16 +118,22 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
   }
 
   void _popup(AppNotification n) {
-    // Native OS notification (web only; no-op elsewhere).
-    showWebNotification(n.title, n.body);
-    // In-app toast (works on every platform).
+    void openLink() {
+      if (mounted && n.link.isNotEmpty) context.go(n.link);
+    }
+
+    // Native OS notification (web only; no-op elsewhere). Auto-closes, closes
+    // on click, and is tagged by id so multiple tabs don't stack copies.
+    showWebNotification(n.title, n.body, id: n.id, onClick: openLink);
+    // In-app toast (works on every platform). Closing either one closes both.
     if (!mounted) return;
     NotificationToast.show(
       context,
       title: n.title,
       body: n.body,
       icon: _iconFor(n.type),
-      onTap: n.link.isNotEmpty ? () => context.go(n.link) : null,
+      onTap: n.link.isNotEmpty ? openLink : null,
+      onDismissed: () => closeWebNotification(n.id),
     );
   }
 

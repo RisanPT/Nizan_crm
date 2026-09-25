@@ -48,7 +48,8 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
     final crm = context.crmColors;
     final asyncTasks = ref.watch(itAllTasksControllerProvider);
     final filterState = ref.watch(itFilterProvider);
-    final projects = ref.watch(itProjectsProvider).value ?? const <ITProjectModel>[];
+    final projectsAsync = ref.watch(itProjectsProvider);
+    final projects = projectsAsync.value ?? const <ITProjectModel>[];
     final itProjectIds = projects.map((p) => p.id).toSet();
 
     return Scaffold(
@@ -62,20 +63,19 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
         Expanded(
           child: asyncTasks.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.error_outline, size: 40, color: Colors.red.shade400),
-                const SizedBox(height: 10),
-                Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: () => ref.read(itAllTasksControllerProvider.notifier).refresh(),
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Retry'),
-                ),
-              ]),
+            error: (e, _) => AppErrorView(
+              error: e,
+              onRetry: () => ref.read(itAllTasksControllerProvider.notifier).refresh(),
             ),
             data: (allTasksRaw) {
+              // Without the project list every task would be filtered out, so
+              // show the failure instead of a misleading empty roadmap.
+              if (projectsAsync.hasError && projectsAsync.value == null) {
+                return AppErrorView(
+                  error: projectsAsync.error,
+                  onRetry: () => ref.invalidate(itProjectsProvider),
+                );
+              }
               // Scope the IT Roadmap to IT-department projects only; company
               // (non-IT) projects live in the Company Projects portfolio.
               final allTasks = allTasksRaw.where((t) => itProjectIds.contains(t.projectId)).toList();
@@ -526,12 +526,7 @@ class _ITRoadmapScreenState extends ConsumerState<ITRoadmapScreen> {
       return;
     }
     final allTasks = ref.read(itAllTasksControllerProvider).value ?? const <ITTaskModel>[];
-    showTaskEditor(context, ref, projects.first.id, allTasks: allTasks).then((saved) {
-      if (saved == true) {
-        ref.read(itAllTasksControllerProvider.notifier).refresh();
-        ref.invalidate(itProjectsProvider);
-        ref.invalidate(projectsProvider);
-      }
-    });
+    // The editor refreshes every task view (incl. this roadmap) itself on save.
+    showTaskEditor(context, ref, projects.first.id, allTasks: allTasks);
   }
 }

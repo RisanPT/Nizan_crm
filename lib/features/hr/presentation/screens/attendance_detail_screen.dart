@@ -87,11 +87,12 @@ class AttendanceDetailScreen extends HookConsumerWidget {
       ),
       body: attendanceAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(friendlyErrorMessage(e), textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary)),
-          ),
+        error: (e, _) => AppErrorView(
+          error: e,
+          onRetry: () {
+            ref.invalidate(employeeAttendanceProvider(employeeId));
+            ref.invalidate(employeeDaysProvider(employeeId));
+          },
         ),
         data: (records) {
           final workedDays = records.where((r) => (r.workedHours ?? 0) > 0).length;
@@ -176,7 +177,7 @@ class _HeaderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: crm.border.withValues(alpha: 0.7)),
+        border: Border.all(color: crm.border.faded(0.7)),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 14, offset: const Offset(0, 6)),
         ],
@@ -339,7 +340,7 @@ class _Metric extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         children: [
@@ -418,7 +419,7 @@ class _Calendar extends StatelessWidget {
       case _DayKind.clockedIn:
         return crm.warning.withValues(alpha: 0.4);
       default:
-        return crm.border.withValues(alpha: 0.5);
+        return crm.border.faded(0.5);
     }
   }
 
@@ -438,7 +439,7 @@ class _Calendar extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4)),
         ],
@@ -585,7 +586,7 @@ class _DayDetail extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

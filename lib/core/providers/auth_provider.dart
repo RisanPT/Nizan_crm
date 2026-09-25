@@ -99,6 +99,7 @@ class AuthController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   Future<void> _restoreSession() async {
+    AuthSession? storedSession;
     try {
       final preferences = await SharedPreferences.getInstance();
       final rawSession = preferences.getString(_sessionKey);
@@ -108,16 +109,26 @@ class AuthController extends ChangeNotifier {
         return;
       }
 
-      final storedSession = AuthSession.fromStorageValue(rawSession);
+      storedSession = AuthSession.fromStorageValue(rawSession);
       final refreshedSession = await _ref
           .read(authServiceProvider)
           .getCurrentUser(storedSession.token);
 
       _session = refreshedSession;
       await preferences.setString(_sessionKey, refreshedSession.toStorageValue());
-    } catch (_) {
-      await _clearPersistedSession();
-      _session = null;
+    } catch (error) {
+      // Opening the app offline (or while the server is down) must NOT log the
+      // user out — keep the saved session; requests will work once the
+      // connection is back (the offline banner tells them what's happening).
+      // Only a real rejection (expired/invalid token → 401/403) or an
+      // unreadable stored session clears it.
+      final kind = errorKind(error); // 0 = offline/timeout, 3 = server 5xx
+      if (storedSession != null && (kind == 0 || kind == 3)) {
+        _session = storedSession;
+      } else {
+        await _clearPersistedSession();
+        _session = null;
+      }
     } finally {
       _isInitializing = false;
       notifyListeners();

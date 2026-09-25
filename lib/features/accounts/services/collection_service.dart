@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 
 class CollectionService {
@@ -31,8 +32,8 @@ class CollectionService {
       return data
           .map((item) => ArtistCollection.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load collections: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load collections');
     }
   }
 
@@ -59,8 +60,8 @@ class CollectionService {
         collectionsTotal: (d['collectionsTotal'] as num?)?.toDouble() ?? 0,
         advancesTotal: (d['advancesTotal'] as num?)?.toDouble() ?? 0,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load payments received: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load payments received');
     }
   }
 
@@ -87,13 +88,8 @@ class CollectionService {
       };
       final response = await _dio.post('/collections', data: payload);
       return ArtistCollection.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to create collection: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'create collection');
     }
   }
 
@@ -116,13 +112,8 @@ class CollectionService {
         'attachmentUrl': ?attachmentUrl,
       });
       return ArtistCollection.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to update collection: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'update collection');
     }
   }
 
@@ -137,16 +128,16 @@ class CollectionService {
         data: {'status': status, 'verifiedBy': verifiedBy},
       );
       return ArtistCollection.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to verify collection: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'verify collection');
     }
   }
 
   Future<void> deleteCollection(String id) async {
     try {
       await _dio.delete('/collections/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete collection: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete collection');
     }
   }
 }

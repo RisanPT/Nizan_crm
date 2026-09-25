@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -77,7 +78,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final ok = await showContentEditor(context, ref, initialDate: now);
-          if (ok == true) { refresh(); ref.invalidate(contentStatsProvider); }
+          if (ok == true) refresh(); // the editor already refreshed content + stats
         },
         backgroundColor: crm.primary,
         foregroundColor: Colors.white,
@@ -120,7 +121,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+            error: (e, _) => AppErrorView(error: e, onRetry: refresh),
             data: (items) => _monthGrid(context, ref, crm, monthFocus.value, now, items, isMobile, refresh),
           ),
         ),
@@ -289,7 +290,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
               onPressed: () async {
                 Navigator.pop(ctx);
                 final ok = await showContentEditor(context, ref, initialDate: day);
-                if (ok == true) { refresh(); ref.invalidate(contentStatsProvider); }
+                if (ok == true) refresh(); // the editor already refreshed content + stats
               },
               icon: const Icon(Icons.add, size: 18),
               label: Text('Add content on ${_months[day.month - 1]} ${day.day}'),
@@ -319,7 +320,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
         onTap: () async {
           Navigator.pop(sheetCtx);
           final ok = await showContentEditor(screenCtx, ref, existing: it);
-          if (ok == true) { refresh(); ref.invalidate(contentStatsProvider); }
+          if (ok == true) refresh(); // the editor already refreshed content + stats
         },
       ),
     );
@@ -394,6 +395,7 @@ Future<bool?> showContentEditor(
                       if (confirm != true) return;
                       try {
                         await ref.read(contentServiceProvider).deleteItem(existing.id);
+                        ref.refreshData.content();
                         if (ctx.mounted) Navigator.pop(ctx, true);
                       } catch (e) {
                         messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -486,6 +488,7 @@ Future<bool?> showContentEditor(
                       } else {
                         await svc.createItem(body);
                       }
+                      ref.refreshData.content();
                       if (ctx.mounted) Navigator.pop(ctx, true);
                     } catch (e) {
                       setSheet(() => busy = false);

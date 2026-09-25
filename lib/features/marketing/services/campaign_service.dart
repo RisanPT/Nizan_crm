@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nizan_crm/features/marketing/data/campaign.dart';
@@ -14,8 +15,8 @@ class CampaignService {
       final res = await _dio.get('/marketing/campaigns',
           queryParameters: status == 'all' ? null : {'status': status});
       return CampaignBoard.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load campaigns'));
+    } catch (e) {
+      throw AppException(e, action: 'load campaigns');
     }
   }
 
@@ -25,24 +26,19 @@ class CampaignService {
           ? await _dio.post('/marketing/campaigns', data: c.toJson())
           : await _dio.put('/marketing/campaigns/${c.id}', data: c.toJson());
       return Campaign.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save campaign'));
+    } catch (e) {
+      throw AppException(e, action: 'save campaign');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/marketing/campaigns/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete campaign'));
+    } catch (e) {
+      throw AppException(e, action: 'delete campaign');
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return e.message ?? fallback;
-  }
 }
 
 final campaignServiceProvider =

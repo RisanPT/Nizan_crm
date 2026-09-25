@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/bank_account.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 
@@ -25,8 +25,8 @@ class BankAccountService {
             .toList(),
         totalBalance: (data['totalBalance'] as num?)?.toDouble() ?? 0,
       );
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load bank accounts'));
+    } catch (e) {
+      throw AppException(e, action: 'load bank accounts');
     }
   }
 
@@ -47,8 +47,8 @@ class BankAccountService {
         'asOf': asOf.toIso8601String(),
         'note': note,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to add the account'));
+    } catch (e) {
+      throw AppException(e, action: 'add the account');
     }
   }
 
@@ -61,8 +61,8 @@ class BankAccountService {
         'note': ?note,
         'active': ?active,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to update the account'));
+    } catch (e) {
+      throw AppException(e, action: 'update the account');
     }
   }
 
@@ -74,16 +74,16 @@ class BankAccountService {
         'asOf': asOf.toIso8601String(),
         'note': note,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to update the balance'));
+    } catch (e) {
+      throw AppException(e, action: 'update the balance');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/bank-accounts/$id');
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to delete the account'));
+    } catch (e) {
+      throw AppException(e, action: 'delete the account');
     }
   }
 }

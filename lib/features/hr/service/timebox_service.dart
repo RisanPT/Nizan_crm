@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../providers/dio_provider.dart';
 import '../data/timebox_models.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 // ── Service ───────────────────────────────────────────────────────────────────
 
@@ -15,11 +16,6 @@ class TimeboxService {
   TimeboxService(this._dio);
   final Dio _dio;
 
-  String _err(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] is String) return data['message'] as String;
-    return e.message ?? fallback;
-  }
 
   Future<List<TimeboxEmployee>> getEmployees() async {
     try {
@@ -29,8 +25,8 @@ class TimeboxService {
           .whereType<Map<String, dynamic>>()
           .map(TimeboxEmployee.fromJson)
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to load employees'));
+    } catch (e) {
+      throw AppException(e, action: 'load employees');
     }
   }
 
@@ -43,8 +39,8 @@ class TimeboxService {
           .whereType<Map<String, dynamic>>()
           .map(AttendanceSummaryRow.fromJson)
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to load attendance summary'));
+    } catch (e) {
+      throw AppException(e, action: 'load attendance summary');
     }
   }
 
@@ -64,8 +60,8 @@ class TimeboxService {
           .whereType<Map<String, dynamic>>()
           .map(AttendanceRecord.fromJson)
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to load attendance'));
+    } catch (e) {
+      throw AppException(e, action: 'load attendance');
     }
   }
 
@@ -85,8 +81,8 @@ class TimeboxService {
           .whereType<Map<String, dynamic>>()
           .map(TimeboxDay.fromJson)
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to load timebox days'));
+    } catch (e) {
+      throw AppException(e, action: 'load timebox days');
     }
   }
 
@@ -95,8 +91,8 @@ class TimeboxService {
       final res = await _dio.get('/timebox/payroll-preview',
           queryParameters: {'from': from, 'to': to});
       return PayrollPreview.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to load payroll preview'));
+    } catch (e) {
+      throw AppException(e, action: 'load payroll preview');
     }
   }
 
@@ -112,8 +108,8 @@ class TimeboxService {
         'dryRun': dryRun,
       });
       return (res.data as Map)['message'] as String? ?? 'Done';
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to generate payroll'));
+    } catch (e) {
+      throw AppException(e, action: 'generate payroll');
     }
   }
 
@@ -123,8 +119,8 @@ class TimeboxService {
     try {
       final res = await _dio.post('/timebox/sync-employees');
       return TimeboxSyncResult.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_err(e, 'Failed to sync Timebox employees'));
+    } catch (e) {
+      throw AppException(e, action: 'sync Timebox employees');
     }
   }
 }

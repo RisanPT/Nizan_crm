@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
@@ -38,7 +39,9 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
         body: Center(child: CircularProgressIndicator(color: Color(0xFF4A1942))),
       ),
       error: (err, _) => Scaffold(
-        body: AppErrorView(error: err),
+        appBar: AppBar(),
+        body: AppErrorView(
+            error: err, onRetry: () => ref.invalidate(driverJobsProvider)),
       ),
     );
   }
@@ -473,7 +476,11 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
     setState(() => _isCompleting = true);
     try {
       await ref.read(fleetServiceProvider).completeJob(jobId: job.id, parkedLocation: parkedLocation?.isNotEmpty == true ? parkedLocation : null);
-      ref.invalidate(driverJobsProvider);
+      // Jobs are bookings (tripStatus) and the vehicle's parked location moves.
+      ref.refreshData
+        ..fleetJobs()
+        ..bookings()
+        ..vehicles();
       if (mounted) {
         messenger.showSnackBar(
           const SnackBar(

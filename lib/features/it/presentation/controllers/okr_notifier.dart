@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/it/services/okr_service.dart';
 
 class OKRFilterState {
@@ -74,6 +75,7 @@ class ProjectOKRsNotifier extends AsyncNotifier<List<OKRModel>> {
       payload['projectId'] = projectId;
     }
     final created = await service.createOKR(payload);
+    ref.refreshData.okrs();
     await refresh();
     return created;
   }
@@ -101,6 +103,7 @@ class ProjectOKRsNotifier extends AsyncNotifier<List<OKRModel>> {
 
     try {
       final saved = await service.updateOKR(id, updates);
+      ref.refreshData.okrs();
       await refresh();
       return saved;
     } catch (e) {
@@ -112,6 +115,7 @@ class ProjectOKRsNotifier extends AsyncNotifier<List<OKRModel>> {
   Future<void> deleteOKR(String id) async {
     final service = ref.read(okrServiceProvider);
     await service.deleteOKR(id);
+    ref.refreshData.okrs();
     await refresh();
   }
 }

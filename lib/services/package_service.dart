@@ -4,6 +4,7 @@ import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../core/models/service_package.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final packageServiceProvider = Provider<PackageService>((ref) {
   return PackageService(ref.watch(dioProvider));
@@ -33,8 +34,8 @@ class PackageService {
       return data
           .map((item) => ServicePackage.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load packages: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load packages');
     }
   }
 
@@ -51,8 +52,8 @@ class PackageService {
         response.data as Map<String, dynamic>,
         ServicePackage.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load packages: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load packages');
     }
   }
 
@@ -81,16 +82,16 @@ class PackageService {
           : await _dio.post('/packages', data: payload);
 
       return ServicePackage.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save package: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save package');
     }
   }
 
   Future<void> deletePackage(String id) async {
     try {
       await _dio.delete('/packages/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete package: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete package');
     }
   }
 }

@@ -115,7 +115,7 @@ class _FinancialGlossaryScreenState extends ConsumerState<FinancialGlossaryScree
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+              border: Border.all(color: crm.border.faded(0.6)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [

@@ -71,7 +71,13 @@ class _ReportViewerScreenState extends ConsumerState<ReportViewerScreen> {
 
   Future<void> _openExternally() async {
     final uri = Uri.parse(_inlineUrl);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    var opened = false;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      opened = false; // reported below
+    }
+    if (!opened) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Could not open the file')),
@@ -242,7 +248,16 @@ class _ReportViewerScreenState extends ConsumerState<ReportViewerScreen> {
           color: Colors.black,
           child: InteractiveViewer(
             maxScale: 5,
-            child: Center(child: Image.memory(_bytes!)),
+            child: Center(
+              child: Image.memory(
+                _bytes!,
+                errorBuilder: (context, error, stack) => _RenderFailed(
+                  crm: crm,
+                  icon: Icons.image_outlined,
+                  onOpen: _openExternally,
+                ),
+              ),
+            ),
           ),
         );
       case 'csv':

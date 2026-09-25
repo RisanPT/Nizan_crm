@@ -20,6 +20,7 @@ import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class SettingsScreen extends HookConsumerWidget {
   const SettingsScreen({super.key});
@@ -63,6 +64,7 @@ class SettingsScreen extends HookConsumerWidget {
       var selRegionId = user?.regionId ?? '';
       var selDistrictId = user?.districtId ?? '';
       var selPincodeId = user?.pincodeId ?? '';
+      var saving = false;
 
       await showDialog(
         context: context,
@@ -272,7 +274,11 @@ class SettingsScreen extends HookConsumerWidget {
                         if (asyncEmployees.isLoading)
                           const LinearProgressIndicator()
                         else if (asyncEmployees.hasError)
-                          const Text('Could not load employees')
+                          Text(
+                            friendlyErrorMessage(asyncEmployees.error,
+                                fallback: 'Could not load employees.'),
+                            style: TextStyle(color: crmColors.destructive),
+                          )
                         else
                           // Searchable + filterable picker (name / role / dept)
                           // instead of a long unscrollable dropdown menu.
@@ -393,7 +399,9 @@ class SettingsScreen extends HookConsumerWidget {
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
-                    onPressed: () async {
+                    onPressed: saving
+                        ? null
+                        : () async {
                       final name = nameCtrl.text.trim();
                       final email = emailCtrl.text.trim();
                       final password = passwordCtrl.text.trim();
@@ -420,6 +428,7 @@ class SettingsScreen extends HookConsumerWidget {
                         return;
                       }
 
+                      setState(() => saving = true);
                       try {
                         final service = ref.read(userServiceProvider);
                         if (user == null) {
@@ -463,18 +472,13 @@ class SettingsScreen extends HookConsumerWidget {
                           );
                         }
 
-                        ref.invalidate(crmUsersProvider);
-                        ref.invalidate(paginatedCrmUsersProvider);
+                        ref.refreshData.crmUsers();
                         if (!dialogContext.mounted) return;
                         Navigator.of(dialogContext).pop();
                       } catch (error) {
                         if (!dialogContext.mounted) return;
-                        _showMessage(
-                          dialogContext,
-                          error
-                              .toString()
-                              .replaceFirst('Exception: ', ''),
-                        );
+                        setState(() => saving = false);
+                        showErrorSnackBar(dialogContext, error);
                       }
                     },
                     child: Text(user == null ? 'Create User' : 'Save Changes'),
@@ -513,15 +517,12 @@ class SettingsScreen extends HookConsumerWidget {
       if (confirm == true) {
         try {
           await ref.read(userServiceProvider).deleteUser(user.id);
-          ref.invalidate(crmUsersProvider);
-          ref.invalidate(paginatedCrmUsersProvider);
+          ref.refreshData.crmUsers();
           if (context.mounted) {
             _showMessage(context, 'User deleted successfully');
           }
         } catch (e) {
-          if (context.mounted) {
-            _showMessage(context, friendlyErrorMessage(e));
-          }
+          if (context.mounted) showErrorSnackBar(context, e);
         }
       }
     }
@@ -671,9 +672,10 @@ class SettingsScreen extends HookConsumerWidget {
                 ),
                 error: (error, _) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text(
-                    'Failed to load CRM users: $error',
-                    style: TextStyle(color: crmColors.destructive),
+                  child: AppErrorView(
+                    error: error,
+                    compact: true,
+                    onRetry: () => ref.invalidate(paginatedCrmUsersProvider),
                   ),
                 ),
               ),

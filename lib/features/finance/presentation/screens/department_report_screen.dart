@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/dept_report.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/month_year_picker.dart';
@@ -179,7 +180,7 @@ class _DepartmentReportScreenState extends ConsumerState<DepartmentReportScreen>
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+              border: Border.all(color: crm.border.faded(0.6)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(k.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -205,7 +206,7 @@ class _DepartmentReportScreenState extends ConsumerState<DepartmentReportScreen>
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+          border: Border.all(color: crm.border.faded(0.6)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.title, style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary)),
@@ -370,7 +371,7 @@ class _DepartmentReportScreenState extends ConsumerState<DepartmentReportScreen>
             actionItems: actions,
             notes: _notes.text.trim(),
           );
-      ref.invalidate(departmentReportProvider(_key));
+      ref.refreshData.monthEnd();
       if (mounted) showSuccessSnackBar(context, 'Saved');
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);

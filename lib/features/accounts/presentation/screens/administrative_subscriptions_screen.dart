@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widg
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 // How many days ahead of a renewal we treat a subscription as "due soon" and
 // surface it in the on-open reminder popup.
@@ -142,8 +143,7 @@ class _AdministrativeSubscriptionsScreenState
       builder: (ctx) => _AddEditSubscriptionDialog(
         subscription: subscription,
         onSaved: () {
-          ref.invalidate(subscriptionsProvider);
-          ref.invalidate(subscriptionStatsProvider);
+          // The dialog refreshes subscription data itself on success.
         },
       ),
     );
@@ -175,19 +175,14 @@ class _AdministrativeSubscriptionsScreenState
       try {
         final service = ref.read(subscriptionServiceProvider);
         await service.deleteSubscription(sub.id);
-        ref.invalidate(subscriptionsProvider);
-        ref.invalidate(subscriptionStatsProvider);
+        ref.refreshData.subscriptions();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Subscription deleted successfully')),
           );
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-          );
-        }
+        if (mounted) showErrorSnackBar(context, e);
       }
     }
   }
@@ -295,7 +290,11 @@ class _AdministrativeSubscriptionsScreenState
                 height: 80,
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, _) => const SizedBox.shrink(),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () => ref.invalidate(subscriptionStatsProvider),
+              ),
               data: (stats) => InvStatGrid(
                 isMobile: isMobile,
                 stats: [
@@ -447,13 +446,11 @@ class _AdministrativeSubscriptionsScreenState
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    'Failed to load subscriptions: $e',
-                    style: TextStyle(color: crm.textSecondary),
-                  ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(32),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(subscriptionsProvider),
                 ),
               ),
               data: (subs) {
@@ -898,6 +895,7 @@ class _AddEditSubscriptionDialogState
         await service.updateSubscription(widget.subscription!.id, payload);
       }
 
+      if (mounted) ref.refreshData.subscriptions();
       widget.onSaved();
       if (mounted) {
         Navigator.of(context).pop();
@@ -912,11 +910,7 @@ class _AddEditSubscriptionDialogState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

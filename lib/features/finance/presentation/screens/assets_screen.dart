@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/asset.dart';
 import 'package:nizan_crm/features/finance/controllers/asset_provider.dart';
@@ -167,12 +168,10 @@ class _AssetListState extends ConsumerState<_AssetList> {
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                  child: Text(friendlyErrorMessage(e),
-                      style: TextStyle(color: crm.destructive))),
-            ),
+            AppErrorView(error: e, onRetry: () {
+              ref.invalidate(assetsProvider(type));
+              ref.invalidate(assetStatsProvider);
+            }),
           ]),
           data: (all) {
             final assets = _applyFilters(all);
@@ -230,7 +229,7 @@ class _AssetListState extends ConsumerState<_AssetList> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,8 +268,7 @@ class _AssetListState extends ConsumerState<_AssetList> {
     if (ok != true) return;
     try {
       await ref.read(assetServiceProvider).delete(a.id);
-      ref.invalidate(assetsProvider(type));
-      ref.invalidate(assetStatsProvider);
+      ref.refreshData.assets();
       messenger.showSnackBar(const SnackBar(content: Text('Asset deleted')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -308,7 +306,7 @@ class _AssetCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,8 +572,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
         },
       };
       await ref.read(assetServiceProvider).save(body, id: widget.existing?.id);
-      ref.invalidate(assetsProvider(widget.type));
-      ref.invalidate(assetStatsProvider);
+      ref.refreshData.assets();
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Asset saved')));
     } catch (e) {
@@ -860,8 +857,15 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
       ),
     );
     if (source == null || !mounted) return;
-    final img = await ImagePicker().pickImage(source: source, imageQuality: 70, maxWidth: 1600);
-    if (img == null) return;
+    final XFile? img;
+    try {
+      img = await ImagePicker().pickImage(source: source, imageQuality: 70, maxWidth: 1600);
+    } catch (e) {
+      // Camera/gallery permission denied or picker unavailable.
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e, fallback: "Couldn't open the camera or gallery."))));
+      return;
+    }
+    if (img == null || !mounted) return;
     setState(() => _uploadingImage = true);
     try {
       final url = await ref.read(uploadServiceProvider).uploadImage(img);
@@ -879,7 +883,7 @@ class _AssetDialogState extends ConsumerState<_AssetDialog> {
       decoration: BoxDecoration(
         color: crm.background.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: Column(children: [

@@ -7,6 +7,7 @@ import '../../../core/theme/crm_theme.dart';
 import '../../../core/utils/responsive_builder.dart';
 import '../../../services/role_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Settings → Roles & Permissions.
 ///
@@ -36,13 +37,9 @@ class _RolesPermissionsScreenState
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
+      error: (e, _) => AppErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(rolesProvider),
       ),
       data: (roles) {
         if (roles.isEmpty) {
@@ -475,7 +472,7 @@ class _RolesPermissionsScreenState
       await ref
           .read(roleServiceProvider)
           .updateRole(role.id, permissions: _draft.toList());
-      ref.invalidate(rolesProvider);
+      ref.refreshData.roles();
       messenger.showSnackBar(
         SnackBar(content: Text('${role.label} permissions updated.')),
       );
@@ -540,7 +537,7 @@ class _RolesPermissionsScreenState
             permissions: const [],
             homeRoute: home.isEmpty ? '/' : home,
           );
-      ref.invalidate(rolesProvider);
+      ref.refreshData.roles();
       messenger.showSnackBar(
         SnackBar(content: Text('Role "$name" created — now pick its features.')),
       );
@@ -577,8 +574,8 @@ class _RolesPermissionsScreenState
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(roleServiceProvider).deleteRole(role.id);
-      setState(() => _selectedRoleId = null);
-      ref.invalidate(rolesProvider);
+      if (mounted) setState(() => _selectedRoleId = null);
+      ref.refreshData.roles();
       messenger.showSnackBar(const SnackBar(content: Text('Role deleted.')));
     } catch (e) {
       messenger.showSnackBar(

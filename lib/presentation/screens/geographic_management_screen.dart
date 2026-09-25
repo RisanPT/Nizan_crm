@@ -20,6 +20,7 @@ import '../../services/region_service.dart';
 import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class GeographicManagementScreen extends HookConsumerWidget {
   const GeographicManagementScreen({super.key});
@@ -131,16 +132,19 @@ class GeographicManagementScreen extends HookConsumerWidget {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  await ref
-                      .read(zoneServiceProvider)
-                      .saveZone(
-                        id: zone?.id,
-                        name: nameCtrl.text.trim(),
-                        status: status,
-                      );
-                  ref.invalidate(zonesProvider);
-                  ref.invalidate(paginatedZonesProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  try {
+                    await ref
+                        .read(zoneServiceProvider)
+                        .saveZone(
+                          id: zone?.id,
+                          name: nameCtrl.text.trim(),
+                          status: status,
+                        );
+                    ref.refreshData.geography();
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  } catch (e) {
+                    if (dialogContext.mounted) showErrorSnackBar(dialogContext, e);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -156,9 +160,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
       var selectedZoneId = state?.zoneId ?? '';
 
       // Get active zones for dropdown
-      final activeZones = await ref.read(zonesProvider.future);
+      final activeZones =
+          await _loadOrReport(context, ref.read(zonesProvider.future));
 
-      if (!context.mounted) return;
+      if (activeZones == null || !context.mounted) return;
 
       await showDialog(
         context: context,
@@ -219,17 +224,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
               ElevatedButton(
                 onPressed: () async {
                   if (selectedZoneId.isEmpty) return;
-                  await ref
-                      .read(stateServiceProvider)
-                      .saveState(
-                        id: state?.id,
-                        name: nameCtrl.text.trim(),
-                        zoneId: selectedZoneId,
-                        status: status,
-                      );
-                  ref.invalidate(statesProvider);
-                  ref.invalidate(paginatedStatesProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  try {
+                    await ref
+                        .read(stateServiceProvider)
+                        .saveState(
+                          id: state?.id,
+                          name: nameCtrl.text.trim(),
+                          zoneId: selectedZoneId,
+                          status: status,
+                        );
+                    ref.refreshData.geography();
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  } catch (e) {
+                    if (dialogContext.mounted) showErrorSnackBar(dialogContext, e);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -245,9 +253,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
       var selectedStateId = region?.stateId ?? '';
 
       // Get active states for dropdown
-      final activeStates = await ref.read(statesProvider.future);
+      final activeStates =
+          await _loadOrReport(context, ref.read(statesProvider.future));
 
-      if (!context.mounted) return;
+      if (activeStates == null || !context.mounted) return;
 
       await showDialog(
         context: context,
@@ -308,17 +317,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
               ElevatedButton(
                 onPressed: () async {
                   if (selectedStateId.isEmpty) return;
-                  await ref
-                      .read(regionServiceProvider)
-                      .saveRegion(
-                        id: region?.id,
-                        name: nameCtrl.text.trim(),
-                        stateId: selectedStateId,
-                        status: status,
-                      );
-                  ref.invalidate(regionsProvider);
-                  ref.invalidate(paginatedRegionsProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  try {
+                    await ref
+                        .read(regionServiceProvider)
+                        .saveRegion(
+                          id: region?.id,
+                          name: nameCtrl.text.trim(),
+                          stateId: selectedStateId,
+                          status: status,
+                        );
+                    ref.refreshData.geography();
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  } catch (e) {
+                    if (dialogContext.mounted) showErrorSnackBar(dialogContext, e);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -334,9 +346,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
       var selectedRegionId = district?.regionId ?? '';
 
       // Get active regions for dropdown
-      final activeRegions = await ref.read(regionsProvider.future);
+      final activeRegions =
+          await _loadOrReport(context, ref.read(regionsProvider.future));
 
-      if (!context.mounted) return;
+      if (activeRegions == null || !context.mounted) return;
 
       await showDialog(
         context: context,
@@ -399,17 +412,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
               ElevatedButton(
                 onPressed: () async {
                   if (selectedRegionId.isEmpty) return;
-                  await ref
-                      .read(districtServiceProvider)
-                      .saveDistrict(
-                        id: district?.id,
-                        name: nameCtrl.text.trim(),
-                        regionId: selectedRegionId,
-                        status: status,
-                      );
-                  ref.invalidate(districtsProvider);
-                  ref.invalidate(paginatedDistrictsProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  try {
+                    await ref
+                        .read(districtServiceProvider)
+                        .saveDistrict(
+                          id: district?.id,
+                          name: nameCtrl.text.trim(),
+                          regionId: selectedRegionId,
+                          status: status,
+                        );
+                    ref.refreshData.geography();
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  } catch (e) {
+                    if (dialogContext.mounted) showErrorSnackBar(dialogContext, e);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -425,9 +441,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
       var selectedDistrictId = pincode?.districtId ?? '';
 
       // Get active districts for dropdown
-      final activeDistricts = await ref.read(districtsProvider.future);
+      final activeDistricts =
+          await _loadOrReport(context, ref.read(districtsProvider.future));
 
-      if (!context.mounted) return;
+      if (activeDistricts == null || !context.mounted) return;
 
       await showDialog(
         context: context,
@@ -493,17 +510,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
               ElevatedButton(
                 onPressed: () async {
                   if (selectedDistrictId.isEmpty) return;
-                  await ref
-                      .read(pincodeServiceProvider)
-                      .savePincode(
-                        id: pincode?.id,
-                        code: codeCtrl.text.trim(),
-                        districtId: selectedDistrictId,
-                        status: status,
-                      );
-                  ref.invalidate(pincodesProvider);
-                  ref.invalidate(paginatedPincodesProvider);
-                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  try {
+                    await ref
+                        .read(pincodeServiceProvider)
+                        .savePincode(
+                          id: pincode?.id,
+                          code: codeCtrl.text.trim(),
+                          districtId: selectedDistrictId,
+                          status: status,
+                        );
+                    ref.refreshData.geography();
+                    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  } catch (e) {
+                    if (dialogContext.mounted) showErrorSnackBar(dialogContext, e);
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -725,8 +745,15 @@ class GeographicManagementScreen extends HookConsumerWidget {
     Widget buildBody() {
       switch (category) {
         case 'Zones':
-          if (selectedZone.value != null) {
-            final zone = selectedZone.value!;
+          // Resolve the selection against the live list so an edit shows the
+          // new values and a deleted zone drops back to the list.
+          final picked = selectedZone.value;
+          final zone = picked == null
+              ? null
+              : (zonesVal.value == null
+                  ? picked
+                  : zonesVal.value!.where((z) => z.id == picked.id).firstOrNull);
+          if (zone != null) {
             // Filter states matching zoneId
             final zoneStates = statesVal.value?.where((s) => s.zoneId == zone.id).toList() ?? [];
             final stateIds = zoneStates.map((s) => s.id).toSet();
@@ -754,7 +781,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
           }
           return asyncZones.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+            error: (err, stack) => AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(paginatedZonesProvider),
+            ),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -814,9 +844,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                               IconButton(
                                 icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
                                 onPressed: () async {
-                                  await ref.read(zoneServiceProvider).deleteZone(z.id);
-                                  ref.invalidate(zonesProvider);
-                                  ref.invalidate(paginatedZonesProvider);
+                                  try {
+                                    await ref.read(zoneServiceProvider).deleteZone(z.id);
+                                    ref.refreshData.geography();
+                                  } catch (e) {
+                                    if (context.mounted) showErrorSnackBar(context, e);
+                                  }
                                 },
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
@@ -842,9 +875,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   _buildActions(
                     onEdit: () => openZoneDialog(z),
                     onDelete: () async {
-                      await ref.read(zoneServiceProvider).deleteZone(z.id);
-                      ref.invalidate(zonesProvider);
-                      ref.invalidate(paginatedZonesProvider);
+                      try {
+                        await ref.read(zoneServiceProvider).deleteZone(z.id);
+                        ref.refreshData.geography();
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     crmColors: crmColors,
                   ),
@@ -864,7 +900,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'States':
           return asyncStates.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+            error: (err, stack) => AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(paginatedStatesProvider),
+            ),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -917,9 +956,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   _buildActions(
                     onEdit: () => openStateDialog(s),
                     onDelete: () async {
-                      await ref.read(stateServiceProvider).deleteState(s.id);
-                      ref.invalidate(statesProvider);
-                      ref.invalidate(paginatedStatesProvider);
+                      try {
+                        await ref.read(stateServiceProvider).deleteState(s.id);
+                        ref.refreshData.geography();
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     crmColors: crmColors,
                   ),
@@ -939,7 +981,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Regions':
           return asyncRegions.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+            error: (err, stack) => AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(paginatedRegionsProvider),
+            ),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -994,9 +1039,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                               IconButton(
                                 icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
                                 onPressed: () async {
-                                  await ref.read(regionServiceProvider).deleteRegion(r.id);
-                                  ref.invalidate(regionsProvider);
-                                  ref.invalidate(paginatedRegionsProvider);
+                                  try {
+                                    await ref.read(regionServiceProvider).deleteRegion(r.id);
+                                    ref.refreshData.geography();
+                                  } catch (e) {
+                                    if (context.mounted) showErrorSnackBar(context, e);
+                                  }
                                 },
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
@@ -1015,9 +1063,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   _buildActions(
                     onEdit: () => openRegionDialog(r),
                     onDelete: () async {
-                      await ref.read(regionServiceProvider).deleteRegion(r.id);
-                      ref.invalidate(regionsProvider);
-                      ref.invalidate(paginatedRegionsProvider);
+                      try {
+                        await ref.read(regionServiceProvider).deleteRegion(r.id);
+                        ref.refreshData.geography();
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     crmColors: crmColors,
                   ),
@@ -1037,7 +1088,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Districts':
           return asyncDistricts.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+            error: (err, stack) => AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(paginatedDistrictsProvider),
+            ),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -1092,9 +1146,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                               IconButton(
                                 icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
                                 onPressed: () async {
-                                  await ref.read(districtServiceProvider).deleteDistrict(d.id);
-                                  ref.invalidate(districtsProvider);
-                                  ref.invalidate(paginatedDistrictsProvider);
+                                  try {
+                                    await ref.read(districtServiceProvider).deleteDistrict(d.id);
+                                    ref.refreshData.geography();
+                                  } catch (e) {
+                                    if (context.mounted) showErrorSnackBar(context, e);
+                                  }
                                 },
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
@@ -1113,9 +1170,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   _buildActions(
                     onEdit: () => openDistrictDialog(d),
                     onDelete: () async {
-                      await ref.read(districtServiceProvider).deleteDistrict(d.id);
-                      ref.invalidate(districtsProvider);
-                      ref.invalidate(paginatedDistrictsProvider);
+                      try {
+                        await ref.read(districtServiceProvider).deleteDistrict(d.id);
+                        ref.refreshData.geography();
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     crmColors: crmColors,
                   ),
@@ -1135,7 +1195,10 @@ class GeographicManagementScreen extends HookConsumerWidget {
         case 'Pincodes':
           return asyncPincodes.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+            error: (err, stack) => AppErrorView(
+              error: err,
+              onRetry: () => ref.invalidate(paginatedPincodesProvider),
+            ),
             data: (res) {
               final filteredItems = searchQuery.value.isEmpty
                   ? res.items
@@ -1190,9 +1253,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                               IconButton(
                                 icon: Icon(Icons.delete, size: 18, color: crmColors.destructive),
                                 onPressed: () async {
-                                  await ref.read(pincodeServiceProvider).deletePincode(p.id);
-                                  ref.invalidate(pincodesProvider);
-                                  ref.invalidate(paginatedPincodesProvider);
+                                  try {
+                                    await ref.read(pincodeServiceProvider).deletePincode(p.id);
+                                    ref.refreshData.geography();
+                                  } catch (e) {
+                                    if (context.mounted) showErrorSnackBar(context, e);
+                                  }
                                 },
                                 constraints: const BoxConstraints(),
                                 padding: EdgeInsets.zero,
@@ -1211,9 +1277,12 @@ class GeographicManagementScreen extends HookConsumerWidget {
                   _buildActions(
                     onEdit: () => openPincodeDialog(p),
                     onDelete: () async {
-                      await ref.read(pincodeServiceProvider).deletePincode(p.id);
-                      ref.invalidate(pincodesProvider);
-                      ref.invalidate(paginatedPincodesProvider);
+                      try {
+                        await ref.read(pincodeServiceProvider).deletePincode(p.id);
+                        ref.refreshData.geography();
+                      } catch (e) {
+                        if (context.mounted) showErrorSnackBar(context, e);
+                      }
                     },
                     crmColors: crmColors,
                   ),
@@ -1803,5 +1872,16 @@ class GeographicManagementScreen extends HookConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+/// Awaits a lookup needed to open a dialog; on failure tells the user why the
+/// dialog didn't open (e.g. no internet) and returns null.
+Future<T?> _loadOrReport<T>(BuildContext context, Future<T> future) async {
+  try {
+    return await future;
+  } catch (e) {
+    if (context.mounted) showErrorSnackBar(context, e);
+    return null;
   }
 }

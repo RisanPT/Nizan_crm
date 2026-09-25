@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
 import '../../../../core/extensions/space_extension.dart';
@@ -15,11 +16,15 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../services/report_service.dart';
 import 'package:nizan_crm/features/bookings/services/booking_service.dart';
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart' show bookingsRefreshTriggerProvider;
 import '../../../../core/utils/export_utils.dart';
 
 // ─── Provider: bookings that have at least one verified collection ────────────
 final _bookingInvoiceSummariesProvider =
     FutureProvider<List<_BookingInvoiceSummary>>((ref) async {
+  // Recompute whenever bookings/collections change anywhere in the app
+  // (ref.refreshData.bookings() / .collections() bump this trigger).
+  ref.watch(bookingsRefreshTriggerProvider);
   // 1. Fetch all verified collections
   final collections = await ref
       .watch(collectionServiceProvider)
@@ -43,8 +48,10 @@ final _bookingInvoiceSummariesProvider =
         booking: booking,
         collections: entry.value,
       ));
-    } catch (_) {
-      // Booking may have been deleted — skip
+    } catch (e) {
+      // Booking may have been deleted (or one record is bad) — skip it. But a
+      // lost connection must surface instead of silently emptying the list.
+      if (isOfflineError(e)) rethrow;
     }
   }
 
@@ -241,8 +248,10 @@ class _AccountsCollectionsScreenState
                   context, ref, items, crm, theme, true,
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) =>
-                    Center(child: Text(friendlyErrorMessage(e))),
+                error: (e, _) => AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(filteredCollectionsProvider),
+                ),
               ),
 
               // Tab 2: Invoice Balances
@@ -508,13 +517,19 @@ class _AccountsCollectionsScreenState
             TextButton(
               onPressed: () async {
                 final session = ref.read(authSessionProvider);
-                await ref
-                    .read(collectionServiceProvider)
-                    .verifyCollection(
-                      id: c.id,
-                      status: 'rejected',
-                      verifiedBy: session?.userId ?? '',
-                    );
+                try {
+                  await ref
+                      .read(collectionServiceProvider)
+                      .verifyCollection(
+                        id: c.id,
+                        status: 'rejected',
+                        verifiedBy: session?.userId ?? '',
+                      );
+                } catch (e) {
+                  if (ctx.mounted) showErrorSnackBar(ctx, e);
+                  return;
+                }
+                ref.refreshData.collections();
                 ref.invalidate(filteredCollectionsProvider);
                 ref.invalidate(_bookingInvoiceSummariesProvider);
                 if (ctx.mounted) Navigator.pop(ctx);
@@ -524,13 +539,19 @@ class _AccountsCollectionsScreenState
             ElevatedButton(
               onPressed: () async {
                 final session = ref.read(authSessionProvider);
-                await ref
-                    .read(collectionServiceProvider)
-                    .verifyCollection(
-                      id: c.id,
-                      status: 'verified',
-                      verifiedBy: session?.userId ?? '',
-                    );
+                try {
+                  await ref
+                      .read(collectionServiceProvider)
+                      .verifyCollection(
+                        id: c.id,
+                        status: 'verified',
+                        verifiedBy: session?.userId ?? '',
+                      );
+                } catch (e) {
+                  if (ctx.mounted) showErrorSnackBar(ctx, e);
+                  return;
+                }
+                ref.refreshData.collections();
                 ref.invalidate(filteredCollectionsProvider);
                 // Also refresh the invoice balances tab
                 ref.invalidate(_bookingInvoiceSummariesProvider);
@@ -814,7 +835,7 @@ class _AccountsCollectionsScreenState
             'Exported ${rows0.length} $label (${_fmt(from)}–${_fmt(to)}) — ₹${subtotal.toStringAsFixed(0)}'),
       ));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (context.mounted) showErrorSnackBar(context, e);
     }
   }
 
@@ -845,10 +866,7 @@ class _AccountsCollectionsScreenState
               if (ctx.mounted) Navigator.pop(ctx);
             } catch (e) {
               setLocal(() => busy = false);
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                    SnackBar(content: Text(friendlyErrorMessage(e))));
-              }
+              if (ctx.mounted) showErrorSnackBar(ctx, e);
             }
           }
 
@@ -1103,7 +1121,10 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => AppErrorView(error: e),
+      error: (e, _) => AppErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(_bookingInvoiceSummariesProvider),
+      ),
       data: (all) {
         if (all.isEmpty) {
           return _empty(crm, 'No bookings with verified collections yet.');
@@ -1278,7 +1299,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
             ? Colors.transparent
             : crm.primary.withValues(alpha: 0.03),
         border: Border(
-            bottom: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+            bottom: BorderSide(color: crm.border.faded(0.5))),
       ),
       child: Row(
         children: [
@@ -1495,10 +1516,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
             const SnackBar(content: Text('Invoice report downloaded')));
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-      }
+      if (mounted) showErrorSnackBar(context, e);
     }
   }
 }

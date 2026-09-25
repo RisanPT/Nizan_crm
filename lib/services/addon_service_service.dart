@@ -4,6 +4,7 @@ import '../core/models/addon_service.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../providers/dio_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 final addonServiceServiceProvider = Provider<AddonServiceService>((ref) {
   return AddonServiceService(ref.watch(dioProvider));
@@ -33,8 +34,8 @@ class AddonServiceService {
       return data
           .map((item) => AddonService.fromJson(item as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception('Failed to load add-on services: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load add-on services');
     }
   }
 
@@ -51,8 +52,8 @@ class AddonServiceService {
         response.data as Map<String, dynamic>,
         AddonService.fromJson,
       );
-    } on DioException catch (e) {
-      throw Exception('Failed to load add-on services: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load add-on services');
     }
   }
 
@@ -77,16 +78,16 @@ class AddonServiceService {
           : await _dio.post('/addon-services', data: payload);
 
       return AddonService.fromJson(response.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception('Failed to save add-on service: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'save add-on service');
     }
   }
 
   Future<void> deleteAddonService(String id) async {
     try {
       await _dio.delete('/addon-services/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete add-on service: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete add-on service');
     }
   }
 }

@@ -17,6 +17,7 @@ import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widg
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 const _departments = [
   'All',
@@ -141,8 +142,7 @@ class _AdministrativeExpensesScreenState
       builder: (ctx) => _AddEditAdminExpenseDialog(
         expense: expense,
         onSaved: () {
-          ref.invalidate(adminExpensesProvider);
-          ref.invalidate(adminExpenseStatsProvider);
+          // The dialog refreshes expense data itself on success.
         },
       ),
     );
@@ -220,8 +220,7 @@ class _AdministrativeExpensesScreenState
     try {
       final service = ref.read(adminExpenseServiceProvider);
       await service.verifyAdminExpense(expense.id, status);
-      ref.invalidate(adminExpensesProvider);
-      ref.invalidate(adminExpenseStatsProvider);
+      ref.refreshData.expenses();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -231,11 +230,7 @@ class _AdministrativeExpensesScreenState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     }
   }
 
@@ -265,19 +260,14 @@ class _AdministrativeExpensesScreenState
       try {
         final service = ref.read(adminExpenseServiceProvider);
         await service.deleteAdminExpense(expense.id);
-        ref.invalidate(adminExpensesProvider);
-        ref.invalidate(adminExpenseStatsProvider);
+        ref.refreshData.expenses();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Expense deleted successfully')),
           );
         }
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-          );
-        }
+        if (mounted) showErrorSnackBar(context, e);
       }
     }
   }
@@ -472,7 +462,11 @@ class _AdministrativeExpensesScreenState
                 height: 80,
                 child: Center(child: CircularProgressIndicator()),
               ),
-              error: (_, _) => const SizedBox.shrink(),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () => ref.invalidate(adminExpenseStatsProvider),
+              ),
               data: (stats) => InvStatGrid(
                 isMobile: isMobile,
                 stats: [
@@ -659,13 +653,11 @@ class _AdministrativeExpensesScreenState
                   child: CircularProgressIndicator(),
                 ),
               ),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    'Failed to load expenses: $e',
-                    style: TextStyle(color: crm.textSecondary),
-                  ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(32),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(adminExpensesProvider),
                 ),
               ),
               data: (expenses) {
@@ -1117,6 +1109,7 @@ class _AddEditAdminExpenseDialogState
         await service.updateAdminExpense(widget.expense!.id, payload);
       }
 
+      if (mounted) ref.refreshData.expenses();
       widget.onSaved();
       if (mounted) {
         Navigator.of(context).pop();
@@ -1131,11 +1124,7 @@ class _AddEditAdminExpenseDialogState
         );
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

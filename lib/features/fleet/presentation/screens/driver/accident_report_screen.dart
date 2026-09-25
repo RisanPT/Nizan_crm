@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class AccidentReportScreen extends ConsumerStatefulWidget {
   final String jobId;
@@ -116,16 +117,24 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
         });
       }
     } catch (e) {
-      _setLocError('Failed to get location: $e');
+      _setLocError(friendlyErrorMessage(e,
+          fallback: 'Could not get your location. Please Retry.'));
     }
   }
 
   Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.camera);
-    if (image != null) {
-      setState(() {
-        _selectedImages.add(image);
-      });
+    try {
+      final XFile? image = await _picker.pickImage(source: ImageSource.camera);
+      if (image != null && mounted) {
+        setState(() {
+          _selectedImages.add(image);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        showErrorSnackBar(context, e,
+            fallback: 'Could not open the camera. Please try again.');
+      }
     }
   }
 
@@ -178,6 +187,10 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
         oppositeVehicle: _oppVehicleController.text,
         oppositeNotes: _oppNotesController.text,
       );
+      // Accident reports also set the job's (booking's) tripStatus.
+      ref.refreshData
+        ..fleetJobs()
+        ..bookings();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -187,9 +200,7 @@ class _AccidentReportScreenState extends ConsumerState<AccidentReportScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) {

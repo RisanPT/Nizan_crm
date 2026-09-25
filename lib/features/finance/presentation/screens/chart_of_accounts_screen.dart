@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/controllers/accounting_provider.dart';
@@ -65,7 +66,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(chartAccountsProvider('all'))),
           ]),
           data: (all) {
             if (all.isEmpty) return _emptySeed(context, ref, crm);
@@ -135,7 +136,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: crm.border.withValues(alpha: 0.7)),
+        border: Border.all(color: crm.border.faded(0.7)),
       ),
       child: Row(children: [
         Container(
@@ -228,7 +229,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       final n = await ref.read(accountingServiceProvider).seedAccounts();
-      ref.invalidate(chartAccountsProvider('all'));
+      ref.refreshData.chartOfAccounts();
       messenger.showSnackBar(SnackBar(content: Text('Seeded $n accounts')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -253,7 +254,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
     if (ok != true) return;
     try {
       await ref.read(accountingServiceProvider).deleteAccount(a.id);
-      ref.invalidate(chartAccountsProvider('all'));
+      ref.refreshData.chartOfAccounts();
       messenger.showSnackBar(const SnackBar(content: Text('Account deleted')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -266,7 +267,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
       await ref
           .read(accountingServiceProvider)
           .saveAccount({'status': archived ? 'archived' : 'active'}, id: a.id);
-      ref.invalidate(chartAccountsProvider('all'));
+      ref.refreshData.chartOfAccounts();
       messenger.showSnackBar(SnackBar(content: Text(archived ? 'Account archived' : 'Account restored')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -347,7 +348,7 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
         'openingBalance': double.tryParse(_opening.text.trim()) ?? 0,
         'openingType': _openingType,
       }, id: widget.existing?.id);
-      ref.invalidate(chartAccountsProvider('all'));
+      ref.refreshData.chartOfAccounts();
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('Account saved')));
     } catch (e) {

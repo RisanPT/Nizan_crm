@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
 import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 String _extractId(dynamic obj) {
   if (obj is String) return obj;
@@ -74,12 +75,8 @@ class FleetCompletedWorksScreen extends ConsumerWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: worksAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(
-          child: Text(
-            'Failed to load completed works: $err',
-            style: TextStyle(color: crmColors.textSecondary),
-          ),
-        ),
+        error: (err, stack) => AppErrorView(
+            error: err, onRetry: () => ref.invalidate(managerCompletedWorksProvider)),
         data: (works) {
           final reviewed = works.where((j) => reviewFor(j) != null).length;
           final pending = works.length - reviewed;

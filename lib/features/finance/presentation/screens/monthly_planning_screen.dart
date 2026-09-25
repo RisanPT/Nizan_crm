@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/month_end.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/month_year_picker.dart';
@@ -112,8 +113,7 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
     );
     try {
       await ref.read(monthEndServiceProvider).saveTarget(target);
-      ref.invalidate(monthlyTargetProvider(_key));
-      ref.invalidate(monthEndReviewProvider(_key));
+      ref.refreshData.monthEnd();
       if (mounted) showSuccessSnackBar(context, 'Targets saved for ${_monthNames[_month]} $_year');
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
@@ -222,7 +222,7 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [Icon(icon, size: 18, color: crm.primary), 8.w, Text(title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: crm.textPrimary))]),
@@ -256,7 +256,7 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

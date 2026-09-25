@@ -13,6 +13,7 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 enum AssignmentFilter { all, unassigned, assigned }
 
@@ -64,9 +65,15 @@ class _FleetAssignmentsScreenState
     final cleanPhone = phoneNumber.replaceAll(RegExp(r'\s+'), '');
     final uri = Uri.tryParse('tel:$cleanPhone');
     if (uri == null) return;
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else if (context.mounted) {
+    var launched = false;
+    try {
+      if (await canLaunchUrl(uri)) {
+        launched = await launchUrl(uri);
+      }
+    } catch (_) {
+      launched = false;
+    }
+    if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not launch phone call for $phoneNumber.')),
       );
@@ -120,6 +127,9 @@ class _FleetAssignmentsScreenState
       );
 
       await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
+      // The notifier refreshes booking views; driver/manager job lists are
+      // built from the same bookings.
+      ref.refreshData.fleetJobs();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -164,7 +174,8 @@ class _FleetAssignmentsScreenState
 
     return asyncBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+      error: (err, stack) => AppErrorView(
+          error: err, onRetry: () => ref.invalidate(bookingProvider)),
       data: (bookings) {
         // Only show confirmed/completed bookings that have artists assigned
         final baseFilteredBookings = bookings.where((b) {
@@ -469,7 +480,7 @@ class _FleetAssignmentsScreenState
                     height: 48,
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: crmColors.border.withValues(alpha: 0.3),
+                      color: crmColors.border.faded(0.3),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(

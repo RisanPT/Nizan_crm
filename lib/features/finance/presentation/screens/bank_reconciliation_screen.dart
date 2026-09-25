@@ -47,13 +47,17 @@ class _BankReconciliationScreenState
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: accountsAsync.when(
             loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(bankAccountsProvider)),
             data: (accounts) {
               if (accounts.isEmpty) {
                 return Text('No bank or cash accounts found. Mark an account as bank/cash in the Chart of Accounts.',
                     style: TextStyle(color: crm.textSecondary));
               }
-              _accountId ??= accounts.first.id;
+              // Fall back to the first account if the selected one was
+              // deleted / un-flagged as bank elsewhere.
+              if (_accountId == null || !accounts.any((a) => a.id == _accountId)) {
+                _accountId = accounts.first.id;
+              }
               return Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
@@ -117,7 +121,7 @@ class _BankReconciliationScreenState
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ListView(children: [
-          Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+          AppErrorView(error: e, onRetry: () => ref.invalidate(reconciliationProvider(accountId))),
         ]),
         data: (r) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
@@ -145,7 +149,7 @@ class _BankReconciliationScreenState
         decoration: BoxDecoration(
           color: crm.surface,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+          border: Border.all(color: crm.border.faded(0.8)),
         ),
         child: Column(children: [
           Icon(Icons.upload_file_outlined, size: 40, color: crm.border),
@@ -171,7 +175,7 @@ class _BankReconciliationScreenState
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         _sumRow(crm, 'Balance as per books (ledger)', '${_money(r.bookClosing)} ${r.bookClosing < 0 ? 'Cr' : 'Dr'}', strong: true),
@@ -391,7 +395,7 @@ class _BankReconciliationScreenState
     final box = BoxDecoration(
       color: crm.surface,
       borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+      border: Border.all(color: crm.border.faded(0.8)),
     );
     if (collapsible) {
       return Container(
@@ -492,11 +496,18 @@ class _BankReconciliationScreenState
   // ── Actions ──
   Future<void> _import() async {
     final messenger = ScaffoldMessenger.of(context);
-    final picked = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['xlsx', 'xls', 'csv'],
-      withData: true,
-    );
+    final FilePickerResult? picked;
+    try {
+      picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['xlsx', 'xls', 'csv'],
+        withData: true,
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(friendlyErrorMessage(e, fallback: 'Could not open the file picker.'))));
+      return;
+    }
     if (picked == null || !mounted) return;
     final file = picked.files.single;
     final bytes = file.bytes;

@@ -8,16 +8,50 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/alarm_ring_overlay.dart';
+import 'core/network/connection_banner.dart';
 
 import 'services/notification_service.dart';
 import 'core/services/followup_alarm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  _installGlobalErrorHandlers();
   await NotificationService().init();
   // Android-only follow-up alarms (no-op on web/iOS).
   await FollowUpAlarmService.instance.init();
   runApp(const ProviderScope(child: MyApp()));
+}
+
+/// Last-resort safety net for errors nothing else caught:
+///  • Framework (build/layout) errors are logged instead of silently lost.
+///  • Uncaught async errors (a forgotten wait + failed request) are logged
+///    and marked handled, so they don't take the app down.
+///  • In release builds a widget that throws renders a small, friendly
+///    placeholder instead of Flutter's grey/red error box.
+void _installGlobalErrorHandlers() {
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('Unhandled Flutter error: ${details.exceptionAsString()}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('Unhandled async error: $error\n$stack');
+    return true;
+  };
+  if (kReleaseMode) {
+    ErrorWidget.builder = (details) => const Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'This section could not be displayed.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+              ),
+            ),
+          ),
+        );
+  }
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -67,7 +101,7 @@ class _MyAppState extends ConsumerState<MyApp> {
         final ringing = _ringing;
         return Stack(
           children: [
-            child ?? const SizedBox.shrink(),
+            ConnectionBanner(child: child ?? const SizedBox.shrink()),
             if (ringing != null)
               AlarmRingOverlay(
                 alarm: ringing,

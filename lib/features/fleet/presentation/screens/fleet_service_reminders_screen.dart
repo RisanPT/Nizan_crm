@@ -8,6 +8,7 @@ import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 enum _Urgency { completed, overdue, dueSoon, upcoming }
 
@@ -128,12 +129,8 @@ class _FleetServiceRemindersScreenState
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: remindersAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, stack) => Center(
-            child: Text(
-              'Failed to load reminders: $err',
-              style: TextStyle(color: crmColors.textSecondary),
-            ),
-          ),
+          error: (err, stack) => AppErrorView(
+            error: err, onRetry: () => ref.invalidate(managerServiceRemindersProvider)),
           data: (reminders) {
             final overdue = reminders
                 .where((r) => _urgencyOf(r) == _Urgency.overdue)
@@ -456,7 +453,7 @@ class _FleetServiceRemindersScreenState
   Future<void> _completeReminder(String id) async {
     try {
       await ref.read(fleetServiceProvider).completeServiceReminder(id);
-      ref.invalidate(managerServiceRemindersProvider);
+      ref.refreshData.vehicles(); // includes service reminders
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Marked as completed!')),
@@ -464,9 +461,7 @@ class _FleetServiceRemindersScreenState
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -547,7 +542,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
             notes: _notesController.text.trim(),
           );
 
-      ref.invalidate(managerServiceRemindersProvider);
+      ref.refreshData.vehicles(); // includes service reminders
 
       if (mounted) {
         Navigator.pop(context);
@@ -558,9 +553,7 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -603,7 +596,10 @@ class _AddReminderDialogState extends ConsumerState<_AddReminderDialog> {
                     );
                   },
                   loading: () => const CircularProgressIndicator(),
-                  error: (err, _) => Text(friendlyErrorMessage(err)),
+                  error: (err, _) => AppErrorView(
+                      error: err,
+                      compact: true,
+                      onRetry: () => ref.invalidate(vehiclesProvider)),
                 ),
                 16.h,
                 DropdownButtonFormField<String>(

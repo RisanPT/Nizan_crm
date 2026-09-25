@@ -8,7 +8,6 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
-import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/models/customer.dart';
@@ -257,9 +256,12 @@ class AddBookingScreen extends HookConsumerWidget {
           if (asyncAddonServices.hasError)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Could not load add-on services.',
-                style: TextStyle(color: Colors.red.shade400, fontSize: 12),
+              child: AppErrorView(
+                error: asyncAddonServices.error,
+                compact: true,
+                title: 'Could not load add-on services',
+                onRetry: () => ProviderScope.containerOf(context, listen: false)
+                    .invalidate(addonServicesProvider),
               ),
             ),
           if (addons.value.isEmpty)
@@ -759,18 +761,9 @@ class AddBookingScreen extends HookConsumerWidget {
 
         if (!context.mounted) return;
 
-        // Invalidate the customers list so the new customer (auto-created
-        // on the backend during booking) appears in the Clients Directory.
-        ref.invalidate(customersProvider);
-
+        // addBooking already refreshed every dependent view (paginated
+        // bookings, clients directory, converted lead, slots, reports).
         final isConversion = (qParams['leadId'] ?? '').isNotEmpty;
-        if (isConversion) {
-          // The lead is now Converted on the backend — refresh the leads lists
-          // so the new status shows when the salesperson returns to them.
-          ref.invalidate(leadsProvider);
-          ref.invalidate(paginatedLeadsProvider);
-        }
-        ref.invalidate(paginatedBookingsProvider);
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -802,14 +795,7 @@ class AddBookingScreen extends HookConsumerWidget {
         }
       } catch (error) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              friendlyErrorMessage(error),
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        showErrorSnackBar(context, error);
       } finally {
         if (context.mounted) {
           isSubmitting.value = false;
@@ -1142,9 +1128,15 @@ class AddBookingScreen extends HookConsumerWidget {
                               if (asyncPackages.hasError || asyncDistricts.hasError)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
-                                  child: Text(
-                                    'Failed to load package setup. Check backend packages and districts.',
-                                    style: TextStyle(color: crmColors.warning),
+                                  child: AppErrorView(
+                                    error: asyncPackages.error ?? asyncDistricts.error,
+                                    compact: true,
+                                    title: 'Could not load packages and districts',
+                                    onRetry: () {
+                                      final c = ProviderScope.containerOf(context, listen: false);
+                                      c.invalidate(packagesProvider);
+                                      c.invalidate(districtsProvider);
+                                    },
                                   ),
                                 ),
                               // The booking-level district selector shows ONLY in

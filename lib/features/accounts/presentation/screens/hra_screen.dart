@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/accounts/data/hra_record.dart';
 import 'package:nizan_crm/features/accounts/controllers/hra_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -35,6 +36,12 @@ class _HraScreenState extends ConsumerState<HraScreen> {
   void _refresh(WidgetRef ref) {
     ref.invalidate(hraRecordsProvider);
     ref.invalidate(hraStatsProvider);
+  }
+
+  // HRA records are mirrored into admin expenses (source: hra).
+  void _refreshAfterChange(WidgetRef ref) {
+    ref.refreshData.hra();
+    ref.refreshData.expenses();
   }
 
   int _daysUntil(DateTime d) {
@@ -115,7 +122,11 @@ class _HraScreenState extends ConsumerState<HraScreen> {
             14.h,
             statsAsync.when(
               loading: () => const SizedBox.shrink(),
-              error: (_, _) => const SizedBox.shrink(),
+              error: (e, _) => AppErrorView(
+                error: e,
+                compact: true,
+                onRetry: () => ref.invalidate(hraStatsProvider),
+              ),
               data: (s) => _StatsRow(stats: s, crm: crm),
             ),
             16.h,
@@ -126,7 +137,10 @@ class _HraScreenState extends ConsumerState<HraScreen> {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.only(top: 40),
-                child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
+                child: AppErrorView(
+                  error: e,
+                  onRetry: () => ref.invalidate(hraRecordsProvider),
+                ),
               ),
               data: (records) {
                 if (records.isEmpty) {
@@ -184,17 +198,17 @@ class _HraScreenState extends ConsumerState<HraScreen> {
     if (ok != true) return;
     try {
       await ref.read(hraServiceProvider).delete(r.id);
-      _refresh(ref);
+      _refreshAfterChange(ref);
       messenger.showSnackBar(const SnackBar(content: Text('HRA record deleted')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      if (context.mounted) showErrorSnackBar(context, e);
     }
   }
 
   void _openForm(BuildContext context, WidgetRef ref, {HraRecord? existing}) {
     showDialog(
       context: context,
-      builder: (_) => _HraDialog(existing: existing, onSaved: () => _refresh(ref)),
+      builder: (_) => _HraDialog(existing: existing, onSaved: () => _refreshAfterChange(ref)),
     );
   }
 }
@@ -225,7 +239,7 @@ class _StatsRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,7 +291,7 @@ class _HraCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Row(
         children: [
@@ -403,7 +417,7 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
       navigator.pop();
       messenger.showSnackBar(const SnackBar(content: Text('HRA saved')));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: Colors.red));
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -434,7 +448,11 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
                 // Employee picker
                 employeesAsync.when(
                   loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
+                  error: (e, _) => AppErrorView(
+                    error: e,
+                    compact: true,
+                    onRetry: () => ref.invalidate(employeesProvider),
+                  ),
                   data: (staff) => DropdownButtonFormField<String>(
                     initialValue: _employeeId,
                     isExpanded: true,

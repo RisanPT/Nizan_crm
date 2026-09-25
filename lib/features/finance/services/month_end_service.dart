@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/month_end.dart';
 import 'package:nizan_crm/features/finance/data/dept_report.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -15,8 +15,8 @@ class MonthEndService {
       final res = await _dio.get('/reports/month-end',
           queryParameters: {'month': month, 'year': year});
       return MonthEndReview.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load the month-end review'));
+    } catch (e) {
+      throw AppException(e, action: 'load the month-end review');
     }
   }
 
@@ -25,8 +25,8 @@ class MonthEndService {
       final res = await _dio.get('/reports/targets',
           queryParameters: {'month': month, 'year': year});
       return MonthlyTarget.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load targets'));
+    } catch (e) {
+      throw AppException(e, action: 'load targets');
     }
   }
 
@@ -34,8 +34,8 @@ class MonthEndService {
     try {
       final res = await _dio.put('/reports/targets', data: target.toJson());
       return MonthlyTarget.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to save targets'));
+    } catch (e) {
+      throw AppException(e, action: 'save targets');
     }
   }
 
@@ -48,8 +48,8 @@ class MonthEndService {
         if (!openOnly && year != null) 'year': year,
       });
       return (res.data as List).map((e) => CeoDecision.fromJson(e as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load decisions'));
+    } catch (e) {
+      throw AppException(e, action: 'load decisions');
     }
   }
 
@@ -59,16 +59,16 @@ class MonthEndService {
           ? await _dio.post('/reports/decisions', data: d.toJson())
           : await _dio.put('/reports/decisions/${d.id}', data: d.toJson());
       return CeoDecision.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to save decision'));
+    } catch (e) {
+      throw AppException(e, action: 'save decision');
     }
   }
 
   Future<void> deleteDecision(String id) async {
     try {
       await _dio.delete('/reports/decisions/$id');
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to delete decision'));
+    } catch (e) {
+      throw AppException(e, action: 'delete decision');
     }
   }
 
@@ -77,8 +77,8 @@ class MonthEndService {
     try {
       final res = await _dio.get('/reports/departments');
       return (res.data as List).map((e) => DeptInfo.fromJson(e as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load departments'));
+    } catch (e) {
+      throw AppException(e, action: 'load departments');
     }
   }
 
@@ -87,8 +87,8 @@ class MonthEndService {
       final res = await _dio.get('/reports/department/$dept',
           queryParameters: {'month': month, 'year': year});
       return DeptReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load the report'));
+    } catch (e) {
+      throw AppException(e, action: 'load the report');
     }
   }
 
@@ -112,8 +112,8 @@ class MonthEndService {
         'actionItems': actionItems.map((a) => a.toJson()).toList(),
         'notes': notes,
       });
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to save the report'));
+    } catch (e) {
+      throw AppException(e, action: 'save the report');
     }
   }
 }

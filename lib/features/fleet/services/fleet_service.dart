@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 
 class FleetService {
@@ -14,7 +15,7 @@ class FleetService {
           .map((json) => FleetJob.fromJson(json))
           .toList();
     } catch (e) {
-      throw Exception('Failed to load driver jobs: $e');
+      throw AppException(e, action: 'load driver jobs');
     }
   }
 
@@ -26,7 +27,7 @@ class FleetService {
       );
       return FleetJob.fromJson(response.data['job']);
     } catch (e) {
-      throw Exception('Failed to start trip: $e');
+      throw AppException(e, action: 'start trip');
     }
   }
 
@@ -40,13 +41,8 @@ class FleetService {
         job: FleetJob.fromJson(response.data['job']),
         isLastJob: response.data['isLastJob'] == true,
       );
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to complete job: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'complete job');
     }
   }
 
@@ -87,7 +83,7 @@ class FleetService {
       );
       return AccidentReport.fromJson(response.data['accident']);
     } catch (e) {
-      throw Exception('Failed to report accident: $e');
+      throw AppException(e, action: 'report accident');
     }
   }
 
@@ -109,7 +105,7 @@ class FleetService {
       );
       return DriverReview.fromJson(response.data['review']);
     } catch (e) {
-      throw Exception('Failed to submit review: $e');
+      throw AppException(e, action: 'submit review');
     }
   }
 
@@ -120,7 +116,7 @@ class FleetService {
           .map((json) => DriverReview.fromJson(json))
           .toList();
     } catch (e) {
-      throw Exception('Failed to load reviews: $e');
+      throw AppException(e, action: 'load reviews');
     }
   }
 
@@ -131,7 +127,7 @@ class FleetService {
           .map((json) => AccidentReport.fromJson(json))
           .toList();
     } catch (e) {
-      throw Exception('Failed to load accidents: $e');
+      throw AppException(e, action: 'load accidents');
     }
   }
   Future<List<FleetJob>> getManagerCompletedWorks() async {
@@ -141,7 +137,7 @@ class FleetService {
           .map((json) => FleetJob.fromJson(json))
           .toList();
     } catch (e) {
-      throw Exception('Failed to load completed works: $e');
+      throw AppException(e, action: 'load completed works');
     }
   }
 
@@ -152,7 +148,7 @@ class FleetService {
           .map((json) => ServiceReminder.fromJson(json))
           .toList();
     } catch (e) {
-      throw Exception('Failed to load service reminders: $e');
+      throw AppException(e, action: 'load service reminders');
     }
   }
 
@@ -175,13 +171,8 @@ class FleetService {
         },
       );
       return ServiceReminder.fromJson(response.data['reminder']);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception(
-        (data is Map && data['message'] != null)
-            ? data['message'].toString()
-            : 'Failed to add reminder: ${e.message}',
-      );
+    } catch (e) {
+      throw AppException(e, action: 'add reminder');
     }
   }
 
@@ -190,7 +181,7 @@ class FleetService {
       final response = await _dio.post('/fleet/manager/service-reminders/$id/complete');
       return ServiceReminder.fromJson(response.data['reminder']);
     } catch (e) {
-      throw Exception('Failed to complete reminder: $e');
+      throw AppException(e, action: 'complete reminder');
     }
   }
 }

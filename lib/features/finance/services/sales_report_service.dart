@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/data/sales_report.dart';
 
 /// Endpoint segments under /api/sales-reports.
@@ -25,11 +26,8 @@ class SalesReportService {
         'groupBy': ?groupBy,
       });
       return SalesReport.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      throw Exception((data is Map && data['message'] != null)
-          ? data['message'].toString()
-          : 'Failed to load report: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load the report');
     }
   }
 }

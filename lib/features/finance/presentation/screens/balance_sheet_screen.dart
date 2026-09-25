@@ -81,7 +81,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(padding: const EdgeInsets.all(40), child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(balanceSheetProvider(_asOfIso))),
           ]),
           data: (r) {
             _last = r;
@@ -124,7 +124,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                   decoration: BoxDecoration(
                     color: crm.surface,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+                    border: Border.all(color: crm.border.faded(0.8)),
                   ),
                   child: Column(children: [
                     _footRow(crm, 'Total Assets', r.totalAssets, false),
@@ -162,8 +162,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -190,7 +189,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
       ),
       child: Column(children: [
         Padding(

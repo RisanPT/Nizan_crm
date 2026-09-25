@@ -657,43 +657,56 @@ class SalesBookingsScreen extends HookConsumerWidget {
       if (confirmed != true || !context.mounted) return;
 
       final notifier = ref.read(bookingProvider.notifier);
+      // Stop at the first failure and tell the user; only the bookings that
+      // were actually deleted are dropped from the selection.
+      final deletedIds = <String>[];
       for (final bookingId in bookingIds) {
-        await notifier.removeBooking(bookingId);
+        try {
+          await notifier.removeBooking(bookingId);
+          deletedIds.add(bookingId);
+        } catch (e) {
+          if (context.mounted) showErrorSnackBar(context, e);
+          break;
+        }
       }
 
-      ref.invalidate(paginatedBookingsProvider);
+      // removeBooking already refreshed every bookings view (and clients,
+      // slots, reports) for each successful delete.
+      if (!context.mounted) return;
 
       // When deleting from a row icon (single booking), clear all selections
       // so the "Delete Selected" bulk button disappears and avoids confusion.
-      if (clearAllSelections) {
+      if (clearAllSelections && deletedIds.length == bookingIds.length) {
         selectedIds.value = <String>{};
       } else {
         selectedIds.value = {
           for (final existingId in selectedIds.value)
-            if (!bookingIds.contains(existingId)) existingId,
+            if (!deletedIds.contains(existingId)) existingId,
         };
       }
 
-      if (bookingIds.length >= currentPageCount && pageState.value > 1) {
+      if (deletedIds.length >= currentPageCount && pageState.value > 1) {
         pageState.value -= 1;
       }
     }
 
     Future<void> printCombinedClientPdf(List<Booking> selectedBookings) async {
       if (selectedBookings.isEmpty) return;
-      await printMultipleBookingDetails(
-        selectedBookings,
-        variant: BookingPrintVariant.clientInvoice,
-      );
+      try {
+        await printMultipleBookingDetails(
+          selectedBookings,
+          variant: BookingPrintVariant.clientInvoice,
+        );
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      }
     }
 
     return asyncPaginatedBookings.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, _) => Center(
-        child: Text(
-          'Failed to load bookings: $error',
-          style: TextStyle(color: crmColors.textSecondary),
-        ),
+      error: (error, _) => AppErrorView(
+        error: error,
+        onRetry: () => ref.invalidate(paginatedBookingsProvider(pageParams)),
       ),
       data: (response) {
         final bookings = response.items;
@@ -887,7 +900,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                 decoration: BoxDecoration(
                   color: crmColors.surface,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: crmColors.border.withValues(alpha: 0.5)),
+                  border: Border.all(color: crmColors.border.faded(0.5)),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.02),

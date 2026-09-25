@@ -11,6 +11,7 @@ import 'package:nizan_crm/services/state_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/zone_service.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Settings → Departments: the org structure. Admin creates/edits departments
 /// (grouped Administrative / Creative), assigns a head, sets the roles the head
@@ -67,7 +68,7 @@ class DepartmentsScreen extends ConsumerWidget {
           onPressed: () async {
             try {
               final n = await ref.read(departmentServiceProvider).seed();
-              ref.invalidate(departmentsProvider);
+              ref.refreshData.departments();
               if (context.mounted) showSuccessSnackBar(context, 'Created $n departments');
             } catch (e) {
               if (context.mounted) showErrorSnackBar(context, e);
@@ -110,7 +111,9 @@ class DepartmentsScreen extends ConsumerWidget {
       final svc = ref.read(departmentServiceProvider);
       final tb = await svc.syncFromTimebox(); // administrative staff from Timebox
       final creative = await svc.assignByRole(); // artists → Artist, drivers → Fleet
-      ref.invalidate(departmentsProvider);
+      ref.refreshData
+        ..departments()
+        ..employees(); // staff department assignments changed
       if (context.mounted) showSuccessSnackBar(context, '$tb $creative');
     } catch (e) {
       if (context.mounted) showErrorSnackBar(context, e);
@@ -157,7 +160,7 @@ class DepartmentsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: crm.border.withValues(alpha: d.active ? 0.7 : 0.3)),
+              border: Border.all(color: crm.border.faded(d.active ? 0.7 : 0.3)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
@@ -196,7 +199,9 @@ class DepartmentsScreen extends ConsumerWidget {
                     if (v == 'delete') {
                       try {
                         await ref.read(departmentServiceProvider).delete(d.id);
-                        ref.invalidate(departmentsProvider);
+                        ref.refreshData
+                          ..departments()
+                          ..employees(); // former members lose the department
                         if (context.mounted) showSuccessSnackBar(context, 'Deleted');
                       } catch (e) {
                         if (context.mounted) showErrorSnackBar(context, e);
@@ -253,7 +258,8 @@ class DepartmentsScreen extends ConsumerWidget {
       );
 
   Future<void> _edit(BuildContext context, WidgetRef ref, Department? existing) async {
-    final saved = await showModalBottomSheet<bool>(
+    // The form refreshes departments itself on a successful save.
+    await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -261,7 +267,6 @@ class DepartmentsScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _DepartmentForm(existing: existing),
     );
-    if (saved == true) ref.invalidate(departmentsProvider);
   }
 }
 
@@ -385,7 +390,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
           _label(crm, 'ROLES THE HEAD MAY ASSIGN'),
           rolesAsync.when(
             loading: () => const Padding(padding: EdgeInsets.all(8), child: LinearProgressIndicator()),
-            error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive, fontSize: 12)),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(rolesProvider)),
             data: (roles) => Wrap(spacing: 8, runSpacing: 4, children: [
               for (final r in roles)
                 FilterChip(
@@ -401,7 +406,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
           _label(crm, 'GEOGRAPHY SCOPE (EMPTY = ALL / PAN-INDIA)'),
           zonesAsync.when(
             loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(zonesProvider)),
             data: (zones) => Wrap(spacing: 8, runSpacing: 4, children: [
               for (final z in zones)
                 FilterChip(
@@ -414,7 +419,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
           8.h,
           statesAsync.when(
             loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
+            error: (e, _) => AppErrorView(error: e, compact: true, onRetry: () => ref.invalidate(statesProvider)),
             data: (states) => Wrap(spacing: 8, runSpacing: 4, children: [
               for (final st in states)
                 FilterChip(
@@ -469,6 +474,9 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
     );
     try {
       await ref.read(departmentServiceProvider).save(dept);
+      ref.refreshData
+        ..departments()
+        ..employees(); // department head flag / assignment may change
       if (mounted) { showSuccessSnackBar(context, 'Saved'); Navigator.pop(context, true); }
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
@@ -660,7 +668,7 @@ class _HeadPickerSheetState extends ConsumerState<_HeadPickerSheet> {
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 20),
                 children: [
                   ListTile(
-                    leading: CircleAvatar(backgroundColor: crm.border.withValues(alpha: 0.4), child: Icon(Icons.person_off_outlined, size: 18, color: crm.textSecondary)),
+                    leading: CircleAvatar(backgroundColor: crm.border.faded(0.4), child: Icon(Icons.person_off_outlined, size: 18, color: crm.textSecondary)),
                     title: const Text('No head'),
                     trailing: widget.selectedId == null ? Icon(Icons.check, color: crm.primary) : null,
                     onTap: () => Navigator.pop(context, (id: '', name: '')),

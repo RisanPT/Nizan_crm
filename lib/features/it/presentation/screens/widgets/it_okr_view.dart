@@ -31,6 +31,24 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
   bool? _completedFilter;
   DateTime? _startDateFilter;
 
+  /// Inline OKR edits (status, priority, dates, head). The notifier already
+  /// reverts to server data on failure; tell the user it did not save.
+  Future<void> _updateOkr(String id, Map<String, dynamic> updates) async {
+    try {
+      await ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(id, updates);
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+
+  Future<void> _deleteOkr(String id) async {
+    try {
+      await ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).deleteOKR(id);
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
@@ -41,19 +59,9 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
       backgroundColor: crm.background,
       body: asyncOkrs.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary)),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: () => ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).refresh(),
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Retry'),
-              ),
-            ],
-          ),
+        error: (e, _) => AppErrorView(
+          error: e,
+          onRetry: () => ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).refresh(),
         ),
         data: (allOkrs) {
           // Filter OKRs
@@ -410,7 +418,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+            border: Border(bottom: BorderSide(color: crm.border.faded(0.5))),
           ),
           child: Row(
             children: [
@@ -470,7 +478,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 width: 140,
                 child: PopupMenuButton<dynamic>(
                   onSelected: (e) {
-                    ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(
+                    _updateOkr(
                       item.id,
                       {'projectHeadId': e.id, 'projectHeadName': e.name},
                     );
@@ -525,7 +533,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       ),
                     );
                     if (d != null) {
-                      ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(
+                      _updateOkr(
                         item.id,
                         {'startDate': d.toIso8601String()},
                       );
@@ -547,7 +555,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 child: PopupMenuButton<OKRStatus>(
                   initialValue: item.status,
                   onSelected: (st) {
-                    ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(
+                    _updateOkr(
                       item.id,
                       {'status': st.slug},
                     );
@@ -595,7 +603,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 child: PopupMenuButton<OKRPriority>(
                   initialValue: item.priority,
                   onSelected: (pr) {
-                    ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(
+                    _updateOkr(
                       item.id,
                       {'priority': pr.slug},
                     );
@@ -657,7 +665,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       ),
                     );
                     if (d != null) {
-                      ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).updateOKRField(
+                      _updateOkr(
                         item.id,
                         {'deadline': d.toIso8601String()},
                       );
@@ -778,7 +786,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                     if (v == 'edit') {
                       _openEditor(existing: item);
                     } else if (v == 'delete') {
-                      ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).deleteOKR(item.id);
+                      _deleteOkr(item.id);
                     }
                   },
                   itemBuilder: (ctx) => const [
@@ -799,7 +807,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
               padding: const EdgeInsets.fromLTRB(46, 6, 14, 6),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.015),
-                border: Border(bottom: BorderSide(color: crm.border.withValues(alpha: 0.3))),
+                border: Border(bottom: BorderSide(color: crm.border.faded(0.3))),
               ),
               child: Row(
                 children: [

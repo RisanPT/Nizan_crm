@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -37,8 +38,8 @@ class ArtistPayoutService {
       return (res.data as List)
           .map((e) => ArtistPayout.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load payouts'));
+    } catch (e) {
+      throw AppException(e, action: 'load payouts');
     }
   }
 
@@ -60,8 +61,8 @@ class ArtistPayoutService {
         'notes': notes,
       });
       return ArtistPayout.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to create payout'));
+    } catch (e) {
+      throw AppException(e, action: 'create payout');
     }
   }
 
@@ -82,8 +83,8 @@ class ArtistPayoutService {
         'bookingId': ?bookingId,
       });
       return ArtistPayout.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update payout'));
+    } catch (e) {
+      throw AppException(e, action: 'update payout');
     }
   }
 
@@ -91,8 +92,8 @@ class ArtistPayoutService {
     try {
       final res = await _dio.put('/artist-payouts/$id/approve');
       return ArtistPayout.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to approve payout'));
+    } catch (e) {
+      throw AppException(e, action: 'approve payout');
     }
   }
 
@@ -101,24 +102,19 @@ class ArtistPayoutService {
       final res = await _dio.put('/artist-payouts/$id/pay',
           data: {'paymentMode': ?paymentMode});
       return ArtistPayout.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to pay payout'));
+    } catch (e) {
+      throw AppException(e, action: 'pay payout');
     }
   }
 
   Future<void> deletePayout(String id) async {
     try {
       await _dio.delete('/artist-payouts/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete payout'));
+    } catch (e) {
+      throw AppException(e, action: 'delete payout');
     }
   }
 
-  String _msg(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) return data['message'].toString();
-    return e.message ?? fallback;
-  }
 }
 
 final artistPayoutServiceProvider =

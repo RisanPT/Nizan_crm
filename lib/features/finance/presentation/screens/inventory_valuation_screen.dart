@@ -62,13 +62,7 @@ class _InventoryValuationScreenState
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ListView(children: [
-              Padding(
-                padding: const EdgeInsets.all(40),
-                child: Center(
-                  child: Text(friendlyErrorMessage(e),
-                      style: TextStyle(color: crm.destructive)),
-                ),
-              ),
+              AppErrorView(error: e, onRetry: () => ref.invalidate(inventoryProductsProvider)),
             ]),
             data: (all) {
               if (_sel != null) return _detailView(crm, _sel!);
@@ -404,8 +398,7 @@ class _InventoryValuationScreenState
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }

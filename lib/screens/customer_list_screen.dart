@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../controllers/customer_controller.dart';
+import '../core/error/errors.dart';
 
 class CustomerListScreen extends ConsumerWidget {
   const CustomerListScreen({super.key});
@@ -38,15 +39,10 @@ class CustomerListScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Failed to connect to backend.\nEnsure Node.js is running and IP matches.\nError Details:\n$error',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.red),
-            ),
-          ),
+        error: (error, stack) => AppErrorView(
+          error: error,
+          onRetry: () =>
+              ref.read(customerControllerProvider.notifier).reload(),
         ),
       ),
     );

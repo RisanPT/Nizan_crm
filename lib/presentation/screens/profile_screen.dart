@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/error/errors.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
@@ -190,7 +191,7 @@ class ProfileScreen extends ConsumerWidget {
                   width: 140,
                   height: 20,
                   decoration: BoxDecoration(
-                    color: crm.border.withValues(alpha: 0.3),
+                    color: crm.border.faded(0.3),
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
@@ -356,7 +357,7 @@ class ProfileScreen extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: crm.surface,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+                          border: Border.all(color: crm.border.faded(0.5)),
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withValues(alpha: 0.015),
@@ -423,7 +424,7 @@ class ProfileScreen extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: crm.surface,
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+                        border: Border.all(color: crm.border.faded(0.5)),
                       ),
                       child: const Center(
                         child: SizedBox(
@@ -436,7 +437,14 @@ class ProfileScreen extends ConsumerWidget {
                     24.h,
                   ],
                 ),
-                error: (_, _) => const SizedBox.shrink(),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: AppErrorView(
+                    error: e,
+                    compact: true,
+                    onRetry: () => ref.invalidate(currentEmployeeProvider),
+                  ),
+                ),
               ),
 
               // Settings Card Group
@@ -444,7 +452,7 @@ class ProfileScreen extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: crm.surface,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+                  border: Border.all(color: crm.border.faded(0.5)),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.015),
@@ -547,7 +555,7 @@ class _ProfileStatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.015),
@@ -602,7 +610,7 @@ class _StatCardSkeleton extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: crm.border.withValues(alpha: 0.3)),
+        border: Border.all(color: crm.border.faded(0.3)),
       ),
       child: const Center(
         child: SizedBox(
@@ -635,7 +643,7 @@ class _DetailRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: crm.border.withValues(alpha: 0.2),
+            color: crm.border.faded(0.2),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, size: 16, color: crm.textSecondary),
@@ -755,7 +763,7 @@ class _ProfileTile extends StatelessWidget {
               Divider(
                 height: 1,
                 indent: 76,
-                color: crm.border.withValues(alpha: 0.4),
+                color: crm.border.faded(0.4),
               ),
           ],
         ),

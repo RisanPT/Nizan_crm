@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/whatsapp_service.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
@@ -87,10 +88,7 @@ class MarketingReEngagementScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 50),
-                child: Center(
-                  child: Text(e.toString().replaceFirst('Exception: ', ''),
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+                child: AppErrorView(error: e, onRetry: () => ref.invalidate(reEngagementProvider)),
               ),
               data: (r) {
                 if (r.clients.isEmpty) {
@@ -178,10 +176,7 @@ class MarketingReEngagementScreen extends ConsumerWidget {
       await WhatsAppService.openChat(c.phone, message);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: const Color(0xFFDC2626),
-        ));
+        showErrorSnackBar(context, e);
       }
     }
   }

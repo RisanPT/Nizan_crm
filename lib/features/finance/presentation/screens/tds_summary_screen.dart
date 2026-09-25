@@ -106,12 +106,7 @@ class _TdsSummaryScreenState extends ConsumerState<TdsSummaryScreen> {
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => ListView(children: [
-              Padding(
-                padding: const EdgeInsets.all(40),
-                child: Center(
-                    child: Text(friendlyErrorMessage(e),
-                        style: TextStyle(color: crm.destructive))),
-              ),
+              AppErrorView(error: e, onRetry: () => ref.invalidate(adminExpensesProvider)),
             ]),
             data: (all) => _body(crm, all),
           ),
@@ -296,8 +291,7 @@ class _TdsSummaryScreenState extends ConsumerState<TdsSummaryScreen> {
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }

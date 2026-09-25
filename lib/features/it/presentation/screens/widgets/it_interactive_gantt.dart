@@ -280,7 +280,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                 color: lane.color.withValues(alpha: 0.08),
                 border: Border(
                   left: BorderSide(color: lane.color, width: 3),
-                  bottom: BorderSide(color: crm.border.withValues(alpha: 0.6)),
+                  bottom: BorderSide(color: crm.border.faded(0.6)),
                   right: BorderSide(color: crm.border),
                 ),
               ),
@@ -325,7 +325,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                   decoration: BoxDecoration(
                     color: crm.surface,
                     border: Border(
-                      bottom: BorderSide(color: crm.border.withValues(alpha: 0.5)),
+                      bottom: BorderSide(color: crm.border.faded(0.5)),
                       right: BorderSide(color: crm.border),
                     ),
                   ),
@@ -411,7 +411,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                     color: isToday
                         ? crm.primary.withValues(alpha: 0.12)
                         : (isWeekend ? crm.background.withValues(alpha: 0.8) : null),
-                    border: Border(right: BorderSide(color: crm.border.withValues(alpha: 0.4))),
+                    border: Border(right: BorderSide(color: crm.border.faded(0.4))),
                   ),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Text(
@@ -455,7 +455,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                   height: _headerHeight,
                   decoration: BoxDecoration(
                     color: isCurrentWeek ? crm.primary.withValues(alpha: 0.07) : null,
-                    border: Border(right: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+                    border: Border(right: BorderSide(color: crm.border.faded(0.5))),
                   ),
                   child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                     Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -498,7 +498,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                   height: _headerHeight,
                   decoration: BoxDecoration(
                     color: isCurrentMonth ? crm.primary.withValues(alpha: 0.08) : null,
-                    border: Border(right: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+                    border: Border(right: BorderSide(color: crm.border.faded(0.5))),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -537,7 +537,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                 height: totalHeight,
                 decoration: BoxDecoration(
                   color: isWeekend ? crm.background.withValues(alpha: 0.35) : null,
-                  border: Border(right: BorderSide(color: crm.border.withValues(alpha: 0.25))),
+                  border: Border(right: BorderSide(color: crm.border.faded(0.25))),
                 ),
               );
             }(),
@@ -675,6 +675,7 @@ class _ITInteractiveGanttState extends ConsumerState<ITInteractiveGantt> {
                       _openTaskDetail(t);
                     }
                   }
+                  if (!mounted) return;
                   setState(() {
                     _draggingTaskId = null;
                     _dragOffsetDays = 0;

@@ -109,7 +109,8 @@ class _FinancialAnalystReportScreenState
                           setState(() => _exporting = true);
                           try {
                             await export_svc.printFinancialReport(async.value!);
-                          } catch (_) {
+                          } catch (e) {
+                            if (context.mounted) showErrorSnackBar(context, e, fallback: "Couldn't export the report. Please try again.");
                           } finally {
                             if (mounted) setState(() => _exporting = false);
                           }
@@ -129,13 +130,9 @@ class _FinancialAnalystReportScreenState
           Expanded(
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(friendlyErrorMessage(e),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: crm.textSecondary)),
-                ),
+              error: (e, _) => AppErrorView(
+                error: e,
+                onRetry: () => ref.invalidate(financialAnalystReportProvider(_monthKey)),
               ),
               data: (r) => _ReportBody(report: r, crm: crm),
             ),

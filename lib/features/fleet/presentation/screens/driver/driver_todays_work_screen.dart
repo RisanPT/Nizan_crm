@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class DriverTodaysWorkScreen extends ConsumerStatefulWidget {
   const DriverTodaysWorkScreen({super.key});
@@ -92,7 +93,8 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => AppErrorView(error: err),
+        error: (err, stack) => AppErrorView(
+            error: err, onRetry: () => ref.invalidate(driverJobsProvider)),
       ),
     );
   }
@@ -173,7 +175,9 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
         try {
           final fleetService = ref.read(fleetServiceProvider);
           await fleetService.startTripWithInspection(job.id, []);
-          ref.invalidate(driverJobsProvider);
+          ref.refreshData
+            ..fleetJobs()
+            ..bookings(); // jobs are bookings (tripStatus)
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Trip started (photos bypassed)')),
@@ -181,9 +185,7 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
           }
         } catch (e) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(friendlyErrorMessage(e))),
-            );
+            showErrorSnackBar(context, e);
           }
         }
       }

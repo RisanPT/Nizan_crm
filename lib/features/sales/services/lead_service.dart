@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/core/models/paginated_response.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 /// A single lead inside a demand cluster (same event date + same place).
 class LeadClusterItem {
@@ -223,8 +224,8 @@ class LeadService {
           limit: filter.limit,
         );
       }
-    } on DioException catch (e) {
-      throw Exception('Failed to load leads: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'load leads');
     }
   }
 
@@ -240,8 +241,8 @@ class LeadService {
       return list
           .map((e) => LeadCluster.fromJson((e as Map).cast<String, dynamic>()))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to load lead clusters'));
+    } catch (e) {
+      throw AppException(e, action: 'load lead clusters');
     }
   }
 
@@ -255,32 +256,32 @@ class LeadService {
         'date': '${date.year}-${two(date.month)}-${two(date.day)}',
       });
       return LeadsReport.fromJson((res.data as Map).cast<String, dynamic>());
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to load the lead report'));
+    } catch (e) {
+      throw AppException(e, action: 'load the lead report');
     }
   }
 
   Future<void> updateLead(String id, Map<String, dynamic> data) async {
     try {
       await _dio.put('/leads/$id', data: data);
-    } on DioException catch (e) {
-      throw Exception('Failed to update lead: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'update lead');
     }
   }
 
   Future<void> deleteLead(String id) async {
     try {
       await _dio.delete('/leads/$id');
-    } on DioException catch (e) {
-      throw Exception('Failed to delete lead: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'delete lead');
     }
   }
 
   Future<void> bulkAssignLeads(String userId) async {
     try {
       await _dio.post('/leads/bulk-assign', data: {'userId': userId});
-    } on DioException catch (e) {
-      throw Exception('Failed to bulk assign leads: ${e.message}');
+    } catch (e) {
+      throw AppException(e, action: 'bulk assign leads');
     }
   }
 
@@ -300,8 +301,8 @@ class LeadService {
         'competitorName': competitorName,
         'lostAttachment': ?lostAttachment,
       });
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to submit lost request'));
+    } catch (e) {
+      throw AppException(e, action: 'submit lost request');
     }
   }
 
@@ -316,16 +317,9 @@ class LeadService {
         'decision': approve ? 'approved' : 'rejected',
         'note': note,
       });
-    } on DioException catch (e) {
-      throw Exception(_message(e, 'Failed to review lost request'));
+    } catch (e) {
+      throw AppException(e, action: 'review lost request');
     }
   }
 
-  String _message(DioException e, String fallback) {
-    final data = e.response?.data;
-    if (data is Map && data['message'] != null) {
-      return data['message'].toString();
-    }
-    return e.message ?? fallback;
-  }
 }

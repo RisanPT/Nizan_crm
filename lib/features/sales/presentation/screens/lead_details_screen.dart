@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart' show showLeadEditDialog;
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,7 @@ import 'package:nizan_crm/services/user_service.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 // Formatting helpers
 String _fmtDate(DateTime d) {
@@ -89,9 +91,13 @@ class LeadDetailsScreen extends HookConsumerWidget {
     final asyncLeads = ref.watch(leadsProvider);
     final asyncActivities = ref.watch(leadActivitiesProvider(leadId));
     final session = ref.watch(authSessionProvider);
-    final isAdminOrManager =
-        session != null &&
-        (session.role == 'admin' || session.role == 'manager');
+    // Same rule as the leads list: admins, CRM, ANY manager (manager,
+    // sales_manager, regional_manager) and department heads.
+    final isAdminOrManager = session != null &&
+        (session.role == 'admin' ||
+            session.role == 'crm' ||
+            session.role.endsWith('manager') ||
+            session.isDepartmentHead);
 
     return Scaffold(
       appBar: AppBar(
@@ -112,7 +118,10 @@ class LeadDetailsScreen extends HookConsumerWidget {
       ),
       body: asyncLeads.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text(friendlyErrorMessage(err))),
+        error: (err, stack) => AppErrorView(
+          error: err,
+          onRetry: () => ref.invalidate(leadsProvider),
+        ),
         data: (leads) {
           final leadIndex = leads.indexWhere((l) => l.id == leadId);
           if (leadIndex == -1) {
@@ -155,8 +164,12 @@ class LeadDetailsScreen extends HookConsumerWidget {
                 asyncActivities.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (err, stack) =>
-                      Center(child: Text(friendlyErrorMessage(err))),
+                  error: (err, stack) => AppErrorView(
+                    error: err,
+                    compact: true,
+                    onRetry: () =>
+                        ref.invalidate(leadActivitiesProvider(leadId)),
+                  ),
                   data: (activities) {
                     final filtered = activities
                         .where((act) => act.type == selectedTab.value)
@@ -733,16 +746,10 @@ class LeadDetailsScreen extends HookConsumerWidget {
     }
   }
 
+  /// Opens the same Edit Lead form the leads list uses. It saves and refreshes
+  /// every lead view itself, so this page updates as soon as it closes.
   void _showEditDialog(BuildContext context, WidgetRef ref, Lead lead) {
-    // Navigate to edit using the existing form inside a Dialog or delegate to page
-    // For simplicity, we can reuse the edit dialog from sales_leads_screen
-    // We will show a SnackBar or navigate
-    context.push('/sales/leads');
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Tap Edit on the lead in the table to modify.'),
-      ),
-    );
+    showLeadEditDialog(context, ref, lead);
   }
 
   void _showTransferDialog(BuildContext context, WidgetRef ref, Lead lead) {
@@ -751,9 +758,7 @@ class LeadDetailsScreen extends HookConsumerWidget {
       builder: (ctx) {
         return _TransferLeadDialog(
           lead: lead,
-          onSaved: () {
-            ref.invalidate(leadsProvider);
-          },
+          onSaved: () => ref.refreshData.leads(),
         );
       },
     );
@@ -782,12 +787,10 @@ class LeadDetailsScreen extends HookConsumerWidget {
                 await ref
                     .read(leadActivityServiceProvider)
                     .deleteActivity(leadId, activityId);
-                ref.invalidate(leadActivitiesProvider(leadId));
+                ref.refreshData.leads(); // timeline + lead lists
               } catch (e) {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                  showErrorSnackBar(context, e);
                 }
               }
             },
@@ -829,10 +832,8 @@ class LeadDetailsScreen extends HookConsumerWidget {
         return _AddActivityLogDialog(
           leadId: leadId,
           initialType: initialType,
-          onSaved: () {
-            ref.invalidate(leadsProvider); // refresh parent status
-            ref.invalidate(leadActivitiesProvider(leadId)); // refresh timeline
-          },
+          // Lead status (all lead lists) + this lead's timeline.
+          onSaved: () => ref.refreshData.leads(),
         );
       },
     );
@@ -861,7 +862,11 @@ class _TransferLeadDialog extends HookConsumerWidget {
           height: 100,
           child: Center(child: CircularProgressIndicator()),
         ),
-        error: (err, stack) => Text(friendlyErrorMessage(err)),
+        error: (err, stack) => AppErrorView(
+          error: err,
+          compact: true,
+          onRetry: () => ref.invalidate(crmUsersProvider),
+        ),
         data: (users) {
           final salesStaff = users.where((u) => u.role == 'sales').toList();
           return DropdownButtonFormField<String?>(
@@ -910,12 +915,10 @@ class _TransferLeadDialog extends HookConsumerWidget {
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                      showErrorSnackBar(context, e);
                     }
                   } finally {
-                    isSaving.value = false;
+                    if (context.mounted) isSaving.value = false;
                   }
                 },
           child: const Text('Transfer'),
@@ -1136,12 +1139,10 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                     }
                   } catch (e) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                      showErrorSnackBar(context, e);
                     }
                   } finally {
-                    isSaving.value = false;
+                    if (context.mounted) isSaving.value = false;
                   }
                 },
           child: const Text('Save'),

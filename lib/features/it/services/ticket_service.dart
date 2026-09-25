@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/it/data/ticket.dart';
 
@@ -47,45 +48,48 @@ class TicketService {
   final Dio _dio;
   TicketService(this._dio);
 
-  Future<List<Ticket>> getTickets([TicketQuery q = const TicketQuery()]) async {
-    final res = await _dio.get('/tickets', queryParameters: {
-      if (q.status != null && q.status!.isNotEmpty) 'status': q.status,
-      if (q.type != null && q.type!.isNotEmpty) 'type': q.type,
-      if (q.priority != null && q.priority!.isNotEmpty) 'priority': q.priority,
-      if (q.mine) 'mine': 'true',
-      if (q.assignee != null && q.assignee!.isNotEmpty) 'assignee': q.assignee,
-    });
-    return (res.data as List).map((e) => Ticket.fromJson((e as Map).cast<String, dynamic>())).toList();
+  /// Runs an API call and rethrows any failure as an [AppException].
+  Future<T> _guard<T>(String action, Future<T> Function() call) async {
+    try {
+      return await call();
+    } catch (e) {
+      throw AppException(e, action: action);
+    }
   }
 
-  Future<Ticket> getTicket(String id) async {
-    final res = await _dio.get('/tickets/$id');
-    return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<List<Ticket>> getTickets([TicketQuery q = const TicketQuery()]) => _guard('load tickets', () async {
+        final res = await _dio.get('/tickets', queryParameters: {
+          if (q.status != null && q.status!.isNotEmpty) 'status': q.status,
+          if (q.type != null && q.type!.isNotEmpty) 'type': q.type,
+          if (q.priority != null && q.priority!.isNotEmpty) 'priority': q.priority,
+          if (q.mine) 'mine': 'true',
+          if (q.assignee != null && q.assignee!.isNotEmpty) 'assignee': q.assignee,
+        });
+        return (res.data as List).map((e) => Ticket.fromJson((e as Map).cast<String, dynamic>())).toList();
+      });
 
-  Future<Ticket> createTicket(Map<String, dynamic> body) async {
-    final res = await _dio.post('/tickets', data: body);
-    return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<Ticket> _ticket(String action, Future<Response<dynamic>> Function() call) => _guard(action, () async {
+        final res = await call();
+        return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
+      });
 
-  Future<Ticket> updateTicket(String id, Map<String, dynamic> body) async {
-    final res = await _dio.put('/tickets/$id', data: body);
-    return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<Ticket> getTicket(String id) => _ticket('load the ticket', () => _dio.get('/tickets/$id'));
 
-  Future<Ticket> addComment(String id, String text) async {
-    final res = await _dio.post('/tickets/$id/comments', data: {'text': text});
-    return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<Ticket> createTicket(Map<String, dynamic> body) =>
+      _ticket('raise the ticket', () => _dio.post('/tickets', data: body));
 
-  Future<Ticket> promoteToTask(String id, Map<String, dynamic> body) async {
-    final res = await _dio.post('/tickets/$id/promote', data: body);
-    return Ticket.fromJson((res.data as Map).cast<String, dynamic>());
-  }
+  Future<Ticket> updateTicket(String id, Map<String, dynamic> body) =>
+      _ticket('update the ticket', () => _dio.put('/tickets/$id', data: body));
 
-  Future<Map<String, int>> getStats() async {
-    final res = await _dio.get('/tickets/stats');
-    final m = (res.data as Map).cast<String, dynamic>();
-    return m.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
-  }
+  Future<Ticket> addComment(String id, String text) =>
+      _ticket('add the comment', () => _dio.post('/tickets/$id/comments', data: {'text': text}));
+
+  Future<Ticket> promoteToTask(String id, Map<String, dynamic> body) =>
+      _ticket('convert the ticket to a task', () => _dio.post('/tickets/$id/promote', data: body));
+
+  Future<Map<String, int>> getStats() => _guard('load ticket stats', () async {
+        final res = await _dio.get('/tickets/stats');
+        final m = (res.data as Map).cast<String, dynamic>();
+        return m.map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
+      });
 }

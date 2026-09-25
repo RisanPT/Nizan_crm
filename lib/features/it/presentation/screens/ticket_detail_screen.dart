@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/it/data/ticket.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/services/ticket_service.dart';
@@ -31,8 +32,7 @@ class TicketDetailScreen extends HookConsumerWidget {
     final sending = useState(false);
 
     Future<void> reload() async {
-      ref.invalidate(ticketProvider(ticketId));
-      ref.invalidate(ticketsProvider);
+      ref.refreshData.tickets(); // this ticket + lists + stats
     }
 
     return Scaffold(
@@ -51,7 +51,7 @@ class TicketDetailScreen extends HookConsumerWidget {
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.textSecondary))),
+        error: (e, _) => AppErrorView(error: e, onRetry: reload),
         data: (t) => SelectionArea(
           child: Column(children: [
           Expanded(
@@ -255,7 +255,7 @@ class TicketDetailScreen extends HookConsumerWidget {
                     try {
                       await ref.read(ticketServiceProvider).addComment(ticketId, text);
                       comment.clear();
-                      ref.invalidate(ticketProvider(ticketId));
+                      ref.refreshData.tickets();
                     } catch (e) {
                       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                     } finally {
@@ -482,6 +482,8 @@ class _TriagePanel extends HookConsumerWidget {
                             'assignedTo': assigneeId,
                             'assignedToName': name,
                           });
+                          refreshAllItTaskViews(ref); // new task + project progress
+                          ref.refreshData.tickets();
                           if (ctx.mounted) Navigator.pop(ctx, true);
                         } catch (e) {
                           setD(() => busy = false);
@@ -497,12 +499,6 @@ class _TriagePanel extends HookConsumerWidget {
     );
 
     if (done == true) {
-      ref.invalidate(projectsProvider);
-      ref.invalidate(itAllTasksControllerProvider);
-      if (projectId != null) {
-        ref.invalidate(itProjectTasksControllerProvider(projectId!));
-      }
-      ref.invalidate(ticketStatsProvider);
       await onSaved();
       messenger.showSnackBar(const SnackBar(content: Text('Ticket converted to an IT task')));
     }

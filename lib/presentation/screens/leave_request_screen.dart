@@ -193,7 +193,7 @@ class _LeaveRequestScreenState extends ConsumerState<LeaveRequestScreen> {
                   decoration: BoxDecoration(
                     color: crm.surface,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+                    border: Border.all(color: crm.border.faded(0.5)),
                     boxShadow: [
                       BoxShadow(
                         color: statusColor.withValues(alpha: 0.08),

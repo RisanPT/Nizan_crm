@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
@@ -48,13 +49,9 @@ class _AccountsFleetExpensesScreenState
 
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(friendlyErrorMessage(e),
-              textAlign: TextAlign.center,
-              style: TextStyle(color: crm.textSecondary)),
-        ),
+      error: (e, _) => AppErrorView(
+        error: e,
+        onRetry: () => ref.invalidate(fuelExpensesProvider),
       ),
       data: (all) {
         final items = [...all]..sort((a, b) => b.date.compareTo(a.date));
@@ -250,10 +247,10 @@ class _AccountsFleetExpensesScreenState
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(fuelExpenseServiceProvider).setStatus(e.id, status);
-      ref.invalidate(fuelExpensesProvider);
+      ref.refreshData.fuelExpenses();
       messenger.showSnackBar(SnackBar(content: Text('Marked $status')));
     } catch (err) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(err))));
+      if (mounted) showErrorSnackBar(context, err);
     }
   }
 

@@ -32,9 +32,8 @@ class _ArtistInventoryScreenState extends ConsumerState<ArtistInventoryScreen> {
       isMobile: isMobile,
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-            child: Text(friendlyErrorMessage(e),
-                style: TextStyle(color: crm.textSecondary))),
+        error: (e, _) => AppErrorView(
+            error: e, onRetry: () => ref.invalidate(inventoryProductsProvider)),
         data: (products) {
           final q = _search.trim().toLowerCase();
           final filtered = products.where((p) {

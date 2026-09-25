@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/accounts/data/expense_category.dart';
@@ -60,7 +61,7 @@ class _ManageExpenseCategoriesDialogState
     super.dispose();
   }
 
-  void _refresh() => ref.invalidate(expenseCategoriesProvider(_dept));
+  void _refresh() => ref.refreshData.expenseCategories();
 
   Future<void> _run(Future<void> Function() action) async {
     setState(() => _busy = true);
@@ -68,14 +69,7 @@ class _ManageExpenseCategoriesDialogState
       await action();
       _refresh();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyErrorMessage(e)),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      if (mounted) showErrorSnackBar(context, e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

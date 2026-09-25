@@ -15,6 +15,7 @@ import '../../core/models/service_region.dart';
 import '../../core/models/district.dart';
 import '../../core/models/service_package.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class PackageDetailScreen extends HookConsumerWidget {
   final String packageId;
@@ -117,6 +118,29 @@ class PackageDetailScreen extends HookConsumerWidget {
         asyncRegions.isLoading ||
         asyncDistricts.isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    // A failed load is not "package not found"; the geography lookups are
+    // needed to show and edit the district overrides correctly.
+    final loadError = (package == null ? asyncPackages.error : null) ??
+        asyncDistricts.error ??
+        asyncRegions.error ??
+        asyncStates.error ??
+        asyncZones.error;
+    if (loadError != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Package')),
+        body: AppErrorView(
+          error: loadError,
+          onRetry: () {
+            ref.invalidate(packagesProvider);
+            ref.invalidate(zonesProvider);
+            ref.invalidate(statesProvider);
+            ref.invalidate(regionsProvider);
+            ref.invalidate(districtsProvider);
+          },
+        ),
+      );
     }
 
     if (package == null) {
@@ -341,16 +365,13 @@ class PackageDetailScreen extends HookConsumerWidget {
                                       regionPrices: package.regionPrices,
                                       districtPrices: updatedList,
                                     );
-                                    ref.invalidate(packagesProvider);
-                                    ref.invalidate(paginatedPackagesProvider);
+                                    ref.refreshData.packages();
                                     if (context.mounted) {
                                       Navigator.of(ctx).pop();
                                     }
                                   } catch (e) {
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(friendlyErrorMessage(e))),
-                                      );
+                                      showErrorSnackBar(context, e);
                                     }
                                   }
                                 },
@@ -401,13 +422,10 @@ class PackageDetailScreen extends HookConsumerWidget {
             regionPrices: package.regionPrices,
             districtPrices: updatedList,
           );
-          ref.invalidate(packagesProvider);
-          ref.invalidate(paginatedPackagesProvider);
+          ref.refreshData.packages();
         } catch (e) {
           if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(friendlyErrorMessage(e))),
-            );
+            showErrorSnackBar(context, e);
           }
         }
       }

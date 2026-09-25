@@ -74,9 +74,15 @@ class _CombinedAccountsDashboardScreenState
     }
     if (error != null) {
       return Scaffold(
-        body: Center(
-          child: Text(friendlyErrorMessage(error),
-              style: TextStyle(color: crm.textSecondary)),
+        body: AppErrorView(
+          error: error,
+          onRetry: () {
+            ref.invalidate(collectionsProvider);
+            ref.invalidate(expensesProvider);
+            ref.invalidate(bookingProvider);
+            ref.invalidate(adminExpenseStatsProvider);
+            ref.invalidate(subscriptionStatsProvider);
+          },
         ),
       );
     }

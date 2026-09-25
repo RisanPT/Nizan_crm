@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
-import 'package:nizan_crm/core/error/error_message.dart';
 import 'package:nizan_crm/features/reports/data/company_report.dart';
 import 'package:nizan_crm/features/reports/data/report_folder.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -17,8 +17,8 @@ class CompanyReportService {
       if (scope != null && scope.isNotEmpty) qp['scope'] = scope;
       final res = await _dio.get('/company-reports', queryParameters: qp.isEmpty ? null : qp);
       return (res.data as List).map((e) => CompanyReport.fromJson(e as Map<String, dynamic>)).toList();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load reports'));
+    } catch (e) {
+      throw AppException(e, action: 'load reports');
     }
   }
 
@@ -50,8 +50,8 @@ class CompanyReportService {
         form.files.add(MapEntry('file', await MultipartFile.fromFile(filePath, filename: filename)));
       }
       await _dio.post('/company-reports', data: form);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to upload the report'));
+    } catch (e) {
+      throw AppException(e, action: 'upload the report');
     }
   }
 
@@ -60,16 +60,16 @@ class CompanyReportService {
       final res = await _dio.get<List<int>>('/company-reports/$id/download',
           options: Options(responseType: ResponseType.bytes));
       return res.data ?? const <int>[];
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to download the report'));
+    } catch (e) {
+      throw AppException(e, action: 'download the report');
     }
   }
 
   Future<void> delete(String id) async {
     try {
       await _dio.delete('/company-reports/$id');
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to delete the report'));
+    } catch (e) {
+      throw AppException(e, action: 'delete the report');
     }
   }
 
@@ -78,8 +78,8 @@ class CompanyReportService {
     try {
       final form = FormData.fromMap({'folder': folderId ?? ''});
       await _dio.put('/company-reports/$id', data: form);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to move the report'));
+    } catch (e) {
+      throw AppException(e, action: 'move the report');
     }
   }
 
@@ -96,8 +96,8 @@ class CompanyReportService {
       return (res.data as List)
           .map((e) => ReportFolder.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to load folders'));
+    } catch (e) {
+      throw AppException(e, action: 'load folders');
     }
   }
 
@@ -108,8 +108,8 @@ class CompanyReportService {
         if (department != null && department.isNotEmpty) 'department': department,
       });
       return ReportFolder.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to create the folder'));
+    } catch (e) {
+      throw AppException(e, action: 'create the folder');
     }
   }
 
@@ -118,16 +118,16 @@ class CompanyReportService {
       final res =
           await _dio.put('/company-reports/folders/$id', data: {'name': name});
       return ReportFolder.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to rename the folder'));
+    } catch (e) {
+      throw AppException(e, action: 'rename the folder');
     }
   }
 
   Future<void> deleteFolder(String id) async {
     try {
       await _dio.delete('/company-reports/folders/$id');
-    } on DioException catch (e) {
-      throw Exception(friendlyErrorMessage(e, fallback: 'Failed to delete the folder'));
+    } catch (e) {
+      throw AppException(e, action: 'delete the folder');
     }
   }
 }

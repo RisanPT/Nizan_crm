@@ -76,7 +76,7 @@ class _PartyStatementSheet extends ConsumerWidget {
           Expanded(
             child: async.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)))),
+              error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(partyStatementProvider((kind: kind, name: name, phone: phone)))),
               data: (s) => _body(crm, accent, s, scrollController),
             ),
           ),
@@ -115,7 +115,7 @@ class _PartyStatementSheet extends ConsumerWidget {
             decoration: BoxDecoration(
               color: crm.surface,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+              border: Border.all(color: crm.border.faded(0.8)),
             ),
             child: Column(children: [
               Container(
@@ -131,7 +131,7 @@ class _PartyStatementSheet extends ConsumerWidget {
               for (final r in s.rows)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.4)))),
+                  decoration: BoxDecoration(border: Border(top: BorderSide(color: crm.border.faded(0.4)))),
                   child: Row(children: [
                     Expanded(
                       flex: 5,

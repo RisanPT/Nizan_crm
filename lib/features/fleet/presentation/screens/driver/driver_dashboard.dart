@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 
 class DriverDashboard extends ConsumerWidget {
   const DriverDashboard({super.key});
@@ -71,7 +72,7 @@ class DriverDashboard extends ConsumerWidget {
                 ),
               ),
               error: (err, _) => SliverToBoxAdapter(
-                child: _buildError(ref, err.toString()),
+                child: _buildError(ref, err),
               ),
             ),
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
@@ -468,23 +469,28 @@ class DriverDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildError(WidgetRef ref, String err) {
+  Widget _buildError(WidgetRef ref, Object err) {
     return Padding(
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.wifi_off_rounded, size: 52, color: Colors.redAccent),
+          Icon(
+              isOfflineError(err)
+                  ? Icons.wifi_off_rounded
+                  : Icons.error_outline_rounded,
+              size: 52,
+              color: Colors.redAccent),
           const SizedBox(height: 16),
-          const Text(
-            'Connection Error',
+          Text(
+            friendlyErrorTitle(err),
             style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF1A1A2E)),
           ),
           const SizedBox(height: 8),
-          Text(err,
+          Text(friendlyErrorMessage(err),
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey[500], fontSize: 13)),
           const SizedBox(height: 20),

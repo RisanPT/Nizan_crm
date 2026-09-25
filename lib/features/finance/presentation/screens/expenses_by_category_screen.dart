@@ -96,12 +96,7 @@ class _ExpensesByCategoryScreenState
         child: async.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                  child: Text(friendlyErrorMessage(e),
-                      style: TextStyle(color: crm.destructive))),
-            ),
+            AppErrorView(error: e, onRetry: () => ref.invalidate(adminExpensesProvider)),
           ]),
           data: (all) {
             // Approved-only: a department head's pending submission is not a
@@ -507,8 +502,7 @@ class _ExpensesByCategoryScreenState
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        showErrorSnackBar(context, e);
       }
     }
   }
@@ -536,10 +530,18 @@ class _ReceiptPreview extends StatelessWidget {
         u.endsWith('.gif');
   }
 
-  Future<void> _open() async {
+  Future<void> _open(BuildContext context) async {
     final uri = Uri.tryParse(url);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    var opened = false;
+    try {
+      if (uri != null) {
+        opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (_) {
+      opened = false;
+    }
+    if (!opened && context.mounted) {
+      showErrorSnackBar(context, null, fallback: "Couldn't open the receipt. Please try again.");
     }
   }
 
@@ -568,7 +570,7 @@ class _ReceiptPreview extends StatelessWidget {
                         color: crm.textPrimary)),
               ),
               TextButton.icon(
-                onPressed: _open,
+                onPressed: () => _open(context),
                 icon: const Icon(Icons.open_in_new_rounded, size: 15),
                 label: const Text('Open'),
               ),
@@ -577,21 +579,21 @@ class _ReceiptPreview extends StatelessWidget {
           Divider(height: 1, color: crm.border),
           if (_isImage)
             InkWell(
-              onTap: _open,
+              onTap: () => _open(context),
               child: Image.network(
                 url,
                 fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => _docFallback(),
+                errorBuilder: (_, _, _) => _docFallback(context),
               ),
             )
           else
-            _docFallback(),
+            _docFallback(context),
         ],
       ),
     );
   }
 
-  Widget _docFallback() => Padding(
+  Widget _docFallback(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
         child: Center(
           child: Column(
@@ -603,7 +605,7 @@ class _ReceiptPreview extends StatelessWidget {
                   style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
               8.h,
               OutlinedButton.icon(
-                onPressed: _open,
+                onPressed: () => _open(context),
                 icon: const Icon(Icons.open_in_new_rounded, size: 16),
                 label: const Text('Open document'),
               ),

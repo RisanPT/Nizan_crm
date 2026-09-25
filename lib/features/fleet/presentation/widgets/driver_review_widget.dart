@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class DriverReviewWidget extends ConsumerStatefulWidget {
   final String driverId;
@@ -44,6 +45,7 @@ class _DriverReviewWidgetState extends ConsumerState<DriverReviewWidget> {
         rating: _rating,
         comment: _commentController.text,
       );
+      ref.refreshData.fleetJobs();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -53,9 +55,7 @@ class _DriverReviewWidgetState extends ConsumerState<DriverReviewWidget> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyErrorMessage(e))),
-        );
+        showErrorSnackBar(context, e);
       }
     } finally {
       if (mounted) {

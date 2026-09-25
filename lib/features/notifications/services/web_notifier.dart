@@ -11,5 +11,12 @@ bool get webNotificationsSupported => impl.supported;
 Future<void> ensureWebNotificationPermission() => impl.ensurePermission();
 
 /// Show a native OS notification if permission has been granted (web only).
-void showWebNotification(String title, String body) =>
-    impl.showWebNotification(title, body);
+/// It closes itself after a few seconds, closes when clicked (focusing the app
+/// and running [onClick]), and [id] is used as the OS tag so duplicates from
+/// several tabs collapse into one.
+void showWebNotification(String title, String body,
+        {String? id, void Function()? onClick}) =>
+    impl.showWebNotification(title, body, id: id, onClick: onClick);
+
+/// Close the native notification shown for [id], if it is still open.
+void closeWebNotification(String id) => impl.closeWebNotification(id);

@@ -9,6 +9,7 @@ import 'package:nizan_crm/services/trial_service.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Trials calendar — mirrors the booking calendar's UI/UX (Month / Week / Day)
 /// but bound to studio trials. Isolated from the booking calendar.
@@ -200,9 +201,10 @@ class TrialsCalendarScreen extends HookConsumerWidget {
               child: async.isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : async.hasError
-                      ? Center(
-                          child: Text('Failed to load trials',
-                              style: TextStyle(color: crm.textSecondary)))
+                      ? AppErrorView(
+                          error: async.error,
+                          onRetry: () => ref.invalidate(allTrialsProvider),
+                        )
                       : SingleChildScrollView(
                           padding: EdgeInsets.all(isMobile ? 12 : 16),
                           child: viewMode.value == 'Month'
@@ -763,13 +765,13 @@ class TrialsCalendarScreen extends HookConsumerWidget {
               await ref
                   .read(trialServiceProvider)
                   .updateTrial(t.copyWith(status: s));
-              ref.read(trialsRefreshTriggerProvider.notifier).state++;
+              ref.refreshData.trials();
               setLocal(() => saving = false);
               messenger.showSnackBar(
                   const SnackBar(content: Text('Trial updated')));
             } catch (e) {
               setLocal(() => saving = false);
-              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+              if (dctx.mounted) showErrorSnackBar(dctx, e);
             }
           }
 

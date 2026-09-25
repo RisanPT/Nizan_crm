@@ -111,7 +111,7 @@ class _MonthRangeDialogState extends State<_MonthRangeDialog> {
         decoration: BoxDecoration(
           color: crm.background,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+          border: Border.all(color: crm.border.faded(0.6)),
         ),
         child: Row(children: [
           IconButton(
@@ -154,7 +154,7 @@ class _MonthRangeDialogState extends State<_MonthRangeDialog> {
         decoration: BoxDecoration(
           color: selected ? crm.primary : (inRange ? crm.primary.withValues(alpha: 0.10) : Colors.transparent),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? crm.primary : crm.border.withValues(alpha: 0.5)),
+          border: Border.all(color: selected ? crm.primary : crm.border.faded(0.5)),
         ),
         child: Text(
           _monthsShort[mo - 1],
@@ -215,7 +215,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
               decoration: BoxDecoration(
                 color: crm.background,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+                border: Border.all(color: crm.border.faded(0.6)),
               ),
               child: Row(children: [
                 IconButton(
@@ -249,7 +249,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                         decoration: BoxDecoration(
                           color: selected ? crm.primary : Colors.transparent,
                           borderRadius: BorderRadius.circular(9),
-                          border: Border.all(color: selected ? crm.primary : crm.border.withValues(alpha: 0.5)),
+                          border: Border.all(color: selected ? crm.primary : crm.border.faded(0.5)),
                         ),
                         child: Text(_monthsShort[mo - 1],
                             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: selected ? Colors.white : crm.textPrimary)),

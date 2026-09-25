@@ -144,9 +144,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
               }
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(friendlyErrorMessage(e)), backgroundColor: crm.destructive),
-                );
+                showErrorSnackBar(context, e);
               }
             } finally {
               busy.value = false;
@@ -356,7 +354,7 @@ class _MonthBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.sidebar.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.5)),
+        border: Border.all(color: crm.border.faded(0.5)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -437,7 +435,7 @@ class _Kpi extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
@@ -630,7 +628,7 @@ class _DeptBarsCard extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: (pct / 100).clamp(0.0, 1.0),
                         minHeight: 8,
-                        backgroundColor: crm.border.withValues(alpha: 0.5),
+                        backgroundColor: crm.border.faded(0.5),
                         valueColor: AlwaysStoppedAnimation(color),
                       ),
                     ),
@@ -656,7 +654,7 @@ class _Panel extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 12, offset: const Offset(0, 5))],
       ),
       child: Column(
@@ -703,7 +701,7 @@ class _FilterRow extends StatelessWidget {
           contentPadding: EdgeInsets.zero,
           filled: true,
           fillColor: crm.surface,
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border.withValues(alpha: 0.7))),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border.faded(0.7))),
           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.accent)),
         ),
       ),
@@ -712,7 +710,7 @@ class _FilterRow extends StatelessWidget {
     final dept = Container(
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border.withValues(alpha: 0.7))),
+      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border.faded(0.7))),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String?>(
           value: deptValue,
@@ -779,7 +777,7 @@ class _StatusSegments extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border.withValues(alpha: 0.6))),
+      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border.faded(0.6))),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         seg(_Filter.all, 'All', crm.accent),
         seg(_Filter.present, 'Present', crm.success),
@@ -802,7 +800,7 @@ class _EmployeeTable extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         children: [
@@ -831,7 +829,7 @@ class _EmployeeTable extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
-                  border: Border(top: BorderSide(color: crm.border.withValues(alpha: 0.5))),
+                  border: Border(top: BorderSide(color: crm.border.faded(0.5))),
                 ),
                 child: Row(children: [
                   Expanded(
@@ -911,7 +909,7 @@ class _SummaryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.8)),
+        border: Border.all(color: crm.border.faded(0.8)),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 12, offset: const Offset(0, 6))],
       ),
       child: Material(
@@ -961,7 +959,7 @@ class _SummaryCard extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: row.expectedDays > 0 ? (row.daysPresent / row.expectedDays).clamp(0.0, 1.0) : 0,
                       minHeight: 7,
-                      backgroundColor: crm.border.withValues(alpha: 0.5),
+                      backgroundColor: crm.border.faded(0.5),
                       valueColor: AlwaysStoppedAnimation(color),
                     ),
                   ),

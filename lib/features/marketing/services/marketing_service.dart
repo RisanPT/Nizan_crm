@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/error/errors.dart';
 import '../../../providers/dio_provider.dart';
-import '../../../core/error/error_message.dart';
 import '../data/marketing_models.dart';
 
 final marketingServiceProvider = Provider<MarketingService>((ref) {
@@ -33,8 +33,8 @@ class MarketingService {
       return (res.data as List)
           .map((e) => Competitor.fromJson(e as Map<String, dynamic>))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load competitors'));
+    } catch (e) {
+      throw AppException(e, action: 'load competitors');
     }
   }
 
@@ -42,8 +42,8 @@ class MarketingService {
     try {
       final res = await _dio.post('/marketing/competitors', data: c.toJson());
       return Competitor.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to add competitor'));
+    } catch (e) {
+      throw AppException(e, action: 'add competitor');
     }
   }
 
@@ -52,16 +52,16 @@ class MarketingService {
       final res =
           await _dio.put('/marketing/competitors/$id', data: c.toJson());
       return Competitor.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to update competitor'));
+    } catch (e) {
+      throw AppException(e, action: 'update competitor');
     }
   }
 
   Future<void> deleteCompetitor(String id) async {
     try {
       await _dio.delete('/marketing/competitors/$id');
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to delete competitor'));
+    } catch (e) {
+      throw AppException(e, action: 'delete competitor');
     }
   }
 
@@ -74,8 +74,8 @@ class MarketingService {
           '/marketing/competitors/$competitorId/snapshot',
           data: data);
       return CompetitorSnapshot.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save weekly data'));
+    } catch (e) {
+      throw AppException(e, action: 'save weekly data');
     }
   }
 
@@ -90,8 +90,8 @@ class MarketingService {
         'weekOf': ?weekOf?.toIso8601String(),
       });
       return Map<String, dynamic>.from(res.data as Map);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Import failed'));
+    } catch (e) {
+      throw AppException(e, action: 'import the file');
     }
   }
 
@@ -100,8 +100,8 @@ class MarketingService {
       final res = await _dio.get('/marketing/rankings',
           queryParameters: {'weekOf': ?weekOf});
       return RankingBoard.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load rankings'));
+    } catch (e) {
+      throw AppException(e, action: 'load rankings');
     }
   }
 
@@ -109,8 +109,8 @@ class MarketingService {
     try {
       final res = await _dio.get('/marketing/scoring-config');
       return ScoringConfig.fromJson(res.data as Map<String, dynamic>);
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load scoring config'));
+    } catch (e) {
+      throw AppException(e, action: 'load scoring config');
     }
   }
 
@@ -120,8 +120,8 @@ class MarketingService {
     try {
       await _dio.put('/marketing/scoring-config',
           data: {'weights': weights, 'note': note});
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to save weights'));
+    } catch (e) {
+      throw AppException(e, action: 'save weights');
     }
   }
 
@@ -136,11 +136,9 @@ class MarketingService {
                 (e['score'] as num?)?.toInt() ?? 0,
               ))
           .toList();
-    } on DioException catch (e) {
-      throw Exception(_msg(e, 'Failed to load trend'));
+    } catch (e) {
+      throw AppException(e, action: 'load trend');
     }
   }
 
-  String _msg(DioException e, String fallback) =>
-      friendlyErrorMessage(e, fallback: fallback);
 }

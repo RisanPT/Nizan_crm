@@ -94,8 +94,11 @@ class _ReportAccessPickerState extends ConsumerState<_ReportAccessPicker> {
                   padding: EdgeInsets.all(24),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (e, _) => Text(friendlyErrorMessage(e),
-                    style: TextStyle(color: crm.destructive)),
+                error: (e, _) => AppErrorView(
+                  error: e,
+                  compact: true,
+                  onRetry: () => ref.invalidate(crmUsersProvider),
+                ),
                 data: (users) {
                   final people = users
                       .where((u) => u.id != widget.ownerId)

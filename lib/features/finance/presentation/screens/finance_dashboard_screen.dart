@@ -36,10 +36,10 @@ class FinanceDashboardScreen extends ConsumerWidget {
         child: statsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ListView(children: [
-            Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(child: Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive))),
-            ),
+            AppErrorView(error: e, onRetry: () {
+              ref.invalidate(assetStatsProvider);
+              ref.invalidate(assetsProvider('all'));
+            }),
           ]),
           data: (stats) {
             final assets = assetsAsync.value ?? const <Asset>[];
@@ -163,7 +163,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +191,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crm.border.withValues(alpha: 0.6)),
+        border: Border.all(color: crm.border.faded(0.6)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,7 +223,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
           child: LinearProgressIndicator(
             value: frac,
             minHeight: 8,
-            backgroundColor: crm.border.withValues(alpha: 0.4),
+            backgroundColor: crm.border.faded(0.4),
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ),
@@ -249,7 +249,7 @@ class FinanceDashboardScreen extends ConsumerWidget {
           child: LinearProgressIndicator(
             value: frac,
             minHeight: 7,
-            backgroundColor: crm.border.withValues(alpha: 0.4),
+            backgroundColor: crm.border.faded(0.4),
             valueColor: AlwaysStoppedAnimation(crm.primary),
           ),
         ),

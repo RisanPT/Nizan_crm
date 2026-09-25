@@ -559,9 +559,23 @@ class SlotManagementScreen extends HookConsumerWidget {
                 ),
                 error: (err, stack) => SizedBox(
                   height: 200,
-                  child: AppErrorView(error: err),
+                  child: AppErrorView(
+                    error: err,
+                    onRetry: () => ref.invalidate(employeesProvider),
+                  ),
                 ),
                 data: (_) {
+                  // Without bookings every artist would look free, which is
+                  // worse than showing nothing.
+                  if (asyncBookings.hasError && !asyncBookings.hasValue) {
+                    return SizedBox(
+                      height: 200,
+                      child: AppErrorView(
+                        error: asyncBookings.error,
+                        onRetry: () => ref.invalidate(bookingProvider),
+                      ),
+                    );
+                  }
                   if (filteredArtists.isEmpty) {
                     return const SizedBox(
                       height: 150,
@@ -730,7 +744,7 @@ class SlotManagementScreen extends HookConsumerWidget {
               width: double.infinity,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: crmColors.border.withValues(alpha: 0.3),
+                color: crmColors.border.faded(0.3),
               ),
               clipBehavior: Clip.antiAlias,
               child: Row(
@@ -755,7 +769,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                     Expanded(
                       flex: (freePct * 1000).toInt(),
                       child: Container(
-                        color: crmColors.border.withValues(alpha: 0.5),
+                        color: crmColors.border.faded(0.5),
                       ),
                     ),
                 ],
@@ -847,7 +861,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                         child: LinearProgressIndicator(
                           value: rate,
                           minHeight: 8,
-                          backgroundColor: crmColors.border.withValues(alpha: 0.3),
+                          backgroundColor: crmColors.border.faded(0.3),
                           valueColor: AlwaysStoppedAnimation<Color>(
                             rate > 0.8 ? crmColors.destructive : (rate > 0.5 ? Colors.orange : crmColors.primary),
                           ),
