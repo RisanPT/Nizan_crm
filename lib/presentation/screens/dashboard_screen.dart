@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../core/providers/auth_provider.dart';
@@ -102,13 +103,24 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       return !date.isBefore(prevRange.start) && !date.isAfter(prevRange.end);
     }).toList();
 
-    final double currentSales = currentBookings.fold(0.0, (sum, b) => sum + b.totalPrice);
+    final double currentSales = currentBookings
+        .where((b) => b.countsTowardSales)
+        .fold(0.0, (sum, b) => sum + b.totalPrice);
     final int currentOrders = currentBookings.length;
-    final double currentAvgBasket = currentOrders > 0 ? currentSales / currentOrders : 0.0;
+    // Average over the bookings that count toward sales (same set as the sum).
+    final int currentSaleOrders =
+        currentBookings.where((b) => b.countsTowardSales).length;
+    final double currentAvgBasket =
+        currentSaleOrders > 0 ? currentSales / currentSaleOrders : 0.0;
 
-    final double prevSales = prevBookings.fold(0.0, (sum, b) => sum + b.totalPrice);
+    final double prevSales = prevBookings
+        .where((b) => b.countsTowardSales)
+        .fold(0.0, (sum, b) => sum + b.totalPrice);
     final int prevOrders = prevBookings.length;
-    final double prevAvgBasket = prevOrders > 0 ? prevSales / prevOrders : 0.0;
+    final int prevSaleOrders =
+        prevBookings.where((b) => b.countsTowardSales).length;
+    final double prevAvgBasket =
+        prevSaleOrders > 0 ? prevSales / prevSaleOrders : 0.0;
 
     double salesGrowth = 0.0;
     if (prevSales > 0) {
@@ -164,11 +176,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final prevMonthEnd = DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0);
 
         final double currentVal = currentBookings
-            .where((b) => !b.bookingDate.isBefore(currentMonthStart) && !b.bookingDate.isAfter(currentMonthEnd))
+            .where((b) => !b.bookingDate.isBefore(currentMonthStart) && !b.bookingDate.isAfter(currentMonthEnd) && b.countsTowardSales)
             .fold(0.0, (sum, b) => sum + b.totalPrice);
 
         final double prevVal = prevBookings
-            .where((b) => !b.bookingDate.isBefore(prevMonthStart) && !b.bookingDate.isAfter(prevMonthEnd))
+            .where((b) => !b.bookingDate.isBefore(prevMonthStart) && !b.bookingDate.isAfter(prevMonthEnd) && b.countsTowardSales)
             .fold(0.0, (sum, b) => sum + b.totalPrice);
 
         groups.add(
@@ -199,11 +211,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final prevDate = prevRange.start.add(Duration(days: i));
 
         final double currentVal = currentBookings
-            .where((b) => b.bookingDate.year == currentDate.year && b.bookingDate.month == currentDate.month && b.bookingDate.day == currentDate.day)
+            .where((b) => b.bookingDate.year == currentDate.year && b.bookingDate.month == currentDate.month && b.bookingDate.day == currentDate.day && b.countsTowardSales)
             .fold(0.0, (sum, b) => sum + b.totalPrice);
 
         final double prevVal = prevBookings
-            .where((b) => b.bookingDate.year == prevDate.year && b.bookingDate.month == prevDate.month && b.bookingDate.day == prevDate.day)
+            .where((b) => b.bookingDate.year == prevDate.year && b.bookingDate.month == prevDate.month && b.bookingDate.day == prevDate.day && b.countsTowardSales)
             .fold(0.0, (sum, b) => sum + b.totalPrice);
 
         groups.add(
@@ -1061,6 +1073,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final crmColors = context.crmColors;
 
     final asyncBookings = ref.watch(bookingProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
     final asyncArtistBookings = role == AppRole.artist
         ? ref.watch(artistAssignedWorksProvider(1))
         : null;
@@ -1164,6 +1178,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         );
         return;
       }
+
+      // Report sales totals skip non-counting bookings — make sure the list is in.
+      await ref.read(salesExcludedCreatorsProvider.future);
+      if (!context.mounted) return;
 
       await _runWithReportLoader(
         context: context,
@@ -1303,7 +1321,10 @@ int _bookingsInMonth(List<Booking> bookings, DateTime m) => bookings
 /// non-postponed) bookings.
 double _revenueInMonth(List<Booking> bookings, DateTime m) {
   final monthly = bookings
-      .where((b) => b.bookingDate.year == m.year && b.bookingDate.month == m.month);
+      .where((b) =>
+          b.bookingDate.year == m.year &&
+          b.bookingDate.month == m.month &&
+          b.countsTowardSales);
   final completed = monthly
       .where((b) => b.status.toLowerCase() == 'completed')
       .fold<double>(0, (sum, b) => sum + b.totalPrice);

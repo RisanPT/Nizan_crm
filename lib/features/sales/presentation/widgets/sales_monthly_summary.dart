@@ -24,6 +24,8 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncBookings = ref.watch(bookingProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
     final asyncStates = ref.watch(statesProvider);
     final asyncRegions = ref.watch(regionsProvider);
     final asyncZones = ref.watch(zonesProvider);
@@ -106,9 +108,9 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
           final packageCount = b.bookingItems.isEmpty ? 1 : b.bookingItems.length;
           stats.totalPackages += packageCount;
           if (b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed') {
-            stats.totalSales += b.totalPrice;
+            if (b.countsTowardSales) stats.totalSales += b.totalPrice;
             stats.advanceCollected += b.advanceAmount;
-            if (b.status.toLowerCase() != 'completed') {
+            if (b.status.toLowerCase() != 'completed' && b.countsTowardSales) {
               stats.forecastAmount += (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0, double.infinity);
             }
           }
@@ -131,6 +133,9 @@ class _MonthlySalesSummaryView extends ConsumerWidget {
             );
             return;
           }
+          // Report sales totals skip non-counting bookings — make sure the list is in.
+          await ref.read(salesExcludedCreatorsProvider.future);
+          if (!context.mounted) return;
           final reportMonth = DateTime(stats.year, stats.month);
           final activeFiltersStr = (() {
             final List<String> parts = [];

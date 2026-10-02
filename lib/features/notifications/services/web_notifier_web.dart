@@ -9,7 +9,7 @@ bool get supported => true;
 
 /// How long a native popup stays up before we close it ourselves. Without
 /// this, Chrome/Edge on Windows keep it on screen until the user closes it.
-const _autoClose = Duration(seconds: 8);
+const _autoClose = Duration(seconds: 5);
 
 /// Open native notifications by notification id, so they can be closed when
 /// the matching in-app toast is dismissed.

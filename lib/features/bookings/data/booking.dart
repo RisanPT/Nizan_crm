@@ -1,3 +1,5 @@
+import 'package:nizan_crm/core/config/sales_rules.dart' as rules;
+
 class BookingAssignment {
   final String employeeId;
   final String artistName;
@@ -568,6 +570,9 @@ class Booking {
   /// booking is saved as completed. Not persisted; used to append the link to
   /// the completion WhatsApp message.
   final String reviewUrl;
+  /// Set by the server: whether this booking counts toward sales totals.
+  /// Null when the server predates this field (falls back to the local rule).
+  final bool? serverCountsTowardSales;
 
   const Booking({
     required this.id,
@@ -629,6 +634,7 @@ class Booking {
     this.outfitLooks = const [],
     this.createdByName = '',
     this.reviewUrl = '',
+    this.serverCountsTowardSales,
     this.createdBy = '',
   });
 
@@ -715,6 +721,12 @@ class Booking {
 
   /// True when the balance has been fully settled.
   bool get isFullyPaid => balanceDue <= 0;
+
+  /// False for bookings entered by the users listed in
+  /// core/config/sales_rules.dart — those stay out of every sales total.
+  // Prefer the server's per-booking verdict; fall back to the local list.
+  bool get countsTowardSales =>
+      serverCountsTowardSales ?? rules.countsTowardSales(createdBy: createdBy);
 
   String get displayBookingNumber {
     final explicitNumber = bookingNumber.trim();
@@ -961,6 +973,7 @@ class Booking {
       outfitLooks: _parseOutfitLooks(json),
       createdByName: json['createdByName'] as String? ?? '',
       reviewUrl: json['reviewUrl'] as String? ?? '',
+      serverCountsTowardSales: json['countsTowardSales'] as bool?,
       createdBy: json['createdBy'] is Map
           ? (json['createdBy']['_id'] as String? ?? '')
           : (json['createdBy'] as String? ?? ''),
@@ -1155,6 +1168,7 @@ class Booking {
       createdByName: createdByName ?? this.createdByName,
       createdBy: createdBy ?? this.createdBy,
       reviewUrl: reviewUrl ?? this.reviewUrl,
+      serverCountsTowardSales: serverCountsTowardSales,
     );
   }
 }

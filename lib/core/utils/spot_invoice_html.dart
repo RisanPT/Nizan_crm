@@ -21,6 +21,9 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
   final phoneLine = data.customerPhone.trim().isEmpty
       ? ''
       : '<div class="info-line"><span class="info-key">Phone</span> <span class="info-val">${_esc(data.customerPhone.trim())}</span></div>';
+  final districtLine = data.district.trim().isEmpty
+      ? ''
+      : '<div class="info-line"><span class="info-key">District</span> <span class="info-val">${_esc(data.district.trim())}</span></div>';
   final noteBlock = data.note.trim().isEmpty
       ? ''
       : '<div class="gst-note" style="background:#fbf7f8;border-color:#e7d2d8;color:#601a29;"><b>Note:</b> ${_esc(data.note.trim())}</div>';
@@ -96,6 +99,7 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
       <div class="info-card-title">Billed To</div>
       <div class="info-customer">${_esc(customer)}</div>
       $phoneLine
+      $districtLine
     </div>
     <div class="info-card">
       <div class="info-card-title">Company Details</div>

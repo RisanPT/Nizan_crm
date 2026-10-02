@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart' show showLeadEditDialog;
+import 'package:nizan_crm/features/sales/presentation/screens/sales_leads_screen.dart' show showLeadEditDialog, isLostReviewer;
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -154,6 +154,10 @@ class LeadDetailsScreen extends HookConsumerWidget {
               children: [
                 // 1. Lead Header Details Card
                 _buildHeaderCard(context, ref, lead, crm, isAdminOrManager, assignedName),
+                if (lead.status == 'Pending Lost Approval') ...[
+                  16.h,
+                  _PendingLostPanel(lead: lead),
+                ],
                 24.h,
 
                 // 2. Tab Bar Selector
@@ -843,6 +847,153 @@ class LeadDetailsScreen extends HookConsumerWidget {
 // ─────────────────────────────────────────────────────────
 //  Transfer Lead Dialog
 // ─────────────────────────────────────────────────────────
+/// Shown on a lead awaiting lost approval: the request details, and for
+/// reviewer roles (sales manager / manager / admin) Approve / Reject buttons.
+/// Executives see that it is waiting on the manager.
+class _PendingLostPanel extends HookConsumerWidget {
+  final Lead lead;
+  const _PendingLostPanel({required this.lead});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const amber = Color(0xFFB45309);
+    final canReview = isLostReviewer(ref.watch(authSessionProvider)?.role);
+    final noteCtrl = useTextEditingController();
+    final saving = useState(false);
+
+    Future<void> review(bool approve) async {
+      saving.value = true;
+      try {
+        await ref.read(leadServiceProvider).reviewLostApproval(
+              lead.id,
+              approve: approve,
+              note: noteCtrl.text.trim(),
+            );
+        ref.refreshData.leads();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(approve
+                  ? 'Lost request approved — lead closed.'
+                  : 'Lost request rejected — lead reopened.'),
+              backgroundColor: approve ? Colors.green[700] : Colors.orange[800],
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      } finally {
+        if (context.mounted) saving.value = false;
+      }
+    }
+
+    Widget row(String label, String value) => value.trim().isEmpty
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: amber),
+                ),
+                TextSpan(text: value.trim()),
+              ]),
+              style: const TextStyle(fontSize: 13.5, color: Color(0xFF78350F)),
+            ),
+          );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF59E0B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: amber, size: 20),
+              8.w,
+              Expanded(
+                child: Text(
+                  canReview
+                      ? 'Lost approval requested — please review'
+                      : 'Waiting for sales manager approval',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    color: amber,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          6.h,
+          row('Reason', lead.reason),
+          if (lead.remarks.trim() != lead.reason.trim())
+            row('Remarks', lead.remarks),
+          row('Competitor', lead.competitorName),
+          if (canReview) ...[
+            14.h,
+            TextField(
+              controller: noteCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Review note (optional)',
+                prefixIcon: Icon(Icons.rate_review_outlined),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            12.h,
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: saving.value ? null : () => review(false),
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Reject — reopen lead'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFB91C1C),
+                      side: const BorderSide(color: Color(0xFFB91C1C)),
+                      backgroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                12.w,
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: saving.value ? null : () => review(true),
+                    icon: saving.value
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.check_rounded),
+                    label: const Text('Approve — mark Lost'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF15803D),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _TransferLeadDialog extends HookConsumerWidget {
   final Lead lead;
   final VoidCallback onSaved;
@@ -951,6 +1102,9 @@ class _AddActivityLogDialog extends HookConsumerWidget {
     final scheduledDate = useState(DateTime.now());
     final leadStatus = useState<String?>('Follow-up');
     final isSaving = useState(false);
+    // Executives' "Lost" goes to the sales manager for approval (server-side
+    // workflow); reviewers close it directly. Mirrors the Leads outcome dialog.
+    final canReviewLost = isLostReviewer(ref.watch(authSessionProvider)?.role);
 
     Future<void> pickDateTime() async {
       final pickedDate = await showDatePicker(
@@ -1058,13 +1212,18 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                 labelText: 'Change Lead Status To',
                 helperText: 'Select to update current lead status',
               ),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('Do Not Change')),
-                DropdownMenuItem(value: 'New', child: Text('New')),
-                DropdownMenuItem(value: 'Contacted', child: Text('Contacted')),
-                DropdownMenuItem(value: 'Follow-up', child: Text('Follow-up')),
-                DropdownMenuItem(value: 'Converted', child: Text('Converted')),
-                DropdownMenuItem(value: 'Lost', child: Text('Lost')),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Do Not Change')),
+                const DropdownMenuItem(value: 'New', child: Text('New')),
+                const DropdownMenuItem(value: 'Contacted', child: Text('Contacted')),
+                const DropdownMenuItem(value: 'Follow-up', child: Text('Follow-up')),
+                const DropdownMenuItem(value: 'Converted', child: Text('Converted')),
+                DropdownMenuItem(
+                  value: 'Lost',
+                  child: Text(canReviewLost
+                      ? 'Lost'
+                      : 'Lost (needs manager approval)'),
+                ),
               ],
               onChanged: (val) => leadStatus.value = val,
             ),
@@ -1130,10 +1289,14 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                     );
                     onSaved();
                     if (context.mounted) {
+                      final sentForApproval =
+                          leadStatus.value == 'Lost' && !canReviewLost;
                       Navigator.of(context).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Log entry saved successfully!'),
+                        SnackBar(
+                          content: Text(sentForApproval
+                              ? 'Log saved — Lost request sent to the sales manager for approval'
+                              : 'Log entry saved successfully!'),
                         ),
                       );
                     }

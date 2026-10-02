@@ -3,6 +3,7 @@ import 'package:nizan_crm/features/inventory/data/inventory_product.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/data/staff_kit.dart';
 import 'package:nizan_crm/features/inventory/data/vendor.dart';
+import 'package:nizan_crm/features/inventory/data/inventory_category.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 /// Sentinel for optional 'clear vs leave unchanged' update params.
@@ -15,10 +16,10 @@ class ExternalProduct {
   const ExternalProduct({this.name = '', this.brand = '', this.imageUrl = ''});
 
   factory ExternalProduct.fromJson(Map<String, dynamic> j) => ExternalProduct(
-        name: j['name'] as String? ?? '',
-        brand: j['brand'] as String? ?? '',
-        imageUrl: j['imageUrl'] as String? ?? '',
-      );
+    name: j['name'] as String? ?? '',
+    brand: j['brand'] as String? ?? '',
+    imageUrl: j['imageUrl'] as String? ?? '',
+  );
 
   bool get isEmpty => name.isEmpty && brand.isEmpty;
 }
@@ -95,7 +96,10 @@ class InventoryService {
   /// the number of rows actually inserted.
   Future<int> bulkCreateProducts(List<Map<String, dynamic>> items) async {
     try {
-      final res = await _dio.post('/inventory/products/bulk', data: {'items': items});
+      final res = await _dio.post(
+        '/inventory/products/bulk',
+        data: {'items': items},
+      );
       final data = res.data as Map<String, dynamic>;
       return (data['inserted'] as num?)?.toInt() ?? 0;
     } catch (e) {
@@ -107,7 +111,8 @@ class InventoryService {
   Future<InventoryProduct?> lookupBarcode(String code) async {
     try {
       final res = await _dio.get(
-          '/inventory/products/barcode/${Uri.encodeComponent(code)}');
+        '/inventory/products/barcode/${Uri.encodeComponent(code)}',
+      );
       return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
@@ -122,7 +127,8 @@ class InventoryService {
   Future<ExternalProduct?> lookupExternal(String code) async {
     try {
       final res = await _dio.get(
-          '/inventory/products/external/${Uri.encodeComponent(code)}');
+        '/inventory/products/external/${Uri.encodeComponent(code)}',
+      );
       final ext = ExternalProduct.fromJson(res.data as Map<String, dynamic>);
       return ext.isEmpty ? null : ext;
     } on DioException catch (e) {
@@ -135,15 +141,15 @@ class InventoryService {
 
   /// Manually update a product's open-tube fill level (0..100) and, optionally,
   /// its tube count (quantity). Used by the artist stock/tube adjuster.
-  Future<InventoryProduct> setFill(String id, int fillLevel,
-      {int? quantity}) async {
+  Future<InventoryProduct> setFill(
+    String id,
+    int fillLevel, {
+    int? quantity,
+  }) async {
     try {
       final res = await _dio.patch(
         '/inventory/products/$id/fill',
-        data: {
-          'fillLevel': fillLevel,
-          'quantity': ?quantity,
-        },
+        data: {'fillLevel': fillLevel, 'quantity': ?quantity},
       );
       return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
@@ -156,9 +162,13 @@ class InventoryService {
   /// product's usagePerWork%. Returns the number of products updated.
   Future<int> consumeForWork({String? employeeId}) async {
     try {
-      final res = await _dio.post('/inventory/consume', data: {
-        if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
-      });
+      final res = await _dio.post(
+        '/inventory/consume',
+        data: {
+          if (employeeId != null && employeeId.isNotEmpty)
+            'employeeId': employeeId,
+        },
+      );
       final data = res.data as Map<String, dynamic>;
       final updated = data['updated'];
       if (updated is num) return updated.toInt();
@@ -180,10 +190,7 @@ class InventoryService {
     try {
       final res = await _dio.patch(
         '/inventory/kits/$kitId/item/$index',
-        data: {
-          'fillLevel': ?fillLevel,
-          'quantity': ?quantity,
-        },
+        data: {'fillLevel': ?fillLevel, 'quantity': ?quantity},
       );
       return StaffKit.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
@@ -222,22 +229,25 @@ class InventoryService {
     bool interState = false,
   }) async {
     try {
-      final res = await _dio.post('/inventory/purchases', data: {
-        'supplier': supplier,
-        if (vendorId.isNotEmpty) 'vendorId': vendorId,
-        'invoiceNo': invoiceNo,
-        if (billImage.isNotEmpty) 'billImage': billImage,
-        'date': (date ?? DateTime.now()).toIso8601String(),
-        if (dueDate != null) 'dueDate': dueDate.toIso8601String(),
-        'items': items.map((e) => e.toJson()).toList(),
-        'paid': paid,
-        'notes': notes,
-        'gstEnabled': gstEnabled,
-        if (gstin.isNotEmpty) 'gstin': gstin,
-        'gstRate': gstRate,
-        'gstAmount': gstAmount,
-        'interState': interState,
-      });
+      final res = await _dio.post(
+        '/inventory/purchases',
+        data: {
+          'supplier': supplier,
+          if (vendorId.isNotEmpty) 'vendorId': vendorId,
+          'invoiceNo': invoiceNo,
+          if (billImage.isNotEmpty) 'billImage': billImage,
+          'date': (date ?? DateTime.now()).toIso8601String(),
+          if (dueDate != null) 'dueDate': dueDate.toIso8601String(),
+          'items': items.map((e) => e.toJson()).toList(),
+          'paid': paid,
+          'notes': notes,
+          'gstEnabled': gstEnabled,
+          if (gstin.isNotEmpty) 'gstin': gstin,
+          'gstRate': gstRate,
+          'gstAmount': gstAmount,
+          'interState': interState,
+        },
+      );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'record purchase');
@@ -253,12 +263,15 @@ class InventoryService {
     String note = '',
   }) async {
     try {
-      final res = await _dio.post('/inventory/purchases/$id/payments', data: {
-        'amount': amount,
-        'date': (date ?? DateTime.now()).toIso8601String(),
-        'mode': mode,
-        'note': note,
-      });
+      final res = await _dio.post(
+        '/inventory/purchases/$id/payments',
+        data: {
+          'amount': amount,
+          'date': (date ?? DateTime.now()).toIso8601String(),
+          'mode': mode,
+          'note': note,
+        },
+      );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'record payment');
@@ -282,21 +295,24 @@ class InventoryService {
     String? supplier,
   }) async {
     try {
-      final res = await _dio.put('/inventory/purchases/$id', data: {
-        'invoiceNo': ?invoiceNo,
-        'billImage': ?billImage,
-        'notes': ?notes,
-        'date': ?date?.toIso8601String(),
-        if (!identical(dueDate, _unset))
-          'dueDate': (dueDate as DateTime?)?.toIso8601String(),
-        'gstEnabled': ?gstEnabled,
-        'gstin': ?gstin,
-        'gstRate': ?gstRate,
-        'gstAmount': ?gstAmount,
-        'interState': ?interState,
-        'vendorId': ?vendorId,
-        'supplier': ?supplier,
-      });
+      final res = await _dio.put(
+        '/inventory/purchases/$id',
+        data: {
+          'invoiceNo': ?invoiceNo,
+          'billImage': ?billImage,
+          'notes': ?notes,
+          'date': ?date?.toIso8601String(),
+          if (!identical(dueDate, _unset))
+            'dueDate': (dueDate as DateTime?)?.toIso8601String(),
+          'gstEnabled': ?gstEnabled,
+          'gstin': ?gstin,
+          'gstRate': ?gstRate,
+          'gstAmount': ?gstAmount,
+          'interState': ?interState,
+          'vendorId': ?vendorId,
+          'supplier': ?supplier,
+        },
+      );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'update bill');
@@ -321,8 +337,10 @@ class InventoryService {
     try {
       final res = vendor.id.isEmpty
           ? await _dio.post('/inventory/vendors', data: vendor.toJson())
-          : await _dio.put('/inventory/vendors/${vendor.id}',
-              data: vendor.toJson());
+          : await _dio.put(
+              '/inventory/vendors/${vendor.id}',
+              data: vendor.toJson(),
+            );
       return Vendor.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'save vendor');
@@ -334,6 +352,52 @@ class InventoryService {
       await _dio.delete('/inventory/vendors/$id');
     } catch (e) {
       throw AppException(e, action: 'delete vendor');
+    }
+  }
+
+  // ── Categories ─────────────────────────────────────────────────────────
+
+  Future<List<InventoryCategory>> getCategories() async {
+    try {
+      final res = await _dio.get('/inventory/categories');
+      return (res.data as List)
+          .map((e) => InventoryCategory.fromJson(e as Map<String, dynamic>))
+          .where((c) => c.name.isNotEmpty)
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load categories');
+    }
+  }
+
+  Future<InventoryCategory> createCategory(String name) async {
+    try {
+      final res = await _dio.post(
+        '/inventory/categories',
+        data: {'name': name},
+      );
+      return InventoryCategory.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'add category');
+    }
+  }
+
+  Future<InventoryCategory> renameCategory(String id, String name) async {
+    try {
+      final res = await _dio.put(
+        '/inventory/categories/$id',
+        data: {'name': name},
+      );
+      return InventoryCategory.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'rename category');
+    }
+  }
+
+  Future<void> deleteCategory(String id) async {
+    try {
+      await _dio.delete('/inventory/categories/$id');
+    } catch (e) {
+      throw AppException(e, action: 'delete category');
     }
   }
 

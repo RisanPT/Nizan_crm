@@ -11,7 +11,8 @@ String fmtINR(num v) => '₹${_inr.format(v)}';
 
 int? daysLeft(DateTime? e) => e?.difference(DateTime.now()).inDays;
 
-String fmtExp(DateTime? e) => e == null ? '—' : DateFormat('MMM yyyy').format(e);
+String fmtExp(DateTime? e) =>
+    e == null ? '—' : DateFormat('MMM yyyy').format(e);
 
 /// Full date + time a product was added, e.g. "24 Sep 2026, 3:45 PM".
 String fmtAdded(DateTime? d) =>
@@ -34,14 +35,32 @@ const kLowStockColor = Color(0xFFB76E79);
 
 /// Maroon→rose palette from the source design, indexed by category.
 const _shades = [
-  Color(0xFF4A0D18), Color(0xFF5C1120), Color(0xFF6E1423), Color(0xFF800020),
-  Color(0xFF8F1D33), Color(0xFF9E2B43), Color(0xFFAD3A53), Color(0xFFBC4E64),
-  Color(0xFFC96578), Color(0xFFD57F8E), Color(0xFFE19AA6), Color(0xFFEDB7C0),
+  Color(0xFF4A0D18),
+  Color(0xFF5C1120),
+  Color(0xFF6E1423),
+  Color(0xFF800020),
+  Color(0xFF8F1D33),
+  Color(0xFF9E2B43),
+  Color(0xFFAD3A53),
+  Color(0xFFBC4E64),
+  Color(0xFFC96578),
+  Color(0xFFD57F8E),
+  Color(0xFFE19AA6),
+  Color(0xFFEDB7C0),
 ];
 
 Color categoryColor(String category) {
-  final i = InventoryProduct.categories.indexOf(category);
-  return _shades[(i < 0 ? InventoryProduct.categories.length - 1 : i) % _shades.length];
+  final key = category.trim().toLowerCase();
+  final i = InventoryProduct.categories.indexWhere(
+    (c) => c.toLowerCase() == key,
+  );
+  if (i >= 0) return _shades[i % _shades.length];
+  // Custom categories: a stable shade derived from the name.
+  var h = 0;
+  for (final u in key.codeUnits) {
+    h = (h * 31 + u) & 0x7fffffff;
+  }
+  return _shades[h % _shades.length];
 }
 
 IconData productIcon(String category) {
@@ -103,37 +122,41 @@ class InvHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: crm.textPrimary,
-                      letterSpacing: -0.4)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: crm.textPrimary,
+                  letterSpacing: -0.4,
+                ),
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
-                Text(subtitle!,
-                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                Text(
+                  subtitle!,
+                  style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                ),
               ],
             ],
           ),
         ),
-        if (trailing != null) ...[
-          const SizedBox(width: 6),
-          trailing!,
-        ],
+        if (trailing != null) ...[const SizedBox(width: 6), trailing!],
         if (onAction != null && actionLabel != null) ...[
           const SizedBox(width: 10),
           FilledButton.icon(
             onPressed: onAction,
             icon: Icon(actionIcon, size: 18),
-            label: Text(actionLabel!,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            label: Text(
+              actionLabel!,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
             style: FilledButton.styleFrom(
               minimumSize: const Size(0, 40),
               padding: const EdgeInsets.symmetric(horizontal: 15),
-              shape:
-                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
           ),
         ],
@@ -198,22 +221,28 @@ class _InvStatCard extends StatelessWidget {
             child: Icon(stat.icon, color: stat.color, size: 18),
           ),
           const Spacer(),
-          Text(stat.value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: stat.color,
-                  height: 1.0)),
+          Text(
+            stat.value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: stat.color,
+              height: 1.0,
+            ),
+          ),
           const SizedBox(height: 3),
-          Text(stat.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: crm.textSecondary)),
+          Text(
+            stat.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: crm.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -231,20 +260,27 @@ class StockPill extends StatelessWidget {
     final crm = context.crmColors;
     final out = product.isOut;
     final low = product.isLow;
-    final color = out ? crm.destructive : (low ? const Color(0xFFB76E79) : crm.success);
+    final color = out
+        ? crm.destructive
+        : (low ? const Color(0xFFB76E79) : crm.success);
     final label = out ? 'STOCK OUT' : (low ? 'LOW' : 'STOCK IN');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: out ? crm.destructive : color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: out ? crm.destructive : color.withValues(alpha: 0.4)),
+        border: Border.all(
+          color: out ? crm.destructive : color.withValues(alpha: 0.4),
+        ),
       ),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              color: out ? Colors.white : color)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: out ? Colors.white : color,
+        ),
+      ),
     );
   }
 }
@@ -274,8 +310,9 @@ class TubeGauge extends StatelessWidget {
     final low = !out && fillLevel <= 20;
     final spares = quantity > 0 ? quantity - 1 : 0; // full, unopened tubes
     final frac = fillLevel.clamp(0, 100) / 100.0;
-    final color =
-        out ? crm.destructive : (low ? const Color(0xFFB76E79) : crm.success);
+    final color = out
+        ? crm.destructive
+        : (low ? const Color(0xFFB76E79) : crm.success);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -283,17 +320,23 @@ class TubeGauge extends StatelessWidget {
         if (showLabel) ...[
           Row(
             children: [
-              Text(out ? 'EMPTY' : '$fillLevel% open',
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+              Text(
+                out ? 'EMPTY' : '$fillLevel% open',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
               const Spacer(),
               Text(
-                  out
-                      ? 'no tubes'
-                      : spares > 0
-                          ? '+ $spares full tube${spares == 1 ? '' : 's'}'
-                          : 'last tube',
-                  style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+                out
+                    ? 'no tubes'
+                    : spares > 0
+                    ? '+ $spares full tube${spares == 1 ? '' : 's'}'
+                    : 'last tube',
+                style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -305,8 +348,9 @@ class TubeGauge extends StatelessWidget {
               Container(
                 height: height,
                 decoration: BoxDecoration(
-                    color: crm.input,
-                    borderRadius: BorderRadius.circular(height)),
+                  color: crm.input,
+                  borderRadius: BorderRadius.circular(height),
+                ),
               ),
               FractionallySizedBox(
                 widthFactor: out ? 0.0 : frac.clamp(0.02, 1.0),
@@ -314,7 +358,8 @@ class TubeGauge extends StatelessWidget {
                   height: height,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                        colors: [color.withValues(alpha: 0.65), color]),
+                      colors: [color.withValues(alpha: 0.65), color],
+                    ),
                     borderRadius: BorderRadius.circular(height),
                   ),
                 ),
@@ -332,8 +377,11 @@ class TubeGauge extends StatelessWidget {
 class InvCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  const InvCard(
-      {super.key, required this.child, this.padding = const EdgeInsets.all(16)});
+  const InvCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -354,11 +402,12 @@ class InvEmpty extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  const InvEmpty(
-      {super.key,
-      required this.icon,
-      required this.title,
-      required this.subtitle});
+  const InvEmpty({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -369,17 +418,23 @@ class InvEmpty extends StatelessWidget {
         children: [
           Icon(icon, size: 52, color: crm.textSecondary.withValues(alpha: 0.4)),
           const SizedBox(height: 14),
-          Text(title,
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: crm.textSecondary)),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: crm.textSecondary,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(subtitle,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  color: crm.textSecondary.withValues(alpha: 0.7))),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: crm.textSecondary.withValues(alpha: 0.7),
+            ),
+          ),
         ],
       ),
     );
@@ -396,7 +451,11 @@ class InvBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          isMobile ? 16 : 0, isMobile ? 12 : 0, isMobile ? 16 : 0, 0),
+        isMobile ? 16 : 0,
+        isMobile ? 12 : 0,
+        isMobile ? 16 : 0,
+        0,
+      ),
       child: child,
     );
   }
@@ -410,7 +469,10 @@ String invDisplayName(InventoryProduct p) =>
     p.shade.isNotEmpty && p.shade != '—' ? '${p.name} · ${p.shade}' : p.name;
 
 TextStyle invCardTitle(CrmTheme crm) => TextStyle(
-    fontSize: 15, fontWeight: FontWeight.w700, color: crm.textPrimary);
+  fontSize: 15,
+  fontWeight: FontWeight.w700,
+  color: crm.textPrimary,
+);
 
 /// Card title row: title, optional count badge, optional "View all".
 class InvSectionHeader extends StatelessWidget {
@@ -440,33 +502,45 @@ class InvSectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Flexible(
-                  child: Text(title,
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: invCardTitle(crm)),
-                ),
-                if (count != null) ...[
-                  8.w,
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                        color: c.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(20)),
-                    child: Text('$count',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: c)),
+                      style: invCardTitle(crm),
+                    ),
                   ),
+                  if (count != null) ...[
+                    8.w,
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$count',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: c,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
-              ]),
+              ),
               if (subtitle != null) ...[
                 2.h,
-                Text(subtitle!,
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                Text(
+                  subtitle!,
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                ),
               ],
             ],
           ),
@@ -480,7 +554,13 @@ class InvSectionHeader extends StatelessWidget {
 }
 
 /// Two widgets side by side on wide screens, stacked on narrow ones.
-Widget invPair(bool stacked, Widget a, Widget b, {int flexA = 1, int flexB = 1}) {
+Widget invPair(
+  bool stacked,
+  Widget a,
+  Widget b, {
+  int flexA = 1,
+  int flexB = 1,
+}) {
   if (stacked) return Column(children: [a, 12.h, b]);
   return Row(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -529,8 +609,9 @@ class InvProductTile extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10)),
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(productIcon(p.category), size: 18, color: color),
           ),
           10.w,
@@ -538,20 +619,24 @@ class InvProductTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(invDisplayName(p),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: crm.textPrimary)),
+                Text(
+                  invDisplayName(p),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: crm.textPrimary,
+                  ),
+                ),
                 2.h,
                 Text(
-                    detail ??
-                        '${p.brand.isEmpty ? '—' : p.brand} · ${p.category}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+                  detail ??
+                      '${p.brand.isEmpty ? '—' : p.brand} · ${p.category}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: crm.textSecondary),
+                ),
               ],
             ),
           ),
@@ -560,8 +645,9 @@ class InvProductTile extends StatelessWidget {
           TextButton(
             onPressed: onAction,
             style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 10)),
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+            ),
             child: Text(actionLabel, style: const TextStyle(fontSize: 12.5)),
           ),
         ],
@@ -571,14 +657,16 @@ class InvProductTile extends StatelessWidget {
 }
 
 Widget invBadge(String text, Color color) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20)),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-    );
+  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+  decoration: BoxDecoration(
+    color: color.withValues(alpha: 0.12),
+    borderRadius: BorderRadius.circular(20),
+  ),
+  child: Text(
+    text,
+    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
+  ),
+);
 
 class InvEmptyLine extends StatelessWidget {
   final String text;
@@ -589,11 +677,13 @@ class InvEmptyLine extends StatelessWidget {
     final crm = context.crmColors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 20),
-      child: Row(children: [
-        Icon(Icons.check_circle_outline, color: crm.success, size: 18),
-        8.w,
-        Text(text, style: TextStyle(fontSize: 13, color: crm.textSecondary)),
-      ]),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle_outline, color: crm.success, size: 18),
+          8.w,
+          Text(text, style: TextStyle(fontSize: 13, color: crm.textSecondary)),
+        ],
+      ),
     );
   }
 }
@@ -623,7 +713,11 @@ class InvKpiGrid extends StatelessWidget {
       spacing: gap,
       runSpacing: gap,
       children: [
-        for (final s in stats) SizedBox(width: w, child: _InvKpiCard(stat: s)),
+        for (final s in stats)
+          SizedBox(
+            width: w,
+            child: _InvKpiCard(stat: s),
+          ),
       ],
     );
   }
@@ -650,13 +744,16 @@ class _InvKpiCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text(stat.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: crm.textSecondary)),
+                child: Text(
+                  stat.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: crm.textSecondary,
+                  ),
+                ),
               ),
               Container(
                 width: 32,
@@ -673,18 +770,23 @@ class _InvKpiCard extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(stat.value,
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: crm.textPrimary,
-                    height: 1.0)),
+            child: Text(
+              stat.value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: crm.textPrimary,
+                height: 1.0,
+              ),
+            ),
           ),
           const SizedBox(height: 5),
-          Text(stat.caption,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: stat.color)),
+          Text(
+            stat.caption,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 11, color: stat.color),
+          ),
         ],
       ),
     );

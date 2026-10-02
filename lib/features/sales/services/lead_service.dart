@@ -24,16 +24,16 @@ class LeadClusterItem {
   });
 
   factory LeadClusterItem.fromJson(Map<String, dynamic> j) => LeadClusterItem(
-        id: (j['_id'] ?? j['id'] ?? '').toString(),
-        name: (j['name'] ?? '').toString(),
-        phone: (j['phone'] ?? '').toString(),
-        status: (j['status'] ?? 'New').toString(),
-        priority: (j['priority'] ?? 'Warm').toString(),
-        enquiryDate: j['enquiryDate'] != null
-            ? DateTime.tryParse(j['enquiryDate'].toString())?.toLocal()
-            : null,
-        location: (j['location'] ?? '').toString(),
-      );
+    id: (j['_id'] ?? j['id'] ?? '').toString(),
+    name: (j['name'] ?? '').toString(),
+    phone: (j['phone'] ?? '').toString(),
+    status: (j['status'] ?? 'New').toString(),
+    priority: (j['priority'] ?? 'Warm').toString(),
+    enquiryDate: j['enquiryDate'] != null
+        ? DateTime.tryParse(j['enquiryDate'].toString())?.toLocal()
+        : null,
+    location: (j['location'] ?? '').toString(),
+  );
 }
 
 /// A group of leads all enquiring for the SAME event date at the SAME place,
@@ -52,13 +52,15 @@ class LeadCluster {
   });
 
   factory LeadCluster.fromJson(Map<String, dynamic> j) => LeadCluster(
-        date: (j['date'] ?? '').toString(),
-        place: (j['place'] ?? '').toString(),
-        count: (j['count'] as num?)?.toInt() ?? 0,
-        leads: ((j['leads'] as List?) ?? const [])
-            .map((e) => LeadClusterItem.fromJson((e as Map).cast<String, dynamic>()))
-            .toList(),
-      );
+    date: (j['date'] ?? '').toString(),
+    place: (j['place'] ?? '').toString(),
+    count: (j['count'] as num?)?.toInt() ?? 0,
+    leads: ((j['leads'] as List?) ?? const [])
+        .map(
+          (e) => LeadClusterItem.fromJson((e as Map).cast<String, dynamic>()),
+        )
+        .toList(),
+  );
 }
 
 class LeadFilter {
@@ -69,6 +71,7 @@ class LeadFilter {
   final String source;
   final String salesperson;
   final String month;
+
   /// 'All', 'Hot', 'Warm' or 'Cold'.
   final String priority;
 
@@ -115,9 +118,9 @@ class LeadReportBucket {
   final int count;
   const LeadReportBucket({required this.key, required this.count});
   factory LeadReportBucket.fromJson(Map<String, dynamic> j) => LeadReportBucket(
-        key: (j['key'] ?? 'Unknown').toString(),
-        count: (j['count'] as num?)?.toInt() ?? 0,
-      );
+    key: (j['key'] ?? 'Unknown').toString(),
+    count: (j['count'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// One daily point of the report trend line.
@@ -126,9 +129,9 @@ class LeadReportPoint {
   final int count;
   const LeadReportPoint({required this.date, required this.count});
   factory LeadReportPoint.fromJson(Map<String, dynamic> j) => LeadReportPoint(
-        date: (j['date'] ?? '').toString(),
-        count: (j['count'] as num?)?.toInt() ?? 0,
-      );
+    date: (j['date'] ?? '').toString(),
+    count: (j['count'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// A day/week/month lead report with a like-for-like previous-period comparison.
@@ -136,7 +139,11 @@ class LeadsReport {
   final String period;
   final int total, prevTotal, converted, prevConverted, conversionRate, lost;
   final int followUpsDue, followUpsOverdue;
-  final List<LeadReportBucket> bySource, byStatus, byPriority, byAddedBy, byAssignee;
+  final List<LeadReportBucket> bySource,
+      byStatus,
+      byPriority,
+      byAddedBy,
+      byAssignee;
   final List<LeadReportPoint> series;
 
   const LeadsReport({
@@ -159,7 +166,9 @@ class LeadsReport {
 
   factory LeadsReport.fromJson(Map<String, dynamic> j) {
     List<LeadReportBucket> buckets(dynamic v) => ((v as List?) ?? const [])
-        .map((e) => LeadReportBucket.fromJson((e as Map).cast<String, dynamic>()))
+        .map(
+          (e) => LeadReportBucket.fromJson((e as Map).cast<String, dynamic>()),
+        )
         .toList();
     return LeadsReport(
       period: (j['period'] ?? 'day').toString(),
@@ -177,7 +186,9 @@ class LeadsReport {
       byAddedBy: buckets(j['byAddedBy']),
       byAssignee: buckets(j['byAssignee']),
       series: ((j['series'] as List?) ?? const [])
-          .map((e) => LeadReportPoint.fromJson((e as Map).cast<String, dynamic>()))
+          .map(
+            (e) => LeadReportPoint.fromJson((e as Map).cast<String, dynamic>()),
+          )
           .toList(),
     );
   }
@@ -203,19 +214,25 @@ class LeadService {
           if (filter.month != 'All') 'month': filter.month,
         },
       );
-      
+
       final data = response.data;
       if (data is Map<String, dynamic> && data.containsKey('items')) {
-        return PaginatedResponse<Lead>.fromJson(data, (json) => Lead.fromJson(json));
+        return PaginatedResponse<Lead>.fromJson(
+          data,
+          (json) => Lead.fromJson(json),
+        );
       } else {
         // Fallback for old API format or missing pagination fields
         List leadsList = [];
         if (data is Map) {
-          leadsList = (data['data'] ?? data['leads'] ?? data['items'] ?? []) as List;
+          leadsList =
+              (data['data'] ?? data['leads'] ?? data['items'] ?? []) as List;
         } else if (data is List) {
           leadsList = data;
         }
-        final items = leadsList.map((item) => Lead.fromJson(item as Map<String, dynamic>)).toList();
+        final items = leadsList
+            .map((item) => Lead.fromJson(item as Map<String, dynamic>))
+            .toList();
         return PaginatedResponse<Lead>(
           items: items,
           totalItems: items.length,
@@ -248,13 +265,19 @@ class LeadService {
 
   /// Day / week / month lead report around [date] (date-only; the server anchors
   /// the period in IST). [period] is 'day', 'week' or 'month'.
-  Future<LeadsReport> getLeadsReport({required String period, required DateTime date}) async {
+  Future<LeadsReport> getLeadsReport({
+    required String period,
+    required DateTime date,
+  }) async {
     String two(int n) => n.toString().padLeft(2, '0');
     try {
-      final res = await _dio.get('/leads/report', queryParameters: {
-        'period': period,
-        'date': '${date.year}-${two(date.month)}-${two(date.day)}',
-      });
+      final res = await _dio.get(
+        '/leads/report',
+        queryParameters: {
+          'period': period,
+          'date': '${date.year}-${two(date.month)}-${two(date.day)}',
+        },
+      );
       return LeadsReport.fromJson((res.data as Map).cast<String, dynamic>());
     } catch (e) {
       throw AppException(e, action: 'load the lead report');
@@ -295,12 +318,15 @@ class LeadService {
     String? lostAttachment,
   }) async {
     try {
-      await _dio.post('/leads/$id/request-lost', data: {
-        'reason': reason,
-        'remarks': remarks,
-        'competitorName': competitorName,
-        'lostAttachment': ?lostAttachment,
-      });
+      await _dio.post(
+        '/leads/$id/request-lost',
+        data: {
+          'reason': reason,
+          'remarks': remarks,
+          'competitorName': competitorName,
+          if (lostAttachment != null) 'lostAttachment': lostAttachment,
+        },
+      );
     } catch (e) {
       throw AppException(e, action: 'submit lost request');
     }
@@ -313,13 +339,12 @@ class LeadService {
     String note = '',
   }) async {
     try {
-      await _dio.post('/leads/$id/review-lost', data: {
-        'decision': approve ? 'approved' : 'rejected',
-        'note': note,
-      });
+      await _dio.post(
+        '/leads/$id/review-lost',
+        data: {'decision': approve ? 'approved' : 'rejected', 'note': note},
+      );
     } catch (e) {
       throw AppException(e, action: 'review lost request');
     }
   }
-
 }

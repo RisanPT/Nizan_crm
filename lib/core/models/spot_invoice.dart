@@ -11,6 +11,7 @@ class SpotInvoiceData {
   final String invoiceNo;
   final String customerName;
   final String customerPhone;
+  final String district;
   final List<SpotInvoiceLine> lines;
   final DateTime date;
   final String note;
@@ -19,6 +20,7 @@ class SpotInvoiceData {
     required this.invoiceNo,
     required this.customerName,
     this.customerPhone = '',
+    this.district = '',
     required this.lines,
     required this.date,
     this.note = '',

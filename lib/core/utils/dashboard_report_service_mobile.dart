@@ -514,7 +514,9 @@ _DashboardReport _buildReport(
                     booking.discountAmount)
                 .clamp(0, double.infinity),
       );
-  final totalSales = activeBookings.fold<double>(0, (sum, b) => sum + b.totalPrice);
+  final totalSales = activeBookings
+      .where((b) => b.countsTowardSales)
+      .fold<double>(0, (sum, b) => sum + b.totalPrice);
   final totalDiscount = activeBookings.fold<double>(0, (sum, b) => sum + b.discountAmount);
   final totalAdvance = activeBookings.fold<double>(0, (sum, b) => sum + b.advanceAmount);
 
@@ -575,7 +577,8 @@ _DashboardReport _buildReport(
           ? '${date.day} ${_monthShort(date.month)} ${date.year}'
           : '${date.day} ${_monthShort(date.month)}',
       bookingsCount: (previous?.bookingsCount ?? 0) + 1,
-      revenue: (previous?.revenue ?? 0) + booking.totalPrice,
+      revenue: (previous?.revenue ?? 0) +
+          (booking.countsTowardSales ? booking.totalPrice : 0),
       date: DateTime(date.year, date.month, date.day),
     );
   }

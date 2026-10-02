@@ -42,6 +42,7 @@ import '../../features/sales/presentation/screens/sales_invoices_screen.dart';
 import '../../features/sales/presentation/screens/sales_quarterly_screen.dart';
 import '../../features/sales/presentation/screens/monthly_bookings_screen.dart';
 import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
+import '../../features/sales/presentation/screens/booking_map_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
@@ -167,6 +168,7 @@ String? subKeyForPath(String path) {
   if (path == '/sales/monthly') return 'sales.monthly';
   if (path == '/sales/quarterly') return 'sales.quarterly';
   if (path == '/sales/cancelled') return 'sales.cancelled';
+  if (path == '/sales/booking-map') return 'sales.booking_map';
   if (path == '/sales') return 'sales.invoices';
   // Accounts (payables)
   if (path == '/accounts/dashboard') return 'payables.dashboard';
@@ -498,6 +500,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Quarterly Performance';
           } else if (state.uri.path == '/sales/cancelled') {
             title = 'Cancelled Works';
+          } else if (state.uri.path == '/sales/booking-map') {
+            title = 'Booking Map';
           } else if (state.uri.path == '/sales/calendar') {
             title = 'Sales Calendar';
           } else if (state.uri.path == '/reports/analyst') {
@@ -827,6 +831,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales/cancelled',
             builder: (context, state) => const CancelledWorksScreen(),
+          ),
+          GoRoute(
+            path: '/sales/booking-map',
+            builder: (context, state) => const BookingMapScreen(),
           ),
           // Same Sales Calendar the Marketing team uses, mounted for Sales too.
           GoRoute(

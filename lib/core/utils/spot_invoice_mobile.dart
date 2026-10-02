@@ -125,6 +125,9 @@ Future<void> printSpotInvoice(SpotInvoiceData data) async {
                 if (data.customerPhone.trim().isNotEmpty)
                   pw.Text('Phone: ${data.customerPhone}',
                       style: const pw.TextStyle(fontSize: 10)),
+                if (data.district.trim().isNotEmpty)
+                  pw.Text('District: ${data.district.trim()}',
+                      style: const pw.TextStyle(fontSize: 10)),
               ],
             ),
           ),

@@ -11,6 +11,8 @@ import 'package:nizan_crm/features/inventory/utils/inventory_import.dart';
 import 'barcode_scanner_page.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_dialogs.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_category_dialogs.dart';
+import 'package:nizan_crm/features/inventory/data/inventory_category.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 
@@ -35,7 +37,15 @@ class InventoryStockScreen extends ConsumerStatefulWidget {
 }
 
 /// Sort orders offered in the stock toolbar.
-enum _StockSort { newest, oldest, nameAz, qtyLow, qtyHigh, valueHigh, expirySoon }
+enum _StockSort {
+  newest,
+  oldest,
+  nameAz,
+  qtyLow,
+  qtyHigh,
+  valueHigh,
+  expirySoon,
+}
 
 String _sortLabel(_StockSort s) {
   switch (s) {
@@ -87,18 +97,20 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
 
   /// Applies a search/filter/view/sort change and jumps back to page 1.
   void _update(VoidCallback fn) => setState(() {
-        fn();
-        _page = 0;
-      });
+    fn();
+    _page = 0;
+  });
 
   void _goToPage(int page) {
     setState(() => _page = page);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _gridTopKey.currentContext;
       if (ctx != null && mounted) {
-        Scrollable.ensureVisible(ctx,
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut);
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -126,14 +138,17 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
         builder: (ctx) => AlertDialog(
           title: const Text('Not in stock'),
           content: Text(
-              'No product is registered for barcode:\n\n$code\n\nAdd it now?'),
+            'No product is registered for barcode:\n\n$code\n\nAdd it now?',
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Add product')),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Add product'),
+            ),
           ],
         ),
       );
@@ -152,8 +167,9 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
         content: Text('Delete ${p.name}?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: crm.destructive),
@@ -185,7 +201,9 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       );
     } catch (e) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Could not open the file picker. Please try again.')),
+        const SnackBar(
+          content: Text('Could not open the file picker. Please try again.'),
+        ),
       );
       return;
     }
@@ -210,11 +228,16 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       SnackBar(content: Text('Importing ${result.items.length} products…')),
     );
     try {
-      final inserted =
-          await ref.read(inventoryServiceProvider).bulkCreateProducts(result.items);
+      final inserted = await ref
+          .read(inventoryServiceProvider)
+          .bulkCreateProducts(result.items);
       ref.refreshData.inventory();
       messenger.showSnackBar(
-        SnackBar(content: Text('Imported $inserted product${inserted == 1 ? '' : 's'}.')),
+        SnackBar(
+          content: Text(
+            'Imported $inserted product${inserted == 1 ? '' : 's'}.',
+          ),
+        ),
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
@@ -236,36 +259,57 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(fileName,
-                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                Text(
+                  fileName,
+                  style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                ),
                 10.h,
                 if (r.hasItems)
-                  Text('${r.items.length} product${r.items.length == 1 ? '' : 's'} ready to import'
-                      '${r.skipped > 0 ? ' · ${r.skipped} skipped' : ''}',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700, color: crm.textPrimary))
+                  Text(
+                    '${r.items.length} product${r.items.length == 1 ? '' : 's'} ready to import'
+                    '${r.skipped > 0 ? ' · ${r.skipped} skipped' : ''}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: crm.textPrimary,
+                    ),
+                  )
                 else
-                  Text('Nothing to import',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700, color: crm.destructive)),
+                  Text(
+                    'Nothing to import',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: crm.destructive,
+                    ),
+                  ),
                 for (final w in r.warnings) ...[
                   6.h,
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(Icons.info_outline, size: 14, color: crm.warning),
-                    6.w,
-                    Expanded(
-                      child: Text(w,
-                          style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                    ),
-                  ]),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, size: 14, color: crm.warning),
+                      6.w,
+                      Expanded(
+                        child: Text(
+                          w,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: crm.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
                 if (sample.isNotEmpty) ...[
                   12.h,
-                  Text('Preview',
-                      style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: crm.textSecondary)),
+                  Text(
+                    'Preview',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: crm.textSecondary,
+                    ),
+                  ),
                   6.h,
                   for (final it in sample)
                     Padding(
@@ -275,14 +319,19 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
                         '${it['brand'] != null ? ' · ${it['brand']}' : ''}'
                         '${it['quantity'] != null ? ' · qty ${it['quantity']}' : ''}'
                         '${it['price'] != null ? ' · ₹${it['price']}' : ''}',
-                        style: TextStyle(fontSize: 12.5, color: crm.textPrimary),
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: crm.textPrimary,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   if (r.items.length > sample.length)
-                    Text('…and ${r.items.length - sample.length} more',
-                        style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                    Text(
+                      '…and ${r.items.length - sample.length} more',
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                    ),
                 ],
                 12.h,
                 Text(
@@ -303,8 +352,10 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(backgroundColor: crm.primary),
-              child: Text('Import ${r.items.length}',
-                  style: const TextStyle(color: Colors.white)),
+              child: Text(
+                'Import ${r.items.length}',
+                style: const TextStyle(color: Colors.white),
+              ),
             ),
         ],
       ),
@@ -335,209 +386,249 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       child: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppErrorView(
-            error: e, onRetry: () => ref.invalidate(inventoryProductsProvider)),
-        data: (products) => LayoutBuilder(builder: (context, box) {
-          final width = box.maxWidth;
-          final narrow = width < 640;
-          final q = _search.trim().toLowerCase();
+          error: e,
+          onRetry: () => ref.invalidate(inventoryProductsProvider),
+        ),
+        data: (products) => LayoutBuilder(
+          builder: (context, box) {
+            final width = box.maxWidth;
+            final narrow = width < 640;
+            final q = _search.trim().toLowerCase();
 
-          bool searchCat(InventoryProduct p) {
-            final matchCat = _cat == 'All' || p.category == _cat;
-            final matchQ = q.isEmpty ||
-                ('${p.name} ${p.brand} ${p.shade}').toLowerCase().contains(q);
-            return matchCat && matchQ;
-          }
-
-          final base = products.where(searchCat).toList();
-          final allCount = base.length;
-          final kitCount = base.where((p) => allocatedFor(p) > 0).length;
-          final availCount =
-              base.where((p) => (p.quantity - allocatedFor(p)) > 0).length;
-
-          // Apply the view filter.
-          final filtered = base.where((p) {
-            switch (_view) {
-              case StockView.all:
-                return true;
-              case StockView.kits:
-                return allocatedFor(p) > 0;
-              case StockView.remaining:
-                return true;
+            bool searchCat(InventoryProduct p) {
+              final matchCat =
+                  _cat == 'All' ||
+                  p.category.trim().toLowerCase() == _cat.trim().toLowerCase();
+              final matchQ =
+                  q.isEmpty ||
+                  ('${p.name} ${p.brand} ${p.shade}').toLowerCase().contains(q);
+              return matchCat && matchQ;
             }
-          }).toList();
 
-          // Apply the chosen sort.
-          int byName(InventoryProduct a, InventoryProduct b) =>
-              invDisplayName(a)
-                  .toLowerCase()
-                  .compareTo(invDisplayName(b).toLowerCase());
-          filtered.sort((a, b) {
-            int r;
-            switch (_sort) {
-              case _StockSort.newest:
-                r = _cmpDate(a.createdAt, b.createdAt, desc: true);
-                break;
-              case _StockSort.oldest:
-                r = _cmpDate(a.createdAt, b.createdAt, desc: false);
-                break;
-              case _StockSort.nameAz:
-                r = 0;
-                break;
-              case _StockSort.qtyLow:
-                r = a.quantity.compareTo(b.quantity);
-                break;
-              case _StockSort.qtyHigh:
-                r = b.quantity.compareTo(a.quantity);
-                break;
-              case _StockSort.valueHigh:
-                r = (b.quantity * b.price).compareTo(a.quantity * a.price);
-                break;
-              case _StockSort.expirySoon:
-                r = _cmpDate(a.expiry, b.expiry, desc: false);
-                break;
-            }
-            return r != 0 ? r : byName(a, b);
-          });
+            final base = products.where(searchCat).toList();
+            final allCount = base.length;
+            final kitCount = base.where((p) => allocatedFor(p) > 0).length;
+            final availCount = base
+                .where((p) => (p.quantity - allocatedFor(p)) > 0)
+                .length;
 
-          // ── Metrics for the shown products ──
-          final units = filtered.fold<int>(0, (a, p) => a + p.quantity);
-          final value =
-              filtered.fold<double>(0, (a, p) => a + p.quantity * p.price);
-          final lowCount = filtered.where((p) => p.isLow).length;
-          final outCount = filtered.where((p) => p.isOut).length;
-          final expiring = filtered
-              .where((p) =>
-                  p.quantity > 0 &&
-                  p.expiry != null &&
-                  (daysLeft(p.expiry) ?? 999) <= 90)
-              .length;
-          final allocatedUnits =
-              filtered.fold<int>(0, (a, p) => a + allocatedFor(p));
-
-          // ── Pagination ──
-          final total = filtered.length;
-          final pages = total == 0 ? 1 : (total + _pageSize - 1) ~/ _pageSize;
-          final page = _page.clamp(0, pages - 1);
-          final start = page * _pageSize;
-          final end = (start + _pageSize).clamp(0, total);
-          final pageItems =
-              total == 0 ? const <InventoryProduct>[] : filtered.sublist(start, end);
-
-          final cols = width < 520
-              ? 1
-              : width < 780
-                  ? 2
-                  : width < 1100
-                      ? 3
-                      : width < 1420
-                          ? 4
-                          : 5;
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(inventoryProductsProvider);
-              ref.invalidate(staffKitsProvider);
-              try {
-                await ref.read(inventoryProductsProvider.future);
-              } catch (_) {
-                // Failure is shown by the screen's error state; don't throw from pull-to-refresh.
+            // Apply the view filter.
+            final filtered = base.where((p) {
+              switch (_view) {
+                case StockView.all:
+                  return true;
+                case StockView.kits:
+                  return allocatedFor(p) > 0;
+                case StockView.remaining:
+                  return true;
               }
-            },
-            child: CustomScrollView(
-              controller: _scrollCtrl,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _header(crm, products.length),
-                      16.h,
-                      InvKpiGrid(width: width, stats: [
-                        InvKpi(
-                            '$total',
-                            'Products Shown',
-                            total == products.length
-                                ? 'all products'
-                                : 'of ${products.length} total',
-                            Icons.inventory_2_outlined,
-                            crm.primary),
-                        InvKpi(
-                            '$units',
-                            'Units in Stock',
-                            allocatedUnits > 0
-                                ? '$allocatedUnits allocated to kits'
-                                : 'across shown products',
-                            Icons.layers_outlined,
-                            crm.accent),
-                        InvKpi(fmtINR(value), 'Stock Value', 'qty × unit price',
-                            Icons.currency_rupee_rounded,
-                            const Color(0xFF6E1423)),
-                        InvKpi('$lowCount', 'Low Stock',
-                            'at or below reorder level',
-                            Icons.trending_down_rounded, kLowStockColor),
-                        InvKpi('$outCount', 'Out of Stock', 'need restocking',
-                            Icons.remove_shopping_cart_outlined,
-                            crm.destructive),
-                        InvKpi('$expiring', 'Expiring Soon', 'within 90 days',
-                            Icons.hourglass_bottom_rounded, crm.warning),
-                      ]),
-                      16.h,
-                      _toolbar(crm, narrow, allCount, kitCount, availCount),
-                      16.h,
-                      if (total > 0)
-                        Padding(
-                          key: _gridTopKey,
-                          padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Showing ${start + 1}–$end of $total'
-                                  ' product${total == 1 ? '' : 's'}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
+            }).toList();
+
+            // Apply the chosen sort.
+            int byName(InventoryProduct a, InventoryProduct b) =>
+                invDisplayName(
+                  a,
+                ).toLowerCase().compareTo(invDisplayName(b).toLowerCase());
+            filtered.sort((a, b) {
+              int r;
+              switch (_sort) {
+                case _StockSort.newest:
+                  r = _cmpDate(a.createdAt, b.createdAt, desc: true);
+                  break;
+                case _StockSort.oldest:
+                  r = _cmpDate(a.createdAt, b.createdAt, desc: false);
+                  break;
+                case _StockSort.nameAz:
+                  r = 0;
+                  break;
+                case _StockSort.qtyLow:
+                  r = a.quantity.compareTo(b.quantity);
+                  break;
+                case _StockSort.qtyHigh:
+                  r = b.quantity.compareTo(a.quantity);
+                  break;
+                case _StockSort.valueHigh:
+                  r = (b.quantity * b.price).compareTo(a.quantity * a.price);
+                  break;
+                case _StockSort.expirySoon:
+                  r = _cmpDate(a.expiry, b.expiry, desc: false);
+                  break;
+              }
+              return r != 0 ? r : byName(a, b);
+            });
+
+            // ── Metrics for the shown products ──
+            final units = filtered.fold<int>(0, (a, p) => a + p.quantity);
+            final value = filtered.fold<double>(
+              0,
+              (a, p) => a + p.quantity * p.price,
+            );
+            final lowCount = filtered.where((p) => p.isLow).length;
+            final outCount = filtered.where((p) => p.isOut).length;
+            final expiring = filtered
+                .where(
+                  (p) =>
+                      p.quantity > 0 &&
+                      p.expiry != null &&
+                      (daysLeft(p.expiry) ?? 999) <= 90,
+                )
+                .length;
+            final allocatedUnits = filtered.fold<int>(
+              0,
+              (a, p) => a + allocatedFor(p),
+            );
+
+            // ── Pagination ──
+            final total = filtered.length;
+            final pages = total == 0 ? 1 : (total + _pageSize - 1) ~/ _pageSize;
+            final page = _page.clamp(0, pages - 1);
+            final start = page * _pageSize;
+            final end = (start + _pageSize).clamp(0, total);
+            final pageItems = total == 0
+                ? const <InventoryProduct>[]
+                : filtered.sublist(start, end);
+
+            final cols = width < 520
+                ? 1
+                : width < 780
+                ? 2
+                : width < 1100
+                ? 3
+                : width < 1420
+                ? 4
+                : 5;
+
+            return RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(inventoryProductsProvider);
+                ref.invalidate(staffKitsProvider);
+                try {
+                  await ref.read(inventoryProductsProvider.future);
+                } catch (_) {
+                  // Failure is shown by the screen's error state; don't throw from pull-to-refresh.
+                }
+              },
+              child: CustomScrollView(
+                controller: _scrollCtrl,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _header(crm, products.length),
+                        16.h,
+                        InvKpiGrid(
+                          width: width,
+                          stats: [
+                            InvKpi(
+                              '$total',
+                              'Products Shown',
+                              total == products.length
+                                  ? 'all products'
+                                  : 'of ${products.length} total',
+                              Icons.inventory_2_outlined,
+                              crm.primary,
+                            ),
+                            InvKpi(
+                              '$units',
+                              'Units in Stock',
+                              allocatedUnits > 0
+                                  ? '$allocatedUnits allocated to kits'
+                                  : 'across shown products',
+                              Icons.layers_outlined,
+                              crm.accent,
+                            ),
+                            InvKpi(
+                              fmtINR(value),
+                              'Stock Value',
+                              'qty × unit price',
+                              Icons.currency_rupee_rounded,
+                              const Color(0xFF6E1423),
+                            ),
+                            InvKpi(
+                              '$lowCount',
+                              'Low Stock',
+                              'at or below reorder level',
+                              Icons.trending_down_rounded,
+                              kLowStockColor,
+                            ),
+                            InvKpi(
+                              '$outCount',
+                              'Out of Stock',
+                              'need restocking',
+                              Icons.remove_shopping_cart_outlined,
+                              crm.destructive,
+                            ),
+                            InvKpi(
+                              '$expiring',
+                              'Expiring Soon',
+                              'within 90 days',
+                              Icons.hourglass_bottom_rounded,
+                              crm.warning,
+                            ),
+                          ],
+                        ),
+                        16.h,
+                        _toolbar(crm, narrow, allCount, kitCount, availCount),
+                        16.h,
+                        if (total > 0)
+                          Padding(
+                            key: _gridTopKey,
+                            padding: const EdgeInsets.fromLTRB(2, 0, 2, 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Showing ${start + 1}–$end of $total'
+                                    ' product${total == 1 ? '' : 's'}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
                                       fontSize: 12.5,
                                       fontWeight: FontWeight.w600,
-                                      color: crm.textSecondary),
+                                      color: crm.textSecondary,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              if (pages > 1)
-                                Text('Page ${page + 1} of $pages',
+                                if (pages > 1)
+                                  Text(
+                                    'Page ${page + 1} of $pages',
                                     style: TextStyle(
-                                        fontSize: 12,
-                                        color: crm.textSecondary)),
-                            ],
+                                      fontSize: 12,
+                                      color: crm.textSecondary,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                if (total == 0)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      child: InvEmpty(
+                  if (total == 0)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: InvEmpty(
                           icon: Icons.inventory_2_outlined,
                           title: _view == StockView.kits
                               ? 'Nothing allocated to kits'
                               : 'No products found',
                           subtitle: _view == StockView.kits
                               ? 'Products added to staff kits appear here.'
-                              : 'Try a different search, or add a product.'),
-                    ),
-                  )
-                else ...[
-                  SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: cols,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      mainAxisExtent: _cardHeight,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) {
+                              : 'Try a different search, or add a product.',
+                        ),
+                      ),
+                    )
+                  else ...[
+                    SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: cols,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        mainAxisExtent: _cardHeight,
+                      ),
+                      delegate: SliverChildBuilderDelegate((context, i) {
                         final p = pageItems[i];
                         return _StockCard(
                           key: ValueKey(p.id),
@@ -548,20 +639,26 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
                               showProductDialog(context, ref, product: p),
                           onDelete: () => _delete(p),
                         );
-                      },
-                      childCount: pageItems.length,
+                      }, childCount: pageItems.length),
                     ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: _pagination(
-                        crm, narrow, page, pages, start, end, total),
-                  ),
+                    SliverToBoxAdapter(
+                      child: _pagination(
+                        crm,
+                        narrow,
+                        page,
+                        pages,
+                        start,
+                        end,
+                        total,
+                      ),
+                    ),
+                  ],
+                  SliverToBoxAdapter(child: 24.h),
                 ],
-                SliverToBoxAdapter(child: 24.h),
-              ],
-            ),
-          );
-        }),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -570,12 +667,11 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
 
   Widget _header(CrmTheme crm, int productCount) {
     ButtonStyle tonal() => IconButton.styleFrom(
-          foregroundColor: crm.primary,
-          backgroundColor: crm.primary.withValues(alpha: 0.10),
-          minimumSize: const Size(40, 40),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        );
+      foregroundColor: crm.primary,
+      backgroundColor: crm.primary.withValues(alpha: 0.10),
+      minimumSize: const Size(40, 40),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    );
     return InvHeader(
       title: 'Stock List',
       subtitle:
@@ -606,13 +702,19 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
   // ── Toolbar: search, sort, category chips, view segments ─────────────────
 
   Widget _toolbar(
-      CrmTheme crm, bool narrow, int allCount, int kitCount, int availCount) {
+    CrmTheme crm,
+    bool narrow,
+    int allCount,
+    int kitCount,
+    int availCount,
+  ) {
     final search = Container(
       height: 44,
       decoration: BoxDecoration(
-          color: crm.input,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: crm.border)),
+        color: crm.input,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
       child: TextField(
         controller: _searchCtrl,
         onChanged: (v) => _update(() => _search = v),
@@ -624,8 +726,11 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
               ? null
               : IconButton(
                   tooltip: 'Clear search',
-                  icon: Icon(Icons.close_rounded,
-                      size: 18, color: crm.textSecondary),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: crm.textSecondary,
+                  ),
                   onPressed: () {
                     _searchCtrl.clear();
                     _update(() => _search = '');
@@ -646,9 +751,10 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       height: 44,
       padding: const EdgeInsets.only(left: 12, right: 8),
       decoration: BoxDecoration(
-          color: crm.input,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: crm.border)),
+        color: crm.input,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
       child: Row(
         children: [
           Icon(Icons.sort_rounded, size: 18, color: crm.textSecondary),
@@ -662,15 +768,20 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
                 borderRadius: BorderRadius.circular(12),
                 dropdownColor: crm.surface,
                 style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: crm.textPrimary),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: crm.textPrimary,
+                ),
                 items: [
                   for (final s in _StockSort.values)
                     DropdownMenuItem(
-                        value: s,
-                        child: Text(_sortLabel(s),
-                            maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      value: s,
+                      child: Text(
+                        _sortLabel(s),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
                 onChanged: (v) {
                   if (v != null) _update(() => _sort = v);
@@ -700,15 +811,37 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
               ],
             ),
           12.h,
-          // ── Category chips ──
+          // ── Category chips (+ Add / Manage at the end) ──
           SizedBox(
             height: 34,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
                 _catChip(crm, 'All', null),
-                for (final c in InventoryProduct.categories)
-                  _catChip(crm, c, categoryColor(c)),
+                for (final c
+                    in ref.watch(inventoryCategoriesProvider).value ??
+                        InventoryCategory.builtins())
+                  _catChip(crm, c.name, categoryColor(c.name), category: c),
+                _catAction(
+                  crm,
+                  icon: Icons.add_rounded,
+                  label: 'Add',
+                  tooltip: 'Add a category',
+                  dashed: true,
+                  onTap: () => showAddCategoryDialog(context, ref),
+                ),
+                _catAction(
+                  crm,
+                  icon: Icons.edit_outlined,
+                  label: 'Manage',
+                  tooltip: 'Rename or delete categories',
+                  onTap: () => showManageCategoriesSheet(
+                    context,
+                    ref,
+                    onChanged: (old, to, deleted) =>
+                        _afterCategoryChange(old, to, deleted),
+                  ),
+                ),
               ],
             ),
           ),
@@ -717,7 +850,9 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
-                color: crm.input, borderRadius: BorderRadius.circular(12)),
+              color: crm.input,
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Row(
               children: [
                 _seg(crm, 'All Stock', allCount, StockView.all),
@@ -731,8 +866,79 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
     );
   }
 
-  Widget _catChip(CrmTheme crm, String label, Color? dot) {
+  // Keep the selected filter valid after a category is renamed / deleted.
+  void _afterCategoryChange(String oldName, String? renamedTo, bool deleted) {
+    if (_cat != oldName) return;
+    _update(() => _cat = deleted ? 'All' : (renamedTo ?? _cat));
+  }
+
+  // "+ Add" / "Manage" pills at the end of the category row.
+  Widget _catAction(
+    CrmTheme crm, {
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool dashed = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: dashed ? crm.primary.withValues(alpha: 0.06) : crm.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: dashed ? crm.primary.withValues(alpha: 0.45) : crm.border,
+            ),
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 15, color: crm.primary),
+                  4.w,
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: crm.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _catChip(
+    CrmTheme crm,
+    String label,
+    Color? dot, {
+    InventoryCategory? category,
+  }) {
     final selected = _cat == label;
+    void actions(Offset at) {
+      if (category == null) return;
+      showCategoryActions(
+        context,
+        ref,
+        category,
+        position: at,
+        onChanged: (to, deleted) =>
+            _afterCategoryChange(category.name, to, deleted),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: MouseRegion(
@@ -740,6 +946,13 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => _update(() => _cat = label),
+          // Long-press (touch) / right-click (mouse) → Rename / Delete.
+          onLongPressStart: category == null
+              ? null
+              : (d) => actions(d.globalPosition),
+          onSecondaryTapDown: category == null
+              ? null
+              : (d) => actions(d.globalPosition),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -757,16 +970,20 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
                     width: 7,
                     height: 7,
                     decoration: BoxDecoration(
-                        color: selected ? Colors.white : dot,
-                        shape: BoxShape.circle),
+                      color: selected ? Colors.white : dot,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   6.w,
                 ],
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: selected ? Colors.white : crm.textPrimary)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : crm.textPrimary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -791,9 +1008,10 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
             boxShadow: selected
                 ? [
                     BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 3,
-                        offset: const Offset(0, 1))
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
                   ]
                 : null,
           ),
@@ -801,19 +1019,25 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        color: selected ? crm.primary : crm.textSecondary)),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? crm.primary : crm.textSecondary,
+                  ),
+                ),
                 4.w,
-                Text('$count',
-                    style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: selected
-                            ? crm.primary.withValues(alpha: 0.7)
-                            : crm.textSecondary.withValues(alpha: 0.6))),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: selected
+                        ? crm.primary.withValues(alpha: 0.7)
+                        : crm.textSecondary.withValues(alpha: 0.6),
+                  ),
+                ),
               ],
             ),
           ),
@@ -827,25 +1051,38 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
   /// A single rounded bar: "Prev · 1 2 … 7 · Next", with the current page
   /// marked by colour + underline rather than boxed buttons, plus a thin
   /// progress line showing how far through the list the user is.
-  Widget _pagination(CrmTheme crm, bool narrow, int page, int pages, int start,
-      int end, int total) {
+  Widget _pagination(
+    CrmTheme crm,
+    bool narrow,
+    int page,
+    int pages,
+    int start,
+    int end,
+    int total,
+  ) {
     final info = Text(
       'Showing ${start + 1}–$end of $total',
       style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: crm.textSecondary),
+        fontSize: 12.5,
+        fontWeight: FontWeight.w600,
+        color: crm.textSecondary,
+      ),
     );
     if (pages <= 1) {
       return Padding(
-          padding: const EdgeInsets.only(top: 16), child: Center(child: info));
+        padding: const EdgeInsets.only(top: 16),
+        child: Center(child: info),
+      );
     }
 
     // Page numbers to show; null = ellipsis gap.
-    final shown = <int>{0, pages - 1, page - 1, page, page + 1}
-        .where((i) => i >= 0 && i < pages)
-        .toList()
-      ..sort();
+    final shown = <int>{
+      0,
+      pages - 1,
+      page - 1,
+      page,
+      page + 1,
+    }.where((i) => i >= 0 && i < pages).toList()..sort();
     final entries = <int?>[];
     for (final i in shown) {
       if (entries.isNotEmpty && entries.last != null && i - entries.last! > 1) {
@@ -854,29 +1091,41 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
       entries.add(i);
     }
 
-    Widget step(String label, IconData icon, int? target, {bool trailing = false}) {
+    Widget step(
+      String label,
+      IconData icon,
+      int? target, {
+      bool trailing = false,
+    }) {
       final enabled = target != null;
-      final color =
-          enabled ? crm.primary : crm.textSecondary.withValues(alpha: 0.4);
+      final color = enabled
+          ? crm.primary
+          : crm.textSecondary.withValues(alpha: 0.4);
       final ic = Icon(icon, size: 18, color: color);
       return InkWell(
         borderRadius: BorderRadius.circular(30),
         onTap: enabled ? () => _goToPage(target) : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (!trailing) ic,
-            if (!narrow) ...[
-              if (!trailing) 2.w,
-              Text(label,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!trailing) ic,
+              if (!narrow) ...[
+                if (!trailing) 2.w,
+                Text(
+                  label,
                   style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: color)),
-              if (trailing) 2.w,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+                if (trailing) 2.w,
+              ],
+              if (trailing) ic,
             ],
-            if (trailing) ic,
-          ]),
+          ),
         ),
       );
     }
@@ -891,19 +1140,23 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${i + 1}',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
-                      color: selected ? crm.primary : crm.textSecondary)),
+              Text(
+                '${i + 1}',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  color: selected ? crm.primary : crm.textSecondary,
+                ),
+              ),
               3.h,
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 height: 2.5,
                 width: selected ? 14 : 0,
                 decoration: BoxDecoration(
-                    color: crm.primary,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: crm.primary,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ],
           ),
@@ -912,10 +1165,11 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
     }
 
     Widget divider() => Container(
-        width: 1,
-        height: 18,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        color: crm.border);
+      width: 1,
+      height: 18,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      color: crm.border,
+    );
 
     final bar = Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -925,42 +1179,57 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
         border: Border.all(color: crm.border),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 3)),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          step('Prev', Icons.chevron_left_rounded,
-              page > 0 ? page - 1 : null),
+          step('Prev', Icons.chevron_left_rounded, page > 0 ? page - 1 : null),
           divider(),
           if (narrow)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text.rich(TextSpan(children: [
+              child: Text.rich(
                 TextSpan(
-                    text: '${page + 1}',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w800, color: crm.primary)),
-                TextSpan(
-                    text: ' / $pages',
-                    style: TextStyle(color: crm.textSecondary)),
-              ]), style: const TextStyle(fontSize: 13)),
+                  children: [
+                    TextSpan(
+                      text: '${page + 1}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: crm.primary,
+                      ),
+                    ),
+                    TextSpan(
+                      text: ' / $pages',
+                      style: TextStyle(color: crm.textSecondary),
+                    ),
+                  ],
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
             )
           else
             for (final e in entries)
               e == null
                   ? Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: Text('…',
-                          style: TextStyle(color: crm.textSecondary)))
+                      child: Text(
+                        '…',
+                        style: TextStyle(color: crm.textSecondary),
+                      ),
+                    )
                   : number(e),
           divider(),
-          step('Next', Icons.chevron_right_rounded,
-              page < pages - 1 ? page + 1 : null,
-              trailing: true),
+          step(
+            'Next',
+            Icons.chevron_right_rounded,
+            page < pages - 1 ? page + 1 : null,
+            trailing: true,
+          ),
         ],
       ),
     );
@@ -980,15 +1249,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 22, bottom: 4),
-      child: Column(
-        children: [
-          bar,
-          12.h,
-          info,
-          6.h,
-          progress,
-        ],
-      ),
+      child: Column(children: [bar, 12.h, info, 6.h, progress]),
     );
   }
 }
@@ -1056,10 +1317,10 @@ class _StockCard extends StatelessWidget {
     final expText = p.expiry == null
         ? 'No expiry date'
         : dl! < 0
-            ? 'Expired · ${fmtExp(p.expiry)}'
-            : expWarn
-                ? 'Exp ${fmtExp(p.expiry)} · ${dl}d left'
-                : 'Exp ${fmtExp(p.expiry)}';
+        ? 'Expired · ${fmtExp(p.expiry)}'
+        : expWarn
+        ? 'Exp ${fmtExp(p.expiry)} · ${dl}d left'
+        : 'Exp ${fmtExp(p.expiry)}';
 
     return Material(
       color: flagged
@@ -1069,7 +1330,8 @@ class _StockCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-            color: flagged ? tint.withValues(alpha: 0.38) : crm.border),
+          color: flagged ? tint.withValues(alpha: 0.38) : crm.border,
+        ),
       ),
       child: InkWell(
         onTap: onEdit,
@@ -1086,29 +1348,40 @@ class _StockCard extends StatelessWidget {
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
-                        color: catColor.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(11)),
-                    child: Icon(productIcon(p.category),
-                        color: catColor, size: 20),
+                      color: catColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(
+                      productIcon(p.category),
+                      color: catColor,
+                      size: 20,
+                    ),
                   ),
                   10.w,
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(invDisplayName(p),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: crm.textPrimary)),
+                        Text(
+                          invDisplayName(p),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: crm.textPrimary,
+                          ),
+                        ),
                         2.h,
-                        Text(p.brand.isEmpty ? '—' : p.brand,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 11.5, color: crm.textSecondary)),
+                        Text(
+                          p.brand.isEmpty ? '—' : p.brand,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: crm.textSecondary,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1118,29 +1391,43 @@ class _StockCard extends StatelessWidget {
                     child: PopupMenuButton<String>(
                       padding: EdgeInsets.zero,
                       tooltip: 'More',
-                      icon: Icon(Icons.more_vert,
-                          size: 18, color: crm.textSecondary),
+                      icon: Icon(
+                        Icons.more_vert,
+                        size: 18,
+                        color: crm.textSecondary,
+                      ),
                       onSelected: (v) {
                         if (v == 'edit') onEdit();
                         if (v == 'delete') onDelete();
                       },
                       itemBuilder: (_) => [
                         const PopupMenuItem(
-                            value: 'edit',
-                            child: Row(children: [
+                          value: 'edit',
+                          child: Row(
+                            children: [
                               Icon(Icons.edit, size: 16),
                               SizedBox(width: 8),
-                              Text('Edit')
-                            ])),
+                              Text('Edit'),
+                            ],
+                          ),
+                        ),
                         PopupMenuItem(
-                            value: 'delete',
-                            child: Row(children: [
-                              Icon(Icons.delete,
-                                  size: 16, color: crm.destructive),
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.delete,
+                                size: 16,
+                                color: crm.destructive,
+                              ),
                               const SizedBox(width: 8),
-                              Text('Delete',
-                                  style: TextStyle(color: crm.destructive))
-                            ])),
+                              Text(
+                                'Delete',
+                                style: TextStyle(color: crm.destructive),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -1155,17 +1442,23 @@ class _StockCard extends StatelessWidget {
                     Flexible(
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
-                            color: catColor.withValues(alpha: 0.10),
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Text(p.category,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: catColor)),
+                          color: catColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          p.category,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: catColor,
+                          ),
+                        ),
                       ),
                     ),
                     6.w,
@@ -1187,19 +1480,26 @@ class _StockCard extends StatelessWidget {
                           FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
-                            child: Text(bigValue,
-                                style: TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    color: bigColor,
-                                    height: 1.0)),
+                            child: Text(
+                              bigValue,
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: bigColor,
+                                height: 1.0,
+                              ),
+                            ),
                           ),
                           4.h,
-                          Text(bigCaption,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 10.5, color: crm.textSecondary)),
+                          Text(
+                            bigCaption,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: crm.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1222,21 +1522,24 @@ class _StockCard extends StatelessWidget {
               Row(
                 children: [
                   Icon(
-                      expWarn
-                          ? Icons.hourglass_bottom_rounded
-                          : Icons.event_outlined,
-                      size: 13,
-                      color: expColor),
+                    expWarn
+                        ? Icons.hourglass_bottom_rounded
+                        : Icons.event_outlined,
+                    size: 13,
+                    color: expColor,
+                  ),
                   5.w,
                   Expanded(
-                    child: Text(expText,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                expWarn ? FontWeight.w700 : FontWeight.w500,
-                            color: expColor)),
+                    child: Text(
+                      expText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: expWarn ? FontWeight.w700 : FontWeight.w500,
+                        color: expColor,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1246,7 +1549,10 @@ class _StockCard extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 6),
                 child: view == StockView.all
                     ? TubeGauge(
-                        quantity: p.quantity, fillLevel: p.fillLevel, height: 8)
+                        quantity: p.quantity,
+                        fillLevel: p.fillLevel,
+                        height: 8,
+                      )
                     : _allocationBar(crm, p, remaining),
               ),
               10.h,
@@ -1257,18 +1563,24 @@ class _StockCard extends StatelessWidget {
               8.h,
               Row(
                 children: [
-                  Icon(Icons.schedule_rounded,
-                      size: 12, color: crm.textSecondary),
+                  Icon(
+                    Icons.schedule_rounded,
+                    size: 12,
+                    color: crm.textSecondary,
+                  ),
                   5.w,
                   Expanded(
                     child: Text(
-                        p.createdAt != null
-                            ? 'Added ${fmtAdded(p.createdAt)}'
-                            : 'Added date unknown',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 10.5, color: crm.textSecondary)),
+                      p.createdAt != null
+                          ? 'Added ${fmtAdded(p.createdAt)}'
+                          : 'Added date unknown',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: crm.textSecondary,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1280,28 +1592,34 @@ class _StockCard extends StatelessWidget {
   }
 
   Widget _kv(CrmTheme crm, String label, String value) => Text.rich(
-        TextSpan(children: [
-          TextSpan(
-              text: '$label ',
-              style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
-          TextSpan(
-              text: value,
-              style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: crm.textPrimary)),
-        ]),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        textAlign: TextAlign.end,
-      );
+    TextSpan(
+      children: [
+        TextSpan(
+          text: '$label ',
+          style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+        ),
+        TextSpan(
+          text: value,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            color: crm.textPrimary,
+          ),
+        ),
+      ],
+    ),
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    textAlign: TextAlign.end,
+  );
 
   /// Kits / remaining views: share of stock allocated vs left.
   Widget _allocationBar(CrmTheme crm, InventoryProduct p, int remaining) {
     final isKits = view == StockView.kits;
     final shown = isKits ? allocated : remaining;
-    final frac =
-        p.quantity <= 0 ? 0.0 : (shown / p.quantity).clamp(0.0, 1.0).toDouble();
+    final frac = p.quantity <= 0
+        ? 0.0
+        : (shown / p.quantity).clamp(0.0, 1.0).toDouble();
     final color = isKits
         ? crm.accent
         : (remaining == 0 ? crm.destructive : crm.success);
@@ -1313,14 +1631,20 @@ class _StockCard extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                  '${(frac * 100).round()}% ${isKits ? 'allocated' : 'available'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w800, color: color)),
+                '${(frac * 100).round()}% ${isKits ? 'allocated' : 'available'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
             ),
-            Text('$shown / ${p.quantity}',
-                style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
+            Text(
+              '$shown / ${p.quantity}',
+              style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+            ),
           ],
         ),
         4.h,

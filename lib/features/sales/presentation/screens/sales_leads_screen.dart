@@ -2022,6 +2022,7 @@ class _LeadsTable extends ConsumerWidget {
         flexible: flexible,
         showAssignedTo: isSalesManager,
         assignedName: assignedName,
+        canReviewLost: isLostReviewer(session?.role),
         onEdit: () => showLeadEditDialog(context, ref, lead),
         onDelete: () => _confirmDelete(context, ref, lead),
         onRecordOutcome: () => _showRecordOutcomeDialog(context, ref, lead),
@@ -2100,7 +2101,11 @@ class _LeadCard extends StatefulWidget {
     this.flexible = false,
     this.showAssignedTo = false,
     this.assignedName,
+    this.canReviewLost = false,
   });
+
+  /// Reviewer roles get a "Review Lost request" button on pending-lost leads.
+  final bool canReviewLost;
 
   @override
   State<_LeadCard> createState() => _LeadCardState();
@@ -2169,13 +2174,19 @@ class _LeadCardState extends State<_LeadCard> {
                           ),
                         ],
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          LeadPriorityChip(lead.priority, dense: true),
-                          const SizedBox(width: 6),
-                          _StatusBadge(status: lead.status),
-                        ],
+                      const SizedBox(width: 6),
+                      // Flexible so a long status ("Pending Lost Approval")
+                      // shrinks instead of overflowing the card.
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            LeadPriorityChip(lead.priority, dense: true),
+                            const SizedBox(width: 6),
+                            Flexible(child: _StatusBadge(status: lead.status)),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -2347,6 +2358,13 @@ class _LeadCardState extends State<_LeadCard> {
                   // Fixed-height grid cells push the actions to the bottom; the
                   // content-sized mobile card just leaves a small gap.
                   if (widget.flexible) const SizedBox(height: 12) else const Spacer(),
+                  if (lead.status == 'Pending Lost Approval') ...[
+                    _PendingLostStrip(
+                      canReview: widget.canReviewLost,
+                      onReview: widget.onRecordOutcome,
+                    ),
+                    const SizedBox(height: 6),
+                  ],
                   const Divider(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -2497,6 +2515,59 @@ class _BottomSheetHandle extends StatelessWidget {
 //  Shared small widgets
 // ─────────────────────────────────────────────────────────
 
+/// Amber strip on a lead card awaiting lost approval: reviewers get a
+/// "Review Lost request" button (opens the outcome dialog with Approve /
+/// Reject); executives see that it is waiting on the manager.
+class _PendingLostStrip extends StatelessWidget {
+  final bool canReview;
+  final VoidCallback onReview;
+  const _PendingLostStrip({required this.canReview, required this.onReview});
+
+  @override
+  Widget build(BuildContext context) {
+    const amber = Color(0xFFB45309);
+    if (!canReview) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEF3C7),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.hourglass_top_rounded, size: 14, color: amber),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Waiting for sales manager approval',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: amber),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: onReview,
+        icon: const Icon(Icons.gavel_rounded, size: 16),
+        label: const Text('Review Lost request'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFF59E0B),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   final String status;
   const _StatusBadge({required this.status});
@@ -2504,17 +2575,24 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _statusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        status,
-        textAlign: TextAlign.center,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+    // Short label on cards; the full status is in the tooltip.
+    final label = status == 'Pending Lost Approval' ? 'Lost · Pending' : status;
+    return Tooltip(
+      message: status,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }

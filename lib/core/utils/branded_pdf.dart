@@ -31,6 +31,9 @@ Future<pw.MemoryImage?> _logo() async {
   return _logoCache;
 }
 
+/// The Team N logo for custom-layout reports (null if the asset is missing).
+Future<pw.MemoryImage?> brandedPdfLogo() => _logo();
+
 /// The built-in Helvetica/Times fonts render many Unicode punctuation marks as
 /// blank boxes (en/em dash, smart quotes, bullet, ellipsis). Swap to ASCII.
 String pdfSafe(Object? v) => v
@@ -43,6 +46,9 @@ String pdfSafe(Object? v) => v
     .replaceAll('“', '"')
     .replaceAll('”', '"')
     .replaceAll('…', '...')
+    // intl's 'h:mm a' puts a narrow no-break space before AM/PM.
+    .replaceAll(' ', ' ')
+    .replaceAll(' ', ' ')
     .replaceAll(' ', ' ');
 
 /// One titled table in a report.

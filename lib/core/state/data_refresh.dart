@@ -24,6 +24,7 @@ import 'package:flutter_riverpod/legacy.dart' show StateProvider;
 import 'package:flutter_riverpod/misc.dart' show ProviderOrFamily;
 
 // Core / shared
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/providers/my_department_provider.dart';
 import 'package:nizan_crm/core/providers/trial_package_provider.dart';
@@ -133,6 +134,7 @@ class DataRefresh {
     _bump(bookingsRefreshTriggerProvider);
     _all(_inv, [
       bookingProvider,
+      salesExcludedCreatorsProvider, // who's left out of sales totals
       paginatedBookingsProvider,
       singleBookingProvider,
       artistAssignedWorksProvider,
@@ -190,7 +192,13 @@ class DataRefresh {
       ]);
 
   void crmUsers() {
-    _all(_inv, [crmUsersProvider, paginatedCrmUsersProvider]);
+    // salesExcludedCreatorsProvider: a user's "Count bookings in sales totals"
+    // switch changes which bookings every sales total includes.
+    _all(_inv, [
+      crmUsersProvider,
+      paginatedCrmUsersProvider,
+      salesExcludedCreatorsProvider,
+    ]);
     employees(); // users and employees are kept in sync server-side
   }
 

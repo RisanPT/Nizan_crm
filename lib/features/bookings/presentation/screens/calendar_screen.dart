@@ -16,6 +16,7 @@ import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
+import 'package:nizan_crm/core/utils/monthly_works_report.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/zone_service.dart';
@@ -955,6 +956,56 @@ class CalendarScreen extends HookConsumerWidget {
       );
     }).toList();
 
+    // ── Monthly works report ─────────────────────────────────────────────
+    // Month view → the month on screen; Day/Week view → the selected day's
+    // month. Uses the same artist / location filters as the calendar.
+    final downloadingReport = useState(false);
+    DateTime reportMonth() => viewMode.value == 'Month'
+        ? monthFocus.value
+        : DateTime(selectedDay.year, selectedDay.month, 1);
+
+    Future<void> downloadReport() async {
+      if (downloadingReport.value) return;
+      downloadingReport.value = true;
+      try {
+        String? nameOf(Iterable<({String id, String name})> items, String id) =>
+            items.where((i) => i.id == id).map((i) => i.name).firstOrNull;
+        final notes = <String>[];
+        final artist = selectedArtistFilter.value;
+        if (artist == 'unassigned') {
+          notes.add('Unassigned works');
+        } else if (artist != 'all') {
+          notes.add(
+            'Artist: ${nameOf(activeArtists.map((e) => (id: e.id, name: e.name)), artist) ?? 'selected artist'}',
+          );
+        }
+        void geo(
+          String label,
+          String value,
+          Iterable<({String id, String name})> items,
+        ) {
+          if (value != 'all') {
+            notes.add('$label: ${nameOf(items, value) ?? value}');
+          }
+        }
+
+        geo('Zone', zoneFilter.value, zones.map((z) => (id: z.id, name: z.name)));
+        geo('State', stateFilter.value, states.map((s) => (id: s.id, name: s.name)));
+        geo('Region', regionFilter.value, regions.map((r) => (id: r.id, name: r.name)));
+        geo('District', districtFilter.value, districts.map((d) => (id: d.id, name: d.name)));
+
+        await downloadMonthlyWorksReport(
+          bookings: filteredCalendarBookings,
+          month: reportMonth(),
+          filterNote: notes.join(', '),
+        );
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      } finally {
+        downloadingReport.value = false;
+      }
+    }
+
     void openGeoFilters() => _openGeoFilters(
       context,
       crmColors,
@@ -1145,7 +1196,29 @@ class CalendarScreen extends HookConsumerWidget {
                       ],
                     ),
                   ),
+                  Tooltip(
+                    message:
+                        'Download works with assigned artists for ${monthTitle(reportMonth())}',
+                    child: OutlinedButton.icon(
+                      onPressed: downloadingReport.value ? null : downloadReport,
+                      icon: downloadingReport.value
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                      label: Text('${monthTitle(reportMonth())} Report'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: crmColors.primary,
+                        side: BorderSide(
+                          color: crmColors.primary.withValues(alpha: 0.35),
+                        ),
+                      ),
+                    ),
+                  ),
                   if (!isArtist) ...[
+                    12.w,
                     ElevatedButton.icon(
                       onPressed: () => showAddBookingModeChooser(context),
                       icon: const Icon(Icons.add, size: 18),
@@ -1223,6 +1296,23 @@ class CalendarScreen extends HookConsumerWidget {
                                     IconButton(
                                       onPressed: goToNextWeek,
                                       icon: const Icon(Icons.chevron_right),
+                                    ),
+                                    IconButton(
+                                      tooltip:
+                                          '${monthTitle(reportMonth())} report (PDF)',
+                                      onPressed: downloadingReport.value
+                                          ? null
+                                          : downloadReport,
+                                      color: crmColors.primary,
+                                      icon: downloadingReport.value
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2),
+                                            )
+                                          : const Icon(
+                                              Icons.picture_as_pdf_outlined),
                                     ),
                                     OutlinedButton(
                                       onPressed: goToToday,

@@ -18,7 +18,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isArtistLogin = false;
 
   @override
   void dispose() {
@@ -37,13 +36,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           .login(
             email: _emailController.text,
             password: _passwordController.text,
-            // You might need to pass role or something here if backend requires it
           );
     } catch (e) {
       // Shows the backend's reason (e.g. "Invalid email or password") or, when
       // the network is down, "Can't reach the server…".
       if (!mounted) return;
-      showErrorSnackBar(context, e, fallback: 'Unable to sign in. Please try again.');
+      showErrorSnackBar(
+        context,
+        e,
+        fallback: 'Unable to sign in. Please try again.',
+      );
     }
   }
 
@@ -67,10 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        crmColors.sidebar,
-                        crmColors.primary,
-                      ],
+                      colors: [crmColors.sidebar, crmColors.primary],
                     ),
                   ),
                   child: Stack(
@@ -107,7 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ],
                               ),
                               child: Image.asset(
-                              'assets/images/teamn_logo.png',
+                                'assets/images/teamn_logo.png',
                                 fit: BoxFit.contain,
                               ),
                             ),
@@ -151,11 +150,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           obscurePassword: _obscurePassword,
                           isSubmitting: auth.isSubmitting,
                           isDesktop: true,
-                          isArtistLogin: _isArtistLogin,
-                          onArtistLoginChanged: (val) =>
-                              setState(() => _isArtistLogin = val),
                           onTogglePassword: () {
-                            setState(() => _obscurePassword = !_obscurePassword);
+                            setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            );
                           },
                           onSubmit: _submit,
                         ),
@@ -203,20 +201,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       ],
                     ),
                     child: Image.asset(
-                    'assets/images/teamn_logo.png',
-                    fit: BoxFit.contain,
+                      'assets/images/teamn_logo.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                ),
-                24.h,
-                Text(
-                  'TEAM N ERP',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
+                  24.h,
+                  Text(
+                    'TEAM N ERP',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 4,
+                    ),
                   ),
-                ),
                   8.h,
                   Text(
                     'Creative Enterprise Portal',
@@ -235,7 +233,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               decoration: BoxDecoration(
                 color: crmColors.background,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(40),
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 40, 24, 40),
@@ -246,8 +246,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   obscurePassword: _obscurePassword,
                   isSubmitting: auth.isSubmitting,
                   isDesktop: false,
-                  isArtistLogin: _isArtistLogin,
-                  onArtistLoginChanged: (val) => setState(() => _isArtistLogin = val),
                   onTogglePassword: () {
                     setState(() => _obscurePassword = !_obscurePassword);
                   },
@@ -270,8 +268,6 @@ class _LoginCard extends StatelessWidget {
     required this.obscurePassword,
     required this.isSubmitting,
     required this.isDesktop,
-    required this.isArtistLogin,
-    required this.onArtistLoginChanged,
     required this.onTogglePassword,
     required this.onSubmit,
   });
@@ -282,8 +278,6 @@ class _LoginCard extends StatelessWidget {
   final bool obscurePassword;
   final bool isSubmitting;
   final bool isDesktop;
-  final bool isArtistLogin;
-  final ValueChanged<bool> onArtistLoginChanged;
   final VoidCallback onTogglePassword;
   final Future<void> Function() onSubmit;
 
@@ -311,27 +305,18 @@ class _LoginCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Welcome Back',
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                _ArtistToggle(
-                  value: isArtistLogin,
-                  onChanged: onArtistLoginChanged,
-                ),
-              ],
+            Text(
+              'Welcome Back',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.5,
+              ),
             ),
             4.h,
+            // One login for everyone — each user lands on their own dashboard
+            // based on the role on their account.
             Text(
-              isArtistLogin
-                  ? 'Artist Portal Access'
-                  : 'Administrative CRM Access',
+              'Sign in to your Team N account',
               style: TextStyle(
                 color: crmColors.primary,
                 fontWeight: FontWeight.bold,
@@ -410,7 +395,7 @@ class _LoginCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            isArtistLogin ? 'ENTER ARTIST PORTAL' : 'ACCESS CRM DESK',
+                            'SIGN IN',
                             style: const TextStyle(
                               fontWeight: FontWeight.w900,
                               letterSpacing: 1.5,
@@ -421,53 +406,6 @@ class _LoginCard extends StatelessWidget {
                           const Icon(Icons.arrow_forward_rounded, size: 18),
                         ],
                       ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ArtistToggle extends StatelessWidget {
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _ArtistToggle({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: value ? crm.primary.withValues(alpha: 0.15) : crm.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: value ? crm.primary.withValues(alpha: 0.3) : crm.border,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              value ? Icons.brush_rounded : Icons.person_outline_rounded,
-              size: 16,
-              color: value ? crm.primary : crm.textSecondary,
-            ),
-            8.w,
-            Text(
-              'ARTIST',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
-                color: value ? crm.primary : crm.textSecondary,
-                letterSpacing: 1.2,
               ),
             ),
           ],

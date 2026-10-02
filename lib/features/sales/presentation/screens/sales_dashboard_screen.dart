@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/crm_user.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -77,6 +78,8 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
     final asyncBookings = ref.watch(bookingProvider);
     final asyncLeads = ref.watch(leadsProvider);
     final asyncUsers = ref.watch(crmUsersProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
 
     if (asyncBookings.isLoading || asyncLeads.isLoading || asyncUsers.isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -341,8 +344,9 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
       return (
         leads: ls,
         bookings: bs.length,
-        revenue:
-            bs.fold<double>(0, (s, x) => s + (x.totalPrice - x.discountAmount)),
+        revenue: bs
+            .where((x) => x.countsTowardSales)
+            .fold<double>(0, (s, x) => s + (x.totalPrice - x.discountAmount)),
       );
     }
 
@@ -2033,8 +2037,9 @@ class _DashboardData {
         .where((b) => within(b.createdAt ?? b.bookingDate, prevFrom, prevTo))
         .toList();
 
-    double rev(List<Booking> bs) =>
-        bs.fold(0.0, (s, b) => s + (b.totalPrice - b.discountAmount));
+    double rev(List<Booking> bs) => bs
+        .where((b) => b.countsTowardSales)
+        .fold(0.0, (s, b) => s + (b.totalPrice - b.discountAmount));
 
     // Buckets: one per day of the month, or one per month across the FY.
     final daily = <_DayPoint>[];
@@ -2083,7 +2088,7 @@ class _DashboardData {
         final id = l.bookingId;
         if (id == null || id.isEmpty || !counted.add(id)) continue;
         final b = bookingById[id];
-        if (b == null) continue;
+        if (b == null || !b.countsTowardSales) continue;
         total += b.totalPrice - b.discountAmount;
       }
       return total;

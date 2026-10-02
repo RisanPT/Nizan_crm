@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../../../core/providers/trial_provider.dart';
@@ -142,6 +143,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
       paginatedBookingsProvider(pageParams),
     );
     final asyncAllBookings = ref.watch(bookingProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
     final allBookings = asyncAllBookings.value ?? const <Booking>[];
 
     // The FULL set of people who actually entered bookings — derived from the
@@ -242,7 +245,6 @@ class SalesBookingsScreen extends HookConsumerWidget {
     // all-time figure beside an FY figure (₹2.54Cr vs ₹2.51Cr) under near
     // identical labels was a main source of the "which number is right?"
     // confusion. Everything in the summary is now FY-scoped and consistent.
-    final advanceCollectedFY = fyBookings.fold<double>(0, (sum, b) => b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed' ? sum + b.advanceAmount : sum);
 
     // ── Today vs Yesterday · Total revenue · Q1–Q4 works (selected FY) ──────
     DateTime dateOf(Booking b) =>
@@ -257,11 +259,18 @@ class SalesBookingsScreen extends HookConsumerWidget {
     // the parts genuinely reconcile with the whole. The old status tiles
     // counted only the visible page while "Total Bookings" counted every page,
     // so they could never add up — which is what made the screen look wrong.
-    final fyBookedValue =
-        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice);
+    final fyBookedValue = fyBookings
+        .where((b) => isActiveBooking(b) && b.countsTowardSales)
+        .fold<double>(0, (s, b) => s + b.totalPrice);
+    // Advance on the SAME bookings as fyBookedValue, so booked / collected /
+    // outstanding / % reconcile (bookings left out of sales totals are left
+    // out of all four).
+    final fyCountedAdvance = fyBookings
+        .where((b) => isActiveBooking(b) && b.countsTowardSales)
+        .fold<double>(0, (s, b) => s + b.advanceAmount);
     final fyOutstanding =
-        (fyBookedValue - advanceCollectedFY) < 0 ? 0.0 : fyBookedValue - advanceCollectedFY;
-    final fyCollectedPct = fyBookedValue <= 0 ? 0.0 : (advanceCollectedFY / fyBookedValue).clamp(0.0, 1.0);
+        (fyBookedValue - fyCountedAdvance) < 0 ? 0.0 : fyBookedValue - fyCountedAdvance;
+    final fyCollectedPct = fyBookedValue <= 0 ? 0.0 : (fyCountedAdvance / fyBookedValue).clamp(0.0, 1.0);
 
     final fyWorksTotal = countPackages(fyBookings);
     final fyConfirmed = countPackages(fyBookings.where((b) => _statusIs(b.status, 'confirmed')));
@@ -297,7 +306,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
     double revenueOn(DateTime day) =>
         geoFilteredAllBookings
-            .where((b) => isActiveBooking(b) && onSameDay(dateOf(b), day))
+            .where((b) =>
+                isActiveBooking(b) &&
+                b.countsTowardSales &&
+                onSameDay(dateOf(b), day))
             .fold<double>(0, (s, b) => s + b.totalPrice) +
         salesTrials
             .where((t) => onSameDay(t.trialDate, day))
@@ -316,7 +328,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
         : (todaySales - yesterdaySales) / yesterdaySales * 100;
 
     final totalRevenueFY =
-        fyBookings.where(isActiveBooking).fold<double>(0, (s, b) => s + b.totalPrice) +
+        fyBookings
+            .where((b) => isActiveBooking(b) && b.countsTowardSales)
+            .fold<double>(0, (s, b) => s + b.totalPrice) +
         salesTrials
             .where(trialInFY)
             .fold<double>(0, (s, t) => s + trialAmount(t));
@@ -345,7 +359,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
       return '${d.year}-${d.month}' == currentMonthKey && b.status.toLowerCase() != 'cancelled' && b.status.toLowerCase() != 'postponed';
     }).toList();
 
-    final forecastSales = monthBookings.fold<double>(
+    final forecastSales = monthBookings
+        .where((b) => b.countsTowardSales)
+        .fold<double>(
       0,
       (sum, b) => sum + b.totalPrice,
     );
@@ -358,6 +374,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
 
     Future<void> exportReport() async {
+      // Report sales totals skip non-counting bookings — make sure the list is in.
+      await ref.read(salesExcludedCreatorsProvider.future);
+      if (!context.mounted) return;
       final packages = ref.read(packagesProvider).value;
       final employees = ref.read(employeesProvider).value;
 
@@ -1422,7 +1441,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
 
                 final collection = _CollectionSummaryCard(
                   booked: fyBookedValue,
-                  collected: advanceCollectedFY,
+                  collected: fyCountedAdvance,
                   outstanding: fyOutstanding,
                   pct: fyCollectedPct,
                   scopeLabel: scopeLabel,

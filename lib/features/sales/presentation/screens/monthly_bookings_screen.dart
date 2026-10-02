@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
@@ -49,6 +50,8 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
     final range = useState<DateTimeRange?>(null);
 
     final bookingsAsync = ref.watch(bookingProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
 
     DateTime basisDate(Booking b) =>
         eventBasis.value ? b.bookingDate : (b.createdAt ?? b.bookingDate);
@@ -121,7 +124,9 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
 
           // Totals from the whole month (not the search subset).
           final active = inMonth.where((b) => !_isCancelled(b.status)).toList();
-          final revenue = active.fold<double>(0, (s, b) => s + b.totalPrice);
+          final revenue = active
+              .where((b) => b.countsTowardSales)
+              .fold<double>(0, (s, b) => s + b.totalPrice);
           final advance = active.fold<double>(0, (s, b) => s + b.advanceAmount);
           final balance = active.fold<double>(0, (s, b) => s + _balanceOf(b));
           final cancelled = inMonth.length - active.length;

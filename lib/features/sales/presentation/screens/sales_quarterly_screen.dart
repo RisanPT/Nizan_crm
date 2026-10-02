@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../../../core/providers/trial_provider.dart';
@@ -58,6 +59,8 @@ class SalesQuarterlyScreen extends ConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(bookingProvider);
     final allTrials = ref.watch(allTrialsProvider).value ?? const <Trial>[];
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
 
     final fyStartYear =
         int.tryParse(financialYear.split('-').first) ?? DateTime.now().year;
@@ -103,11 +106,13 @@ class SalesQuarterlyScreen extends ConsumerWidget {
             }
             if (!_active(b)) continue;
             qWorks[qi] += _works(b);
-            qRevenue[qi] += b.totalPrice;
+            if (b.countsTowardSales) qRevenue[qi] += b.totalPrice;
             qAdvance[qi] += b.advanceAmount;
             if (status == 'completed') qCompleted[qi] += _works(b);
             monthWorks[m] = (monthWorks[m] ?? 0) + _works(b);
-            monthRevenue[m] = (monthRevenue[m] ?? 0) + b.totalPrice;
+            if (b.countsTowardSales) {
+              monthRevenue[m] = (monthRevenue[m] ?? 0) + b.totalPrice;
+            }
           }
 
           // Fold in trials (studio-wide): each non-cancelled trial in the FY

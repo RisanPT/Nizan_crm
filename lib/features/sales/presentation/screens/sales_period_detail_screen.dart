@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/crm_user.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -51,6 +52,8 @@ class SalesPeriodDetailScreen extends ConsumerWidget {
     final asyncBookings = ref.watch(bookingProvider);
     final asyncLeads = ref.watch(leadsProvider);
     final asyncUsers = ref.watch(crmUsersProvider);
+    // Recompute sales totals once the "doesn't count toward sales" list loads.
+    ref.watch(salesExcludedCreatorsProvider);
 
     if (asyncBookings.isLoading ||
         asyncLeads.isLoading ||
@@ -101,7 +104,7 @@ class SalesPeriodDetailScreen extends ConsumerWidget {
 
     bool isConverted(Lead l) => l.status.toLowerCase() == 'converted';
     final converted = leads.where(isConverted).length;
-    final revenue = bookings.fold<double>(
+    final revenue = bookings.where((b) => b.countsTowardSales).fold<double>(
         0, (s, b) => s + (b.totalPrice - b.discountAmount));
     final collected =
         bookings.fold<double>(0, (s, b) => s + b.advanceAmount + b.collectedAmount);

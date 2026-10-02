@@ -3,6 +3,7 @@ import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/spot_invoice.dart';
@@ -15,9 +16,9 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
 
-/// The salesperson's main workspace: Leads · Calculator · Spot Invoice.
-/// The Calculator feeds a total into the Spot Invoice tab, which generates a
-/// shareable no-GST quotation.
+/// The salesperson's main workspace: Leads · Quote · Slots · Invoice.
+/// The Quote tab feeds its lines (and district) into the Invoice tab, which
+/// generates a shareable no-GST quotation.
 class SalesWorkspaceScreen extends ConsumerStatefulWidget {
   const SalesWorkspaceScreen({super.key});
 
@@ -30,10 +31,11 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: 4, vsync: this);
 
-  // Handoff from Calculator → Spot Invoice.
+  // Handoff from Quote → Invoice.
   List<SpotInvoiceLine> _prefillLines = const [];
   String _prefillCustomer = '';
   String _prefillPhone = '';
+  String? _prefillDistrictId;
   int _prefillNonce = 0;
 
   @override
@@ -43,10 +45,15 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
   }
 
   void _sendToInvoice(
-      String customer, String phone, List<SpotInvoiceLine> lines) {
+    String customer,
+    String phone,
+    String? districtId,
+    List<SpotInvoiceLine> lines,
+  ) {
     setState(() {
       _prefillCustomer = customer;
       _prefillPhone = phone;
+      _prefillDistrictId = districtId;
       _prefillLines = lines;
       _prefillNonce++;
     });
@@ -67,10 +74,14 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               labelColor: crm.primary,
               unselectedLabelColor: crm.textSecondary,
               indicatorColor: crm.primary,
-              labelStyle:
-                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
-              unselectedLabelStyle:
-                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              labelStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w500,
+              ),
               indicatorSize: TabBarIndicatorSize.label,
               indicatorWeight: 2.5,
               tabs: const [
@@ -92,6 +103,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
                   key: ValueKey(_prefillNonce),
                   initialCustomer: _prefillCustomer,
                   initialPhone: _prefillPhone,
+                  initialDistrictId: _prefillDistrictId,
                   initialLines: _prefillLines,
                 ),
               ],
@@ -104,11 +116,710 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-//  Calculator tab
+//  Shared building blocks
+// ─────────────────────────────────────────────────────────────────────────
+const _wideBreakpoint = 900.0;
+const _maxPageWidth = 1320.0;
+const _sidePanelWidth = 380.0;
+const _darkWine = Color(0xFF3A101A);
+const _gold = Color(0xFFC9A66B);
+
+String _rupees(double v) {
+  final s = v.toStringAsFixed(0);
+  // Indian digit grouping: 12,34,567
+  if (s.length <= 3) return '₹$s';
+  final last3 = s.substring(s.length - 3);
+  var rest = s.substring(0, s.length - 3);
+  final parts = <String>[];
+  while (rest.length > 2) {
+    parts.insert(0, rest.substring(rest.length - 2));
+    rest = rest.substring(0, rest.length - 2);
+  }
+  if (rest.isNotEmpty) parts.insert(0, rest);
+  return '₹${parts.join(',')},$last3';
+}
+
+String? _districtNameFor(List<District> districts, String? id) {
+  if (id == null || id.isEmpty) return null;
+  return districts.where((d) => d.id == id).map((d) => d.name).firstOrNull;
+}
+
+/// Responsive tab layout.
+///  • Wide (≥ [_wideBreakpoint]): form on the left, a fixed summary panel on
+///    the right holding the total and the primary action.
+///  • Narrow: full-width single column with a pinned total bar.
+class _TabScaffold extends StatelessWidget {
+  final List<Widget> Function(bool wide) builder;
+  final Widget sidePanel;
+  final Widget bottomBar;
+
+  const _TabScaffold({
+    required this.builder,
+    required this.sidePanel,
+    required this.bottomBar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = c.maxWidth >= _wideBreakpoint;
+        final form = SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(wide ? 24 : 16, 20, wide ? 12 : 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: builder(wide),
+          ),
+        );
+        if (!wide) {
+          return Column(
+            children: [
+              Expanded(child: form),
+              bottomBar,
+            ],
+          );
+        }
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _maxPageWidth),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: form),
+                SizedBox(
+                  width: _sidePanelWidth,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(12, 20, 24, 24),
+                    child: sidePanel,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Receipt-style summary card shown in the right-hand pane on wide screens.
+class _SummaryPanel extends StatelessWidget {
+  final String title;
+  final double total;
+  final String caption;
+  final List<(String, String)> details;
+  final List<SpotInvoiceLine> lines;
+  final String emptyMessage;
+  final String actionLabel;
+  final IconData actionIcon;
+  final VoidCallback? onPressed;
+  final bool busy;
+  final Widget? footer;
+
+  const _SummaryPanel({
+    required this.title,
+    required this.total,
+    required this.caption,
+    required this.lines,
+    required this.emptyMessage,
+    required this.actionLabel,
+    required this.actionIcon,
+    required this.onPressed,
+    this.details = const [],
+    this.busy = false,
+    this.footer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: crm.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header — title + big total
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [crm.primary, _darkWine],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 1,
+                    fontWeight: FontWeight.w800,
+                    color: _gold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _rupees(total),
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  caption,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (details.isNotEmpty) ...[
+                  for (final (k, v) in details)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 78,
+                            child: Text(
+                              k,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: crm.textSecondary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              v,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: crm.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  _DashedDivider(color: crm.border),
+                  const SizedBox(height: 12),
+                ],
+                if (lines.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: crm.textSecondary,
+                      ),
+                    ),
+                  )
+                else ...[
+                  for (final l in lines)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              l.label,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: crm.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            _rupees(l.amount),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: crm.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  _DashedDivider(color: crm.border),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Text(
+                        'Total',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: crm.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        _rupees(total),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                          color: crm.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: busy ? null : onPressed,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 14.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(actionIcon, size: 20),
+                  label: Text(actionLabel),
+                ),
+                if (footer != null) ...[const SizedBox(height: 10), footer!],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DashedDivider extends StatelessWidget {
+  final Color color;
+  const _DashedDivider({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final n = (c.maxWidth / 8).floor();
+        return Row(
+          children: List.generate(
+            n,
+            (_) => Expanded(
+              child: Container(
+                height: 1,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                color: color,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TabHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  const _TabHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [crm.primary, _darkWine],
+              ),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: _gold, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: crm.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(color: crm.textSecondary, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A titled card grouping related fields.
+class _Section extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget? trailing;
+  final Widget child;
+
+  const _Section({
+    required this.title,
+    required this.icon,
+    required this.child,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 36,
+            child: Row(
+              children: [
+                Icon(icon, size: 17, color: crm.primary),
+                const SizedBox(width: 8),
+                Text(
+                  title.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w800,
+                    color: crm.textSecondary,
+                  ),
+                ),
+                const Spacer(),
+                ?trailing,
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// Lays two fields side by side on wide screens, stacked on phones.
+class _TwoUp extends StatelessWidget {
+  final Widget a;
+  final Widget b;
+  const _TwoUp(this.a, this.b);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth >= 520) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: a),
+              const SizedBox(width: 12),
+              Expanded(child: b),
+            ],
+          );
+        }
+        return Column(children: [a, const SizedBox(height: 12), b]);
+      },
+    );
+  }
+}
+
+/// District picker shared by the Quote and Invoice tabs.
+class _DistrictField extends StatelessWidget {
+  final List<District> districts;
+  final String? value;
+  final String label;
+  final String noneLabel;
+  final ValueChanged<String?> onChanged;
+
+  const _DistrictField({
+    required this.districts,
+    required this.value,
+    required this.onChanged,
+    this.label = 'District',
+    this.noneLabel = 'No district',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...districts.where((d) => d.isActive || d.id == value)]
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    // Until districts load, a preset id has no matching item — show "none"
+    // and re-seed (via the key) once the list arrives.
+    final effective = sorted.any((d) => d.id == value) ? value! : '';
+    return DropdownButtonFormField<String>(
+      key: ValueKey('district-${sorted.length}-$effective'),
+      isExpanded: true,
+      initialValue: effective,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.location_on_outlined),
+      ),
+      items: [
+        DropdownMenuItem(value: '', child: Text(noneLabel)),
+        for (final d in sorted)
+          DropdownMenuItem(
+            value: d.id,
+            child: Text(
+              d.regionName.isNotEmpty
+                  ? '${d.name}  ·  ${d.regionName}'
+                  : d.name,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+      ],
+      onChanged: (id) => onChanged((id == null || id.isEmpty) ? null : id),
+    );
+  }
+}
+
+/// Pinned footer: running total on the left, primary action on the right.
+class _TotalBar extends StatelessWidget {
+  final double total;
+  final String caption;
+  final String actionLabel;
+  final IconData actionIcon;
+  final VoidCallback? onPressed;
+  final bool busy;
+
+  const _TotalBar({
+    required this.total,
+    required this.caption,
+    required this.actionLabel,
+    required this.actionIcon,
+    required this.onPressed,
+    this.busy = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [crm.primary, _darkWine],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 14,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      caption,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _rupees(total),
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: busy ? null : onPressed,
+                style: FilledButton.styleFrom(
+                  backgroundColor: _gold,
+                  foregroundColor: _darkWine,
+                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.18),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 14,
+                  ),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(actionIcon, size: 20),
+                label: Text(actionLabel),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyHint extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  const _EmptyHint({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: crm.input,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: crm.textSecondary, size: 26),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: crm.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: crm.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+//  Quote tab
 // ─────────────────────────────────────────────────────────────────────────
 class _CalculatorTab extends ConsumerStatefulWidget {
-  final void Function(String customer, String phone, List<SpotInvoiceLine> lines)
-      onCreateInvoice;
+  final void Function(
+    String customer,
+    String phone,
+    String? districtId,
+    List<SpotInvoiceLine> lines,
+  )
+  onCreateInvoice;
 
   const _CalculatorTab({required this.onCreateInvoice});
 
@@ -121,7 +832,6 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
   final _phoneCtrl = TextEditingController();
   ServicePackage? _package;
   String? _districtId;
-  String _districtName = '';
   int _qty = 1;
   final Set<String> _addonIds = {};
 
@@ -132,19 +842,35 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
     super.dispose();
   }
 
-  List<SpotInvoiceLine> _buildLines(List<AddonService> addons) {
+  void _reset() {
+    setState(() {
+      _customerCtrl.clear();
+      _phoneCtrl.clear();
+      _package = null;
+      _districtId = null;
+      _qty = 1;
+      _addonIds.clear();
+    });
+  }
+
+  List<SpotInvoiceLine> _buildLines(
+    List<AddonService> addons,
+    String? districtName,
+  ) {
     final lines = <SpotInvoiceLine>[];
     if (_package != null) {
       // Package price varies by district — use the district-specific price when
       // a district is chosen (falls back to the base price otherwise).
       final unit = _package!.effectivePriceForDistrict(_districtId);
-      final where = _districtName.isNotEmpty ? ' · $_districtName' : '';
-      lines.add(SpotInvoiceLine(
-        label: _qty > 1
-            ? '${_package!.name} × $_qty$where'
-            : '${_package!.name}$where',
-        amount: unit * _qty,
-      ));
+      final where = districtName != null ? ' · $districtName' : '';
+      lines.add(
+        SpotInvoiceLine(
+          label: _qty > 1
+              ? '${_package!.name} × $_qty$where'
+              : '${_package!.name}$where',
+          amount: unit * _qty,
+        ),
+      );
     }
     for (final a in addons) {
       if (_addonIds.contains(a.id)) {
@@ -159,285 +885,273 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
     final crm = context.crmColors;
     final asyncPackages = ref.watch(packagesProvider);
     final asyncAddons = ref.watch(addonServicesProvider);
-    final asyncDistricts = ref.watch(districtsProvider);
-    final districts = asyncDistricts.value ?? [];
+    final districts = ref.watch(districtsProvider).value ?? const <District>[];
+    final districtName = _districtNameFor(districts, _districtId);
     final addons = (asyncAddons.value ?? [])
         .where((a) => a.status.toLowerCase() == 'active')
         .toList();
-    final lines = _buildLines(addons);
+    final lines = _buildLines(addons, districtName);
     final total = lines.fold<double>(0, (s, l) => s + l.amount);
+    final dirty =
+        lines.isNotEmpty ||
+        _customerCtrl.text.isNotEmpty ||
+        _phoneCtrl.text.isNotEmpty;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: crm.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(Icons.calculate_rounded, color: crm.primary, size: 23),
+    final caption = lines.isEmpty
+        ? 'Quote total'
+        : 'Quote total · ${lines.length} item${lines.length == 1 ? '' : 's'}';
+    final VoidCallback? send = lines.isEmpty
+        ? null
+        : () => widget.onCreateInvoice(
+            _customerCtrl.text.trim(),
+            _phoneCtrl.text.trim(),
+            _districtId,
+            lines,
+          );
+
+    return _TabScaffold(
+      bottomBar: _TotalBar(
+        total: total,
+        caption: caption,
+        actionLabel: 'Create Invoice',
+        actionIcon: Icons.arrow_forward_rounded,
+        onPressed: send,
+      ),
+      sidePanel: _SummaryPanel(
+        title: 'Quote summary',
+        total: total,
+        caption: caption,
+        details: [
+          if (_customerCtrl.text.trim().isNotEmpty)
+            ('Customer', _customerCtrl.text.trim()),
+          if (_phoneCtrl.text.trim().isNotEmpty)
+            ('Phone', _phoneCtrl.text.trim()),
+          ('District', districtName ?? 'Standard price'),
+        ],
+        lines: lines,
+        emptyMessage: 'Pick a package or add-ons to see the breakdown.',
+        actionLabel: 'Create Invoice',
+        actionIcon: Icons.arrow_forward_rounded,
+        onPressed: send,
+      ),
+      builder: (wide) => [
+        Row(
+          children: [
+            const Expanded(
+              child: _TabHeader(
+                icon: Icons.calculate_rounded,
+                title: 'Quote',
+                subtitle:
+                    'Price a package for a customer, then send it to Invoice.',
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Quote Calculator',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
-                    const SizedBox(height: 2),
-                    Text('Build a quick price quote, then turn it into an invoice.',
-                        style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Customer (optional)
-          TextField(
-            controller: _customerCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Customer name (optional)',
-              prefixIcon: Icon(Icons.person_outline),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone (optional)',
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // District — package price varies by district.
-          DropdownButtonFormField<String>(
-            isExpanded: true,
-            initialValue: _districtId,
-            decoration: const InputDecoration(
-              labelText: 'District (for pricing)',
-              prefixIcon: Icon(Icons.location_on_outlined),
-            ),
-            items: [
-              const DropdownMenuItem(value: '', child: Text('Standard price')),
-              for (final d in districts)
-                DropdownMenuItem(value: d.id, child: Text(d.name)),
-            ],
-            onChanged: (id) => setState(() {
-              _districtId = (id == null || id.isEmpty) ? null : id;
-              _districtName = _districtId == null
-                  ? ''
-                  : (districts
-                          .where((d) => d.id == _districtId)
-                          .map((d) => d.name)
-                          .firstOrNull ??
-                      '');
-            }),
-          ),
-          const SizedBox(height: 12),
-
-          // Package (price shown reflects the selected district)
-          asyncPackages.when(
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => AppErrorView(
-              error: e,
-              compact: true,
-              onRetry: () => ref.invalidate(packagesProvider),
-            ),
-            data: (packages) => DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: _package?.id,
-              decoration: const InputDecoration(
-                labelText: 'Package',
-                prefixIcon: Icon(Icons.card_giftcard_outlined),
-              ),
-              items: [
-                for (final p in packages)
-                  DropdownMenuItem(
-                    value: p.id,
-                    child: Text(
-                        '${p.name}  ·  ₹${p.effectivePriceForDistrict(_districtId).toStringAsFixed(0)}',
-                        overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: (id) => setState(() =>
-                  _package = packages.where((p) => p.id == id).firstOrNull),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Quantity
-          Row(
-            children: [
-              Text('Quantity', style: TextStyle(color: crm.textSecondary)),
-              const Spacer(),
-              IconButton.outlined(
-                onPressed: _qty > 1 ? () => setState(() => _qty--) : null,
-                icon: const Icon(Icons.remove),
-              ),
+            if (dirty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text('$_qty',
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold)),
+                padding: const EdgeInsets.only(bottom: 16),
+                child: TextButton.icon(
+                  onPressed: _reset,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  label: const Text('Reset'),
+                ),
               ),
-              IconButton.filled(
-                onPressed: () => setState(() => _qty++),
-                icon: const Icon(Icons.add),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          ],
+        ),
 
-          // Add-ons
-          if (addons.isNotEmpty) ...[
-            Text('Add-ons',
-                style: TextStyle(
-                    color: crm.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14)),
-            const SizedBox(height: 8),
-            ...addons.map((a) {
-              final selected = _addonIds.contains(a.id);
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: () => setState(() {
-                    if (selected) {
-                      _addonIds.remove(a.id);
-                    } else {
-                      _addonIds.add(a.id);
-                    }
-                  }),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? crm.primary.withValues(alpha: 0.06)
-                          : crm.surface,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: selected ? crm.primary : crm.border,
-                        width: selected ? 1.5 : 1,
-                      ),
+        _Section(
+          title: 'Customer',
+          icon: Icons.person_outline_rounded,
+          child: _TwoUp(
+            TextField(
+              controller: _customerCtrl,
+              onChanged: (_) => setState(() {}),
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Name (optional)',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            TextField(
+              controller: _phoneCtrl,
+              onChanged: (_) => setState(() {}),
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone (optional)',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+          ),
+        ),
+
+        _Section(
+          title: 'Package',
+          icon: Icons.card_giftcard_outlined,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _TwoUp(
+                _DistrictField(
+                  districts: districts,
+                  value: _districtId,
+                  label: 'District (sets package price)',
+                  noneLabel: 'Standard price',
+                  onChanged: (id) => setState(() => _districtId = id),
+                ),
+                asyncPackages.when(
+                  loading: () => const LinearProgressIndicator(),
+                  error: (e, _) => AppErrorView(
+                    error: e,
+                    compact: true,
+                    onRetry: () => ref.invalidate(packagesProvider),
+                  ),
+                  data: (packages) => DropdownButtonFormField<String>(
+                    key: ValueKey('q-package-${_package?.id}'),
+                    isExpanded: true,
+                    initialValue: _package?.id,
+                    decoration: const InputDecoration(
+                      labelText: 'Package',
+                      prefixIcon: Icon(Icons.inventory_2_outlined),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 22,
-                          height: 22,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color:
-                                selected ? crm.primary : Colors.transparent,
-                            borderRadius: BorderRadius.circular(7),
-                            border: Border.all(
-                                color: selected ? crm.primary : crm.border,
-                                width: 1.5),
+                    items: [
+                      for (final p in packages)
+                        DropdownMenuItem(
+                          value: p.id,
+                          child: Text(
+                            '${p.name}  ·  ${_rupees(p.effectivePriceForDistrict(_districtId))}',
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          child: selected
-                              ? const Icon(Icons.check_rounded,
-                                  size: 15, color: Colors.white)
-                              : null,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(a.name,
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  color: crm.textPrimary)),
+                    ],
+                    onChanged: (id) => setState(
+                      () => _package = packages
+                          .where((p) => p.id == id)
+                          .firstOrNull,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Quantity',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: crm.textPrimary,
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Text('₹${a.price.toStringAsFixed(0)}',
+                        if (_package != null)
+                          Text(
+                            '${_rupees(_package!.effectivePriceForDistrict(_districtId))} each',
                             style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: selected
-                                    ? crm.primary
-                                    : crm.textSecondary)),
+                              fontSize: 12,
+                              color: crm.textSecondary,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-                ),
-              );
-            }),
-          ],
-          const SizedBox(height: 16),
-
-          // Total
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [crm.primary, const Color(0xFF3A101A)],
+                  _Stepper(
+                    value: _qty,
+                    onChanged: (v) => setState(() => _qty = v),
+                  ),
+                ],
               ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: crm.primary.withValues(alpha: 0.28),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
+            ],
+          ),
+        ),
+
+        if (addons.isNotEmpty)
+          _Section(
+            title: 'Add-ons',
+            icon: Icons.auto_awesome_outlined,
+            trailing: _addonIds.isEmpty
+                ? null
+                : Text(
+                    '${_addonIds.length} selected',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: crm.primary,
+                    ),
+                  ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Total amount',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.7))),
-                    const SizedBox(height: 2),
-                    Text('₹${total.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white)),
-                  ],
-                ),
-                const Spacer(),
-                Icon(Icons.receipt_long_rounded,
-                    color: Colors.white.withValues(alpha: 0.85), size: 28),
+                for (final a in addons)
+                  _AddonChip(
+                    label: a.name,
+                    price: a.price,
+                    selected: _addonIds.contains(a.id),
+                    onTap: () => setState(() {
+                      if (!_addonIds.remove(a.id)) _addonIds.add(a.id);
+                    }),
+                  ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
 
+        // On wide screens the breakdown lives in the side panel.
+        if (!wide)
+          _Section(
+            title: 'Breakdown',
+            icon: Icons.receipt_outlined,
+            child: lines.isEmpty
+                ? const _EmptyHint(
+                    icon: Icons.playlist_add_rounded,
+                    title: 'Nothing priced yet',
+                    message: 'Pick a package or add-ons to see the breakdown.',
+                  )
+                : _LineList(lines: lines, total: total),
+          ),
+      ],
+    );
+  }
+}
+
+class _Stepper extends StatelessWidget {
+  final int value;
+  final ValueChanged<int> onChanged;
+  const _Stepper({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.input,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: value > 1 ? () => onChanged(value - 1) : null,
+            icon: const Icon(Icons.remove_rounded, size: 18),
+          ),
           SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: lines.isEmpty
-                  ? null
-                  : () => widget.onCreateInvoice(
-                        _customerCtrl.text.trim(),
-                        _phoneCtrl.text.trim(),
-                        lines,
-                      ),
-              icon: const Icon(Icons.receipt_long_rounded),
-              label: const Text('Create Invoice from this Quote'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+            width: 32,
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: crm.textPrimary,
               ),
             ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            color: crm.primary,
+            onPressed: () => onChanged(value + 1),
+            icon: const Icon(Icons.add_rounded, size: 18),
           ),
         ],
       ),
@@ -445,18 +1159,202 @@ class _CalculatorTabState extends ConsumerState<_CalculatorTab> {
   }
 }
 
+class _AddonChip extends StatelessWidget {
+  final String label;
+  final double price;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AddonChip({
+    required this.label,
+    required this.price,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Material(
+      color: selected ? crm.primary : crm.input,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: selected ? crm.primary : crm.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.add_circle_outline_rounded,
+                size: 17,
+                color: selected ? _gold : crm.textSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: selected ? Colors.white : crm.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _rupees(price),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: selected
+                      ? Colors.white.withValues(alpha: 0.85)
+                      : crm.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Numbered line items with a total row. Optional edit/remove callbacks turn
+/// it into the editable list used by the Invoice tab.
+class _LineList extends StatelessWidget {
+  final List<SpotInvoiceLine> lines;
+  final double total;
+  final void Function(int index)? onEdit;
+  final void Function(int index)? onRemove;
+
+  const _LineList({
+    required this.lines,
+    required this.total,
+    this.onEdit,
+    this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < lines.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: crm.border),
+          InkWell(
+            onTap: onEdit == null ? null : () => onEdit!(i),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: onRemove == null ? 10 : 4,
+                horizontal: 2,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: crm.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        color: crm.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      lines[i].label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: crm.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _rupees(lines[i].amount),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary,
+                    ),
+                  ),
+                  if (onRemove != null)
+                    IconButton(
+                      tooltip: 'Remove',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: crm.destructive,
+                      ),
+                      onPressed: () => onRemove!(i),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: crm.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Text(
+                'Total',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: crm.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _rupees(total),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: crm.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
-//  Spot Invoice tab
+//  Invoice tab
 // ─────────────────────────────────────────────────────────────────────────
 class _SpotInvoiceTab extends ConsumerStatefulWidget {
   final String initialCustomer;
   final String initialPhone;
+  final String? initialDistrictId;
   final List<SpotInvoiceLine> initialLines;
 
   const _SpotInvoiceTab({
     super.key,
     this.initialCustomer = '',
     this.initialPhone = '',
+    this.initialDistrictId,
     this.initialLines = const [],
   });
 
@@ -465,12 +1363,15 @@ class _SpotInvoiceTab extends ConsumerStatefulWidget {
 }
 
 class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
-  late final TextEditingController _customerCtrl =
-      TextEditingController(text: widget.initialCustomer);
-  late final TextEditingController _phoneCtrl =
-      TextEditingController(text: widget.initialPhone);
+  late final TextEditingController _customerCtrl = TextEditingController(
+    text: widget.initialCustomer,
+  );
+  late final TextEditingController _phoneCtrl = TextEditingController(
+    text: widget.initialPhone,
+  );
   final _noteCtrl = TextEditingController();
   late final List<SpotInvoiceLine> _lines = [...widget.initialLines];
+  late String? _districtId = widget.initialDistrictId;
   bool _generating = false;
 
   @override
@@ -481,13 +1382,17 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     super.dispose();
   }
 
-  Future<void> _addLineDialog() async {
-    final labelCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    final added = await showDialog<bool>(
+  /// Add a custom line, or edit line [index] when given.
+  Future<void> _lineDialog({int? index}) async {
+    final existing = index == null ? null : _lines[index];
+    final labelCtrl = TextEditingController(text: existing?.label ?? '');
+    final amountCtrl = TextEditingController(
+      text: existing == null ? '' : existing.amount.toStringAsFixed(0),
+    );
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add line item'),
+        title: Text(existing == null ? 'Add line item' : 'Edit line item'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -499,18 +1404,22 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
             const SizedBox(height: 12),
             TextField(
               controller: amountCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
               decoration: const InputDecoration(labelText: 'Amount (₹)'),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Add')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(existing == null ? 'Add' : 'Save'),
+          ),
         ],
       ),
     );
@@ -518,13 +1427,20 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
     labelCtrl.dispose();
     amountCtrl.dispose();
-    if (added == true && label.isNotEmpty) {
-      setState(() => _lines.add(SpotInvoiceLine(label: label, amount: amount)));
-    }
+    if (ok != true || label.isEmpty) return;
+    final line = SpotInvoiceLine(label: label, amount: amount);
+    setState(() {
+      if (index == null) {
+        _lines.add(line);
+      } else {
+        _lines[index] = line;
+      }
+    });
   }
 
-  /// Pick an existing service package and add it as a line item (name + price).
-  Future<void> _addPackageDialog() async {
+  /// Pick an existing service package and add it as a line item. The price
+  /// follows the selected district, same as the Quote tab.
+  Future<void> _addPackageDialog(String? districtName) async {
     final List<ServicePackage> packages;
     try {
       packages = await ref.read(packagesProvider.future);
@@ -534,63 +1450,117 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     }
     if (!mounted) return;
     if (packages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No packages available')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No packages available')));
       return;
     }
+    final districtId = _districtId;
     final picked = await showModalBottomSheet<ServicePackage>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (ctx) {
         var q = '';
-        return StatefulBuilder(builder: (ctx, setSheet) {
-          final filtered = q.isEmpty
-              ? packages
-              : packages.where((p) => p.name.toLowerCase().contains(q.toLowerCase())).toList();
-          return Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(ctx).viewInsets.bottom),
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Add a package', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              TextField(
-                autofocus: true,
-                decoration: const InputDecoration(hintText: 'Search packages…', prefixIcon: Icon(Icons.search)),
-                onChanged: (v) => setSheet(() => q = v.trim()),
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            final crm = ctx.crmColors;
+            final filtered = q.isEmpty
+                ? packages
+                : packages
+                      .where(
+                        (p) => p.name.toLowerCase().contains(q.toLowerCase()),
+                      )
+                      .toList();
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                16 + MediaQuery.of(ctx).viewInsets.bottom,
               ),
-              const SizedBox(height: 8),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.45),
-                child: filtered.isEmpty
-                    ? const Padding(padding: EdgeInsets.all(24), child: Text('No matching packages.'))
-                    : ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final p in filtered)
-                            ListTile(
-                              title: Text(p.name),
-                              trailing: Text('₹${p.price.toStringAsFixed(0)}',
-                                  style: const TextStyle(fontWeight: FontWeight.w700)),
-                              onTap: () => Navigator.pop(ctx, p),
-                            ),
-                        ],
-                      ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Add a package',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    districtName == null
+                        ? 'Standard prices — pick a district for local pricing.'
+                        : 'Prices for $districtName',
+                    style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Search packages…',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (v) => setSheet(() => q = v.trim()),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+                    ),
+                    child: filtered.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Text('No matching packages.'),
+                          )
+                        : ListView(
+                            shrinkWrap: true,
+                            children: [
+                              for (final p in filtered)
+                                ListTile(
+                                  leading: Icon(
+                                    Icons.inventory_2_outlined,
+                                    color: crm.primary,
+                                  ),
+                                  title: Text(p.name),
+                                  trailing: Text(
+                                    _rupees(
+                                      p.effectivePriceForDistrict(districtId),
+                                    ),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  onTap: () => Navigator.pop(ctx, p),
+                                ),
+                            ],
+                          ),
+                  ),
+                ],
               ),
-            ]),
-          );
-        });
+            );
+          },
+        );
       },
     );
     if (picked != null) {
-      setState(() => _lines.add(SpotInvoiceLine(label: picked.name, amount: picked.price)));
+      final where = districtName != null ? ' · $districtName' : '';
+      setState(
+        () => _lines.add(
+          SpotInvoiceLine(
+            label: '${picked.name}$where',
+            amount: picked.effectivePriceForDistrict(districtId),
+          ),
+        ),
+      );
     }
   }
 
-  Future<void> _generate() async {
+  Future<void> _generate(String? districtName) async {
     if (_customerCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a customer name')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter a customer name')));
       return;
     }
     if (_lines.isEmpty) {
@@ -604,14 +1574,17 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
       final now = DateTime.now();
       final invoiceNo =
           'QT-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch % 100000}';
-      await printSpotInvoice(SpotInvoiceData(
-        invoiceNo: invoiceNo,
-        customerName: _customerCtrl.text.trim(),
-        customerPhone: _phoneCtrl.text.trim(),
-        lines: List.of(_lines),
-        date: now,
-        note: _noteCtrl.text.trim(),
-      ));
+      await printSpotInvoice(
+        SpotInvoiceData(
+          invoiceNo: invoiceNo,
+          customerName: _customerCtrl.text.trim(),
+          customerPhone: _phoneCtrl.text.trim(),
+          district: districtName ?? '',
+          lines: List.of(_lines),
+          date: now,
+          note: _noteCtrl.text.trim(),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         showErrorSnackBar(context, e);
@@ -624,229 +1597,197 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    final districts = ref.watch(districtsProvider).value ?? const <District>[];
+    final districtName = _districtNameFor(districts, _districtId);
     final total = _lines.fold<double>(0, (s, l) => s + l.amount);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final caption = _lines.isEmpty
+        ? 'Invoice total · no GST'
+        : 'Invoice total · ${_lines.length} item${_lines.length == 1 ? '' : 's'} · no GST';
+    final actionLabel = _generating ? 'Generating…' : 'Generate & Share';
+    final customer = _customerCtrl.text.trim();
+    final phone = _phoneCtrl.text.trim();
+
+    return _TabScaffold(
+      bottomBar: _TotalBar(
+        total: total,
+        caption: caption,
+        actionLabel: actionLabel,
+        actionIcon: Icons.ios_share_rounded,
+        busy: _generating,
+        onPressed: () => _generate(districtName),
+      ),
+      sidePanel: _SummaryPanel(
+        title: 'Invoice preview',
+        total: total,
+        caption: caption,
+        details: [
+          ('Billed to', customer.isEmpty ? '—' : customer),
+          if (phone.isNotEmpty) ('Phone', phone),
+          ('District', districtName ?? '—'),
+        ],
+        lines: _lines,
+        emptyMessage: 'Line items you add will appear here.',
+        actionLabel: actionLabel,
+        actionIcon: Icons.ios_share_rounded,
+        busy: _generating,
+        onPressed: () => _generate(districtName),
+        footer: Text(
+          'A shareable PDF quotation, no GST.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+        ),
+      ),
+      builder: (wide) => [
+        const _TabHeader(
+          icon: Icons.receipt_long_rounded,
+          title: 'Invoice',
+          subtitle:
+              'Generate a quotation and share it with the customer (no GST).',
+        ),
+
+        _Section(
+          title: 'Billed to',
+          icon: Icons.person_outline_rounded,
+          child: Column(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: crm.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(13),
+              _TwoUp(
+                TextField(
+                  controller: _customerCtrl,
+                  onChanged: (_) => setState(() {}),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Customer name *',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
                 ),
-                child: Icon(Icons.receipt_long_rounded, color: crm.primary, size: 23),
+                TextField(
+                  controller: _phoneCtrl,
+                  onChanged: (_) => setState(() {}),
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone (optional)',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Spot Invoice',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
-                    const SizedBox(height: 2),
-                    Text('Generate a quotation and share it with the customer (no GST).',
-                        style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
-                  ],
-                ),
+              const SizedBox(height: 12),
+              _DistrictField(
+                districts: districts,
+                value: _districtId,
+                label: 'District',
+                noneLabel: 'Select district',
+                onChanged: (id) => setState(() => _districtId = id),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _customerCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Customer name *',
-              prefixIcon: Icon(Icons.person_outline),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Phone (optional)',
-              prefixIcon: Icon(Icons.phone_outlined),
-            ),
-          ),
-          const SizedBox(height: 16),
+        ),
 
-          // Line items
-          Row(
+        _Section(
+          title: 'Line items',
+          icon: Icons.list_alt_rounded,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Line items',
-                  style: TextStyle(
-                      color: crm.textSecondary, fontWeight: FontWeight.w700)),
-              const Spacer(),
               TextButton.icon(
-                onPressed: _addPackageDialog,
-                icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                onPressed: () => _addPackageDialog(districtName),
+                icon: const Icon(Icons.inventory_2_outlined, size: 17),
                 label: const Text('Package'),
               ),
               TextButton.icon(
-                onPressed: _addLineDialog,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add'),
+                onPressed: () => _lineDialog(),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Custom'),
               ),
             ],
           ),
-          if (_lines.isEmpty)
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
-              decoration: BoxDecoration(
-                color: crm.input,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: crm.border),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.playlist_add_rounded,
-                      color: crm.textSecondary, size: 28),
-                  const SizedBox(height: 8),
-                  Text('No items yet',
+          child: _lines.isEmpty
+              ? const _EmptyHint(
+                  icon: Icons.playlist_add_rounded,
+                  title: 'No items yet',
+                  message:
+                      'Add a package or a custom line, or build one in the Quote tab.',
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _LineList(
+                      lines: _lines,
+                      total: total,
+                      onEdit: (i) => _lineDialog(index: i),
+                      onRemove: (i) => setState(() => _lines.removeAt(i)),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tap an item to edit it.',
                       style: TextStyle(
-                          fontWeight: FontWeight.w700, color: crm.textPrimary)),
-                  const SizedBox(height: 2),
-                  Text('Add a package or line, or build a quote in the Quote tab.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                ],
-              ),
-            )
-          else
-            ..._lines.asMap().entries.map((e) {
-              final i = e.key;
-              final l = e.value;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                decoration: BoxDecoration(
-                  color: crm.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: crm.border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                        fontSize: 11.5,
+                        color: crm.textSecondary,
+                      ),
                     ),
                   ],
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                        child: Text(l.label,
-                            style: const TextStyle(fontWeight: FontWeight.w600))),
-                    const SizedBox(width: 8),
-                    Text('₹${l.amount.toStringAsFixed(0)}',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w800, color: crm.textPrimary)),
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(Icons.close_rounded,
-                          size: 18, color: crm.destructive),
-                      onPressed: () => setState(() => _lines.removeAt(i)),
-                    ),
-                  ],
-                ),
-              );
-            }),
-          const SizedBox(height: 8),
+        ),
 
-          TextField(
+        _Section(
+          title: 'Note',
+          icon: Icons.notes_rounded,
+          child: TextField(
             controller: _noteCtrl,
-            maxLines: 2,
+            maxLines: 3,
+            minLines: 2,
             decoration: const InputDecoration(
-              labelText: 'Note (optional)',
-              prefixIcon: Icon(Icons.notes_outlined),
-              alignLabelWithHint: true,
+              hintText: 'Anything the customer should know (optional)',
             ),
           ),
-          const SizedBox(height: 16),
-
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [crm.primary, const Color(0xFF3A101A)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: crm.primary.withValues(alpha: 0.28),
-                  blurRadius: 16,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Total amount',
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withValues(alpha: 0.7))),
-                    const SizedBox(height: 2),
-                    Text('₹${total.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w900,
-                            color: Colors.white)),
-                  ],
-                ),
-                const Spacer(),
-                Icon(Icons.ios_share_rounded,
-                    color: Colors.white.withValues(alpha: 0.85), size: 26),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _generating ? null : _generate,
-              icon: _generating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.ios_share_rounded),
-              label: Text(_generating ? 'Generating…' : 'Generate & Share'),
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-// ─── Availability tab ─────────────────────────────────────────────────────
-// Read-only view of this month's morning/evening slot availability so a
+// ─────────────────────────────────────────────────────────────────────────
+//  Slots tab
+// ─────────────────────────────────────────────────────────────────────────
+// Read-only calendar of the month's morning/evening slot availability so a
 // salesperson can see which days still have room before promising a date.
-const _monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'];
+const _monthNames = [
+  '',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 const _weekdays = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _weekdaysLong = [
+  '',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+];
+
+enum _DayState { open, low, full, blocked }
+
+_DayState _stateOf(DaySlot d) {
+  if (d.blocked) return _DayState.blocked;
+  if (d.total.isFull) return _DayState.full;
+  if (d.total.capacity > 0 && d.total.available / d.total.capacity <= 0.25) {
+    return _DayState.low;
+  }
+  return _DayState.open;
+}
 
 class _AvailabilityTab extends ConsumerStatefulWidget {
   const _AvailabilityTab();
@@ -856,9 +1797,27 @@ class _AvailabilityTab extends ConsumerStatefulWidget {
 
 class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
   late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  int? _selectedDay;
 
-  void _shift(int delta) =>
-      setState(() => _month = DateTime(_month.year, _month.month + delta));
+  DateTime get _today {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  bool get _isCurrentMonth =>
+      _month.year == _today.year && _month.month == _today.month;
+
+  void _setMonth(DateTime m) => setState(() {
+    _month = DateTime(m.year, m.month);
+    _selectedDay = null;
+  });
+
+  Color _colorFor(_DayState s, CrmTheme crm) => switch (s) {
+    _DayState.open => crm.success,
+    _DayState.low => crm.warning,
+    _DayState.full => crm.destructive,
+    _DayState.blocked => crm.textSecondary,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -867,30 +1826,7 @@ class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
-          child: Row(
-            children: [
-              IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    final picked = await showMonthPicker(context, initial: _month);
-                    if (picked != null) setState(() => _month = DateTime(picked.year, picked.month));
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text('${_monthNames[_month.month]} ${_month.year}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                    const Icon(Icons.arrow_drop_down, size: 22),
-                  ]),
-                ),
-              ),
-              IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
-            ],
-          ),
-        ),
+        _monthBar(context),
         Expanded(
           child: async.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -898,249 +1834,628 @@ class _AvailabilityTabState extends ConsumerState<_AvailabilityTab> {
               error: e,
               onRetry: () => ref.invalidate(monthAvailabilityProvider(key)),
             ),
-            data: (m) => RefreshIndicator(
-              onRefresh: () async => ref.invalidate(monthAvailabilityProvider(key)),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                children: [
-                  _summary(context, m),
-                  const SizedBox(height: 14),
-                  for (final d in m.days) _dayRow(context, d),
-                ],
-              ),
-            ),
+            data: (m) {
+              final byDay = {for (final d in m.days) d.date.day: d};
+              final sel =
+                  _selectedDay ??
+                  (_isCurrentMonth ? _today.day : m.days.firstOrNull?.date.day);
+              final detail = sel != null && byDay[sel] != null
+                  ? _dayDetail(context, byDay[sel]!)
+                  : null;
+              return RefreshIndicator(
+                onRefresh: () async =>
+                    ref.invalidate(monthAvailabilityProvider(key)),
+                child: LayoutBuilder(
+                  builder: (context, c) {
+                    final wide = c.maxWidth >= _wideBreakpoint;
+                    final Widget body = wide
+                        // Calendar on the left; month summary + selected day
+                        // stay beside it on the right.
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: _calendar(context, byDay, sel)),
+                              const SizedBox(width: 20),
+                              SizedBox(
+                                width: _sidePanelWidth,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _summary(context, m),
+                                    const SizedBox(height: 14),
+                                    ?detail,
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _summary(context, m),
+                              const SizedBox(height: 14),
+                              _calendar(context, byDay, sel),
+                              const SizedBox(height: 14),
+                              ?detail,
+                            ],
+                          );
+                    return ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        wide ? 24 : 16,
+                        wide ? 20 : 4,
+                        wide ? 24 : 16,
+                        28,
+                      ),
+                      children: [
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _maxPageWidth,
+                            ),
+                            child: body,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              );
+            },
           ),
         ),
       ],
     );
   }
 
+  Widget _monthBar(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      color: crm.surface,
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _maxPageWidth),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Previous month',
+                onPressed: () =>
+                    _setMonth(DateTime(_month.year, _month.month - 1)),
+                icon: const Icon(Icons.chevron_left_rounded),
+              ),
+              Expanded(
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showMonthPicker(
+                      context,
+                      initial: _month,
+                    );
+                    if (picked != null) _setMonth(picked);
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.calendar_month_rounded,
+                          size: 18,
+                          color: crm.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_monthNames[_month.month]} ${_month.year}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_drop_down_rounded,
+                          size: 22,
+                          color: crm.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (!_isCurrentMonth)
+                TextButton(
+                  onPressed: () => _setMonth(_today),
+                  child: const Text('Today'),
+                ),
+              IconButton(
+                tooltip: 'Next month',
+                onPressed: () =>
+                    _setMonth(DateTime(_month.year, _month.month + 1)),
+                icon: const Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _summary(BuildContext context, MonthAvailability m) {
     final crm = context.crmColors;
-    const gold = Color(0xFFC9A66B);
     final pct = m.totalCapacity == 0
         ? 0.0
         : (m.totalBooked / m.totalCapacity).clamp(0.0, 1.0);
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [crm.primary, const Color(0xFF3A101A)],
+          colors: [crm.primary, _darkWine],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: crm.primary.withValues(alpha: 0.26),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: crm.primary.withValues(alpha: 0.24),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('${m.totalAvailable}',
-              style: const TextStyle(
-                  fontSize: 40, fontWeight: FontWeight.w900, color: Colors.white, height: 1)),
-          const SizedBox(height: 4),
-          Text('slots open in ${_monthNames[m.month]} ${m.year}',
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-          const SizedBox(height: 16),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _heroPill(Icons.event_busy_rounded, '${m.totalBooked}', 'Booked'),
+              Text(
+                '${m.totalAvailable}',
+                style: const TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  height: 1,
+                ),
+              ),
               const SizedBox(width: 8),
-              _heroPill(Icons.event_seat_rounded, '${m.totalCapacity}', 'Capacity'),
-              const SizedBox(width: 8),
-              _heroPill(Icons.today_rounded,
-                  '${m.defaultMorning + m.defaultEvening}', 'Per day'),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 3),
+                child: Text(
+                  'slots open',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              _heroStat('${m.totalBooked}', 'Booked'),
+              const SizedBox(width: 18),
+              _heroStat('${m.totalCapacity}', 'Capacity'),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
               value: pct,
               minHeight: 7,
               backgroundColor: Colors.white.withValues(alpha: 0.22),
-              valueColor: const AlwaysStoppedAnimation(gold),
+              valueColor: const AlwaysStoppedAnimation(_gold),
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            '${(pct * 100).round()}% booked  ·  ${m.defaultMorning} morning + ${m.defaultEvening} evening',
-            style: TextStyle(fontSize: 11.5, color: Colors.white.withValues(alpha: 0.62)),
+            '${(pct * 100).round()}% booked  ·  ${m.defaultMorning} morning + ${m.defaultEvening} evening per day',
+            style: TextStyle(
+              fontSize: 11.5,
+              color: Colors.white.withValues(alpha: 0.65),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _heroPill(IconData icon, String value, String label) {
-    const gold = Color(0xFFC9A66B);
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+  Widget _heroStat(String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: Colors.white,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 15, color: gold),
-            const SizedBox(height: 6),
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 10.5, color: Colors.white.withValues(alpha: 0.6))),
-          ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10.5,
+            color: Colors.white.withValues(alpha: 0.6),
+          ),
         ),
+      ],
+    );
+  }
+
+  Widget _calendar(
+    BuildContext context,
+    Map<int, DaySlot> byDay,
+    int? selected,
+  ) {
+    final crm = context.crmColors;
+    final first = DateTime(_month.year, _month.month, 1);
+    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
+    final leading = first.weekday - 1; // Monday-first grid
+    final cellCount = ((leading + daysInMonth + 6) ~/ 7) * 7;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              for (var w = 1; w <= 7; w++)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      _weekdays[w],
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: w >= 6 ? crm.primary : crm.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LayoutBuilder(
+            builder: (context, c) {
+              final wide = c.maxWidth >= 480;
+              final roomy = c.maxWidth >= 640;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: cellCount,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 7,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
+                  childAspectRatio: wide ? 1.15 : 0.82,
+                ),
+                itemBuilder: (context, i) {
+                  final day = i - leading + 1;
+                  if (day < 1 || day > daysInMonth) return const SizedBox();
+                  return _dayCell(
+                    context,
+                    day,
+                    byDay[day],
+                    day == selected,
+                    roomy: roomy,
+                  );
+                },
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            alignment: WrapAlignment.center,
+            children: [
+              _legend(crm.success, 'Open'),
+              _legend(crm.warning, 'Filling up'),
+              _legend(crm.destructive, 'Full'),
+              _legend(crm.textSecondary, 'Blocked'),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _dayRow(BuildContext context, DaySlot d) {
+  Widget _dayCell(
+    BuildContext context,
+    int day,
+    DaySlot? d,
+    bool selected, {
+    bool roomy = false,
+  }) {
     final crm = context.crmColors;
-    final today = DateTime.now();
-    final isPast = d.date.isBefore(DateTime(today.year, today.month, today.day));
-    final color = d.unavailable ? crm.destructive : crm.success;
-    final pct = d.total.capacity == 0
-        ? 0.0
-        : (d.total.booked / d.total.capacity).clamp(0.0, 1.0);
-    final label = d.blocked
-        ? 'BLOCKED'
-        : (d.total.isFull ? 'FULL' : '${d.total.available} of ${d.total.capacity} left');
+    final date = DateTime(_month.year, _month.month, day);
+    final isPast = date.isBefore(_today);
+    final isToday = date == _today;
+    final state = d == null ? null : _stateOf(d);
+    final color = state == null ? crm.textSecondary : _colorFor(state, crm);
+    final sub = d == null
+        ? ''
+        : switch (state!) {
+            _DayState.blocked => '—',
+            _DayState.full => 'Full',
+            _ => '${d.total.available}',
+          };
 
     return Opacity(
-      opacity: isPast ? 0.5 : 1,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: d.unavailable
-                  ? crm.destructive.withValues(alpha: 0.30)
-                  : crm.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+      opacity: isPast ? 0.45 : 1,
+      child: Material(
+        color: selected ? crm.primary : color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: d == null ? null : () => setState(() => _selectedDay = day),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: isToday && !selected
+                  ? Border.all(color: crm.primary, width: 1.5)
+                  : null,
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            // Date chip
-            Container(
-              width: 46,
-              height: 52,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('${d.date.day}',
-                      style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: color,
-                          height: 1)),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$day',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: selected ? Colors.white : crm.textPrimary,
+                    decoration: state == _DayState.blocked
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                ),
+                if (sub.isNotEmpty) ...[
                   const SizedBox(height: 2),
-                  Text(_weekdays[d.date.weekday],
-                      style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: color.withValues(alpha: 0.85))),
+                  Text(
+                    sub,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? _gold : color,
+                    ),
+                  ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                // Big desktop cells also show the morning / evening split.
+                if (roomy && d != null && !d.blocked) ...[
+                  const SizedBox(height: 4),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(9),
-                        ),
-                        child: Text(label,
-                            style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w800,
-                                color: color)),
+                      Icon(
+                        Icons.wb_sunny_rounded,
+                        size: 11,
+                        color: selected ? Colors.white70 : crm.textSecondary,
                       ),
-                      const Spacer(),
-                      if (d.isOverride)
-                        Tooltip(
-                          message: 'HR set a custom limit for this day',
-                          child: Icon(Icons.push_pin_rounded,
-                              size: 14, color: crm.textSecondary),
+                      Text(
+                        ' ${d.morning.available}  ',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: selected ? Colors.white70 : crm.textSecondary,
                         ),
+                      ),
+                      Icon(
+                        Icons.nightlight_round,
+                        size: 11,
+                        color: selected ? Colors.white70 : crm.textSecondary,
+                      ),
+                      Text(
+                        ' ${d.evening.available}',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: selected ? Colors.white70 : crm.textSecondary,
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 9),
-                  if (d.blocked)
-                    Text('Blocked by HR — no bookings',
-                        style: TextStyle(fontSize: 11.5, color: crm.destructive))
-                  else ...[
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: LinearProgressIndicator(
-                        value: pct,
-                        minHeight: 6,
-                        backgroundColor: color.withValues(alpha: 0.12),
-                        valueColor: AlwaysStoppedAnimation(color),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _amPm(Icons.wb_sunny_rounded, 'Morning',
-                            d.morning.booked, d.morning.capacity, crm.textSecondary),
-                        const SizedBox(width: 16),
-                        _amPm(Icons.nightlight_round, 'Evening',
-                            d.evening.booked, d.evening.capacity, crm.textSecondary),
-                      ],
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _amPm(
-      IconData icon, String label, int booked, int capacity, Color c) {
+  Widget _legend(Color c, String label) {
+    final crm = context.crmColors;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: c),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: c),
+          ),
+        ),
         const SizedBox(width: 5),
-        Text('$label $booked/$capacity',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: c)),
+        Text(label, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
       ],
+    );
+  }
+
+  Widget _dayDetail(BuildContext context, DaySlot d) {
+    final crm = context.crmColors;
+    final state = _stateOf(d);
+    final color = _colorFor(state, crm);
+    final status = switch (state) {
+      _DayState.blocked => 'Blocked',
+      _DayState.full => 'Fully booked',
+      _ => '${d.total.available} of ${d.total.capacity} left',
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _weekdaysLong[d.date.weekday],
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                    ),
+                    Text(
+                      '${d.date.day} ${_monthNames[d.date.month]} ${d.date.year}',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: crm.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (d.isOverride) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(
+                  Icons.push_pin_rounded,
+                  size: 14,
+                  color: crm.textSecondary,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'HR set a custom limit for this day',
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 14),
+          if (d.blocked)
+            Text(
+              'Blocked by HR — no bookings on this day.',
+              style: TextStyle(fontSize: 13, color: crm.destructive),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: _halfTile(
+                    context,
+                    Icons.wb_sunny_rounded,
+                    'Morning',
+                    d.morning,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _halfTile(
+                    context,
+                    Icons.nightlight_round,
+                    'Evening',
+                    d.evening,
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _halfTile(
+    BuildContext context,
+    IconData icon,
+    String label,
+    SlotHalf h,
+  ) {
+    final crm = context.crmColors;
+    final color = h.isFull ? crm.destructive : crm.success;
+    final pct = h.capacity == 0 ? 0.0 : (h.booked / h.capacity).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crm.input,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: crm.textSecondary),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: crm.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            h.isFull ? 'Full' : '${h.available} open',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 5,
+              backgroundColor: color.withValues(alpha: 0.12),
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${h.booked}/${h.capacity} booked',
+            style: TextStyle(fontSize: 11, color: crm.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }

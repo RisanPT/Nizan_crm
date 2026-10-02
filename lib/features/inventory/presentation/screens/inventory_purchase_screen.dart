@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
-import 'package:nizan_crm/features/inventory/data/inventory_product.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/data/vendor.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
@@ -81,12 +80,16 @@ class _InventoryPurchaseScreenState
   double get _grandTotal => _total + _gstAmount;
 
   void _addOrIncrement(PurchaseItem item) {
-    final idx = _items.indexWhere((e) =>
-        (item.productId.isNotEmpty && e.productId == item.productId) ||
-        (item.barcode.isNotEmpty && e.barcode == item.barcode));
+    final idx = _items.indexWhere(
+      (e) =>
+          (item.productId.isNotEmpty && e.productId == item.productId) ||
+          (item.barcode.isNotEmpty && e.barcode == item.barcode),
+    );
     setState(() {
       if (idx >= 0) {
-        _items[idx] = _items[idx].copyWith(quantity: _items[idx].quantity + item.quantity);
+        _items[idx] = _items[idx].copyWith(
+          quantity: _items[idx].quantity + item.quantity,
+        );
       } else {
         _items.add(item);
       }
@@ -99,19 +102,23 @@ class _InventoryPurchaseScreenState
     _barcodeCtrl.clear();
     setState(() => _looking = true);
     try {
-      final found = await ref.read(inventoryServiceProvider).lookupBarcode(code);
+      final found = await ref
+          .read(inventoryServiceProvider)
+          .lookupBarcode(code);
       if (!mounted) return;
       if (found != null) {
-        _addOrIncrement(PurchaseItem(
-          productId: found.id,
-          name: found.name,
-          brand: found.brand,
-          shade: found.shade,
-          barcode: code,
-          category: found.category,
-          quantity: 1,
-          unitCost: found.price,
-        ));
+        _addOrIncrement(
+          PurchaseItem(
+            productId: found.id,
+            name: found.name,
+            brand: found.brand,
+            shade: found.shade,
+            barcode: code,
+            category: found.category,
+            quantity: 1,
+            unitCost: found.price,
+          ),
+        );
       } else {
         // Unknown barcode → enrich from public product databases (Open Beauty
         // Facts / UPCitemdb), then open a prefilled line.
@@ -155,18 +162,20 @@ class _InventoryPurchaseScreenState
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       builder: (ctx) => SafeArea(
-        child: Wrap(children: [
-          ListTile(
-            leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take a photo'),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
-          ),
-          ListTile(
-            leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-          ),
-        ]),
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
       ),
     );
     if (source == null) return;
@@ -175,8 +184,11 @@ class _InventoryPurchaseScreenState
       img = await _picker.pickImage(source: source, imageQuality: 70);
     } catch (e) {
       if (mounted) {
-        showErrorSnackBar(context, e,
-            fallback: 'Could not open the camera / gallery. Please try again.');
+        showErrorSnackBar(
+          context,
+          e,
+          fallback: 'Could not open the camera / gallery. Please try again.',
+        );
       }
       return;
     }
@@ -202,7 +214,9 @@ class _InventoryPurchaseScreenState
     if (_items.isEmpty) return;
     setState(() => _saving = true);
     try {
-      await ref.read(inventoryServiceProvider).createPurchase(
+      await ref
+          .read(inventoryServiceProvider)
+          .createPurchase(
             supplier: _vendor?.name ?? _supplierCtrl.text.trim(),
             vendorId: _vendor?.id ?? '',
             invoiceNo: _invoiceCtrl.text.trim(),
@@ -241,62 +255,64 @@ class _InventoryPurchaseScreenState
     final vendors = ref.watch(vendorsProvider).value ?? const <Vendor>[];
     return Scaffold(
       appBar: AppBar(title: const Text('New Purchase')),
-      body: LayoutBuilder(builder: (context, box) {
-        final wide = box.maxWidth >= 980;
-        final pairs = box.maxWidth >= 600;
-        final sections = <Widget>[
-          _vendorSection(crm, vendors, pairs),
-          16.h,
-          _itemsSection(crm),
-          16.h,
-          invPair(!pairs, _taxSection(crm), _paymentSection(crm)),
-          16.h,
-          _notesSection(crm),
-        ];
+      body: LayoutBuilder(
+        builder: (context, box) {
+          final wide = box.maxWidth >= 980;
+          final pairs = box.maxWidth >= 600;
+          final sections = <Widget>[
+            _vendorSection(crm, vendors, pairs),
+            16.h,
+            _itemsSection(crm),
+            16.h,
+            invPair(!pairs, _taxSection(crm), _paymentSection(crm)),
+            16.h,
+            _notesSection(crm),
+          ];
 
-        if (wide) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1320),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(24, 20, 16, 24),
-                      children: sections,
+          if (wide) {
+            return Align(
+              alignment: Alignment.topCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1320),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 16, 24),
+                        children: sections,
+                      ),
                     ),
-                  ),
-                  SizedBox(
-                    width: 360,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(0, 20, 24, 24),
-                      child: _summaryCard(crm, showSave: true),
+                    SizedBox(
+                      width: 360,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(0, 20, 24, 24),
+                        child: _summaryCard(crm, showSave: true),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                  children: [
+                    ...sections,
+                    16.h,
+                    _summaryCard(crm, showSave: false),
+                  ],
+                ),
+              ),
+              _footer(crm),
+            ],
           );
-        }
-
-        return Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-                children: [
-                  ...sections,
-                  16.h,
-                  _summaryCard(crm, showSave: false),
-                ],
-              ),
-            ),
-            _footer(crm),
-          ],
-        );
-      }),
+        },
+      ),
     );
   }
 
@@ -331,17 +347,23 @@ class _InventoryPurchaseScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: invCardTitle(crm)),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: invCardTitle(crm),
+                    ),
                     if (subtitle != null) ...[
                       2.h,
-                      Text(subtitle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 11.5, color: crm.textSecondary)),
+                      Text(
+                        subtitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: crm.textSecondary,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -360,7 +382,11 @@ class _InventoryPurchaseScreenState
     if (!pairs) return Column(children: [a, 12.h, b]);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [Expanded(child: a), 12.w, Expanded(child: b)],
+      children: [
+        Expanded(child: a),
+        12.w,
+        Expanded(child: b),
+      ],
     );
   }
 
@@ -430,13 +456,17 @@ class _InventoryPurchaseScreenState
                     prefixIcon: Icon(Icons.storefront_outlined),
                   ),
                   hint: Text(
-                      vendors.isEmpty ? 'No vendors — tap +' : 'Select vendor'),
+                    vendors.isEmpty ? 'No vendors — tap +' : 'Select vendor',
+                  ),
                   items: [
                     for (final v in vendors)
                       DropdownMenuItem(
                         value: v,
-                        child: Text(v.name,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          v.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
                   onChanged: (v) => setState(() {
@@ -515,7 +545,8 @@ class _InventoryPurchaseScreenState
           ? null
           : invBadge(
               '${_items.length} item${_items.length == 1 ? '' : 's'} · $_units unit${_units == 1 ? '' : 's'}',
-              crm.primary),
+              crm.primary,
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -534,10 +565,10 @@ class _InventoryPurchaseScreenState
                         ? const Padding(
                             padding: EdgeInsets.all(12),
                             child: SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2)),
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
                           )
                         : IconButton(
                             icon: const Icon(Icons.arrow_forward),
@@ -578,19 +609,28 @@ class _InventoryPurchaseScreenState
               ),
               child: Column(
                 children: [
-                  Icon(Icons.qr_code_scanner,
-                      size: 42, color: crm.textSecondary.withValues(alpha: 0.4)),
+                  Icon(
+                    Icons.qr_code_scanner,
+                    size: 42,
+                    color: crm.textSecondary.withValues(alpha: 0.4),
+                  ),
                   10.h,
-                  Text('Scan a product to start',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: crm.textSecondary)),
+                  Text(
+                    'Scan a product to start',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: crm.textSecondary,
+                    ),
+                  ),
                   4.h,
-                  Text('Items you add appear here with quantity and cost.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                          fontSize: 11.5,
-                          color: crm.textSecondary.withValues(alpha: 0.75))),
+                  Text(
+                    'Items you add appear here with quantity and cost.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: crm.textSecondary.withValues(alpha: 0.75),
+                    ),
+                  ),
                 ],
               ),
             )
@@ -608,21 +648,23 @@ class _InventoryPurchaseScreenState
     final it = _items[i];
     if (stockIn == it.stockIn) return;
     if (!stockIn) {
-      setState(() => _items[i] = PurchaseItem(
-            productId: '',
-            name: it.name,
-            brand: it.brand,
-            shade: it.shade,
-            barcode: it.barcode,
-            category: it.category,
-            quantity: it.quantity,
-            unitCost: it.unitCost,
-            stockIn: false,
-            expiry: it.expiry,
-          ));
+      setState(
+        () => _items[i] = PurchaseItem(
+          productId: '',
+          name: it.name,
+          brand: it.brand,
+          shade: it.shade,
+          barcode: it.barcode,
+          category: it.category,
+          quantity: it.quantity,
+          unitCost: it.unitCost,
+          stockIn: false,
+          expiry: it.expiry,
+        ),
+      );
       return;
     }
-    if (InventoryProduct.categories.contains(it.category)) {
+    if (inventoryCategoryOptions(ref).contains(it.category)) {
       setState(() => _items[i] = it.copyWith(stockIn: true));
       return;
     }
@@ -638,14 +680,11 @@ class _InventoryPurchaseScreenState
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.fromLTRB(12, 12, 6, 10),
       decoration: BoxDecoration(
-        color: it.stockIn
-            ? crm.surface
-            : crm.accent.withValues(alpha: 0.04),
+        color: it.stockIn ? crm.surface : crm.accent.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: it.stockIn
-                ? crm.border
-                : crm.accent.withValues(alpha: 0.3)),
+          color: it.stockIn ? crm.border : crm.accent.withValues(alpha: 0.3),
+        ),
       ),
       child: Column(
         children: [
@@ -655,8 +694,9 @@ class _InventoryPurchaseScreenState
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                    color: cat.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(11)),
+                  color: cat.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
                 child: Icon(productIcon(it.category), color: cat, size: 20),
               ),
               12.w,
@@ -665,36 +705,42 @@ class _InventoryPurchaseScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        it.shade.isNotEmpty && it.shade != '—'
-                            ? '${it.name} · ${it.shade}'
-                            : it.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
+                      it.shade.isNotEmpty && it.shade != '—'
+                          ? '${it.name} · ${it.shade}'
+                          : it.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     2.h,
                     Text(
-                        [
-                          if (it.brand.isNotEmpty) it.brand,
-                          it.category,
-                          if (it.barcode.isNotEmpty) it.barcode,
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 11.5, color: crm.textSecondary)),
+                      [
+                        if (it.brand.isNotEmpty) it.brand,
+                        it.category,
+                        if (it.barcode.isNotEmpty) it.barcode,
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: crm.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              if (!it.stockIn) ...[
-                6.w,
-                invBadge('EXPENSE', crm.accent),
-              ],
+              if (!it.stockIn) ...[6.w, invBadge('EXPENSE', crm.accent)],
               IconButton(
                 tooltip: 'Edit item',
                 visualDensity: VisualDensity.compact,
-                icon: Icon(Icons.edit_outlined,
-                    size: 18, color: crm.textSecondary),
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 18,
+                  color: crm.textSecondary,
+                ),
                 onPressed: () async {
                   final edited = await _lineDialog(existing: it);
                   if (edited != null) setState(() => _items[i] = edited);
@@ -724,20 +770,30 @@ class _InventoryPurchaseScreenState
                     children: [
                       _qtyBtn(crm, Icons.remove, () {
                         if (it.quantity > 1) {
-                          setState(() => _items[i] =
-                              it.copyWith(quantity: it.quantity - 1));
+                          setState(
+                            () => _items[i] = it.copyWith(
+                              quantity: it.quantity - 1,
+                            ),
+                          );
                         }
                       }),
                       ConstrainedBox(
                         constraints: const BoxConstraints(minWidth: 34),
-                        child: Text('${it.quantity}',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 15, fontWeight: FontWeight.w800)),
+                        child: Text(
+                          '${it.quantity}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                       _qtyBtn(crm, Icons.add, () {
-                        setState(() => _items[i] =
-                            it.copyWith(quantity: it.quantity + 1));
+                        setState(
+                          () => _items[i] = it.copyWith(
+                            quantity: it.quantity + 1,
+                          ),
+                        );
                       }),
                     ],
                   ),
@@ -753,7 +809,9 @@ class _InventoryPurchaseScreenState
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
+                        horizontal: 10,
+                        vertical: 7,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: crm.border),
@@ -763,19 +821,24 @@ class _InventoryPurchaseScreenState
                         children: [
                           Flexible(
                             child: Text(
-                                it.stockIn
-                                    ? '${fmtINR(it.unitCost)} / unit'
-                                    : fmtINR(it.unitCost),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: crm.textPrimary)),
+                              it.stockIn
+                                  ? '${fmtINR(it.unitCost)} / unit'
+                                  : fmtINR(it.unitCost),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: crm.textPrimary,
+                              ),
+                            ),
                           ),
                           4.w,
-                          Icon(Icons.edit_outlined,
-                              size: 13, color: crm.textSecondary),
+                          Icon(
+                            Icons.edit_outlined,
+                            size: 13,
+                            color: crm.textSecondary,
+                          ),
                         ],
                       ),
                     ),
@@ -786,12 +849,17 @@ class _InventoryPurchaseScreenState
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Subtotal',
-                        style: TextStyle(
-                            fontSize: 10, color: crm.textSecondary)),
-                    Text(fmtINR(it.subtotal),
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800)),
+                    Text(
+                      'Subtotal',
+                      style: TextStyle(fontSize: 10, color: crm.textSecondary),
+                    ),
+                    Text(
+                      fmtINR(it.subtotal),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -812,15 +880,17 @@ class _InventoryPurchaseScreenState
               6.w,
               Expanded(
                 child: Text(
-                    it.stockIn
-                        ? 'Adds to stock'
-                        : 'Expense only — ledgered, not stocked',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: it.stockIn ? crm.success : crm.accent)),
+                  it.stockIn
+                      ? 'Adds to stock'
+                      : 'Expense only — ledgered, not stocked',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: it.stockIn ? crm.success : crm.accent,
+                  ),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.only(right: 6),
@@ -864,8 +934,10 @@ class _InventoryPurchaseScreenState
         onChanged: (v) => setState(() => _gstEnabled = v),
       ),
       child: !_gstEnabled
-          ? Text('Turn on if this is a GST tax invoice.',
-              style: TextStyle(fontSize: 12.5, color: crm.textSecondary))
+          ? Text(
+              'Turn on if this is a GST tax invoice.',
+              style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -878,11 +950,14 @@ class _InventoryPurchaseScreenState
                   ),
                 ),
                 12.h,
-                Text('GST rate',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: crm.textSecondary)),
+                Text(
+                  'GST rate',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: crm.textSecondary,
+                  ),
+                ),
                 6.h,
                 Wrap(
                   spacing: 6,
@@ -898,11 +973,14 @@ class _InventoryPurchaseScreenState
                   ],
                 ),
                 12.h,
-                Text('Supply type',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: crm.textSecondary)),
+                Text(
+                  'Supply type',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: crm.textSecondary,
+                  ),
+                ),
                 6.h,
                 Wrap(
                   spacing: 6,
@@ -936,16 +1014,22 @@ class _InventoryPurchaseScreenState
                     runSpacing: 4,
                     children: [
                       Text(
-                          _interState
-                              ? 'IGST ${_pct(_gstRate)}  ${fmtINR(_gstAmount)}'
-                              : 'CGST ${_pct(_gstRate / 2)} ${fmtINR(_gstAmount / 2)} · SGST ${_pct(_gstRate / 2)} ${fmtINR(_gstAmount / 2)}',
-                          style: TextStyle(
-                              fontSize: 12, color: crm.textSecondary)),
-                      Text('GST ${fmtINR(_gstAmount)}',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
+                        _interState
+                            ? 'IGST ${_pct(_gstRate)}  ${fmtINR(_gstAmount)}'
+                            : 'CGST ${_pct(_gstRate / 2)} ${fmtINR(_gstAmount / 2)} · SGST ${_pct(_gstRate / 2)} ${fmtINR(_gstAmount / 2)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: crm.textSecondary,
+                        ),
+                      ),
+                      Text(
+                        'GST ${fmtINR(_gstAmount)}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: crm.textPrimary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -957,10 +1041,16 @@ class _InventoryPurchaseScreenState
   // ── 4. Payment ────────────────────────────────────────────────────────────
 
   Widget _paymentSection(CrmTheme crm) {
-    final overdue = !_paid &&
+    final overdue =
+        !_paid &&
         _dueDate != null &&
-        _dueDate!.isBefore(DateTime(
-            DateTime.now().year, DateTime.now().month, DateTime.now().day));
+        _dueDate!.isBefore(
+          DateTime(
+            DateTime.now().year,
+            DateTime.now().month,
+            DateTime.now().day,
+          ),
+        );
     return _section(
       crm,
       icon: Icons.payments_outlined,
@@ -973,21 +1063,25 @@ class _InventoryPurchaseScreenState
           Row(
             children: [
               Expanded(
-                child: _payOption(crm,
-                    selected: !_paid,
-                    icon: Icons.schedule_rounded,
-                    label: 'Not Paid',
-                    color: crm.warning,
-                    onTap: () => setState(() => _paid = false)),
+                child: _payOption(
+                  crm,
+                  selected: !_paid,
+                  icon: Icons.schedule_rounded,
+                  label: 'Not Paid',
+                  color: crm.warning,
+                  onTap: () => setState(() => _paid = false),
+                ),
               ),
               10.w,
               Expanded(
-                child: _payOption(crm,
-                    selected: _paid,
-                    icon: Icons.check_circle_outline_rounded,
-                    label: 'Paid',
-                    color: crm.success,
-                    onTap: () => setState(() => _paid = true)),
+                child: _payOption(
+                  crm,
+                  selected: _paid,
+                  icon: Icons.check_circle_outline_rounded,
+                  label: 'Paid',
+                  color: crm.success,
+                  onTap: () => setState(() => _paid = true),
+                ),
               ),
             ],
           ),
@@ -1005,12 +1099,16 @@ class _InventoryPurchaseScreenState
           ),
           if (overdue) ...[
             6.h,
-            Text('Due date is in the past — this bill will show as overdue.',
-                style: TextStyle(fontSize: 11.5, color: crm.destructive)),
+            Text(
+              'Due date is in the past — this bill will show as overdue.',
+              style: TextStyle(fontSize: 11.5, color: crm.destructive),
+            ),
           ],
           8.h,
-          Text('Partial payments can be recorded from the Purchases list.',
-              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          Text(
+            'Partial payments can be recorded from the Purchases list.',
+            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+          ),
         ],
       ),
     );
@@ -1034,23 +1132,28 @@ class _InventoryPurchaseScreenState
           color: selected ? color.withValues(alpha: 0.1) : crm.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: selected ? color.withValues(alpha: 0.6) : crm.border,
-              width: selected ? 1.5 : 1),
+            color: selected ? color.withValues(alpha: 0.6) : crm.border,
+            width: selected ? 1.5 : 1,
+          ),
         ),
         child: Row(
           children: [
             Icon(icon, size: 18, color: selected ? color : crm.textSecondary),
             8.w,
             Expanded(
-              child: Text(label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      color: selected ? color : crm.textPrimary)),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? color : crm.textPrimary,
+                ),
+              ),
             ),
-            if (selected) Icon(Icons.radio_button_checked, size: 16, color: color),
+            if (selected)
+              Icon(Icons.radio_button_checked, size: 16, color: color),
           ],
         ),
       ),
@@ -1097,42 +1200,54 @@ class _InventoryPurchaseScreenState
           if (_billImage != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.network(_billImage!,
-                  width: 52,
-                  height: 52,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) =>
-                      Icon(Icons.receipt_long, color: crm.textSecondary)),
+              child: Image.network(
+                _billImage!,
+                width: 52,
+                height: 52,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) =>
+                    Icon(Icons.receipt_long, color: crm.textSecondary),
+              ),
             )
           else
             Container(
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                  color: crm.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: crm.border)),
-              child: Icon(Icons.receipt_long_outlined,
-                  color: crm.textSecondary),
+                color: crm.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: crm.border),
+              ),
+              child: Icon(
+                Icons.receipt_long_outlined,
+                color: crm.textSecondary,
+              ),
             ),
           12.w,
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_billImage != null ? 'Bill attached' : 'Attach bill / invoice',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13.5)),
+                Text(
+                  _billImage != null
+                      ? 'Bill attached'
+                      : 'Attach bill / invoice',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.5,
+                  ),
+                ),
                 2.h,
                 Text(
-                    _billImage != null
-                        ? 'Photo saved with this purchase'
-                        : 'Photo of the supplier tax invoice',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                  _billImage != null
+                      ? 'Photo saved with this purchase'
+                      : 'Photo of the supplier tax invoice',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                ),
               ],
             ),
           ),
@@ -1140,9 +1255,10 @@ class _InventoryPurchaseScreenState
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 12),
               child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             )
           else ...[
             if (_billImage != null)
@@ -1165,36 +1281,46 @@ class _InventoryPurchaseScreenState
   // ── Summary ───────────────────────────────────────────────────────────────
 
   Widget _summaryCard(CrmTheme crm, {required bool showSave}) {
-    final stockValue =
-        _items.where((i) => i.stockIn).fold<double>(0, (a, i) => a + i.subtotal);
+    final stockValue = _items
+        .where((i) => i.stockIn)
+        .fold<double>(0, (a, i) => a + i.subtotal);
     final expenseValue = _total - stockValue;
     final paidAmt = _paid ? _grandTotal : 0.0;
     final balance = _grandTotal - paidAmt;
 
-    Widget row(String label, String value,
-            {Color? color, bool strong = false, bool muted = false}) =>
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        fontSize: muted ? 12 : 13,
-                        color: crm.textSecondary)),
+    Widget row(
+      String label,
+      String value, {
+      Color? color,
+      bool strong = false,
+      bool muted = false,
+    }) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: muted ? 12 : 13,
+                color: crm.textSecondary,
               ),
-              8.w,
-              Text(value,
-                  style: TextStyle(
-                      fontSize: strong ? 14 : (muted ? 12 : 13),
-                      fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-                      color: color ??
-                          (muted ? crm.textSecondary : crm.textPrimary))),
-            ],
+            ),
           ),
-        );
+          8.w,
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: strong ? 14 : (muted ? 12 : 13),
+              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+              color: color ?? (muted ? crm.textSecondary : crm.textPrimary),
+            ),
+          ),
+        ],
+      ),
+    );
 
     return InvCard(
       child: Column(
@@ -1216,22 +1342,27 @@ class _InventoryPurchaseScreenState
               ),
               child: Row(
                 children: [
-                  Icon(Icons.storefront_outlined,
-                      size: 16, color: crm.textSecondary),
+                  Icon(
+                    Icons.storefront_outlined,
+                    size: 16,
+                    color: crm.textSecondary,
+                  ),
                   8.w,
                   Expanded(
                     child: Text(
-                        [
-                          _vendor?.name ?? 'No vendor',
-                          if (_invoiceCtrl.text.trim().isNotEmpty)
-                            '#${_invoiceCtrl.text.trim()}',
-                        ].join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: crm.textPrimary)),
+                      [
+                        _vendor?.name ?? 'No vendor',
+                        if (_invoiceCtrl.text.trim().isNotEmpty)
+                          '#${_invoiceCtrl.text.trim()}',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: crm.textPrimary,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -1263,22 +1394,28 @@ class _InventoryPurchaseScreenState
             ),
             child: Row(
               children: [
-                Text('GRAND TOTAL',
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: crm.textSecondary)),
+                Text(
+                  'GRAND TOTAL',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: crm.textSecondary,
+                  ),
+                ),
                 8.w,
                 Expanded(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
-                    child: Text(fmtINR(_grandTotal),
-                        style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: crm.primary)),
+                    child: Text(
+                      fmtINR(_grandTotal),
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: crm.primary,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -1286,23 +1423,24 @@ class _InventoryPurchaseScreenState
           ),
           8.h,
           row('Paid', fmtINR(paidAmt), color: crm.success),
-          row('Balance', fmtINR(balance),
-              strong: true,
-              color: balance > 0.01 ? crm.warning : crm.success),
+          row(
+            'Balance',
+            fmtINR(balance),
+            strong: true,
+            color: balance > 0.01 ? crm.warning : crm.success,
+          ),
           if (_dueDate != null)
             row('Due', DateFormat('d MMM yyyy').format(_dueDate!), muted: true),
           if (showSave) ...[
             16.h,
-            SizedBox(
-              width: double.infinity,
-              child: _saveButton(),
-            ),
+            SizedBox(width: double.infinity, child: _saveButton()),
             8.h,
             Text(
-                _items.isEmpty
-                    ? 'Add at least one item to save.'
-                    : 'Saving adds stock-in items to inventory.',
-                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+              _items.isEmpty
+                  ? 'Add at least one item to save.'
+                  : 'Saving adds stock-in items to inventory.',
+              style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+            ),
           ],
         ],
       ),
@@ -1321,7 +1459,10 @@ class _InventoryPurchaseScreenState
               width: 18,
               height: 18,
               child: CircularProgressIndicator(
-                  strokeWidth: 2.5, color: Colors.white))
+                strokeWidth: 2.5,
+                color: Colors.white,
+              ),
+            )
           : const Icon(Icons.check_rounded, size: 18),
       label: const Text('Save Purchase'),
     );
@@ -1330,7 +1471,11 @@ class _InventoryPurchaseScreenState
   Widget _footer(CrmTheme crm) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, 12 + MediaQuery.of(context).padding.bottom),
+        16,
+        12,
+        16,
+        12 + MediaQuery.of(context).padding.bottom,
+      ),
       decoration: BoxDecoration(
         color: crm.surface,
         border: Border(top: BorderSide(color: crm.border)),
@@ -1343,16 +1488,21 @@ class _InventoryPurchaseScreenState
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                    '${_items.length} items · $_units units${_gstEnabled ? ' · incl. GST' : ''}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                  '${_items.length} items · $_units units${_gstEnabled ? ' · incl. GST' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                ),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(fmtINR(_grandTotal),
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w800)),
+                  child: Text(
+                    fmtINR(_grandTotal),
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1374,22 +1524,31 @@ class _InventoryPurchaseScreenState
     bool fromExternal = false,
     bool lookupTried = false,
   }) {
-    final nameCtrl =
-        TextEditingController(text: existing?.name ?? initialName ?? '');
-    final brandCtrl =
-        TextEditingController(text: existing?.brand ?? initialBrand ?? '');
+    final nameCtrl = TextEditingController(
+      text: existing?.name ?? initialName ?? '',
+    );
+    final brandCtrl = TextEditingController(
+      text: existing?.brand ?? initialBrand ?? '',
+    );
     final shadeCtrl = TextEditingController(text: existing?.shade ?? '');
-    final qtyCtrl =
-        TextEditingController(text: '${existing?.quantity ?? 1}');
+    final qtyCtrl = TextEditingController(text: '${existing?.quantity ?? 1}');
     final costCtrl = TextEditingController(
-        text: existing != null && existing.unitCost > 0
-            ? existing.unitCost.toStringAsFixed(0)
-            : '');
+      text: existing != null && existing.unitCost > 0
+          ? existing.unitCost.toStringAsFixed(0)
+          : '',
+    );
     var stockIn = existing?.stockIn ?? true;
+    // A stock-in line keeps its own category (built-in, custom or legacy);
+    // an expense line's free-text category only seeds 'Prep' if the user
+    // switches it to stock-in.
     var category = existing?.category ?? 'Prep';
-    if (!InventoryProduct.categories.contains(category)) category = 'Prep';
+    if (existing?.stockIn != true &&
+        !inventoryCategoryOptions(ref).contains(category)) {
+      category = 'Prep';
+    }
     final catCtrl = TextEditingController(
-        text: (existing != null && !existing.stockIn) ? existing.category : '');
+      text: (existing != null && !existing.stockIn) ? existing.category : '',
+    );
     final code = barcode ?? existing?.barcode ?? '';
 
     return showDialog<PurchaseItem>(
@@ -1407,139 +1566,183 @@ class _InventoryPurchaseScreenState
                   if (code.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(children: [
-                        const Icon(Icons.qr_code_2_outlined, size: 16),
-                        const SizedBox(width: 6),
-                        Text('Barcode: $code',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.qr_code_2_outlined, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Barcode: $code',
                             style: const TextStyle(
-                                fontSize: 12.5, fontWeight: FontWeight.w600)),
-                      ]),
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   if (fromExternal)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(children: [
-                        Icon(Icons.cloud_done_outlined,
-                            size: 14, color: ctx.crmColors.primary),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cloud_done_outlined,
+                            size: 14,
+                            color: ctx.crmColors.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
                               'Auto-filled from public product database — review the details.',
                               style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: ctx.crmColors.primary)),
-                        ),
-                      ]),
+                                fontSize: 11.5,
+                                color: ctx.crmColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   if (lookupTried && !fromExternal && code.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(children: [
-                        Icon(Icons.search_off_outlined,
-                            size: 14, color: ctx.crmColors.textSecondary),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.search_off_outlined,
+                            size: 14,
+                            color: ctx.crmColors.textSecondary,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
                               'No public data for this barcode — enter the details (it will be saved for next time).',
                               style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: ctx.crmColors.textSecondary)),
-                        ),
-                      ]),
+                                fontSize: 11.5,
+                                color: ctx.crmColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   TextField(
-                      controller: nameCtrl,
-                      decoration:
-                          const InputDecoration(labelText: 'Product *')),
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Product *'),
+                  ),
                   const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(
+                  Row(
+                    children: [
+                      Expanded(
                         child: TextField(
-                            controller: brandCtrl,
-                            decoration:
-                                const InputDecoration(labelText: 'Brand'))),
-                    const SizedBox(width: 12),
-                    Expanded(
+                          controller: brandCtrl,
+                          decoration: const InputDecoration(labelText: 'Brand'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: TextField(
-                            controller: shadeCtrl,
-                            decoration:
-                                const InputDecoration(labelText: 'Shade'))),
-                  ]),
+                          controller: shadeCtrl,
+                          decoration: const InputDecoration(labelText: 'Shade'),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     value: stockIn,
                     onChanged: (v) => setLocal(() => stockIn = v),
-                    title: const Text('Adds to stock',
-                        style: TextStyle(fontSize: 14)),
+                    title: const Text(
+                      'Adds to stock',
+                      style: TextStyle(fontSize: 14),
+                    ),
                     subtitle: Text(
-                        stockIn
-                            ? 'Creates / restocks an inventory product'
-                            : 'Expense-only — ledgered, not stocked',
-                        style: const TextStyle(fontSize: 11.5)),
+                      stockIn
+                          ? 'Creates / restocks an inventory product'
+                          : 'Expense-only — ledgered, not stocked',
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
                   ),
                   const SizedBox(height: 8),
-                  Row(children: [
-                    SizedBox(
-                      width: 90,
-                      child: TextField(
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
                           controller: qtyCtrl,
                           keyboardType: TextInputType.number,
                           onChanged: (_) => setLocal(() {}),
-                          decoration:
-                              const InputDecoration(labelText: 'Qty')),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
+                          decoration: const InputDecoration(labelText: 'Qty'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
                           controller: costCtrl,
                           keyboardType: TextInputType.number,
                           onChanged: (_) => setLocal(() {}),
                           decoration: InputDecoration(
-                              labelText:
-                                  stockIn ? 'Unit cost (₹)' : 'Amount (₹)')),
-                    ),
-                  ]),
+                            labelText: stockIn ? 'Unit cost (₹)' : 'Amount (₹)',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 10),
-                  Builder(builder: (context) {
-                    final crm = context.crmColors;
-                    final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
-                    final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
-                    return Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: crm.primary.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: crm.primary.withValues(alpha: 0.18)),
-                      ),
-                      child: Row(
-                        children: [
-                          Text('$qty × ${fmtINR(cost)}',
+                  Builder(
+                    builder: (context) {
+                      final crm = context.crmColors;
+                      final qty = int.tryParse(qtyCtrl.text.trim()) ?? 0;
+                      final cost = double.tryParse(costCtrl.text.trim()) ?? 0;
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: crm.primary.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: crm.primary.withValues(alpha: 0.18),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Text(
+                              '$qty × ${fmtINR(cost)}',
                               style: TextStyle(
-                                  fontSize: 13, color: crm.textSecondary)),
-                          const Spacer(),
-                          Text('Total  ${fmtINR(qty * cost)}',
+                                fontSize: 13,
+                                color: crm.textSecondary,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              'Total  ${fmtINR(qty * cost)}',
                               style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                  color: crm.primary)),
-                        ],
-                      ),
-                    );
-                  }),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: crm.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 12),
                   if (stockIn)
                     DropdownButtonFormField<String>(
                       initialValue: category,
                       isExpanded: true,
-                      decoration:
-                          const InputDecoration(labelText: 'Category'),
+                      decoration: const InputDecoration(labelText: 'Category'),
                       items: [
-                        for (final c in InventoryProduct.categories)
+                        for (final c in inventoryCategoryOptions(
+                          ref,
+                          include: category,
+                        ))
                           DropdownMenuItem(value: c, child: Text(c)),
                       ],
                       onChanged: (v) =>
@@ -1549,7 +1752,8 @@ class _InventoryPurchaseScreenState
                     TextField(
                       controller: catCtrl,
                       decoration: const InputDecoration(
-                          labelText: 'Category (e.g. Software, Rent)'),
+                        labelText: 'Category (e.g. Software, Rent)',
+                      ),
                     ),
                 ],
               ),
@@ -1557,8 +1761,9 @@ class _InventoryPurchaseScreenState
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (nameCtrl.text.trim().isEmpty) return;
@@ -1573,8 +1778,8 @@ class _InventoryPurchaseScreenState
                     category: stockIn
                         ? category
                         : (catCtrl.text.trim().isEmpty
-                            ? 'Other'
-                            : catCtrl.text.trim()),
+                              ? 'Other'
+                              : catCtrl.text.trim()),
                     quantity: int.tryParse(qtyCtrl.text.trim()) ?? 1,
                     unitCost: double.tryParse(costCtrl.text.trim()) ?? 0,
                     stockIn: stockIn,

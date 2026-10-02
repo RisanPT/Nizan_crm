@@ -16,7 +16,14 @@ class NotificationToast {
   static const _cardHeight = 92.0;
   static const _gap = 10.0;
   static const _maxVisible = 4;
-  static const _lifetime = Duration(seconds: 6);
+  // Always auto-closes within 5s. [_hardLimit] can't be paused — a resting
+  // mouse cursor over the toast used to pause it forever (hover-pause only
+  // resumed on mouse exit).
+  static const _lifetime = Duration(seconds: 5);
+  static const _hardLimit = Duration(seconds: 5);
+  // Each toast's dismiss callback, so a toast dropped by the stack cap also
+  // cancels its timers.
+  static final Map<OverlayEntry, VoidCallback> _dismissers = {};
 
   static void show(
     BuildContext context, {
@@ -31,9 +38,12 @@ class NotificationToast {
 
     late OverlayEntry entry;
     Timer? timer;
+    Timer? hardTimer;
 
     void dismiss() {
       timer?.cancel();
+      hardTimer?.cancel();
+      _dismissers.remove(entry);
       if (!_active.remove(entry)) return;
       if (entry.mounted) entry.remove();
       onDismissed?.call();
@@ -44,9 +54,23 @@ class NotificationToast {
     }
 
     // Cap the stack — drop the oldest if we're overflowing.
+    bool overflowed = false;
     while (_active.length >= _maxVisible) {
-      final oldest = _active.removeAt(0);
-      if (oldest.mounted) oldest.remove();
+      final oldest = _active.first;
+      final close = _dismissers[oldest];
+      if (close != null) {
+        close(); // cancels its timers + closes its native twin
+      } else {
+        _active.removeAt(0);
+        if (oldest.mounted) oldest.remove();
+      }
+      overflowed = true;
+    }
+    // Re-slot the remaining toasts so they slide up to make room.
+    if (overflowed) {
+      for (final e in _active) {
+        if (e.mounted) e.markNeedsBuild();
+      }
     }
 
     entry = OverlayEntry(
@@ -59,23 +83,84 @@ class NotificationToast {
           topOffset: _gap + slot * (_cardHeight + _gap),
           // Tapping the card opens the linked screen (if any) and closes it.
           onTap: () {
+            // Already closed (e.g. ✕ closes on pointer-down, and the same
+            // click's release then reaches this card) → don't open the link.
+            if (!_active.contains(entry)) return;
             dismiss();
             onTap?.call();
           },
           // The ✕ and a sideways swipe only close it.
           onClose: dismiss,
-          // Hovering (desktop) pauses the auto-close so it can be read.
+          // Hovering (desktop) pauses the 5s auto-close so it can be read;
+          // leaving restarts a short countdown. The hard limit still applies.
           onHover: (hovering) {
             timer?.cancel();
-            if (!hovering) timer = Timer(_lifetime, dismiss);
+            if (!hovering) timer = Timer(const Duration(seconds: 2), dismiss);
           },
         );
       },
     );
 
     _active.add(entry);
+    _dismissers[entry] = dismiss;
     overlay.insert(entry);
     timer = Timer(_lifetime, dismiss);
+    hardTimer = Timer(_hardLimit, dismiss);
+  }
+
+  /// Close every toast currently on screen.
+  static void dismissAll() {
+    for (final close in _dismissers.values.toList()) {
+      close();
+    }
+  }
+}
+
+class _CloseButton extends StatefulWidget {
+  const _CloseButton({required this.color, required this.onClose});
+  final Color color;
+  final VoidCallback onClose;
+
+  @override
+  State<_CloseButton> createState() => _CloseButtonState();
+}
+
+class _CloseButtonState extends State<_CloseButton> {
+  bool _hover = false;
+  bool _closed = false;
+
+  void _close() {
+    if (_closed) return; // pointer-down + any later tap must not double-fire
+    _closed = true;
+    widget.onClose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Close',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => _close(),
+          child: Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _hover
+                  ? widget.color.withValues(alpha: 0.12)
+                  : Colors.transparent,
+            ),
+            child: Icon(Icons.close_rounded, size: 18, color: widget.color),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -227,22 +312,14 @@ class _ToastCardState extends State<_ToastCard>
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Real close button: closes WITHOUT following the link.
-                          // As the innermost tap target it wins the gesture arena
-                          // over the card's InkWell.
-                          SizedBox(
-                            width: 30,
-                            height: 30,
-                            child: IconButton(
-                              tooltip: 'Close',
-                              padding: EdgeInsets.zero,
-                              iconSize: 18,
-                              onPressed: widget.onClose,
-                              icon: Icon(
-                                Icons.close_rounded,
-                                color: crm.textSecondary,
-                              ),
-                            ),
+                          // Close button: closes WITHOUT following the link.
+                          // A raw Listener fires on pointer-down, before the
+                          // gesture arena — so the card's InkWell / the swipe
+                          // detector can never swallow the click (which is why
+                          // the old IconButton sometimes did nothing).
+                          _CloseButton(
+                            color: crm.textSecondary,
+                            onClose: widget.onClose,
                           ),
                         ],
                       ),

@@ -306,6 +306,44 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/inventory/vendors',
                     onTap: () => context.go('/inventory/vendors'),
                   ),
+                  // Extra pages ticked for this role in Roles & Permissions.
+                  // Only when the role has configured permissions — a dual-role
+                  // artist in the inventory workspace keeps the plain menu.
+                  if (access.granted.isNotEmpty) ...[
+                    if (access.canSeeCalendar)
+                      _SidebarItem(
+                        icon: Icons.calendar_month,
+                        title: 'Calendar',
+                        isCollapsed: isCollapsed,
+                        isSelected: currentPath == '/calendar',
+                        onTap: () => context.go('/calendar'),
+                      ),
+                    if (access.canSeeClients)
+                      _SidebarItem(
+                        icon: Icons.people_outline,
+                        title: 'Clients',
+                        isCollapsed: isCollapsed,
+                        isSelected: currentPath.startsWith('/client'),
+                        onTap: () => context.go('/clients'),
+                      ),
+                    if (access.canSeeBookings)
+                      _SidebarItem(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Booking',
+                        isCollapsed: isCollapsed,
+                        isSelected: currentPath.startsWith('/booking'),
+                        onTap: () => context.go('/booking/requests'),
+                      ),
+                    if (access.canSeeTrials)
+                      _SidebarItem(
+                        icon: Icons.event_available_outlined,
+                        title: 'Trials',
+                        isCollapsed: isCollapsed,
+                        isSelected: currentPath == '/trials' ||
+                            currentPath.startsWith('/trials/'),
+                        onTap: () => context.go('/trials'),
+                      ),
+                  ],
                 ] else if (role == AppRole.driver) ...[
                   // ── DRIVER VIEW ───────────────────────────────────────────
                   _SidebarItem(
@@ -590,6 +628,17 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/sales/cancelled',
                             onTap: () => context.go('/sales/cancelled'),
+                          ),
+                        ),
+                      if (access.canSeeSub('sales.booking_map'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.travel_explore_rounded,
+                            title: 'Booking Map',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/booking-map',
+                            onTap: () => context.go('/sales/booking-map'),
                           ),
                         ),
                       // Same YoY Sales Calendar the Marketing team has.
@@ -1147,6 +1196,17 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/inventory/purchases',
                             onTap: () => context.go('/inventory/purchases'),
+                          ),
+                        ),
+                      if (access.canSeeSub('inventory.vendors'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.storefront_outlined,
+                            title: 'Vendors',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/inventory/vendors',
+                            onTap: () => context.go('/inventory/vendors'),
                           ),
                         ),
                     ],
