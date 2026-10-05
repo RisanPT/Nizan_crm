@@ -109,7 +109,8 @@ class Sidebar extends ConsumerWidget {
         currentPath.startsWith('/accounts') || currentPath == '/finance';
     final isInventoryRoute = currentPath.startsWith('/inventory');
     final isFinanceRoute = currentPath.startsWith('/company-finance') ||
-        currentPath == '/reports/analyst';
+        currentPath == '/reports/analyst' ||
+        currentPath == '/finance-head';
     final isItRoute = currentPath.startsWith('/it/') || currentPath.startsWith('/helpdesk');
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isContentRoute = currentPath.startsWith('/marketing/content');
@@ -774,6 +775,17 @@ class Sidebar extends ConsumerWidget {
                           !financeExpanded || financeUserCollapsed),
                     ),
                     if (!isCollapsed && effectiveFinanceExpanded) ...[
+                      if (access.canSeeFinanceHeadDashboard)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.space_dashboard_outlined,
+                            title: 'Finance Head',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/finance-head',
+                            onTap: () => context.go('/finance-head'),
+                          ),
+                        ),
                       // Monthly Financial-Analyst report (Sales + CR + receivables).
                       if (access.canSeeCEOReport)
                         Padding(

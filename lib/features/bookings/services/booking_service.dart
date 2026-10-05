@@ -95,9 +95,14 @@ class BookingService {
     }
   }
 
-  Future<Booking> createBooking(Booking booking) async {
+  /// [allowDuplicate] skips the server's same-number/same-date duplicate
+  /// check, after the user confirmed they really want a second booking.
+  Future<Booking> createBooking(Booking booking, {bool allowDuplicate = false}) async {
     try {
-      final response = await _dio.post('/bookings', data: booking.toJson());
+      final response = await _dio.post('/bookings', data: {
+        ...booking.toJson(),
+        if (allowDuplicate) 'allowDuplicate': true,
+      });
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'create booking');

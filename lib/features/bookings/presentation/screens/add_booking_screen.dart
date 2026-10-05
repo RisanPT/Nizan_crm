@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -757,7 +758,46 @@ class AddBookingScreen extends HookConsumerWidget {
           // avoid double-counting.
           addons: isSingleMode ? addons.value : const <BookingAddon>[],
         );
-        await ref.read(bookingProvider.notifier).addBooking(booking);
+        try {
+          await ref.read(bookingProvider.notifier).addBooking(booking);
+        } catch (error) {
+          // The server refuses a second active booking for the same number on
+          // the same date (usually the same booking saved twice). Only create
+          // it if the user explicitly confirms.
+          final cause = error is AppException ? error.cause : error;
+          final data = cause is DioException ? cause.response?.data : null;
+          if (cause is! DioException ||
+              cause.response?.statusCode != 409 ||
+              data is! Map ||
+              data['duplicateBookingId'] == null) {
+            rethrow;
+          }
+          if (!context.mounted) return;
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Possible Duplicate Booking'),
+              content: Text(
+                '${data['message'] ?? 'A booking for this number on the same date already exists.'}\n\n'
+                'Create another booking anyway?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Create Anyway'),
+                ),
+              ],
+            ),
+          );
+          if (proceed != true) return;
+          await ref
+              .read(bookingProvider.notifier)
+              .addBooking(booking, allowDuplicate: true);
+        }
 
         if (!context.mounted) return;
 

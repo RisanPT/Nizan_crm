@@ -127,6 +127,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/gst_screen.dart'
 import 'package:nizan_crm/features/finance/presentation/screens/gstr3b_summary_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/tds_summary_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/tax_filings_screen.dart';
+import 'package:nizan_crm/features/finance/presentation/screens/finance_head_dashboard_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/lead_details_screen.dart';
 import 'package:nizan_crm/features/notifications/presentation/screens/notifications_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_dashboard.dart';
@@ -292,6 +293,8 @@ bool isRouteAllowed(String path, Access access,
   if (path.startsWith('/projects')) return access.canSeePlanning; // company-wide projects (department-scoped server-side)
   if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
   if (path.startsWith('/backup')) return true; // screen self-scopes; backend enforces per-target access
+  // Checked before '/finance', which it would otherwise match as a prefix.
+  if (path.startsWith('/finance-head')) return access.canSeeFinanceHeadDashboard;
   if (path.startsWith('/company-finance')) {
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canSeeCompanyFinance;
@@ -1153,6 +1156,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/backup',
             builder: (context, state) => const BackupScreen(),
+          ),
+          GoRoute(
+            path: '/finance-head',
+            builder: (context, state) => const FinanceHeadDashboardScreen(),
           ),
           GoRoute(
             path: '/company-finance',

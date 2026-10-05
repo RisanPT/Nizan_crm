@@ -24,10 +24,15 @@ class Access {
   /// team, granting the Artist Head dashboard on top of their artist role.
   final bool artistHead;
 
+  /// The raw role key (e.g. 'finance_head'), for the few screens that belong
+  /// to one specific role rather than to an [AppRole] group.
+  final String roleKey;
+
   const Access(this.role, this.granted,
       {this.configuredHomeRoute = '',
       this.isDepartmentHead = false,
-      this.artistHead = false});
+      this.artistHead = false,
+      this.roleKey = ''});
 
   factory Access.of(AuthSession? session) {
     final role = AppRole.fromString(session?.role);
@@ -42,6 +47,7 @@ class Access {
       configuredHomeRoute: session?.homeRoute ?? '',
       isDepartmentHead: (session?.isDepartmentHead ?? false) || isManager,
       artistHead: session?.artistHead ?? false,
+      roleKey: session?.role.trim().toLowerCase() ?? '',
     );
   }
 
@@ -136,6 +142,10 @@ class Access {
   bool get canSeeCompanyReports =>
       isFullAccess || has('company_reports', role.canSeeCompanyReports);
   bool get canSeePayables => has('payables', role.canSeePayables);
+
+  /// Finance Head dashboard — the finance_head role, or full-access management.
+  bool get canSeeFinanceHeadDashboard =>
+      isFullAccess || roleKey == 'finance_head';
 
   /// The Administrative Expenses screen. Accounts/Admin reach it through the
   /// normal payables permission; any department head also reaches it to SUBMIT

@@ -160,8 +160,8 @@ class Lead {
       'eventType': eventType,
       'alternateNumber': alternateNumber,
       'leadDate': leadDate.toIso8601String(),
-      'enquiryDate': enquiryDate.toIso8601String(),
-      if (bookedDate != null) 'bookedDate': bookedDate?.toIso8601String(),
+      'enquiryDate': enquiryDate.toUtc().toIso8601String(),
+      if (bookedDate != null) 'bookedDate': bookedDate?.toUtc().toIso8601String(),
       // UTC instant (…Z) so the server stores the correct moment; fromJson does
       // the inverse .toLocal(). A naive local string would shift on read-back.
       if (followUpDate != null) 'followUpDate': followUpDate?.toUtc().toIso8601String(),

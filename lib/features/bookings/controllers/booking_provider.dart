@@ -266,11 +266,12 @@ class BookingNotifier extends _$BookingNotifier {
     return [for (final booking in bookings) updatedById[booking.id] ?? booking];
   }
 
-  Future<Booking> addBooking(Booking booking) async {
+  Future<Booking> addBooking(Booking booking, {bool allowDuplicate = false}) async {
     final service = ref.read(bookingServiceProvider);
 
     try {
-      final createdBooking = await service.createBooking(booking);
+      final createdBooking =
+          await service.createBooking(booking, allowDuplicate: allowDuplicate);
       if (ref.mounted) {
         state = AsyncData([...state.value ?? [], createdBooking]);
         _refreshDependents();

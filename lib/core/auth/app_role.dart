@@ -36,6 +36,9 @@ enum AppRole {
       case 'accounts':
       case 'accounts_manager':
       case 'accounts_executive':
+      // Finance Head works with the accounts team's matrix (verify rights,
+      // company finance, payables); its own dashboard is gated by role key.
+      case 'finance_head':
         return AppRole.accounts;
       case 'fleet_manager':
       case 'fleetmanager':

@@ -1162,8 +1162,8 @@ class _LeadForm extends HookConsumerWidget {
           'leadType': leadTypeCtrl.text,
           'eventType': eventType.value,
           'alternateNumber': normalizePhone(alternateCtrl.text),
-          'enquiryDate': enquiryDate.value.toIso8601String(),
-          'bookedDate': bookedDate.value?.toIso8601String(),
+          'enquiryDate': enquiryDate.value.toUtc().toIso8601String(),
+          'bookedDate': bookedDate.value?.toUtc().toIso8601String(),
           // Send the follow-up as a UTC instant (…Z). The picker gives a LOCAL
           // DateTime; plain toIso8601String() drops the zone, so the UTC server
           // misreads it as UTC and every later display is shifted by the local
@@ -2933,8 +2933,8 @@ class _RecordOutcomeDialog extends HookConsumerWidget {
           'leadType': lead.leadType,
           'eventType': lead.eventType,
           'alternateNumber': lead.alternateNumber,
-          'enquiryDate': lead.enquiryDate.toIso8601String(),
-          'bookedDate': lead.bookedDate?.toIso8601String(),
+          'enquiryDate': lead.enquiryDate.toUtc().toIso8601String(),
+          'bookedDate': lead.bookedDate?.toUtc().toIso8601String(),
           // Send the follow-up as a UTC instant (…Z). The picker gives a LOCAL
           // DateTime; plain toIso8601String() drops the zone, so the UTC server
           // misreads it as UTC and every later display is shifted by the local
