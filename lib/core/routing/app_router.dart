@@ -142,6 +142,7 @@ import 'package:nizan_crm/features/fleet/presentation/screens/fleet_service_remi
 import '../../features/trials/presentation/screens/trials_screen.dart';
 import '../../features/trials/presentation/screens/trials_calendar_screen.dart';
 import '../../features/trials/presentation/screens/manage_trial_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_targets_screen.dart';
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -170,6 +171,7 @@ String? subKeyForPath(String path) {
   if (path == '/sales/quarterly') return 'sales.quarterly';
   if (path == '/sales/cancelled') return 'sales.cancelled';
   if (path == '/sales/booking-map') return 'sales.booking_map';
+  if (path == '/sales/targets') return 'sales.targets';
   if (path == '/sales') return 'sales.invoices';
   // Accounts (payables)
   if (path == '/accounts/dashboard') return 'payables.dashboard';
@@ -505,6 +507,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Cancelled Works';
           } else if (state.uri.path == '/sales/booking-map') {
             title = 'Booking Map';
+          } else if (state.uri.path == '/sales/targets') {
+            title = 'Sales Targets';
           } else if (state.uri.path == '/sales/calendar') {
             title = 'Sales Calendar';
           } else if (state.uri.path == '/reports/analyst') {
@@ -839,6 +843,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/sales/booking-map',
             builder: (context, state) => const BookingMapScreen(),
           ),
+          GoRoute(
+            path: '/sales/targets',
+            builder: (context, state) => const SalesTargetsScreen(),
+          ),
           // Same Sales Calendar the Marketing team uses, mounted for Sales too.
           GoRoute(
             path: '/sales/calendar',
@@ -858,7 +866,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/sales/leads',
-            builder: (context, state) => const SalesWorkspaceScreen(),
+            // ?tab=leads|calendar|quote|slots|invoice opens that workspace tab.
+            builder: (context, state) =>
+                SalesWorkspaceScreen(initialTab: state.uri.queryParameters['tab']),
           ),
           GoRoute(
             path: '/sales/leads/:id',

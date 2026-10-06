@@ -60,6 +60,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('sales.quarterly', 'Quarterly Performance'),
     AppSubFeature('sales.cancelled', 'Cancelled Works'),
   AppSubFeature('sales.booking_map', 'Booking Map'),
+    AppSubFeature('sales.targets', 'Sales Targets'),
   ]),
   AppFeature('finance', 'Artist Finance', 'Artist collections and expenses',
       Icons.account_balance_wallet_outlined),

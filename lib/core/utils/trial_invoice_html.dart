@@ -99,6 +99,7 @@ String buildTrialInvoiceHtml(Trial trial, {DateTime? generatedAt}) {
   <div class="meta">
     <div><div class="k">Invoice No.</div><div class="v">${_esc(invNo)}</div></div>
     <div><div class="k">Trial Date</div><div class="v">${_date(trial.trialDate)}</div></div>
+    ${trial.createdAt == null ? '' : '<div><div class="k">Booked On</div><div class="v">${_date(trial.createdAt!)}</div></div>'}
     <div><div class="k">Status</div><div class="v">$status</div></div>
   </div>
 

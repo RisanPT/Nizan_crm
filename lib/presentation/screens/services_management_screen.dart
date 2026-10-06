@@ -18,6 +18,7 @@ import '../../services/state_service.dart';
 import '../../services/region_service.dart';
 import '../../services/district_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/presentation/widgets/package_order_dialog.dart';
 
 class ServicesManagementScreen extends HookConsumerWidget {
   const ServicesManagementScreen({super.key});
@@ -131,6 +132,12 @@ class ServicesManagementScreen extends HookConsumerWidget {
                     label: const Text('Geographics'),
                   ),
                   16.w,
+                  OutlinedButton.icon(
+                    onPressed: () => showPackageOrderDialog(context, ref),
+                    icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                    label: const Text('Arrange order'),
+                  ),
+                  16.w,
                   ElevatedButton.icon(
                     onPressed: () => context.go('/services/add'),
                     icon: const Icon(Icons.add, size: 18),
@@ -173,6 +180,12 @@ class ServicesManagementScreen extends HookConsumerWidget {
                 ),
               ),
             ],
+          ),
+          10.h,
+          OutlinedButton.icon(
+            onPressed: () => showPackageOrderDialog(context, ref),
+            icon: const Icon(Icons.swap_vert_rounded, size: 18),
+            label: const Text('Arrange package order'),
           ),
         ],
         Card(

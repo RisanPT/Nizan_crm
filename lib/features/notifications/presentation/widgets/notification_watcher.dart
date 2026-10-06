@@ -145,6 +145,10 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
         return Icons.receipt_long_rounded;
       case 'month_end_summary':
         return Icons.summarize_rounded;
+      case 'sales_target_midmonth':
+        return Icons.flag_rounded;
+      case 'sales_target_team_midmonth':
+        return Icons.groups_rounded;
       case 'booking_created':
         return Icons.event_available_rounded;
       case 'new_lead':

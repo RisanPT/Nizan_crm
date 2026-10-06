@@ -119,6 +119,7 @@ Future<void> printTrialInvoice(Trial trial) async {
             children: [
               metaCell('Invoice No.', invNo),
               metaCell('Trial Date', date(trial.trialDate)),
+              if (trial.createdAt != null) metaCell('Booked On', date(trial.createdAt!)),
               metaCell('Status', status),
             ],
           ),

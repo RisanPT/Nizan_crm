@@ -400,6 +400,10 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.gavel_outlined, Color(0xFF7C3AED));
     case 'booking_created':
       return const _TypeMeta(Icons.event_available_outlined, Color(0xFF0D9488));
+    case 'sales_target_midmonth':
+      return const _TypeMeta(Icons.flag_outlined, Color(0xFF7C3AED));
+    case 'sales_target_team_midmonth':
+      return const _TypeMeta(Icons.groups_outlined, Color(0xFF7C3AED));
     // Company Reports
     case 'report_uploaded':
       return const _TypeMeta(Icons.folder_shared_outlined, Color(0xFF7C3AED));

@@ -396,7 +396,7 @@ String _buildSingleBookingHtml(
       <div class="card">
         <div class="label">Booking ID</div>
         <div class="value">${_escape(booking.displayBookingNumber)}</div>
-        <p class="muted">Status: ${_escape(statusLabel)}</p>
+        <p class="muted">Status: ${_escape(statusLabel)}${booking.createdAt == null ? '' : ' • Booked ${_formatDate(booking.createdAt!)}'}</p>
       </div>
     </div>
 
@@ -738,6 +738,10 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
         <span class="meta-label">DATE</span>
         <span class="meta-val">$invoiceDateStr</span>
       </div>
+      ${booking.createdAt == null ? '' : '''<div class="inv-meta-cell">
+        <span class="meta-label">BOOKED ON</span>
+        <span class="meta-val">${_formatDate(booking.createdAt!)}</span>
+      </div>'''}
       <div class="inv-meta-cell">
         <span class="meta-label">STATUS</span>
         <span class="status-badge" style="background:$statusBadgeColor">$invoiceStatus</span>
@@ -940,6 +944,10 @@ Future<void> printMultipleBookingDetails(
     service: mergedService.isNotEmpty ? mergedService : base.service,
     bookingDate: invoiceDate,
     selectedDates: mergedItems.expand((i) => i.selectedDates).toList(),
+    // Booked on = when the earliest of the combined bookings was made.
+    createdAt: (selectedBookings.map((b) => b.createdAt).whereType<DateTime>().toList()
+          ..sort((a, z) => a.compareTo(z)))
+        .firstOrNull ?? base.createdAt,
   );
 
   await printBookingDetails(virtualBooking, variant: variant);

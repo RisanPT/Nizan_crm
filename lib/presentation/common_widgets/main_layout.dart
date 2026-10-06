@@ -9,6 +9,7 @@ import '../../core/theme/crm_theme.dart';
 import 'accounts_menu_sheet.dart';
 import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
+import 'sales_menu_sheet.dart';
 import 'sidebar.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
@@ -79,7 +80,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/sales/leads')) return 1;
       if (location == '/calendar') return 2;
       if (location.startsWith('/booking')) return 3;
-      if (location == '/profile') return 4;
+      // Targets, reports, clients, profile… live in the Menu sheet.
+      return 4;
     } else if (role == AppRole.fleetManager) {
       if (location.startsWith('/fleet/assignments')) return 0;
       if (location.startsWith('/fleet/vehicles')) return 1;
@@ -146,7 +148,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 1: context.go('/sales/leads'); break;
         case 2: context.go('/calendar'); break;
         case 3: context.go('/booking/requests'); break;
-        case 4: context.go('/profile'); break;
+        case 4: showSalesMenuSheet(context, ref); break; // opens the menu
       }
     } else if (role == AppRole.fleetManager) {
       switch (index) {
@@ -306,9 +308,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                         label: 'Bookings',
                       ),
                       NavigationDestination(
-                        icon: Icon(Icons.person_outline),
-                        selectedIcon: Icon(Icons.person),
-                        label: 'Profile',
+                        icon: Icon(Icons.menu),
+                        selectedIcon: Icon(Icons.menu_open),
+                        label: 'Menu',
                       ),
                     ]
                   : role == AppRole.fleetManager

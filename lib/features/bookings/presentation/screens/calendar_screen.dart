@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mode_sheet.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/month_kpi_strip.dart';
 import 'package:nizan_crm/presentation/common_widgets/reference_images.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -1492,6 +1493,17 @@ class CalendarScreen extends HookConsumerWidget {
                               ],
                             ),
                     ),
+                    // Month KPIs (follow the artist / location filters).
+                    // Money figures are management-only, so artists skip them.
+                    if (!isArtist)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                        child: MonthKpiStrip(
+                          month: reportMonth(),
+                          bookings: filteredCalendarBookings,
+                          compact: isMobile,
+                        ),
+                      ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: viewMode.value == 'Month'

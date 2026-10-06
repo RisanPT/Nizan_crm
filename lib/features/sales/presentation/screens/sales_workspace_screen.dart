@@ -9,17 +9,28 @@ import 'package:nizan_crm/core/models/spot_invoice.dart';
 import 'package:nizan_crm/core/utils/spot_invoice_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
+import 'lead_calendar_tab.dart';
 import 'quote_builder_tab.dart';
 import 'sales_leads_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
 
-/// The salesperson's main workspace: Leads · Quote · Slots · Invoice.
+/// The salesperson's main workspace: Leads · Lead Calendar · Quote · Slots · Invoice.
 /// The Quote tab feeds its lines (and district) into the Invoice tab, which
 /// generates a shareable no-GST quotation.
 class SalesWorkspaceScreen extends ConsumerStatefulWidget {
-  const SalesWorkspaceScreen({super.key});
+  /// Tab to open: leads | calendar | quote | slots | invoice (from ?tab=).
+  final String? initialTab;
+
+  const SalesWorkspaceScreen({super.key, this.initialTab});
+
+  static const tabKeys = ['leads', 'calendar', 'quote', 'slots', 'invoice'];
+
+  static int indexOf(String? tab) {
+    final i = tabKeys.indexOf((tab ?? '').toLowerCase());
+    return i < 0 ? 0 : i;
+  }
 
   @override
   ConsumerState<SalesWorkspaceScreen> createState() =>
@@ -28,7 +39,20 @@ class SalesWorkspaceScreen extends ConsumerStatefulWidget {
 
 class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(
+    length: 5,
+    vsync: this,
+    initialIndex: SalesWorkspaceScreen.indexOf(widget.initialTab),
+  );
+
+  // Arriving again with a different ?tab= (e.g. from the Menu) switches tab.
+  @override
+  void didUpdateWidget(covariant SalesWorkspaceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTab != oldWidget.initialTab) {
+      _tabs.animateTo(SalesWorkspaceScreen.indexOf(widget.initialTab));
+    }
+  }
 
   // Handoff from Quote → Invoice.
   List<SpotInvoiceLine> _prefillLines = const [];
@@ -56,7 +80,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
       _prefillLines = lines;
       _prefillNonce++;
     });
-    _tabs.animateTo(3);
+    _tabs.animateTo(4);
   }
 
   @override
@@ -70,6 +94,11 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
             color: crm.surface,
             child: TabBar(
               controller: _tabs,
+              // Five tabs don't fit a phone's width; let them scroll there.
+              isScrollable: MediaQuery.sizeOf(context).width < 600,
+              tabAlignment: MediaQuery.sizeOf(context).width < 600
+                  ? TabAlignment.start
+                  : null,
               labelColor: crm.primary,
               unselectedLabelColor: crm.textSecondary,
               indicatorColor: crm.primary,
@@ -85,6 +114,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               indicatorWeight: 2.5,
               tabs: const [
                 Tab(icon: Icon(Icons.groups_rounded), text: 'Leads'),
+                Tab(icon: Icon(Icons.calendar_month_rounded), text: 'Lead Calendar'),
                 Tab(icon: Icon(Icons.calculate_rounded), text: 'Quote'),
                 Tab(icon: Icon(Icons.event_available_rounded), text: 'Slots'),
                 Tab(icon: Icon(Icons.receipt_long_rounded), text: 'Invoice'),
@@ -96,6 +126,7 @@ class _SalesWorkspaceScreenState extends ConsumerState<SalesWorkspaceScreen>
               controller: _tabs,
               children: [
                 const SalesLeadsScreen(),
+                const LeadCalendarTab(),
                 QuoteBuilderTab(onCreateInvoice: _sendToInvoice),
                 const _AvailabilityTab(),
                 _SpotInvoiceTab(

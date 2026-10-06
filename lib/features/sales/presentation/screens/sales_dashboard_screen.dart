@@ -16,6 +16,9 @@ import '../../../../core/utils/lead_priority.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import '../../../../services/user_service.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
+import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
 // ── Chart palette ───────────────────────────────────────────────────────────
 const _cLeads = Color(0xFF6366F1); // indigo — leads
@@ -1773,6 +1776,12 @@ class _SalesDashboardScreenState extends ConsumerState<SalesDashboardScreen> {
           6.h,
           Text('${pct.toStringAsFixed(0)}% of previous period',
               style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+          // Month view: the team's monthly target (set in Sales Targets).
+          if (_month != null &&
+              canSetSalesTargets(ref.watch(authSessionProvider)?.role)) ...[
+            14.h,
+            _TeamTargetStrip(period: (month: _month!, year: _yearForMonth(_month!))),
+          ],
           16.h,
           Row(
             children: [
@@ -2221,6 +2230,70 @@ class _DashboardData {
       rangeLabel: monthly
           ? '${DateFormat('MMMM yyyy').format(from)}  ·  FY $fyStartYear-${(fyStartYear + 1) % 100}'
           : 'FY $fyStartYear-${(fyStartYear + 1) % 100}  ·  Apr $fyStartYear – Mar ${fyStartYear + 1}',
+    );
+  }
+}
+
+/// "Team target" line for the Sales Dashboard: achieved vs the sum of every
+/// salesperson's monthly target. Hidden when no targets are set.
+class _TeamTargetStrip extends ConsumerWidget {
+  final TargetPeriod period;
+  const _TeamTargetStrip({required this.period});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final d = ref.watch(teamTargetsProvider(period)).value;
+    if (d == null) return const SizedBox.shrink();
+    if (d.salesTarget <= 0) {
+      return InkWell(
+        onTap: () => context.go('/sales/targets'),
+        child: Text('No team target set for this month — set targets →',
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: crm.primary)),
+      );
+    }
+    final pct = d.salesValue / d.salesTarget;
+    final elapsed = d.daysInMonth == 0 ? 1.0 : (d.daysInMonth - d.daysLeft) / d.daysInMonth;
+    final color = targetStatusColor(pct, expectedPct: d.daysLeft == 0 ? 1.0 : elapsed);
+    return InkWell(
+      onTap: () => context.go('/sales/targets'),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            Icon(Icons.flag_rounded, size: 15, color: color),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text('Team target ${targetRupees(d.salesTarget)}',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+            ),
+            Text('${(pct * 100).toStringAsFixed(0)}%',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: color)),
+          ]),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct.clamp(0, 1).toDouble(),
+              minHeight: 6,
+              backgroundColor: color.withValues(alpha: 0.15),
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Achieved ${targetRupees(d.salesValue)} · ${d.bookings} bookings'
+            '${d.bookingsTarget > 0 ? ' of ${d.bookingsTarget}' : ''} · ${d.daysLeft} days left',
+            style: TextStyle(fontSize: 11, color: crm.textSecondary),
+          ),
+        ]),
+      ),
     );
   }
 }

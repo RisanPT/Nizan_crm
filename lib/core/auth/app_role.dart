@@ -149,7 +149,7 @@ enum AppRole {
       case AppRole.artistHead:
         return '/artist-head';
       case AppRole.sales:
-        return '/sales/leads';
+        return '/sales/home'; // My Dashboard: target, follow-ups, quick actions
       case AppRole.crm:
         return '/booking/requests';
       case AppRole.accounts:

@@ -87,6 +87,15 @@ class PackageService {
     }
   }
 
+  /// Saves the Services display order: [ids] from first to last.
+  Future<void> reorderPackages(List<String> ids) async {
+    try {
+      await _dio.put('/packages/order', data: {'ids': ids});
+    } catch (e) {
+      throw AppException(e, action: 'save the package order');
+    }
+  }
+
   Future<void> deletePackage(String id) async {
     try {
       await _dio.delete('/packages/$id');

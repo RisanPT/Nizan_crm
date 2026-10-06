@@ -9,6 +9,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
+import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -640,6 +641,18 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/sales/booking-map',
                             onTap: () => context.go('/sales/booking-map'),
+                          ),
+                        ),
+                      // Monthly targets — set by sales managers (and admin/manager).
+                      if (canSetSalesTargets(access.roleKey) && access.canSeeSub('sales.targets'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.flag_outlined,
+                            title: 'Sales Targets',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/targets',
+                            onTap: () => context.go('/sales/targets'),
                           ),
                         ),
                       // Same YoY Sales Calendar the Marketing team has.
@@ -1502,41 +1515,16 @@ class Sidebar extends ConsumerWidget {
                     32.h,
                     _buildSectionTitle('BUSINESS', isCollapsed: isCollapsed, theme: theme),
                     8.h,
-                    _SidebarItem(
-                      icon: Icons.campaign_outlined,
-                      title: 'Marketing',
-                      isCollapsed: isCollapsed,
-                    ),
-                    _SidebarItem(
-                      icon: Icons.analytics_outlined,
-                      title: 'Reports & Analytics',
-                      isCollapsed: isCollapsed,
-                    ),
-                    if (access.canSeeSettings) ...[
+                    // Roles & Permissions and Departments are tabs inside
+                    // Settings, so they aren't listed separately here.
+                    if (access.canSeeSettings)
                       _SidebarItem(
                         icon: Icons.settings_outlined,
                         title: 'Settings',
                         isCollapsed: isCollapsed,
-                        isSelected: currentPath == '/settings',
+                        isSelected: currentPath.startsWith('/settings'),
                         onTap: () => context.go('/settings'),
                       ),
-                      _SidebarItem(
-                        icon: Icons.admin_panel_settings_outlined,
-                        title: 'Roles & Permissions',
-                        isCollapsed: isCollapsed,
-                        isSelected:
-                            currentPath.startsWith('/settings/roles'),
-                        onTap: () => context.go('/settings/roles'),
-                      ),
-                      _SidebarItem(
-                        icon: Icons.apartment_outlined,
-                        title: 'Departments',
-                        isCollapsed: isCollapsed,
-                        isSelected:
-                            currentPath.startsWith('/settings/departments'),
-                        onTap: () => context.go('/settings/departments'),
-                      ),
-                    ],
                   ],
                 ],
               ],

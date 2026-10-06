@@ -139,25 +139,28 @@ Future<void> printBookingDetails(
 
           pw.Table(
             border: pw.TableBorder.all(color: borderColor),
+            // Rows alternate shading by position, so optional rows never
+            // leave two same-coloured rows side by side.
             children: [
-              _buildTableRow('Booking ID / Number', booking.displayBookingNumber, lightBg),
-              _buildTableRow('Customer Name', booking.customerName, PdfColors.white),
-              _buildTableRow('Phone Number', booking.phone, lightBg),
-              _buildTableRow('Service / Package', booking.service, PdfColors.white),
-              _buildTableRow('Event Slot', booking.eventSlot.isNotEmpty ? booking.eventSlot : 'General', lightBg),
-              _buildTableRow('Date of Event', [
-                if (booking.selectedDates.isNotEmpty)
-                  booking.selectedDates.map((d) => '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}').join(', ')
-                else
-                  '${booking.bookingDate.day.toString().padLeft(2, '0')}/${booking.bookingDate.month.toString().padLeft(2, '0')}/${booking.bookingDate.year}'
-              ].join(), PdfColors.white),
-              _buildTableRow('Location', booking.district.isNotEmpty ? booking.district : 'N/A', lightBg),
-              if (booking.address.trim().isNotEmpty)
-                _buildTableRow('Address', booking.address, PdfColors.white),
-              if (booking.pincode.trim().isNotEmpty)
-                _buildTableRow('Pincode', booking.pincode, lightBg),
-              if (booking.outfitDetails.isNotEmpty)
-                _buildTableRow('Outfit Details', booking.outfitDetails, PdfColors.white),
+              for (final (i, (label, value)) in <(String, String)>[
+                ('Booking ID / Number', booking.displayBookingNumber),
+                if (booking.createdAt != null) ('Booked On', _fmtDate(booking.createdAt!)),
+                ('Customer Name', booking.customerName),
+                ('Phone Number', booking.phone),
+                ('Service / Package', booking.service),
+                ('Event Slot', booking.eventSlot.isNotEmpty ? booking.eventSlot : 'General'),
+                (
+                  'Date of Event',
+                  booking.selectedDates.isNotEmpty
+                      ? booking.selectedDates.map(_fmtDate).join(', ')
+                      : _fmtDate(booking.bookingDate),
+                ),
+                ('Location', booking.district.isNotEmpty ? booking.district : 'N/A'),
+                if (booking.address.trim().isNotEmpty) ('Address', booking.address),
+                if (booking.pincode.trim().isNotEmpty) ('Pincode', booking.pincode),
+                if (booking.outfitDetails.isNotEmpty) ('Outfit Details', booking.outfitDetails),
+              ].indexed)
+                _buildTableRow(label, value, i.isEven ? lightBg : PdfColors.white),
             ],
           ),
           pw.SizedBox(height: 20),
@@ -647,3 +650,7 @@ Future<void> printMultipleBookingDetails(
   // Full implementation of data aggregation goes here as planned.
   await printBookingDetails(selectedBookings.first, variant: variant);
 }
+
+/// dd/MM/yyyy, the date format used across the invoice.
+String _fmtDate(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';

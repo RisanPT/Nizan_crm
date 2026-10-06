@@ -8,6 +8,8 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/notifications/controllers/notification_providers.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
+import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -52,6 +54,7 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
         color: crm.primary,
         onRefresh: () async {
           ref.invalidate(paginatedLeadsProvider);
+          ref.invalidate(myTargetProvider);
           try {
             await ref.read(paginatedLeadsProvider(LeadFilter(limit: 100)).future);
           } catch (_) {
@@ -103,6 +106,8 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const MyTargetCard(),
+                      const SizedBox(height: 24),
                       _SectionLabel('Overview', crm: crm),
                       const SizedBox(height: 12),
                       _KpiGrid(stats: stats, totalLeads: page.totalItems, crm: crm),
@@ -128,7 +133,7 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                               label: 'Quote &\nInvoice',
                               filled: false,
                               color: const Color(0xFF0D9488),
-                              onTap: () => context.go('/sales/leads'),
+                              onTap: () => context.go('/sales/leads?tab=quote'),
                             ),
                           ),
                         ],

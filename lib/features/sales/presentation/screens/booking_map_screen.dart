@@ -20,7 +20,7 @@ class BookingMapScreen extends ConsumerStatefulWidget {
   ConsumerState<BookingMapScreen> createState() => _BookingMapScreenState();
 }
 
-enum _Period { thisFy, lastFy, last12, allTime }
+enum _Period { thisFy, lastFy, last12, allTime, custom }
 
 enum _Metric { bookings, sales, avg }
 
@@ -29,6 +29,7 @@ const _periodLabels = {
   _Period.lastFy: 'Last FY',
   _Period.last12: 'Last 12 months',
   _Period.allTime: 'All time',
+  _Period.custom: 'Custom range…',
 };
 
 const _metricLabels = {
@@ -41,6 +42,9 @@ class _BookingMapScreenState extends ConsumerState<BookingMapScreen> {
   final _map = MapController();
   final _searchCtrl = TextEditingController();
   _Period _period = _Period.thisFy;
+
+  /// From–To dates for [_Period.custom] (inclusive).
+  DateTimeRange? _customRange;
   String _basis = 'event';
   _Metric _metric = _Metric.bookings;
   String? _type; // null = all packages
@@ -82,6 +86,9 @@ class _BookingMapScreenState extends ConsumerState<BookingMapScreen> {
         );
       case _Period.allTime:
         return (from: null, to: null, basis: _basis);
+      case _Period.custom:
+        final r = _customRange!;
+        return (from: r.start, to: r.end, basis: _basis);
     }
   }
 
@@ -91,6 +98,34 @@ class _BookingMapScreenState extends ConsumerState<BookingMapScreen> {
     if (q.from == null) return 'All time · by $basis';
     String d(DateTime x) => '${x.day} ${_months[x.month - 1]} ${x.year}';
     return '${d(q.from!)} – ${d(q.to!)} · by $basis';
+  }
+
+  /// Opens the From–To picker; switches to the custom period on Apply and
+  /// leaves the current period untouched on Cancel.
+  Future<void> _pickCustomRange() async {
+    final now = DateTime.now();
+    final current = _query;
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2015),
+      lastDate: DateTime(now.year + 5, 12, 31),
+      initialDateRange: _customRange ??
+          (current.from != null && current.to != null
+              ? DateTimeRange(start: current.from!, end: current.to!)
+              : DateTimeRange(start: DateTime(now.year, now.month), end: now)),
+      helpText: 'Show bookings from – to',
+      saveText: 'Apply',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _customRange = DateTimeRange(
+        start: DateTime(picked.start.year, picked.start.month, picked.start.day),
+        end: DateTime(picked.end.year, picked.end.month, picked.end.day),
+      );
+      _period = _Period.custom;
+      _selectedKey = null;
+      _refreshes = 0;
+    });
   }
 
   void _scheduleRefreshIfPending(BookingMapData data) {
@@ -348,18 +383,38 @@ class _BookingMapScreenState extends ConsumerState<BookingMapScreen> {
               child: DropdownButton<_Period>(
                 value: _period,
                 isDense: true,
+                // The closed button shows the chosen dates for a custom range.
+                selectedItemBuilder: (_) => [
+                  for (final p in _Period.values)
+                    Text(p == _Period.custom && _customRange != null
+                        ? _rangeText(_customRange!)
+                        : _periodLabels[p]!),
+                ],
                 items: [
                   for (final p in _Period.values)
                     DropdownMenuItem(value: p, child: Text(_periodLabels[p]!)),
                 ],
-                onChanged: (p) => setState(() {
-                  _period = p ?? _period;
-                  _selectedKey = null;
-                  _refreshes = 0;
-                }),
+                onChanged: (p) {
+                  if (p == _Period.custom) {
+                    _pickCustomRange();
+                    return;
+                  }
+                  setState(() {
+                    _period = p ?? _period;
+                    _selectedKey = null;
+                    _refreshes = 0;
+                  });
+                },
               ),
             ),
           ),
+          if (_period == _Period.custom)
+            IconButton(
+              tooltip: 'Change dates',
+              visualDensity: VisualDensity.compact,
+              onPressed: _pickCustomRange,
+              icon: const Icon(Icons.edit_calendar_outlined, size: 20),
+            ),
           chip(_basis == 'event' ? 'By event date' : 'By date added', true,
               () => setState(() {
                     _basis = _basis == 'event' ? 'added' : 'event';
@@ -940,6 +995,14 @@ Color _heat(double t) {
   const a = Color(0xFF4EC994), b = Color(0xFFF5A623), c = Color(0xFFE74C3C);
   final x = t.clamp(0.0, 1.0);
   return x < 0.5 ? Color.lerp(a, b, x * 2)! : Color.lerp(b, c, (x - 0.5) * 2)!;
+}
+
+/// "1 Oct – 15 Nov 2026" (year shown once when both dates share it).
+String _rangeText(DateTimeRange r) {
+  String d(DateTime x, {bool year = true}) =>
+      '${x.day} ${_months[x.month - 1]}${year ? ' ${x.year}' : ''}';
+  if (r.start == r.end) return d(r.start);
+  return '${d(r.start, year: r.start.year != r.end.year)} – ${d(r.end)}';
 }
 
 String _int(int n) {
