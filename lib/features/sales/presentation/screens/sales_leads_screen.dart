@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/services/followup_alarm_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -1015,6 +1016,7 @@ class _LeadForm extends HookConsumerWidget {
     final remarksCtrl   = useTextEditingController(text: initialLead?.remarks ?? '');
     final enquiryDate   = useState(initialLead?.enquiryDate ?? DateTime.now());
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
+
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
     // Keep the real status so a system state (Converted / Lost / Pending) isn't
     // silently downgraded on edit — the picker just can't SELECT those.
@@ -1090,65 +1092,8 @@ class _LeadForm extends HookConsumerWidget {
       try {
         final dio = ref.read(dioProvider);
 
-        // Set when the user chooses to create a lead despite a duplicate match,
-        // so the server-side duplicate guard lets it through.
-        var allowDuplicate = false;
-
-        // 1. Duplicate Check
-        if (!isEditing) {
-          final phoneNorm = normalizePhone(phoneCtrl.text);
-          final altNorm = normalizePhone(alternateCtrl.text);
-          
-          if (phoneNorm.isNotEmpty || altNorm.isNotEmpty) {
-            try {
-              final dupRes = await dio.get('/leads', queryParameters: {
-                'limit': 10,
-                'search': phoneNorm.isNotEmpty ? phoneNorm : altNorm,
-              });
-              final data = dupRes.data;
-              List items = [];
-              if (data is Map && data.containsKey('items')) {
-                items = data['items'] as List;
-              } else if (data is Map) {
-                items = (data['data'] ?? data['leads'] ?? []) as List;
-              } else if (data is List) {
-                items = data;
-              }
-              
-              bool duplicateFound = false;
-              for (var i in items) {
-                final leadPhone = i['phone']?.toString() ?? '';
-                final leadAlt = i['alternateNumber']?.toString() ?? '';
-                
-                if (phoneNorm.isNotEmpty && (leadPhone == phoneNorm || leadAlt == phoneNorm)) duplicateFound = true;
-                if (altNorm.isNotEmpty && (leadPhone == altNorm || leadAlt == altNorm)) duplicateFound = true;
-              }
-
-              if (duplicateFound && context.mounted) {
-                final proceed = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Duplicate Contact Found'),
-                    content: const Text('A lead with this Primary or Alternate number already exists. Do you still want to create it?'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                      ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Proceed')),
-                    ],
-                  ),
-                );
-                if (proceed != true) {
-                  isSaving.value = false;
-                  return;
-                }
-                // User accepted the duplicate — tell the server to allow it.
-                allowDuplicate = true;
-              }
-            } catch (_) {
-              // Best-effort duplicate pre-check only: the save below still
-              // runs and reports any real failure (offline, server error…).
-            }
-          }
-        }
+        // Duplicate numbers are refused by the server (one mobile number = one
+        // lead, checked across ALL leads); a 409 is explained in the catch below.
 
         final payload = {
           'name': nameCtrl.text,
@@ -1164,6 +1109,7 @@ class _LeadForm extends HookConsumerWidget {
           'alternateNumber': normalizePhone(alternateCtrl.text),
           'enquiryDate': enquiryDate.value.toUtc().toIso8601String(),
           'bookedDate': bookedDate.value?.toUtc().toIso8601String(),
+
           // Send the follow-up as a UTC instant (…Z). The picker gives a LOCAL
           // DateTime; plain toIso8601String() drops the zone, so the UTC server
           // misreads it as UTC and every later display is shifted by the local
@@ -1176,7 +1122,6 @@ class _LeadForm extends HookConsumerWidget {
           // flow. Sending it here would erase the reason on a normal edit.
           'remarks': remarksCtrl.text,
           'assignedTo': (session?.role == 'sales') ? session?.userId : assignedTo.value,
-          if (allowDuplicate) 'allowDuplicate': true,
         };
 
         String leadIdStr = '';
@@ -1200,6 +1145,7 @@ class _LeadForm extends HookConsumerWidget {
           selectedSource.value = 'Instagram';
           enquiryDate.value = DateTime.now();
           bookedDate.value = null;
+
           followUpDate.value = null;
           status.value = 'New';
           assignedTo.value = null;
@@ -1235,7 +1181,11 @@ class _LeadForm extends HookConsumerWidget {
           );
         }
       } catch (e) {
-        if (context.mounted) {
+        if (!context.mounted) return;
+        final dupe = _duplicateFrom(e);
+        if (dupe != null) {
+          await _showDuplicateLeadDialog(context, dupe);
+        } else {
           showErrorSnackBar(context, e);
         }
       } finally {
@@ -1378,6 +1328,7 @@ class _LeadForm extends HookConsumerWidget {
         ),
         desktopWidth: 210,
       ),
+
 
       // Booked Date
       responsiveField(
@@ -2273,6 +2224,7 @@ class _LeadCardState extends State<_LeadCard> {
                     label: 'Event Date',
                     value: _fmtDate(lead.eventDate ?? lead.enquiryDate),
                   ),
+
                   if (lead.bookedDate != null || lead.followUpDate != null) ...[
                     const SizedBox(height: 6),
                     if (lead.bookedDate != null)
@@ -3575,3 +3527,58 @@ class _FollowUpStatsRow extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────
+//  Duplicate mobile number
+// ─────────────────────────────────────────────────────────
+
+/// The existing lead from the server's "number already used" (409) reply.
+Map<String, dynamic>? _duplicateFrom(Object error) {
+  final cause = error is AppException ? error.cause : error;
+  if (cause is! DioException || cause.response?.statusCode != 409) return null;
+  final data = cause.response?.data;
+  if (data is! Map) return null;
+  final dupe = data['duplicate'];
+  if (dupe is Map) return dupe.cast<String, dynamic>();
+  // "Already being saved" (double tap) has no lead attached.
+  return {'message': data['message']?.toString() ?? 'This number is already being saved.'};
+}
+
+/// Explains that the number already has a lead, and offers to open it.
+Future<void> _showDuplicateLeadDialog(BuildContext context, Map<String, dynamic> dupe) {
+  final id = dupe['id']?.toString() ?? '';
+  final name = dupe['name']?.toString() ?? '';
+  final owner = dupe['owner']?.toString() ?? '';
+  final status = dupe['status']?.toString() ?? '';
+  final phone = dupe['phone']?.toString() ?? '';
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      icon: const Icon(Icons.person_search_rounded, size: 32),
+      title: Text(id.isEmpty ? 'Already saving' : 'This number already has a lead'),
+      content: Text(
+        id.isEmpty
+            ? dupe['message']?.toString() ?? ''
+            : [
+                '$name${phone.isNotEmpty ? ' · $phone' : ''}',
+                if (status.isNotEmpty) 'Status: $status',
+                if (owner.isNotEmpty) 'Handled by: $owner',
+                '',
+                'One mobile number can have only one lead. Update the existing lead '
+                    '(add a remark or follow-up) instead of adding it again.',
+              ].join('\n'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        if (id.isNotEmpty)
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.go('/sales/leads/$id');
+            },
+            icon: const Icon(Icons.open_in_new_rounded, size: 18),
+            label: const Text('Open existing lead'),
+          ),
+      ],
+    ),
+  );
+}

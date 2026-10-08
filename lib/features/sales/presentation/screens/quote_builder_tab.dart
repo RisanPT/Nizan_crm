@@ -157,8 +157,6 @@ const Map<String, (String, String, List<Object>)> _profiles = {
   ),
 };
 
-/// Packages pre-selected on a new quote when present in Services.
-const _defaultKeys = ['platinum', 'airbrush', 'team n royal'];
 
 // includedIn holds Services package names (lower-case).
 const _addons = [
@@ -177,6 +175,9 @@ const _addons = [
 ];
 
 const _events = ['Wedding', 'Reception', 'Engagement', 'Nikah', 'Haldi / Mehendi', 'Save the date'];
+
+/// Dropdown value meaning "type your own event".
+const _otherEvent = '__other__';
 const _defaultNote =
     'Only premium, skin-friendly products are used to ensure a flawless, radiant and long-lasting finish.';
 const _kDraft = 'tnm.draft';
@@ -261,7 +262,31 @@ class _Quote {
   final List<_Line> lines;
   final double travel, discount, advance;
   final Map<String, _Totals> totals;
-  bool get onRequest => lines.any((l) => l.amount == null);
+
+  /// Multi-day programme mode: [program] lists each day; [pkgs] are the
+  /// distinct packages used (for "What's Included").
+  final bool multi;
+  final List<_DayLine> program;
+
+  bool get onRequest =>
+      lines.any((l) => l.amount == null) || (multi && program.any((d) => d.amount == null));
+
+  /// Multi-day: an add-on is free when any package in the programme includes it.
+  bool freeInProgram(_Addon a) => pkgs.any((p) => a.includedIn.contains(p.key));
+
+  double get programTotal => program.fold(0.0, (s, d) => s + (d.amount ?? 0));
+  double get programAddons => lines.fold(
+      0.0, (s, l) => s + (l.amount == null || freeInProgram(l.addon) ? 0 : l.amount!));
+  double get programGrandTotal => max(0, programTotal + programAddons + travel - discount);
+
+  /// "18 Apr – 22 Apr 2027" for the programme's dated days.
+  String get programSpan {
+    final dates = [for (final d in program) if (d.date != null) d.date!]..sort();
+    if (dates.isEmpty) return 'Dates to be confirmed';
+    if (dates.length == 1) return _fmtDate(dates.first);
+    final sameYear = dates.first.year == dates.last.year;
+    return '${DateFormat(sameYear ? 'd MMM' : 'd MMM y').format(dates.first)} – ${_fmtDate(dates.last)}';
+  }
 
   /// Names of the Services packages an add-on comes free with.
   List<String> freeWith(_Addon a) =>
@@ -286,6 +311,8 @@ class _Quote {
     required this.discount,
     required this.advance,
     required this.totals,
+    this.multi = false,
+    this.program = const [],
   });
 }
 
@@ -293,6 +320,52 @@ class _AddonSel {
   bool on;
   int qty;
   _AddonSel({this.on = false, this.qty = 1});
+}
+
+/// One day of a multi-day programme being edited (date, event, package and an
+/// optional custom price — empty means "use the package price").
+class _ProgramDay {
+  DateTime? date;
+  String event;
+  String? pkgId;
+  final TextEditingController price;
+
+  _ProgramDay({this.date, this.event = 'Wedding', this.pkgId, String price = ''})
+      : price = TextEditingController(text: price);
+
+  double? get customPrice {
+    final v = double.tryParse(price.text.trim());
+    return v == null ? null : max(0, v).toDouble();
+  }
+
+  Map<String, dynamic> toJson() => {
+        'date': date == null ? '' : DateFormat('yyyy-MM-dd').format(date!),
+        'event': event,
+        'pkg': pkgId,
+        'price': price.text,
+      };
+
+  factory _ProgramDay.fromJson(Map<String, dynamic> j) => _ProgramDay(
+        date: DateTime.tryParse(j['date'] as String? ?? ''),
+        // Any text — the sales team can type their own event type.
+        event: j['event'] as String? ?? _events.first,
+        pkgId: j['pkg'] as String?,
+        price: j['price'] as String? ?? '',
+      );
+}
+
+/// A computed programme day for the quote sheet.
+class _DayLine {
+  final int no;
+  final DateTime? date;
+  final String event;
+  final _Pkg? pkg;
+
+  /// Null = price on request (no package price and no custom price).
+  final double? amount;
+  final bool custom;
+
+  const _DayLine(this.no, this.date, this.event, this.pkg, this.amount, this.custom);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -323,6 +396,16 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   Map<String, _AddonSel> _sel = {};
   String? _no;
 
+  /// Multi-day programme mode (several dates/events/packages in one quote).
+  bool _multi = false;
+  List<_ProgramDay> _days = [];
+
+  /// Services added by the sales team for this quote (beyond the standard list).
+  List<_Addon> _customAddons = [];
+
+  /// Standard add-ons followed by this quote's custom ones.
+  List<_Addon> get _allAddons => [..._addons, ..._customAddons];
+
   /// Price-list overrides saved on this device. A key mapped to null means
   /// "price on request"; a missing key means "use the default".
   Map<String, double?> _overrides = {};
@@ -335,7 +418,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   @override
   void initState() {
     super.initState();
-    _seedExample();
+    // Nothing is pre-selected: the sales team ticks what the quote needs.
     _load();
   }
 
@@ -344,17 +427,13 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     for (final c in [_name, _phone, _travel, _discount, _validDays, _advance, _notes]) {
       c.dispose();
     }
+    for (final d in _days) {
+      d.price.dispose();
+    }
     _toastTimer?.cancel();
     super.dispose();
   }
 
-  void _seedExample() {
-    _sel = {
-      'brideSaree': _AddonSel(on: true),
-      'gFace': _AddonSel(on: true, qty: 2),
-      'gHair': _AddonSel(on: true, qty: 2),
-    };
-  }
 
   Future<void> _load() async {
     try {
@@ -379,6 +458,27 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     final picked = d['picked'] as List?;
     if (picked != null) _picked = picked.map((e) => '$e').toSet();
     _rec = d['rec'] as String?;
+    _multi = d['multi'] == true;
+    final days = d['days'] as List?;
+    if (days != null) {
+      _days = [for (final x in days) _ProgramDay.fromJson((x as Map).cast<String, dynamic>())];
+    }
+    final custom = d['customAddons'] as List?;
+    if (custom != null) {
+      _customAddons = [
+        for (final x in custom)
+          () {
+            final m = (x as Map).cast<String, dynamic>();
+            return _Addon(
+              m['id'] as String? ?? 'c_${DateTime.now().microsecondsSinceEpoch}',
+              m['name'] as String? ?? '',
+              m['note'] as String? ?? '',
+              (m['price'] as num?)?.toDouble(),
+              perPerson: m['perPerson'] == true,
+            );
+          }(),
+      ];
+    }
     final addons = d['addons'] as Map<String, dynamic>?;
     if (addons != null) {
       _sel = addons.map((k, v) {
@@ -397,7 +497,8 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     _validDays.text = f['validDays'] ?? '15';
     _advance.text = f['advance'] ?? '0';
     _notes.text = f['notes'] ?? _defaultNote;
-    if (_events.contains(f['event'])) _event = f['event'];
+    final ev = f['event'] as String?;
+    if (ev != null) _event = ev;
     _date = DateTime.tryParse(f['date'] ?? '');
   }
 
@@ -407,6 +508,12 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     final draft = {
       'picked': _picked?.toList(),
       'rec': _rec,
+      'multi': _multi,
+      'days': [for (final d in _days) d.toJson()],
+      'customAddons': [
+        for (final a in _customAddons)
+          {'id': a.id, 'name': a.name, 'note': a.note, 'price': a.price, 'perPerson': a.perPerson},
+      ],
       'no': _no,
       'addons': _sel.map((k, v) => MapEntry(k, {'on': v.on, 'qty': v.qty})),
       'f': {
@@ -453,18 +560,11 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   District? _selectedDistrict(List<District> districts) =>
       districts.where((d) => d.id == _districtId).firstOrNull;
 
-  /// The packages in the quote: the user's picks that still exist in
-  /// Services, else the defaults (the named packages, else the first three).
+  /// The packages the sales team ticked (that still exist in Services).
+  /// Nothing is selected by default.
   Set<String> get _selectedIds {
     final ids = {for (final p in _catalog) p.id};
-    final kept = _picked?.where(ids.contains).toSet() ?? <String>{};
-    if (kept.isNotEmpty) return kept;
-    final named = [
-      for (final k in _defaultKeys)
-        for (final p in _catalog)
-          if (p.key == k) p.id,
-    ];
-    return (named.isNotEmpty ? named : _catalog.take(3).map((p) => p.id)).toSet();
+    return _picked?.where(ids.contains).toSet() ?? <String>{};
   }
 
   /// Recommended package id, only when one was chosen and is still in the
@@ -477,7 +577,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     for (final p in _catalog) {
       out[p.id] = p.erp.effectivePriceForDistrict(district?.id);
     }
-    for (final a in _addons) {
+    for (final a in _allAddons) {
       out[a.id] = a.price;
     }
     return out;
@@ -488,11 +588,56 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       e.key: _overrides.containsKey(e.key) ? _overrides[e.key] : e.value,
   };
 
+  /// Multi-day: computed days + the distinct packages they use, in order.
+  (List<_DayLine>, List<_Pkg>) _programLines(Map<String, double?> prices) {
+    final lines = <_DayLine>[];
+    final used = <_Pkg>[];
+    for (var i = 0; i < _days.length; i++) {
+      final d = _days[i];
+      final pkg = _catalog.where((p) => p.id == d.pkgId).firstOrNull;
+      if (pkg != null && !used.contains(pkg)) used.add(pkg);
+      final custom = d.customPrice;
+      lines.add(_DayLine(i + 1, d.date, d.event, pkg, custom ?? (pkg == null ? null : prices[pkg.id]), custom != null));
+    }
+    return (lines, used);
+  }
+
+  /// Switches mode; entering multi-day seeds day 1 from the current quote.
+  void _setMulti(bool multi) {
+    _changed(() {
+      _multi = multi;
+      if (multi && _days.isEmpty) {
+        final pkgId = _recId ?? (_selectedIds.isEmpty ? null : _selectedIds.first);
+        _days = [_ProgramDay(date: _date, event: _event, pkgId: pkgId)];
+      }
+    });
+  }
+
+  void _addDay() {
+    final last = _days.isEmpty ? null : _days.last;
+    _changed(() => _days = [
+          ..._days,
+          _ProgramDay(
+            date: last?.date?.add(const Duration(days: 1)),
+            event: last?.event ?? _events.first,
+            pkgId: last?.pkgId ?? (_catalog.isEmpty ? null : _catalog.first.id),
+          ),
+        ]);
+  }
+
+  void _removeDay(int i) {
+    final d = _days[i];
+    _changed(() => _days = [..._days]..removeAt(i));
+    // Dispose after the rebuild has detached its TextField.
+    WidgetsBinding.instance.addPostFrameCallback((_) => d.price.dispose());
+  }
+
   _Quote _compute(Map<String, double?> prices, String venue) {
     final sel = _selectedIds;
-    final pkgs = _catalog.where((p) => sel.contains(p.id)).toList();
+    final (program, used) = _multi ? _programLines(prices) : (const <_DayLine>[], const <_Pkg>[]);
+    final pkgs = _multi ? used : _catalog.where((p) => sel.contains(p.id)).toList();
     final lines = [
-      for (final a in _addons)
+      for (final a in _allAddons)
         if (_sel[a.id]?.on == true)
           _Line(a, a.perPerson ? max(1, _sel[a.id]!.qty) : 1, prices[a.id]),
     ];
@@ -520,24 +665,63 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       date: _date,
       pkgs: pkgs,
       catalog: _catalog,
-      rec: _recId ?? '',
+      // No "recommended" highlight in a multi-day programme.
+      rec: _multi ? '' : (_recId ?? ''),
       prices: prices,
       lines: lines,
       travel: travel,
       discount: discount,
       advance: _num(_advance),
       totals: totals,
+      multi: _multi,
+      program: program,
     );
   }
 
   // ── Actions ────────────────────────────────────────────────────────────
+  /// WhatsApp text for a multi-day programme.
+  String _waProgramText(_Quote q) {
+    final l = <String>['*TEAM N MAKEOVERS*', '_Makeup Programme Quote · ${q.no}_', ''];
+    if (q.name.isNotEmpty) l.add('Dear ${q.name},');
+    l.addAll([
+      'Thank you for your enquiry! Here is your ${q.program.length}-day programme'
+          ' (${q.programSpan})${q.venue.isNotEmpty ? ' at ${q.venue}' : ''}:',
+      '',
+    ]);
+    for (final d in q.program) {
+      l.add('*Day ${d.no}* · ${d.date == null ? 'Date TBC' : _fmtDate(d.date!)} · ${d.event}');
+      l.add('${d.pkg?.name ?? 'Package to be chosen'}: *${d.amount == null ? 'on request' : _inr(d.amount!)}*');
+    }
+    l.add('');
+    if (q.lines.isNotEmpty) {
+      l.add('*ADD-ONS & GUEST SERVICES*');
+      for (final x in q.lines) {
+        final free = q.freeInProgram(x.addon) ? ' (included)' : '';
+        l.add('• ${x.addon.name}${x.qty > 1 ? ' × ${x.qty}' : ''}: '
+            '${x.amount == null ? 'on request' : _inr(x.amount!)}$free');
+      }
+      l.add('');
+    }
+    l.add('*TOTAL: ${_inr(q.programGrandTotal)}*'
+        '${q.travel > 0 ? ' (incl. travel ${_inr(q.travel)})' : ''}'
+        '${q.discount > 0 ? ' (after ${_inr(q.discount)} discount)' : ''}');
+    if (q.onRequest) l.add('_Items on request are priced during consultation._');
+    l.add('');
+    if (q.advance > 0) l.add('Booking advance: ${_inr(q.advance)} to confirm your dates.');
+    l.add('Quote valid until ${_fmtDate(q.validUntil)}.');
+    if (q.notes.isNotEmpty) l.addAll(['', q.notes]);
+    l.addAll(['', '_Your Look. Your Style. Your Day._ ✨']);
+    return l.join('\n');
+  }
+
   String _waText(_Quote q) {
+    if (q.multi) return _waProgramText(q);
     final l = <String>[];
     l.addAll(['*TEAM N MAKEOVERS*', '_Bridal Makeup Quote · ${q.no}_', '']);
     if (q.name.isNotEmpty) l.add('Dear ${q.name},');
     l.addAll([
       'Thank you for your enquiry! Here are our bridal packages'
-          '${q.date != null ? ' for your ${q.event.toLowerCase()} on ${_fmtDate(q.date!)}' : ''}'
+          '${q.date != null ? ' for your ${q.event.isEmpty ? 'event' : q.event.toLowerCase()} on ${_fmtDate(q.date!)}' : ''}'
           '${q.venue.isNotEmpty ? ' at ${q.venue}' : ''}:',
       '',
     ]);
@@ -623,6 +807,25 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   }
 
   void _createInvoice(_Quote q, District? district) {
+    if (q.multi) {
+      final lines = <SpotInvoiceLine>[
+        for (final d in q.program)
+          if (d.amount != null)
+            SpotInvoiceLine(
+              label: 'Day ${d.no} · ${d.date == null ? 'Date TBC' : DateFormat('d MMM y').format(d.date!)}'
+                  ' · ${d.event} — ${d.pkg?.name ?? 'Package'}',
+              amount: d.amount!,
+            ),
+        for (final l in q.lines)
+          if (l.amount != null && !q.freeInProgram(l.addon))
+            SpotInvoiceLine(label: l.qty > 1 ? '${l.addon.name} × ${l.qty}' : l.addon.name, amount: l.amount!),
+        if (q.travel > 0) SpotInvoiceLine(label: 'Travel / location', amount: q.travel),
+        if (q.discount > 0) SpotInvoiceLine(label: 'Discount', amount: -q.discount),
+      ];
+      if (lines.isEmpty) return;
+      widget.onCreateInvoice(q.name, q.phone, district?.id, lines);
+      return;
+    }
     if (q.pkgs.isEmpty) return;
     final pkg = q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first);
     final lines = <SpotInvoiceLine>[
@@ -640,9 +843,18 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   }
 
   void _newQuote() {
+    final oldDays = _days;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final d in oldDays) {
+        d.price.dispose();
+      }
+    });
     _changed(() {
       _picked = null;
       _rec = null;
+      _multi = false;
+      _days = [];
+      _customAddons = [];
       _sel = {};
       _no = null;
       _districtId = null;
@@ -832,31 +1044,48 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Quote type: compare package options for one event, or a programme of
+        // several dated events (each with its own package) in one quote.
+        SegmentedButton<bool>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: false, label: Text('Compare packages'), icon: Icon(Icons.view_column_outlined, size: 18)),
+            ButtonSegment(value: true, label: Text('Multi-day program'), icon: Icon(Icons.date_range_outlined, size: 18)),
+          ],
+          selected: {_multi},
+          onSelectionChanged: (s) => _setMulti(s.first),
+        ),
+        const SizedBox(height: 16),
         _Panel(pal: pal, title: 'Client', children: [
           field('Bride / customer name', text(_name, hint: 'e.g. Ayesha Rahman')),
-          row2(
-            field('Phone', text(_phone, hint: '+91', phone: true)),
-            field('Wedding date', _DateInput(
-              pal: pal,
-              value: _date,
-              onPick: (d) => _changed(() => _date = d),
-            )),
-          ),
-          row2(
-            field('Event', DropdownButtonFormField<String>(
-              initialValue: _event,
-              isExpanded: true,
-              isDense: true,
-              dropdownColor: pal.surface,
-              style: TextStyle(fontSize: 15, color: pal.fg),
-              decoration: _inputDeco(pal, null),
-              items: [for (final e in _events) DropdownMenuItem(value: e, child: Text(e))],
-              onChanged: (v) => _changed(() => _event = v ?? _event),
-            )),
-            field('Venue / district', _districtDropdown(pal, districts)),
-          ),
+          if (_multi)
+            row2(
+              field('Phone', text(_phone, hint: '+91', phone: true)),
+              field('Venue / district', _districtDropdown(pal, districts)),
+            )
+          else ...[
+            row2(
+              field('Phone', text(_phone, hint: '+91', phone: true)),
+              field('Wedding date', _DateInput(
+                pal: pal,
+                value: _date,
+                onPick: (d) => _changed(() => _date = d),
+              )),
+            ),
+            row2(
+              field('Event', _EventField(
+                pal: pal,
+                value: _event,
+                onChanged: (v) => _changed(() => _event = v),
+              )),
+              field('Venue / district', _districtDropdown(pal, districts)),
+            ),
+          ],
         ]),
         const SizedBox(height: 16),
+        if (_multi)
+          _programPanel(pal, q)
+        else
         _Panel(pal: pal, title: 'Packages in this quote', children: [
           if (_catalog.isEmpty)
             Padding(
@@ -888,16 +1117,11 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
               rec: q.rec == p.id,
               onToggle: () {
                 final sel = {..._selectedIds};
-                if (sel.contains(p.id)) {
-                  if (sel.length == 1) {
-                    _showToast('Keep at least one package in the quote');
-                    return;
-                  }
-                  sel.remove(p.id);
-                } else {
-                  sel.add(p.id);
-                }
-                _changed(() => _picked = sel);
+                if (!sel.remove(p.id)) sel.add(p.id);
+                _changed(() {
+                  _picked = sel;
+                  if (!sel.contains(_rec)) _rec = null;
+                });
               },
               // Tap to recommend; tap the recommended one again to clear it.
               onRecommend: () => _changed(() {
@@ -912,16 +1136,31 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
         ]),
         const SizedBox(height: 16),
         _Panel(pal: pal, title: 'Add-ons & guest services', gap: 0, children: [
-          for (var i = 0; i < _addons.length; i++)
+          for (final (i, a) in _allAddons.indexed)
             _AddonRow(
               pal: pal,
-              addon: _addons[i],
+              addon: a,
               first: i == 0,
-              price: q.prices[_addons[i].id],
-              sel: _sel[_addons[i].id],
-              onToggle: (on) => _changed(() => (_sel[_addons[i].id] ??= _AddonSel()).on = on),
-              onQty: (n) => _changed(() => _sel[_addons[i].id]!.qty = max(1, n)),
+              price: q.prices[a.id],
+              sel: _sel[a.id],
+              onToggle: (on) => _changed(() => (_sel[a.id] ??= _AddonSel()).on = on),
+              onQty: (n) => _changed(() => _sel[a.id]!.qty = max(1, n)),
+              onDelete: _customAddons.contains(a)
+                  ? () => _changed(() {
+                        _customAddons = [..._customAddons]..remove(a);
+                        _sel.remove(a.id);
+                      })
+                  : null,
             ),
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: _Btn(
+              pal: pal,
+              label: 'Add custom service',
+              icon: Icons.add_rounded,
+              onTap: () => _addCustomAddon(pal),
+            ),
+          ),
         ]),
         const SizedBox(height: 16),
         _Panel(pal: pal, title: 'Adjustments', children: [
@@ -953,15 +1192,240 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
         const SizedBox(height: 8),
         _Btn(
           pal: pal,
-          label: q.pkgs.isEmpty
-              ? 'Create invoice'
-              : 'Create invoice (${q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first).name})',
+          label: q.multi
+              ? 'Create invoice (${q.program.length}-day program)'
+              : q.pkgs.isEmpty
+                  ? 'Create invoice'
+                  : 'Create invoice (${q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first).name})',
           icon: Icons.receipt_long_rounded,
-          onTap: q.pkgs.isEmpty ? null : () => _createInvoice(q, district),
+          onTap: (q.multi ? q.program.isEmpty : q.pkgs.isEmpty) ? null : () => _createInvoice(q, district),
         ),
         const SizedBox(height: 8),
         _Btn(pal: pal, label: 'New quote', onTap: _newQuote),
       ],
+    );
+  }
+
+  /// Lets the sales team add their own service line to this quote.
+  Future<void> _addCustomAddon(_Pal pal) async {
+    final name = TextEditingController();
+    final note = TextEditingController();
+    final price = TextEditingController();
+    var perPerson = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: const Text('Add custom service'),
+          content: SizedBox(
+            width: 400,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              TextField(
+                controller: name,
+                autofocus: true,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Service name *', hintText: 'e.g. Mehendi artist, Groom makeup'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: note,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(labelText: 'Details (optional)'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: price,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: const InputDecoration(labelText: 'Price (₹)', hintText: 'Leave empty for "On request"'),
+              ),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: perPerson,
+                onChanged: (v) => setD(() => perPerson = v ?? false),
+                title: const Text('Price is per person'),
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                if (name.text.trim().isEmpty) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok == true && name.text.trim().isNotEmpty) {
+      final a = _Addon(
+        'c_${DateTime.now().microsecondsSinceEpoch}',
+        name.text.trim(),
+        note.text.trim(),
+        double.tryParse(price.text.trim()),
+        perPerson: perPerson,
+      );
+      // Added on purpose, so it's ticked straight away.
+      _changed(() {
+        _customAddons = [..._customAddons, a];
+        _sel[a.id] = _AddonSel(on: true);
+      });
+    }
+    name.dispose();
+    note.dispose();
+    price.dispose();
+  }
+
+  /// Multi-day programme editor: one card per day.
+  Widget _programPanel(_Pal pal, _Quote q) {
+    return _Panel(pal: pal, title: 'Program days', children: [
+      if (_catalog.isEmpty)
+        Text(
+          _pkgsAsync.isLoading ? 'Loading packages…' : 'No packages yet. Add them in Services → Packages.',
+          style: TextStyle(fontSize: 13, color: pal.muted),
+        ),
+      for (var i = 0; i < _days.length; i++)
+        _ProgramDayCard(
+          key: ObjectKey(_days[i]),
+          pal: pal,
+          no: i + 1,
+          day: _days[i],
+          catalog: _catalog,
+          packagePrice: q.program.length > i && q.program[i].pkg != null ? q.prices[q.program[i].pkg!.id] : null,
+          canRemove: _days.length > 1,
+          onChanged: () => _changed(),
+          onRemove: () => _removeDay(i),
+        ),
+      _Btn(pal: pal, label: 'Add day', icon: Icons.add_rounded, onTap: _addDay),
+      if (q.program.isNotEmpty)
+        Row(children: [
+          Expanded(
+            child: Text('${q.program.length} day${q.program.length == 1 ? '' : 's'} · ${q.programSpan}',
+                style: TextStyle(fontSize: 12.5, color: pal.muted)),
+          ),
+          Text(_inr(q.programTotal),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: pal.fg)),
+        ]),
+    ]);
+  }
+}
+
+/// Editor for one programme day.
+class _ProgramDayCard extends StatelessWidget {
+  final _Pal pal;
+  final int no;
+  final _ProgramDay day;
+  final List<_Pkg> catalog;
+  final double? packagePrice;
+  final bool canRemove;
+  final VoidCallback onChanged, onRemove;
+
+  const _ProgramDayCard({
+    super.key,
+    required this.pal,
+    required this.no,
+    required this.day,
+    required this.catalog,
+    required this.packagePrice,
+    required this.canRemove,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final pkgValue = catalog.any((p) => p.id == day.pkgId) ? day.pkgId : null;
+    Widget label(String t) => Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(t, style: TextStyle(fontSize: 12, color: pal.muted)),
+        );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
+      decoration: BoxDecoration(
+        color: pal.bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: pal.line),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+            decoration: BoxDecoration(color: _wine, borderRadius: BorderRadius.circular(999)),
+            child: Text('Day $no', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+          const Spacer(),
+          if (canRemove)
+            IconButton(
+              tooltip: 'Remove day $no',
+              visualDensity: VisualDensity.compact,
+              onPressed: onRemove,
+              icon: Icon(Icons.delete_outline_rounded, size: 19, color: pal.muted),
+            ),
+        ]),
+        const SizedBox(height: 6),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              label('Date'),
+              _DateInput(pal: pal, value: day.date, onPick: (d) {
+                day.date = d;
+                onChanged();
+              }),
+            ]),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              label('Event'),
+              _EventField(
+                pal: pal,
+                value: day.event,
+                onChanged: (v) {
+                  day.event = v;
+                  onChanged();
+                },
+              ),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        label('Package'),
+        DropdownButtonFormField<String>(
+          key: ValueKey('day-pkg-${catalog.length}-$pkgValue'),
+          initialValue: pkgValue,
+          isExpanded: true,
+          isDense: true,
+          dropdownColor: pal.surface,
+          style: TextStyle(fontSize: 14, color: pal.fg),
+          hint: Text('Choose package', style: TextStyle(color: pal.muted)),
+          decoration: _inputDeco(pal, null),
+          items: [
+            for (final p in catalog)
+              DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) {
+            day.pkgId = v;
+            onChanged();
+          },
+        ),
+        const SizedBox(height: 8),
+        label('Price for this day (₹)'),
+        TextField(
+          controller: day.price,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onChanged: (_) => onChanged(),
+          style: TextStyle(fontSize: 14, color: pal.fg),
+          decoration: _inputDeco(
+            pal,
+            packagePrice == null ? 'Package price' : 'Package price ${_inr(packagePrice!)}',
+          ),
+        ),
+      ]),
     );
   }
 }
@@ -1220,6 +1684,9 @@ class _AddonRow extends StatelessWidget {
   final _AddonSel? sel;
   final ValueChanged<bool> onToggle;
   final ValueChanged<int> onQty;
+
+  /// Set for custom services: shows a remove button.
+  final VoidCallback? onDelete;
   const _AddonRow({
     required this.pal,
     required this.addon,
@@ -1228,6 +1695,7 @@ class _AddonRow extends StatelessWidget {
     required this.sel,
     required this.onToggle,
     required this.onQty,
+    this.onDelete,
   });
 
   @override
@@ -1250,7 +1718,8 @@ class _AddonRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(addon.name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: pal.fg)),
-                  Text(addon.note, style: TextStyle(fontSize: 12, height: 1.4, color: pal.muted)),
+                  if (addon.note.isNotEmpty)
+                    Text(addon.note, style: TextStyle(fontSize: 12, height: 1.4, color: pal.muted)),
                   if (addon.perPerson && on) ...[
                     const SizedBox(height: 4),
                     _Qty(pal: pal, value: sel!.qty, onChanged: onQty),
@@ -1270,10 +1739,61 @@ class _AddonRow extends StatelessWidget {
                         Text('per person', style: TextStyle(fontSize: 11, color: pal.muted)),
                     ],
                   ),
+            if (onDelete != null)
+              IconButton(
+                tooltip: 'Remove this service',
+                visualDensity: VisualDensity.compact,
+                onPressed: onDelete,
+                icon: Icon(Icons.close_rounded, size: 18, color: pal.muted),
+              ),
           ],
         ),
       ),
     );
+  }
+}
+
+/// Event type: pick from the list, or "Other" to type your own.
+class _EventField extends StatelessWidget {
+  final _Pal pal;
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _EventField({required this.pal, required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final custom = !_events.contains(value);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String>(
+        key: ValueKey('event-${custom ? _otherEvent : value}'),
+        initialValue: custom ? _otherEvent : value,
+        isExpanded: true,
+        isDense: true,
+        dropdownColor: pal.surface,
+        style: TextStyle(fontSize: 14, color: pal.fg),
+        decoration: _inputDeco(pal, null),
+        items: [
+          for (final e in _events) DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis)),
+          const DropdownMenuItem(value: _otherEvent, child: Text('Other (type your own)…')),
+        ],
+        onChanged: (v) {
+          if (v == null) return;
+          // "Other" starts blank so the sales team types the event name.
+          onChanged(v == _otherEvent ? (custom ? value : '') : v);
+        },
+      ),
+      if (custom) ...[
+        const SizedBox(height: 6),
+        TextFormField(
+          initialValue: value,
+          autofocus: value.isEmpty,
+          textCapitalization: TextCapitalization.words,
+          style: TextStyle(fontSize: 14, color: pal.fg),
+          decoration: _inputDeco(pal, 'e.g. Sangeet, Baptism, Birthday'),
+          onChanged: onChanged,
+        ),
+      ],
+    ]);
   }
 }
 
@@ -1519,8 +2039,21 @@ class _QuoteSheet extends StatelessWidget {
                   children: [
                     _client(),
                     const SizedBox(height: 28),
-                    _title(display, 'Bridal Makeup Packages', 'Choose the experience that suits your style'),
-                    _cards(display, c.maxWidth < 760),
+                    if (q.multi) ...[
+                      _title(display, 'Your Programme',
+                          '${q.program.length} event${q.program.length == 1 ? '' : 's'} · ${q.programSpan}'),
+                      _programTable(),
+                    ] else if (q.pkgs.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Text('Select the packages to quote in the builder.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: _sMuted)),
+                      )
+                    else ...[
+                      _title(display, 'Bridal Makeup Packages', 'Choose the experience that suits your style'),
+                      _cards(display, c.maxWidth < 760),
+                    ],
                     if (_featureRows().isNotEmpty) ...[
                       const SizedBox(height: 28),
                       _title(display, 'What’s Included'),
@@ -1531,9 +2064,11 @@ class _QuoteSheet extends StatelessWidget {
                       _title(display, 'Add-ons & Guest Services'),
                       _addonsTable(),
                     ],
-                    const SizedBox(height: 28),
-                    _title(display, 'Your Total', 'per package option'),
-                    _totalsTable(),
+                    if (q.multi || q.pkgs.isNotEmpty) ...[
+                      const SizedBox(height: 28),
+                      _title(display, 'Your Total', q.multi ? 'for the whole programme' : 'per package option'),
+                      q.multi ? _programTotalsTable() : _totalsTable(),
+                    ],
                     if (q.onRequest)
                       const Padding(
                         padding: EdgeInsets.fromLTRB(2, 8, 2, 0),
@@ -1638,7 +2173,10 @@ class _QuoteSheet extends StatelessWidget {
     final items = [
       ('Prepared for', q.name.isEmpty ? '—' : q.name),
       ('Phone', q.phone.isEmpty ? '—' : q.phone),
-      ('${q.event} date', q.date == null ? 'To be confirmed' : _fmtDate(q.date!)),
+      if (q.multi)
+        ('Programme', '${q.program.length} day${q.program.length == 1 ? '' : 's'} · ${q.programSpan}')
+      else
+        ('${q.event.isEmpty ? 'Event' : q.event} date', q.date == null ? 'To be confirmed' : _fmtDate(q.date!)),
       ('Venue', q.venue.isEmpty ? '—' : q.venue),
     ];
     return Container(
@@ -1839,6 +2377,59 @@ class _QuoteSheet extends StatelessWidget {
     );
   }
 
+  /// Multi-day: Day · Date · Event · Package · Amount.
+  Widget _programTable() {
+    const req = Text('On request', style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: _sMuted));
+    return _table(
+      header: const ['Day', 'Date', 'Event', 'Package', 'Amount'],
+      align: const [TextAlign.center, TextAlign.left, TextAlign.left, TextAlign.left, TextAlign.right],
+      widths: const {
+        0: FixedColumnWidth(56),
+        1: FixedColumnWidth(124),
+        2: FlexColumnWidth(1.2),
+        3: FlexColumnWidth(1.6),
+        4: FixedColumnWidth(120),
+      },
+      minWidth: 560,
+      rows: [
+        for (final d in q.program)
+          [
+            Text('${d.no}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(d.date == null ? 'To be confirmed' : DateFormat('EEE, d MMM y').format(d.date!)),
+            Text(d.event),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(d.pkg?.name ?? 'To be chosen', style: const TextStyle(fontWeight: FontWeight.w600)),
+              if ((d.pkg?.tech ?? '').isNotEmpty)
+                Text(d.pkg!.tech, style: const TextStyle(fontSize: 12.5, color: _sMuted)),
+            ]),
+            d.amount == null ? req : Text(_inr(d.amount!), textAlign: TextAlign.right),
+          ],
+      ],
+    );
+  }
+
+  /// Multi-day: one total for the whole programme.
+  Widget _programTotalsTable() {
+    const sub = TextStyle(color: _sHead);
+    const disc = TextStyle(color: _sOk);
+    const tot = TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white);
+    List<Widget> row(String label, String value, TextStyle s) =>
+        [Text(label, style: s), Text(value, textAlign: TextAlign.right, style: s)];
+    return _table(
+      header: const ['', 'Amount'],
+      align: const [TextAlign.left, TextAlign.right],
+      widths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+      lastIsTotal: true,
+      rows: [
+        row('Programme (${q.program.length} event${q.program.length == 1 ? '' : 's'})', _inr(q.programTotal), sub),
+        if (q.lines.isNotEmpty) row('Add-ons & guests', _inr(q.programAddons), sub),
+        if (q.travel > 0) row('Travel / location', _inr(q.travel), sub),
+        if (q.discount > 0) row('Discount', '− ${_inr(q.discount)}', disc),
+        row('Total', _inr(q.programGrandTotal), tot),
+      ],
+    );
+  }
+
   Set<int> _recCols() => {
     for (var i = 0; i < q.pkgs.length; i++)
       if (q.pkgs[i].id == q.rec) i + 1,
@@ -1904,7 +2495,12 @@ class _QuoteSheet extends StatelessWidget {
               children: [
                 Text(l.addon.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                 Text(l.addon.note, style: const TextStyle(fontSize: 12.5, color: _sMuted)),
-                if (q.freeWith(l.addon).isNotEmpty)
+                if (q.multi && q.freeInProgram(l.addon))
+                  const Text(
+                    'Included in your programme',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _sOk),
+                  )
+                else if (!q.multi && q.freeWith(l.addon).isNotEmpty)
                   Text(
                     'Included free with ${q.freeWith(l.addon).join(' & ')}',
                     style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _sOk),

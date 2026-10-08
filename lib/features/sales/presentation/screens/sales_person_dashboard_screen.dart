@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/notifications/controllers/notification_provid
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/combined_targets_section.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
 const _months = [
@@ -55,6 +56,7 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(paginatedLeadsProvider);
           ref.invalidate(myTargetProvider);
+          ref.invalidate(combinedTargetsProvider);
           try {
             await ref.read(paginatedLeadsProvider(LeadFilter(limit: 100)).future);
           } catch (_) {
@@ -107,6 +109,12 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const MyTargetCard(),
+                      const SizedBox(height: 16),
+                      // Shared team goals this month (hidden when there are none).
+                      CombinedTargetsSection(
+                        period: (month: now.month, year: now.year),
+                        hideWhenEmpty: true,
+                      ),
                       const SizedBox(height: 24),
                       _SectionLabel('Overview', crm: crm),
                       const SizedBox(height: 12),

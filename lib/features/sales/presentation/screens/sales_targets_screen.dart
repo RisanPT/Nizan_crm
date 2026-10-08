@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/sales/data/sales_target.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/combined_targets_section.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
@@ -166,7 +167,8 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
     if (data != null && _editsFor != _period) {
       _resetEdits();
       for (final r in data.rows) {
-        _edits[r.userId] = _Edit(r.target);
+        // Sales managers' targets are the team total — not editable.
+        if (!r.isTeamTotal) _edits[r.userId] = _Edit(r.target);
       }
       _editsFor = _period;
     }
@@ -183,6 +185,7 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
                 if (!await _confirmDiscard()) return;
                 setState(_resetEdits);
                 ref.invalidate(teamTargetsProvider(_period));
+                ref.invalidate(combinedTargetsProvider(_period));
               },
               child: ListView(
                 padding: EdgeInsets.fromLTRB(pad, 16, pad, 24),
@@ -228,7 +231,9 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
     );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Sales Targets', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: crm.textPrimary)),
-      Text('Set each salesperson’s monthly target. Achieved = bookings made this month, net of discount.',
+      Text(
+          'Set each salesperson’s monthly target — a sales manager’s target is the total of the team’s. '
+          'Achieved = bookings made this month, net of discount.',
           style: TextStyle(fontSize: 13, color: crm.textSecondary)),
       const SizedBox(height: 12),
       Wrap(
@@ -347,7 +352,105 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
             ],
           ]),
         ),
+      const SizedBox(height: 28),
+      CombinedTargetsSection(period: _period, editable: true),
     ]);
+  }
+
+  /// A sales manager's row: the team total (sum of every salesperson's
+  /// target) vs the team's sales plus their own. Read-only.
+  Widget _teamRow(CrmTheme crm, TeamTargetRow r, bool compact, double expected) {
+    final t = r.target!;
+    final pct = t.salesTarget > 0 ? r.achieved.salesValue / t.salesTarget : null;
+    final countPct = t.bookingsTarget > 0 ? r.achieved.bookings / t.bookingsTarget : null;
+    final color = targetStatusColor(pct ?? countPct ?? 0, expectedPct: expected);
+    final own = r.own?.salesValue ?? 0;
+
+    final name = Row(children: [
+      CircleAvatar(
+        radius: 16,
+        backgroundColor: crm.primary,
+        child: const Icon(Icons.groups_rounded, size: 16, color: Colors.white),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(r.name, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
+          Text(
+            [r.role.replaceAll('_', ' '), 'team total', if (!r.active) 'inactive'].join(' · '),
+            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+          ),
+        ]),
+      ),
+    ]);
+    Widget fixed(String text) => Tooltip(
+          message: 'Sum of ${t.teamSize} salesperson targets — set theirs to change this',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(color: crm.input, borderRadius: BorderRadius.circular(8)),
+            child: Row(children: [
+              Icon(Icons.functions_rounded, size: 15, color: crm.textSecondary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(text, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w700, color: crm.textPrimary)),
+              ),
+            ]),
+          ),
+        );
+    final valueField = fixed(t.salesTarget > 0 ? targetRupees(t.salesTarget) : 'No team target');
+    final countField = fixed(t.bookingsTarget > 0 ? '${t.bookingsTarget}' : '—');
+    final achieved = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Text(targetRupees(r.achieved.salesValue),
+            style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
+        Expanded(
+          child: Text('  ·  ${r.achieved.bookings} booking${r.achieved.bookings == 1 ? '' : 's'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+        ),
+        if (pct != null)
+          Text('${(pct * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.w800, color: color)),
+      ]),
+      const SizedBox(height: 4),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(
+          value: (pct ?? countPct ?? 0).clamp(0, 1).toDouble(),
+          minHeight: 6,
+          backgroundColor: crm.input,
+          color: pct == null && countPct == null ? crm.border : color,
+        ),
+      ),
+      Text('Team sales${own > 0 ? ' incl. own ${targetRupees(own)}' : ''}',
+          style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+    ]);
+
+    final body = compact
+        ? Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            name,
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(flex: 3, child: valueField),
+              const SizedBox(width: 8),
+              Expanded(flex: 2, child: countField),
+            ]),
+            const SizedBox(height: 10),
+            achieved,
+          ])
+        : Row(children: [
+            Expanded(flex: 4, child: name),
+            Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(right: 12), child: valueField)),
+            Expanded(flex: 2, child: Padding(padding: const EdgeInsets.only(right: 16), child: countField)),
+            Expanded(flex: 5, child: achieved),
+          ]);
+    return Container(
+      color: crm.primary.withValues(alpha: 0.04),
+      padding: compact ? const EdgeInsets.all(14) : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: body,
+    );
   }
 
   Widget _tableHeader(CrmTheme crm) {
@@ -364,6 +467,7 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
   }
 
   Widget _row(CrmTheme crm, TeamTargetRow r, bool compact, double expected) {
+    if (r.isTeamTotal) return _teamRow(crm, r, compact, expected);
     final e = _edits[r.userId];
     if (e == null) return const SizedBox.shrink();
     final changed = e.differsFrom(r.target);
@@ -430,9 +534,12 @@ class _SalesTargetsScreenState extends ConsumerState<SalesTargetsScreen> {
       Row(children: [
         Text(targetRupees(r.achieved.salesValue),
             style: TextStyle(fontWeight: FontWeight.w800, color: crm.textPrimary)),
-        Text('  ·  ${r.achieved.bookings} booking${r.achieved.bookings == 1 ? '' : 's'}',
-            style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-        const Spacer(),
+        Expanded(
+          child: Text('  ·  ${r.achieved.bookings} booking${r.achieved.bookings == 1 ? '' : 's'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+        ),
         if (pct != null)
           Text('${(pct * 100).toStringAsFixed(0)}%', style: TextStyle(fontWeight: FontWeight.w800, color: color)),
       ]),

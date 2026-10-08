@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
@@ -24,6 +23,9 @@ import '../../core/models/employee.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/dashboard/presentation/tabs/finance_tab.dart';
+import 'package:nizan_crm/features/dashboard/presentation/tabs/sales_analytics_tab.dart';
+import 'package:nizan_crm/features/dashboard/presentation/tabs/marketing_tab.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -36,13 +38,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   late DateTime _selectedMonth;
   late List<DateTime> _dropdownMonths;
 
-  int _activeTab = 0; // 0: Operations, 1: Sales
+  int _activeTab = 0; // index into _tabs (Operations, Sales, Sales Team, …)
   // Shared Operations-tab period filter: drives the Lead growth chart AND the
   // Lead sources donut + Enquiries-by-location map (one filter, everything moves).
   String _leadPeriod = 'Monthly'; // 'Monthly' | 'Weekly' | 'Daily'
-  String _salesRange = 'Last 30 days'; // 'Last 7 days', 'Last 30 days', 'Last 6 months', 'Custom'
-  bool _compareEnabled = true;
-  DateTimeRange? _customDateRange;
 
   @override
   void initState() {
@@ -56,424 +55,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     });
   }
 
-  Map<String, DateTimeRange> _getDateRanges() {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    
-    DateTime currentStart;
-    DateTime currentEnd = today;
-    DateTime prevStart;
-    DateTime prevEnd;
-
-    if (_salesRange == 'Last 7 days') {
-      currentStart = today.subtract(const Duration(days: 6));
-      prevStart = currentStart.subtract(const Duration(days: 7));
-      prevEnd = currentStart.subtract(const Duration(days: 1));
-    } else if (_salesRange == 'Last 6 months') {
-      currentStart = DateTime(today.year, today.month - 5, 1);
-      prevStart = DateTime(currentStart.year, currentStart.month - 6, 1);
-      prevEnd = currentStart.subtract(const Duration(days: 1));
-    } else if (_salesRange == 'Custom' && _customDateRange != null) {
-      currentStart = _customDateRange!.start;
-      currentEnd = _customDateRange!.end;
-      final diff = currentEnd.difference(currentStart).inDays + 1;
-      prevStart = currentStart.subtract(Duration(days: diff));
-      prevEnd = currentStart.subtract(const Duration(days: 1));
-    } else {
-      // Default: Last 30 days
-      currentStart = today.subtract(const Duration(days: 29));
-      prevStart = currentStart.subtract(const Duration(days: 30));
-      prevEnd = currentStart.subtract(const Duration(days: 1));
-    }
-
-    return {
-      'current': DateTimeRange(start: currentStart, end: currentEnd),
-      'previous': DateTimeRange(start: prevStart, end: prevEnd),
-    };
-  }
-
-  Map<String, dynamic> _calculateSalesMetrics(List<Booking> bookings, DateTimeRange currentRange, DateTimeRange prevRange) {
-    final currentBookings = bookings.where((b) {
-      final date = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
-      return !date.isBefore(currentRange.start) && !date.isAfter(currentRange.end);
-    }).toList();
-
-    final prevBookings = bookings.where((b) {
-      final date = DateTime(b.bookingDate.year, b.bookingDate.month, b.bookingDate.day);
-      return !date.isBefore(prevRange.start) && !date.isAfter(prevRange.end);
-    }).toList();
-
-    final double currentSales = currentBookings
-        .where((b) => b.countsTowardSales)
-        .fold(0.0, (sum, b) => sum + b.totalPrice);
-    final int currentOrders = currentBookings.length;
-    // Average over the bookings that count toward sales (same set as the sum).
-    final int currentSaleOrders =
-        currentBookings.where((b) => b.countsTowardSales).length;
-    final double currentAvgBasket =
-        currentSaleOrders > 0 ? currentSales / currentSaleOrders : 0.0;
-
-    final double prevSales = prevBookings
-        .where((b) => b.countsTowardSales)
-        .fold(0.0, (sum, b) => sum + b.totalPrice);
-    final int prevOrders = prevBookings.length;
-    final int prevSaleOrders =
-        prevBookings.where((b) => b.countsTowardSales).length;
-    final double prevAvgBasket =
-        prevSaleOrders > 0 ? prevSales / prevSaleOrders : 0.0;
-
-    double salesGrowth = 0.0;
-    if (prevSales > 0) {
-      salesGrowth = ((currentSales - prevSales) / prevSales) * 100;
-    } else if (currentSales > 0) {
-      salesGrowth = 100.0;
-    }
-
-    double ordersGrowth = 0.0;
-    if (prevOrders > 0) {
-      ordersGrowth = ((currentOrders - prevOrders) / prevOrders) * 100;
-    } else if (currentOrders > 0) {
-      ordersGrowth = 100.0;
-    }
-
-    double avgBasketGrowth = 0.0;
-    if (prevAvgBasket > 0) {
-      avgBasketGrowth = ((currentAvgBasket - prevAvgBasket) / prevAvgBasket) * 100;
-    } else if (currentAvgBasket > 0) {
-      avgBasketGrowth = 100.0;
-    }
-
-    return {
-      'currentBookings': currentBookings,
-      'prevBookings': prevBookings,
-      'currentSales': currentSales,
-      'prevSales': prevSales,
-      'salesGrowth': salesGrowth,
-      'currentOrders': currentOrders,
-      'prevOrders': prevOrders,
-      'ordersGrowth': ordersGrowth,
-      'currentAvgBasket': currentAvgBasket,
-      'prevAvgBasket': prevAvgBasket,
-      'avgBasketGrowth': avgBasketGrowth,
-    };
-  }
-
-  List<BarChartGroupData> _buildChartGroups(
-    List<Booking> currentBookings,
-    List<Booking> prevBookings,
-    DateTimeRange currentRange,
-    DateTimeRange prevRange,
-    bool compareEnabled,
-  ) {
-    final List<BarChartGroupData> groups = [];
-    
-    if (_salesRange == 'Last 6 months') {
-      for (int i = 0; i < 6; i++) {
-        final currentMonthStart = DateTime(currentRange.start.year, currentRange.start.month + i, 1);
-        final currentMonthEnd = DateTime(currentMonthStart.year, currentMonthStart.month + 1, 0);
-        
-        final prevMonthStart = DateTime(prevRange.start.year, prevRange.start.month + i, 1);
-        final prevMonthEnd = DateTime(prevMonthStart.year, prevMonthStart.month + 1, 0);
-
-        final double currentVal = currentBookings
-            .where((b) => !b.bookingDate.isBefore(currentMonthStart) && !b.bookingDate.isAfter(currentMonthEnd) && b.countsTowardSales)
-            .fold(0.0, (sum, b) => sum + b.totalPrice);
-
-        final double prevVal = prevBookings
-            .where((b) => !b.bookingDate.isBefore(prevMonthStart) && !b.bookingDate.isAfter(prevMonthEnd) && b.countsTowardSales)
-            .fold(0.0, (sum, b) => sum + b.totalPrice);
-
-        groups.add(
-          BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: currentVal,
-                color: const Color(0xFFE05E26), // Orange
-                width: 14,
-                borderRadius: const BorderRadius.all(Radius.circular(2)),
-              ),
-              if (compareEnabled)
-                BarChartRodData(
-                  toY: prevVal,
-                  color: const Color(0xFFD2D5DA), // Grey
-                  width: 14,
-                  borderRadius: const BorderRadius.all(Radius.circular(2)),
-                ),
-            ],
-          ),
-        );
-      }
-    } else {
-      final diffDays = currentRange.end.difference(currentRange.start).inDays + 1;
-      for (int i = 0; i < diffDays; i++) {
-        final currentDate = currentRange.start.add(Duration(days: i));
-        final prevDate = prevRange.start.add(Duration(days: i));
-
-        final double currentVal = currentBookings
-            .where((b) => b.bookingDate.year == currentDate.year && b.bookingDate.month == currentDate.month && b.bookingDate.day == currentDate.day && b.countsTowardSales)
-            .fold(0.0, (sum, b) => sum + b.totalPrice);
-
-        final double prevVal = prevBookings
-            .where((b) => b.bookingDate.year == prevDate.year && b.bookingDate.month == prevDate.month && b.bookingDate.day == prevDate.day && b.countsTowardSales)
-            .fold(0.0, (sum, b) => sum + b.totalPrice);
-
-        groups.add(
-          BarChartGroupData(
-            x: i,
-            barRods: [
-              BarChartRodData(
-                toY: currentVal,
-                color: const Color(0xFFE05E26), // Orange
-                width: diffDays > 10 ? 4 : 10,
-                borderRadius: const BorderRadius.all(Radius.circular(2)),
-              ),
-              if (compareEnabled)
-                BarChartRodData(
-                  toY: prevVal,
-                  color: const Color(0xFFD2D5DA), // Grey
-                  width: diffDays > 10 ? 4 : 10,
-                  borderRadius: const BorderRadius.all(Radius.circular(2)),
-                ),
-            ],
-          ),
-        );
-      }
-    }
-    return groups;
-  }
-
-  String _getXAxisLabel(int value, DateTimeRange currentRange) {
-    if (_salesRange == 'Last 6 months') {
-      final monthDate = DateTime(currentRange.start.year, currentRange.start.month + value, 1);
-      return _monthName(monthDate.month).substring(0, 3);
-    } else if (_salesRange == 'Last 7 days') {
-      final date = currentRange.start.add(Duration(days: value));
-      const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      return weekdayNames[date.weekday - 1];
-    } else {
-      final date = currentRange.start.add(Duration(days: value));
-      if (value % 5 == 0 || value == 29) {
-        return '${date.day} ${_monthName(date.month).substring(0, 3)}';
-      }
-      return '';
-    }
-  }
-
-  Future<void> _selectCustomRange() async {
-    final DateTimeRange? picked = await showBrandedDateRangePicker(
-      context,
-      firstDate: DateTime(2024),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      initialDateRange: _customDateRange ?? DateTimeRange(
-        start: DateTime.now().subtract(const Duration(days: 30)),
-        end: DateTime.now(),
-      ),
-    );
-    if (picked != null) {
-      setState(() {
-        _salesRange = 'Custom';
-        _customDateRange = picked;
-      });
-    }
-  }
-
-  String formatInrCurrency(double amount, {bool decimal = false}) {
-    if (amount >= 100000) {
-      final int value = amount.toInt();
-      final formatted = value.toString().replaceAllMapped(RegExp(r'(\d+?)(?=(\d\d)+(\d)(?!\d))'), (m) => '${m[1]},');
-      return '₹$formatted';
-    }
-    final format = decimal ? amount.toStringAsFixed(2) : amount.toStringAsFixed(0);
-    final parts = format.split('.');
-    final intPart = parts[0].replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (Match m) => '${m[1]},',
-    );
-    final decimals = parts.length > 1 ? '.${parts[1]}' : '';
-    return '₹$intPart$decimals';
-  }
-
-  Widget _buildKpiCard({
-    required String title,
-    required String value,
-    required double growth,
-    required String prevValue,
-    required bool compareEnabled,
-    required double width,
-  }) {
-    final isPositive = growth >= 0;
-    final growthText = '${isPositive ? "↑" : "↓"} ${growth.abs().toStringAsFixed(0)}%';
-    final growthColor = isPositive ? const Color(0xFF10B981) : const Color(0xFFEF4444);
-
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF4B5563),
-                ),
-              ),
-              const Icon(Icons.info_outline, size: 14, color: Color(0xFF9CA3AF)),
-            ],
-          ),
-          12.h,
-          Row(
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    value,
-                    style: GoogleFonts.inter(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                ),
-              ),
-              if (compareEnabled) ...[
-                8.w,
-                Text(
-                  growthText,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: growthColor,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          8.h,
-          if (compareEnabled)
-            Text(
-              '$prevValue in previous period',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: const Color(0xFF6B7280),
-              ),
-            )
-          else
-            const SizedBox(height: 14),
-        ],
-      ),
-    );
-  }
-
-  Widget buildDateSelector() {
-    final datePills = ['Last 7 days', 'Last 30 days', 'Last 6 months', 'Custom'];
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: datePills.map((range) {
-            final isSelected = _salesRange == range;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: OutlinedButton(
-                onPressed: () {
-                  if (range == 'Custom') {
-                    _selectCustomRange();
-                  } else {
-                    setState(() {
-                      _salesRange = range;
-                    });
-                  }
-                },
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: isSelected ? const Color(0xFFFFF6F0) : Colors.white,
-                  side: BorderSide(
-                    color: isSelected ? const Color(0xFFE05E26) : const Color(0xFFD2D5DA),
-                    width: 1.5,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                ),
-                child: Row(
-                  children: [
-                    if (range == 'Custom') ...[
-                      const Icon(Icons.calendar_today_outlined, size: 12, color: Color(0xFFE05E26)),
-                      8.w,
-                    ],
-                    Text(
-                      range,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                        color: isSelected ? const Color(0xFFE05E26) : const Color(0xFF4B5563),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Switch(
-              value: _compareEnabled,
-              onChanged: (val) {
-                setState(() {
-                  _compareEnabled = val;
-                });
-              },
-              activeThumbColor: const Color(0xFF10B981),
-            ),
-            8.w,
-            Text(
-              'Compare with previous period',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF1F2937),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   Widget buildTabBar() {
     final tabStyles = GoogleFonts.inter(
       fontSize: 14,
       fontWeight: FontWeight.w600,
     );
 
-    final List<String> tabs = ['Operations', 'Sales'];
+    final tabs = _tabs;
 
     return Container(
       decoration: BoxDecoration(
@@ -486,7 +74,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Row(
+      // Scrolls so all tabs stay reachable on phones.
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: tabs.asMap().entries.map((entry) {
           final idx = entry.key;
@@ -519,8 +110,28 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           );
         }).toList(),
+        ),
       ),
     );
+  }
+
+  /// Tabs this user can open. Finance is limited to the roles the server
+  /// allows on /api/dashboard/finance; salespeople (who only see their own
+  /// figures) don't get the company-wide Marketing tab.
+  List<String> get _tabs {
+    final role = ref.read(authSessionProvider)?.role.trim().toLowerCase() ?? '';
+    return [
+      'Operations',
+      'Sales',
+      if (!_selfScoped) 'Marketing',
+      if (kFinanceDashboardRoles.contains(role)) 'Finance',
+    ];
+  }
+
+  /// Sales / sales-executive users only ever see their own figures.
+  bool get _selfScoped {
+    final role = ref.read(authSessionProvider)?.role.trim().toLowerCase() ?? '';
+    return role == 'sales' || role == 'sales_executive';
   }
 
   Widget getTabContent(
@@ -544,317 +155,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     bool isTablet,
     List<Employee> employees,
   ) {
-    switch (_activeTab) {
-      case 0:
-        return _buildOperationsTab(context, userName, bookings, leads, collections, filteredLeads, enquiriesCount, bookingsCount, conversionRate, growthRate, isGrowthPositive, totalRevenue, revenueGrowth, isRevenueGrowthPositive, formatCurrency, exportReport, crmColors, isDesktop, isTablet);
-      case 1:
-        return _buildSalesTab(bookings, crmColors, isDesktop);
+    final tabs = _tabs;
+    switch (tabs[_activeTab.clamp(0, tabs.length - 1)]) {
+      case 'Sales':
+        return SalesAnalyticsTab(selfScoped: _selfScoped);
+      case 'Marketing':
+        return const MarketingTab();
+      case 'Finance':
+        return const FinanceTab();
       default:
-        return const SizedBox.shrink();
+        return _buildOperationsTab(context, userName, bookings, leads, collections, filteredLeads, enquiriesCount, bookingsCount, conversionRate, growthRate, isGrowthPositive, totalRevenue, revenueGrowth, isRevenueGrowthPositive, formatCurrency, exportReport, crmColors, isDesktop, isTablet);
     }
-  }
-
-  Widget _buildSalesTab(List<Booking> bookings, CrmTheme crmColors, bool isDesktop) {
-    final ranges = _getDateRanges();
-    final currentRange = ranges['current']!;
-    final prevRange = ranges['previous']!;
-
-    final metrics = _calculateSalesMetrics(bookings, currentRange, prevRange);
-    
-    final double currentSales = metrics['currentSales'];
-    final double prevSales = metrics['prevSales'];
-    final double salesGrowth = metrics['salesGrowth'];
-
-    final int currentOrders = metrics['currentOrders'];
-    final int prevOrders = metrics['prevOrders'];
-    final double ordersGrowth = metrics['ordersGrowth'];
-
-    final double currentAvgBasket = metrics['currentAvgBasket'];
-    final double prevAvgBasket = metrics['prevAvgBasket'];
-    final double avgBasketGrowth = metrics['avgBasketGrowth'];
-
-    final List<Booking> currentPeriodBookings = metrics['currentBookings'];
-    final List<Booking> prevPeriodBookings = metrics['prevBookings'];
-
-    final groups = _buildChartGroups(currentPeriodBookings, prevPeriodBookings, currentRange, prevRange, _compareEnabled);
-
-    double maxY = 1000.0;
-    for (final group in groups) {
-      for (final rod in group.barRods) {
-        if (rod.toY > maxY) {
-          maxY = rod.toY;
-        }
-      }
-    }
-    maxY = (maxY * 1.15).roundToDouble();
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Sales Dashboard',
-            style: GoogleFonts.inter(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF0F172A),
-            ),
-          ),
-          16.h,
-          buildDateSelector(),
-          24.h,
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final double spacing = 16.0;
-              final int columns = isDesktop ? 3 : 1;
-              final double itemWidth = (constraints.maxWidth - (spacing * (columns - 1))) / columns;
-
-              return Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: [
-                  _buildKpiCard(
-                    title: 'Sales',
-                    value: formatInrCurrency(currentSales),
-                    growth: salesGrowth,
-                    prevValue: formatInrCurrency(prevSales),
-                    compareEnabled: _compareEnabled,
-                    width: itemWidth,
-                  ),
-                  _buildKpiCard(
-                    title: 'Orders',
-                    value: currentOrders.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},'),
-                    growth: ordersGrowth,
-                    prevValue: prevOrders.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},'),
-                    compareEnabled: _compareEnabled,
-                    width: itemWidth,
-                  ),
-                  _buildKpiCard(
-                    title: 'Avg. basket size',
-                    value: formatInrCurrency(currentAvgBasket, decimal: true),
-                    growth: avgBasketGrowth,
-                    prevValue: formatInrCurrency(prevAvgBasket, decimal: true),
-                    compareEnabled: _compareEnabled,
-                    width: itemWidth,
-                  ),
-                ],
-              );
-            },
-          ),
-          32.h,
-          Card(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: Color(0xFFE5E7EB)),
-            ),
-            elevation: 0,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Sales by Day',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          8.w,
-                          const Icon(Icons.info_outline, size: 14, color: Color(0xFF9CA3AF)),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: () {},
-                            icon: const Icon(Icons.show_chart, size: 14, color: Color(0xFF374151)),
-                            label: Text(
-                              'End of day report',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF374151),
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              side: const BorderSide(color: Color(0xFFE5E7EB)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
-                          8.w,
-                          IconButton(
-                            onPressed: () {},
-                            icon: const Icon(Icons.download_outlined, size: 18, color: Color(0xFF374151)),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: const BorderSide(color: Color(0xFFE5E7EB)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  16.h,
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Sales ($currentOrders)',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF4B5563),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      6.h,
-                      Row(
-                        children: [
-                          Text(
-                            formatInrCurrency(currentSales),
-                            style: GoogleFonts.inter(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF0F172A),
-                            ),
-                          ),
-                          if (_compareEnabled) ...[
-                            8.w,
-                            Text(
-                              '${salesGrowth >= 0 ? "↑" : "↓"} ${salesGrowth.abs().toStringAsFixed(0)}%',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: salesGrowth >= 0 ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (_compareEnabled) ...[
-                        4.h,
-                        Text(
-                          '${formatInrCurrency(prevSales)} ($prevOrders) in previous period',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  32.h,
-                  if (groups.isEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 48),
-                        child: Text(
-                          'No sales data in this period',
-                          style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
-                        ),
-                      ),
-                    )
-                  else
-                    SizedBox(
-                      height: 280,
-                      child: BarChart(
-                        BarChartData(
-                          alignment: BarChartAlignment.spaceAround,
-                          maxY: maxY,
-                          gridData: FlGridData(
-                            show: true,
-                            drawVerticalLine: false,
-                            horizontalInterval: maxY > 10000 ? (maxY / 4).roundToDouble() : 2500,
-                            getDrawingHorizontalLine: (value) => FlLine(
-                              color: Colors.grey.withValues(alpha: 0.1),
-                              strokeWidth: 1,
-                            ),
-                          ),
-                          titlesData: FlTitlesData(
-                            show: true,
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                reservedSize: 30,
-                                getTitlesWidget: (value, meta) {
-                                  final label = _getXAxisLabel(value.toInt(), currentRange);
-                                  return SideTitleWidget(
-                                    meta: meta,
-                                    space: 8,
-                                    child: Text(
-                                      label,
-                                      style: GoogleFonts.inter(
-                                        color: const Color(0xFF7B8694),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            leftTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true,
-                                reservedSize: 45,
-                                getTitlesWidget: (value, meta) {
-                                  if (value == 0) return const SizedBox.shrink();
-                                  return SideTitleWidget(
-                                    meta: meta,
-                                    child: Text(
-                                      value >= 1000 ? '${(value / 1000).toStringAsFixed(0)}k' : value.toStringAsFixed(0),
-                                      style: GoogleFonts.inter(
-                                        color: const Color(0xFF7B8694),
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          ),
-                          borderData: FlBorderData(show: false),
-                          barTouchData: BarTouchData(
-                            touchTooltipData: BarTouchTooltipData(
-                              getTooltipColor: (group) => const Color(0xFF0F172A),
-                              getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                                return BarTooltipItem(
-                                  formatInrCurrency(rod.toY),
-                                  GoogleFonts.inter(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                );
-                              },
-                            ),
-                          ),
-                          barGroups: groups,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildOperationsTab(

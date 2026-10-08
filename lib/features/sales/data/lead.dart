@@ -21,6 +21,9 @@ class Lead {
   /// The converted booking's EVENT date (server-managed; resynced when the
   /// booking is rescheduled). Null for unconverted leads.
   final DateTime? eventDate;
+
+  /// Tentative event date when the customer hasn't fixed the day yet.
+  final DateTime? probableDate;
   final DateTime? followUpDate; // date+time for follow-up reminder
   /// How many times a follow-up has been scheduled for this lead.
   final int followUpCount;
@@ -66,6 +69,7 @@ class Lead {
     required this.enquiryDate,
     this.bookedDate,
     this.eventDate,
+    this.probableDate,
     this.followUpDate,
     this.followUpCount = 0,
     this.assignedTo,
@@ -117,6 +121,9 @@ class Lead {
       eventDate: json['eventDate'] != null
           ? DateTime.tryParse(json['eventDate'] as String)?.toLocal()
           : null,
+      probableDate: json['probableDate'] != null
+          ? DateTime.tryParse(json['probableDate'] as String)?.toLocal()
+          : null,
       followUpDate: json['followUpDate'] != null
           ? DateTime.parse(json['followUpDate'] as String).toLocal()
           : null,
@@ -162,6 +169,7 @@ class Lead {
       'leadDate': leadDate.toIso8601String(),
       'enquiryDate': enquiryDate.toUtc().toIso8601String(),
       if (bookedDate != null) 'bookedDate': bookedDate?.toUtc().toIso8601String(),
+      if (probableDate != null) 'probableDate': probableDate?.toUtc().toIso8601String(),
       // UTC instant (…Z) so the server stores the correct moment; fromJson does
       // the inverse .toLocal(). A naive local string would shift on read-back.
       if (followUpDate != null) 'followUpDate': followUpDate?.toUtc().toIso8601String(),
@@ -218,6 +226,7 @@ class Lead {
       enquiryDate: enquiryDate ?? this.enquiryDate,
       bookedDate: bookedDate ?? this.bookedDate,
       eventDate: eventDate,
+      probableDate: probableDate,
       followUpDate: followUpDate ?? this.followUpDate,
       followUpCount: followUpCount ?? this.followUpCount,
       assignedTo: assignedTo ?? this.assignedTo,

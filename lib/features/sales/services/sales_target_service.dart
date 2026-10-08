@@ -57,6 +57,41 @@ class SalesTargetService {
       throw AppException(e, action: "copy last month's targets");
     }
   }
+
+  /// Combined (pool) targets overlapping the month [p], with progress.
+  Future<List<CombinedTarget>> getCombined(TargetPeriod p) async {
+    try {
+      final res = await _dio.get('/sales-targets/combined',
+          queryParameters: {'month': p.month, 'year': p.year});
+      return [
+        for (final t in (_map(res.data)['targets'] as List? ?? const []))
+          CombinedTarget.fromJson((t as Map).cast<String, dynamic>()),
+      ];
+    } catch (e) {
+      throw AppException(e, action: 'load the combined targets');
+    }
+  }
+
+  /// Creates a combined target, or updates [id] when given.
+  Future<void> saveCombined(CombinedTargetInput input, {String? id}) async {
+    try {
+      if (id == null) {
+        await _dio.post('/sales-targets/combined', data: input.toJson());
+      } else {
+        await _dio.put('/sales-targets/combined/$id', data: input.toJson());
+      }
+    } catch (e) {
+      throw AppException(e, action: 'save the combined target');
+    }
+  }
+
+  Future<void> deleteCombined(String id) async {
+    try {
+      await _dio.delete('/sales-targets/combined/$id');
+    } catch (e) {
+      throw AppException(e, action: 'delete the combined target');
+    }
+  }
 }
 
 final salesTargetServiceProvider =
@@ -69,6 +104,15 @@ final myTargetProvider = FutureProvider.autoDispose
 /// Every salesperson's target and progress (sales managers only).
 final teamTargetsProvider = FutureProvider.autoDispose
     .family<TeamTargets, TargetPeriod>((ref, p) => ref.watch(salesTargetServiceProvider).getTeam(p));
+
+/// Combined (pool) targets that overlap a month.
+final combinedTargetsProvider = FutureProvider.autoDispose
+    .family<List<CombinedTarget>, TargetPeriod>((ref, p) => ref.watch(salesTargetServiceProvider).getCombined(p));
+
+/// A sales manager's target is the team total — mirrors the backend
+/// `isSalesManagerRole`.
+bool isSalesManagerRole(String? role) =>
+    RegExp(r'^sales.*manager$', caseSensitive: false).hasMatch((role ?? '').trim());
 
 /// Whether this role may set targets — mirrors the backend `canSetTargets`.
 bool canSetSalesTargets(String? role) {

@@ -682,9 +682,7 @@ class GeographicManagementScreen extends HookConsumerWidget {
                     ),
                   ),
                   Text(
-                    category == 'Zones'
-                        ? 'Manage, add, and search geographic $category.'
-                        : 'Search and view geographic $category.',
+                    'Manage, add, and search geographic $category.',
                     style: TextStyle(color: crmColors.textSecondary, fontSize: 13),
                   ),
                 ],
@@ -697,14 +695,20 @@ class GeographicManagementScreen extends HookConsumerWidget {
               },
               tooltip: viewMode.value == 'grid' ? 'Switch to Table View' : 'Switch to Grid View',
             ),
-            if (category == 'Zones') ...[
-              8.w,
-              ElevatedButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add, size: 18),
-                label: Text('Add $category'),
-              ),
-            ],
+            // Every level can be added here (each dialog picks its parent:
+            // state → zone, region → state, district → region, pincode → district).
+            8.w,
+            isMobile
+                ? IconButton.filled(
+                    onPressed: onAdd,
+                    tooltip: 'Add ${category.endsWith('s') ? category.substring(0, category.length - 1) : category}',
+                    icon: const Icon(Icons.add),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: onAdd,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text('Add ${category.endsWith('s') ? category.substring(0, category.length - 1) : category}'),
+                  ),
           ],
         ),
       );
