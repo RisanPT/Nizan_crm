@@ -30,6 +30,14 @@ enum _Basis {
   final String label;
   const _Basis(this.label);
 
+  /// Plain-language note shown under the toolbar.
+  String get hint => switch (this) {
+    _Basis.event =>
+      "Each lead is shown on the customer's EVENT day — the date they enquired for (or the booking's date once converted), not the day the lead was added.",
+    _Basis.received => 'Each lead is shown on the day the enquiry came in (when it was added).',
+    _Basis.followUp => 'Each lead is shown on its next follow-up date. Leads without a follow-up are not shown.',
+  };
+
   DateTime? dateOf(Lead l) => switch (this) {
     // Unconverted leads keep the requested event date in enquiryDate.
     _Basis.event => l.eventDate ?? l.enquiryDate,
@@ -149,6 +157,11 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
   /// Custom From–To filter (whole days, inclusive). Null = the visible month.
   DateTimeRange? _range;
 
+  /// Prodate finder (Event date view), as in the Sales Calendar: an event day
+  /// with at least [_minProdate] leads is a "prodate" — a peak demand day.
+  int _minProdate = 5;
+  bool _prodatesOnly = false; // fade non-prodate days so the peaks stand out
+
   void _shiftMonth(int delta) => setState(() {
         _month = DateTime(_month.year, _month.month + delta);
         _selectedDay = null;
@@ -244,6 +257,24 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
           listed.sort((a, b) => _basis.dateOf(a)!.compareTo(_basis.dateOf(b)!));
 
           final statuses = {for (final l in all) l.status}.where((s) => s.isNotEmpty).toList()..sort();
+
+          // Prodates: event days in the shown year with >= _minProdate leads
+          // (status filter applies; the From–To range does not).
+          final prodates = <(DateTime, int)>[];
+          if (_basis == _Basis.event) {
+            final perDay = <DateTime, int>{};
+            for (final l in all) {
+              if (_status != 'All' && l.status.toLowerCase() != _status.toLowerCase()) continue;
+              final d = _day((l.eventDate ?? l.enquiryDate).toLocal());
+              if (d.year != _month.year) continue;
+              perDay[d] = (perDay[d] ?? 0) + 1;
+            }
+            for (final e in perDay.entries) {
+              if (e.value >= _minProdate) prodates.add((e.key, e.value));
+            }
+            prodates.sort((a, b) => a.$1.compareTo(b.$1));
+          }
+          final prodateDays = {for (final p in prodates) p.$1};
           final scope = _selectedDay != null
               ? DateFormat('EEE, d MMM yyyy').format(_selectedDay!)
               : range != null
@@ -262,7 +293,16 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
                   child: ListView(
                     padding: EdgeInsets.fromLTRB(pad, 16, pad, 40),
                     children: [
-                      _toolbar(crm, statuses, size),
+                      _toolbar(crm, statuses, size, _basis == _Basis.event ? prodates : null),
+                      const SizedBox(height: 10),
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Icon(Icons.info_outline_rounded, size: 16, color: crm.textSecondary),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(_basis.hint,
+                              style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                        ),
+                      ]),
                       const SizedBox(height: 14),
                       _SummaryStrip(leads: monthLeads),
                       const SizedBox(height: 16),
@@ -272,6 +312,9 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
                         basis: _basis,
                         byDay: byDay,
                         range: range,
+                        prodateDays: prodateDays,
+                        dimNonProdate: _basis == _Basis.event && _prodatesOnly,
+                        minProdate: _minProdate,
                         selected: _selectedDay,
                         onSelect: (d) => setState(() {
                           _selectedDay = _selectedDay == d ? null : d;
@@ -317,7 +360,109 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
     );
   }
 
-  Widget _toolbar(CrmTheme crm, List<String> statuses, _Size size) {
+  static const _prodateColor = Color(0xFFB45309);
+
+  /// "Prodate ≥ N" stepper + "Only" toggle + "N this year" list.
+  Widget _prodatePills(CrmTheme crm, List<(DateTime, int)> prodates) {
+    final deco = BoxDecoration(
+      color: _prodateColor.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(100),
+      border: Border.all(color: _prodateColor.withValues(alpha: 0.45)),
+    );
+    Widget step(IconData icon, VoidCallback onTap) => InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: Padding(padding: const EdgeInsets.all(2), child: Icon(icon, size: 16, color: _prodateColor)),
+        );
+    const label = TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _prodateColor);
+    return Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      Tooltip(
+        message: 'A prodate is an event day with at least this many leads — a peak demand day.',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+          decoration: deco,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Text('🔥 Prodate ≥', style: label),
+            const SizedBox(width: 4),
+            step(Icons.remove_circle_outline, () => setState(() => _minProdate = (_minProdate - 1).clamp(2, 200))),
+            SizedBox(
+              width: 26,
+              child: Text('$_minProdate', textAlign: TextAlign.center, style: label.copyWith(fontSize: 13)),
+            ),
+            step(Icons.add_circle_outline, () => setState(() => _minProdate = (_minProdate + 1).clamp(2, 200))),
+            const Text(' leads', style: label),
+          ]),
+        ),
+      ),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: deco,
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          InkWell(
+            onTap: () => setState(() => _prodatesOnly = !_prodatesOnly),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(_prodatesOnly ? Icons.check_box : Icons.check_box_outline_blank, size: 16, color: _prodateColor),
+              const SizedBox(width: 3),
+              const Text('Only', style: label),
+            ]),
+          ),
+          const SizedBox(width: 6),
+          Container(width: 1, height: 18, color: _prodateColor.withValues(alpha: 0.3)),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: () => _showProdates(crm, prodates),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text('${prodates.length} in ${_month.year}', style: label.copyWith(fontSize: 11.5)),
+              const SizedBox(width: 2),
+              const Icon(Icons.format_list_bulleted_rounded, size: 14, color: _prodateColor),
+            ]),
+          ),
+        ]),
+      ),
+    ]);
+  }
+
+  /// Every prodate of the year; tapping one opens that day.
+  void _showProdates(CrmTheme crm, List<(DateTime, int)> prodates) {
+    showDialog<void>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: Text('🔥 Prodates in ${_month.year}'),
+        content: SizedBox(
+          width: 420,
+          child: prodates.isEmpty
+              ? Text('No event day has $_minProdate or more leads yet.',
+                  style: TextStyle(color: crm.textSecondary))
+              : ListView(shrinkWrap: true, children: [
+                  Text('${prodates.length} peak day${prodates.length == 1 ? '' : 's'} · ≥ $_minProdate leads',
+                      style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+                  const SizedBox(height: 8),
+                  for (final (d, n) in prodates)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.local_fire_department_rounded, color: _prodateColor),
+                      title: Text(DateFormat('EEE, d MMM yyyy').format(d)),
+                      trailing: Text('$n leads',
+                          style: const TextStyle(fontWeight: FontWeight.w800, color: _prodateColor)),
+                      onTap: () {
+                        Navigator.pop(dctx);
+                        setState(() {
+                          _range = null;
+                          _month = DateTime(d.year, d.month);
+                          _selectedDay = d;
+                          _selectedPlace = null;
+                        });
+                      },
+                    ),
+                ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dctx), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  Widget _toolbar(CrmTheme crm, List<String> statuses, _Size size, List<(DateTime, int)>? prodates) {
     final monthNav = Row(mainAxisSize: MainAxisSize.min, children: [
       IconButton.filledTonal(
         tooltip: 'Previous month',
@@ -476,6 +621,10 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
         SingleChildScrollView(scrollDirection: Axis.horizontal, child: basis),
         const SizedBox(height: 10),
         status,
+        if (prodates != null) ...[
+          const SizedBox(height: 10),
+          _prodatePills(crm, prodates),
+        ],
       ]);
     }
     return Wrap(
@@ -489,7 +638,7 @@ class _LeadCalendarTabState extends ConsumerState<LeadCalendarTab> {
           spacing: 10,
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: [dates, basis, status],
+          children: [dates, basis, status, if (prodates != null) _prodatePills(crm, prodates)],
         ),
       ],
     );
@@ -691,6 +840,11 @@ class _CalendarBlock extends StatelessWidget {
 
   /// Active From–To filter; days outside it are greyed out.
   final DateTimeRange? range;
+
+  /// Peak event days (Event date view) and whether to fade the others.
+  final Set<DateTime> prodateDays;
+  final bool dimNonProdate;
+  final int minProdate;
   final DateTime? selected;
   final ValueChanged<DateTime> onSelect;
   const _CalendarBlock({
@@ -699,6 +853,9 @@ class _CalendarBlock extends StatelessWidget {
     required this.basis,
     required this.byDay,
     required this.range,
+    this.prodateDays = const {},
+    this.dimNonProdate = false,
+    this.minProdate = 0,
     required this.selected,
     required this.onSelect,
   });
@@ -788,6 +945,9 @@ class _CalendarBlock extends StatelessWidget {
                               isToday: date == today,
                               isSelected: date == selected,
                               outOfRange: outside(date),
+                              isProdate: prodateDays.contains(date),
+                              dim: dimNonProdate && !prodateDays.contains(date),
+                              minProdate: minProdate,
                               onTap: () => onSelect(date),
                             );
                           }(),
@@ -857,6 +1017,11 @@ class _DayCell extends StatelessWidget {
   final List<Lead> leads;
   final int maxCount, names;
   final bool compact, isToday, isSelected, outOfRange;
+
+  /// Peak event day (>= minProdate leads): gold ring + 🔥. [dim] fades the
+  /// day when "Prodates only" is on.
+  final bool isProdate, dim;
+  final int minProdate;
   final VoidCallback onTap;
   const _DayCell({
     required this.date,
@@ -868,6 +1033,9 @@ class _DayCell extends StatelessWidget {
     required this.isSelected,
     required this.onTap,
     this.outOfRange = false,
+    this.isProdate = false,
+    this.dim = false,
+    this.minProdate = 0,
   });
 
   @override
@@ -881,7 +1049,8 @@ class _DayCell extends StatelessWidget {
 
     final tooltip = n == 0
         ? DateFormat('EEE, d MMM').format(date)
-        : '${DateFormat('EEE, d MMM').format(date)} — $n lead${n == 1 ? '' : 's'}\n'
+        : '${isProdate ? '🔥 Prodate (≥ $minProdate leads)\n' : ''}'
+            '${DateFormat('EEE, d MMM').format(date)} — $n lead${n == 1 ? '' : 's'}\n'
             '${counts.entries.map((e) => '${e.key}: ${e.value}').join(' · ')}\n'
             '${leads.take(6).map((l) => '• ${l.name}').join('\n')}${n > 6 ? '\n…and ${n - 6} more' : ''}';
 
@@ -899,6 +1068,7 @@ class _DayCell extends StatelessWidget {
               color: isToday ? Colors.white : weekend ? crm.destructive.withValues(alpha: 0.8) : crm.textSecondary,
             )),
       ),
+      if (isProdate) const Text(' 🔥', style: TextStyle(fontSize: 12)),
       const Spacer(),
       if (!compact && hot > 0)
         Tooltip(
@@ -926,7 +1096,7 @@ class _DayCell extends StatelessWidget {
       );
     }
 
-    return Tooltip(
+    final cell = Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 400),
       child: Material(
@@ -940,8 +1110,12 @@ class _DayCell extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isSelected ? crm.primary : crm.border.withValues(alpha: n == 0 ? 0.4 : 0.8),
-                width: isSelected ? 2 : 1,
+                color: isSelected
+                    ? crm.primary
+                    : isProdate
+                        ? const Color(0xFFB45309)
+                        : crm.border.withValues(alpha: n == 0 ? 0.4 : 0.8),
+                width: isSelected || isProdate ? 2.2 : 1,
               ),
             ),
             child: compact
@@ -983,7 +1157,9 @@ class _DayCell extends StatelessWidget {
                                 TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crm.primary);
                             final scaler = MediaQuery.textScalerOf(context);
                             double lineHeight(TextStyle s) => (TextPainter(
-                                  text: TextSpan(text: 'Ag', style: s),
+                                  // Merge with the inherited style (theme font,
+                                  // line height) — that is what Text renders with.
+                                  text: TextSpan(text: 'Ag', style: DefaultTextStyle.of(context).style.merge(s)),
                                   textDirection: Directionality.of(context),
                                   textScaler: scaler,
                                   maxLines: 1,
@@ -991,10 +1167,12 @@ class _DayCell extends StatelessWidget {
                                     .height;
                             final rowH = lineHeight(nameStyle) + 2; // + bottom padding
                             final moreH = lineHeight(moreStyle);
-                            var fit = min(names, min(n, (box.maxHeight / rowH).floor()));
+                            // 2px slack so sub-pixel rounding can never overflow.
+                            final room = box.maxHeight - 2;
+                            var fit = min(names, min(n, (room / rowH).floor()));
                             if (fit < n) {
                               // Leave room for the "+N more" line.
-                              fit = min(fit, ((box.maxHeight - moreH) / rowH).floor());
+                              fit = min(fit, ((room - moreH) / rowH).floor());
                             }
                             fit = max(0, fit);
                             final hidden = n - fit;
@@ -1038,6 +1216,8 @@ class _DayCell extends StatelessWidget {
         ),
       ),
     );
+    // "Prodates only": fade the other days so the peaks stand out.
+    return dim ? Opacity(opacity: 0.3, child: cell) : cell;
   }
 }
 
@@ -1562,6 +1742,7 @@ class _LeadRow extends StatelessWidget {
     final facts = <(IconData, String)>[
       (Icons.celebration_outlined, l.eventType.isNotEmpty ? l.eventType : l.leadType),
       (Icons.event_outlined, 'Event ${fmt.format(eventDate.toLocal())}'),
+
       if (place.isNotEmpty) (Icons.location_on_outlined, place),
       if (l.source.isNotEmpty) (Icons.campaign_outlined, l.source),
       (Icons.inbox_outlined, 'Received ${fmt.format(l.leadDate.toLocal())}'),

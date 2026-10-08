@@ -119,7 +119,10 @@ class _Body extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(color: crm.input, borderRadius: BorderRadius.circular(12)),
-          child: Text('No target set for this month yet. Your manager sets it in Sales Targets.',
+          child: Text(
+              t?.derived ?? false
+                  ? 'No salesperson targets set for this month yet — your target is the total of theirs (Sales Targets).'
+                  : 'No target set for this month yet. Your manager sets it in Sales Targets.',
               style: TextStyle(fontSize: 13, color: crm.textSecondary)),
         ),
         const SizedBox(height: 12),
@@ -240,6 +243,14 @@ class _Body extends StatelessWidget {
           Text('Booked each day', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
           const SizedBox(height: 6),
           _DailyBars(daily: a.daily, color: crm.primary),
+        ],
+        if (t.derived) ...[
+          const SizedBox(height: 10),
+          Text(
+            'Team target: the total of ${t.teamSize} salesperson${t.teamSize == 1 ? '' : 's'}’ targets. '
+            'Achieved = the team’s sales${(p.own?.salesValue ?? 0) > 0 ? ' plus your own ${targetRupees(p.own!.salesValue)}' : ' plus your own'}.',
+            style: TextStyle(fontSize: 12, color: crm.textSecondary),
+          ),
         ],
         if (t.note.isNotEmpty || t.setByName.isNotEmpty) ...[
           const SizedBox(height: 10),

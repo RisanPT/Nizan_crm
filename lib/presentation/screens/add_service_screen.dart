@@ -469,6 +469,8 @@ class _DistrictsCard extends StatelessWidget {
                 selectedDistrictId.value = '';
               },
             ),
+            if (selectedZoneId.value.isNotEmpty && availableStates.isEmpty)
+              _EmptyLevelHint('No active states are linked to this zone.', crmColors),
             12.h,
 
             // 3. Region Dropdown
@@ -481,6 +483,8 @@ class _DistrictsCard extends StatelessWidget {
                 selectedDistrictId.value = '';
               },
             ),
+            if (selectedStateId.value.isNotEmpty && availableRegions.isEmpty)
+              _EmptyLevelHint('No active regions are linked to this state.', crmColors),
             12.h,
 
             // 4. District Dropdown
@@ -492,6 +496,8 @@ class _DistrictsCard extends StatelessWidget {
                 selectedDistrictId.value = val ?? '';
               },
             ),
+            if (selectedRegionId.value.isNotEmpty && availableDistricts.isEmpty)
+              _EmptyLevelHint('No active districts are linked to this region.', crmColors),
             16.h,
 
             SizedBox(
@@ -642,4 +648,29 @@ InputDecoration _inputDeco(String label, CrmTheme crmColors) {
     filled: true,
     fillColor: crmColors.surface,
   );
+}
+
+/// Explains an empty level in the zone → state → region → district picker and
+/// points to where it's fixed, instead of leaving a blank dropdown.
+class _EmptyLevelHint extends StatelessWidget {
+  final String message;
+  final CrmTheme crm;
+  const _EmptyLevelHint(this.message, this.crm);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, left: 4),
+      child: Row(children: [
+        Icon(Icons.info_outline_rounded, size: 15, color: crm.warning),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            '$message Add or activate them in Services → Geographics.',
+            style: TextStyle(fontSize: 12, color: crm.textSecondary),
+          ),
+        ),
+      ]),
+    );
+  }
 }
