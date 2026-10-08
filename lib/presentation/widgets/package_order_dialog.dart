@@ -83,7 +83,6 @@ class _PackageOrderDialogState extends ConsumerState<_PackageOrderDialog> {
                     child: ReorderableListView.builder(
                       buildDefaultDragHandles: false,
                       itemCount: order.length,
-                      onReorderItem: _move,
                       itemBuilder: (context, i) {
                         final p = order[i];
                         return Container(
@@ -129,6 +128,7 @@ class _PackageOrderDialogState extends ConsumerState<_PackageOrderDialog> {
                           ),
                         );
                       },
+                      onReorderItem: _move,
                     ),
                   ),
                 ],
