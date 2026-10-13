@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/employee.dart';
@@ -1270,10 +1271,21 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
               children: [
                 Row(
                   children: [
-                    Text(
-                      s.employeeName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
+                    InkWell(
+                      onTap: s.employeeId.isNotEmpty
+                          ? () => context.push('/staff/${s.employeeId}')
+                          : null,
+                      borderRadius: BorderRadius.circular(4),
+                      child: Text(
+                        s.employeeName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: crm.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: crm.primary.withValues(alpha: 0.3),
+                        ),
+                      ),
                     ),
                     8.w,
                     Container(

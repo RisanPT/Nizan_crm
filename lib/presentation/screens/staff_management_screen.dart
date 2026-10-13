@@ -19,9 +19,12 @@ import '../../services/zone_service.dart';
 import '../../services/state_service.dart';
 import '../../services/district_service.dart';
 import '../../services/pincode_service.dart';
-import 'staff_details_screen.dart';
+import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/features/hr_shared/hr_ui.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
+import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
   const StaffManagementScreen({super.key});
@@ -50,6 +53,7 @@ class StaffManagementScreen extends HookConsumerWidget {
       case 'ACCOUNTS':
         return crm.success;
       case 'IT':
+      case 'TECHNOLOGY & SYSTEMS (IT)':
         return Colors.blue;
       case 'SALES':
         return Colors.orange;
@@ -82,6 +86,8 @@ class StaffManagementScreen extends HookConsumerWidget {
     final mainSearchQuery = useState('');
     final selectedDepartment = useState('All');
     final selectedOperationsRole = useState('All');
+    final selectedTimeboxStatus = useState('All'); // 'All', 'linked', 'unlinked'
+    final isSyncingTimebox = useState(false);
 
     // Geographic filter states for operations
     final mainSelectedZoneId = useState('');
@@ -121,6 +127,8 @@ class StaffManagementScreen extends HookConsumerWidget {
             selectedOperationsRole.value != 'All'
         ? selectedOperationsRole.value
         : null;
+    final queryTimeboxStatus =
+        selectedTimeboxStatus.value != 'All' ? selectedTimeboxStatus.value : null;
 
     final asyncEmployees = ref.watch(
       paginatedEmployeesProvider(
@@ -130,6 +138,7 @@ class StaffManagementScreen extends HookConsumerWidget {
           category: queryCategory,
           department: queryDepartment,
           artistRole: queryArtistRole,
+          timeboxStatus: queryTimeboxStatus,
           search: mainSearchQuery.value,
           zoneId: activeTab.value == 'operations' ? mainSelectedZoneId.value : null,
           stateId: activeTab.value == 'operations' ? mainSelectedStateId.value : null,
@@ -139,6 +148,38 @@ class StaffManagementScreen extends HookConsumerWidget {
         ),
       ),
     );
+
+    Future<void> syncTimeboxAction() async {
+      isSyncingTimebox.value = true;
+      try {
+        final res = await ref.read(timeboxServiceProvider).syncEmployees();
+        ref.invalidate(paginatedEmployeesProvider);
+        ref.invalidate(employeesProvider);
+        ref.refreshData.employees();
+        ref.refreshData.hr();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.teal.shade800,
+              content: Text(res.message.isNotEmpty
+                  ? res.message
+                  : 'Timebox attendance sync completed successfully!'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: Colors.red.shade800,
+              content: Text(friendlyErrorMessage(e)),
+            ),
+          );
+        }
+      } finally {
+        isSyncingTimebox.value = false;
+      }
+    }
 
     Future<void> openStaffDialog([
       Employee? employee,
@@ -1062,6 +1103,22 @@ class StaffManagementScreen extends HookConsumerWidget {
               Row(
                 children: [
                   OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.teal,
+                      side: const BorderSide(color: Colors.teal),
+                    ),
+                    onPressed: isSyncingTimebox.value ? null : syncTimeboxAction,
+                    icon: isSyncingTimebox.value
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.teal),
+                          )
+                        : const Icon(Icons.sync, size: 16),
+                    label: Text(isSyncingTimebox.value ? 'Syncing...' : 'Sync Timebox'),
+                  ),
+                  12.w,
+                  OutlinedButton.icon(
                     onPressed: () => openStaffDialog(null, 'administrative'),
                     icon: const Icon(Icons.business_center_outlined, size: 16),
                     label: const Text('Add Administrative'),
@@ -1082,6 +1139,22 @@ class StaffManagementScreen extends HookConsumerWidget {
           12.h,
           Row(
             children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.teal,
+                  side: const BorderSide(color: Colors.teal),
+                ),
+                onPressed: isSyncingTimebox.value ? null : syncTimeboxAction,
+                icon: isSyncingTimebox.value
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.teal),
+                      )
+                    : const Icon(Icons.sync, size: 16),
+                label: Text(isSyncingTimebox.value ? 'Syncing...' : 'Sync Timebox'),
+              ),
+              8.w,
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => openStaffDialog(null, 'administrative'),
@@ -1152,17 +1225,12 @@ class StaffManagementScreen extends HookConsumerWidget {
         16.h,
 
         // Context-Aware Filter & Search Box
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: crmColors.border),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+        Container(
+          decoration: hrCardDecoration(crmColors),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                 // Top Search Bar
                 Row(
                   children: [
@@ -1188,6 +1256,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                     if (mainSearchQuery.value.isNotEmpty ||
                         selectedDepartment.value != 'All' ||
                         selectedOperationsRole.value != 'All' ||
+                        selectedTimeboxStatus.value != 'All' ||
                         mainSelectedZoneId.value.isNotEmpty ||
                         mainSelectedStateId.value.isNotEmpty ||
                         mainSelectedRegionId.value.isNotEmpty ||
@@ -1199,6 +1268,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           mainSearchQuery.value = '';
                           selectedDepartment.value = 'All';
                           selectedOperationsRole.value = 'All';
+                          selectedTimeboxStatus.value = 'All';
                           mainSelectedZoneId.value = '';
                           mainSelectedStateId.value = '';
                           mainSelectedRegionId.value = '';
@@ -1211,6 +1281,65 @@ class StaffManagementScreen extends HookConsumerWidget {
                       ),
                     ],
                   ],
+                ),
+
+                // Timebox Biometric Link Status Chips
+                12.h,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      Text(
+                        'Timebox Biometrics: ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: crmColors.textSecondary,
+                        ),
+                      ),
+                      8.w,
+                      FilterChip(
+                        label: const Text('All Staff'),
+                        selected: selectedTimeboxStatus.value == 'All',
+                        onSelected: (_) {
+                          selectedTimeboxStatus.value = 'All';
+                          pageState.value = 1;
+                        },
+                      ),
+                      8.w,
+                      FilterChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.fingerprint, size: 14, color: Colors.teal),
+                            SizedBox(width: 4),
+                            Text('Biometric Linked'),
+                          ],
+                        ),
+                        selected: selectedTimeboxStatus.value == 'linked',
+                        onSelected: (_) {
+                          selectedTimeboxStatus.value = 'linked';
+                          pageState.value = 1;
+                        },
+                      ),
+                      8.w,
+                      FilterChip(
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.link_off, size: 14, color: Colors.blueGrey),
+                            SizedBox(width: 4),
+                            Text('Not Linked'),
+                          ],
+                        ),
+                        selected: selectedTimeboxStatus.value == 'unlinked',
+                        onSelected: (_) {
+                          selectedTimeboxStatus.value = 'unlinked';
+                          pageState.value = 1;
+                        },
+                      ),
+                    ],
+                  ),
                 ),
 
                 // Department filter chips for Administrative or All tabs
@@ -1541,7 +1670,6 @@ class StaffManagementScreen extends HookConsumerWidget {
                 ],
               ],
             ),
-          ),
         ),
         16.h,
 
@@ -1673,7 +1801,6 @@ class StaffManagementScreen extends HookConsumerWidget {
     Employee employee, {
     required VoidCallback onEdit,
   }) {
-    final theme = Theme.of(context);
     final crmColors = context.crmColors;
 
     final isArtist = employee.artistRole == 'artist';
@@ -1692,24 +1819,18 @@ class StaffManagementScreen extends HookConsumerWidget {
 
     final deptColor = getDepartmentColor(employee.department, context);
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.1)),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => StaffDetailsScreen(employee: employee),
-            ),
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
+    return Container(
+      decoration: hrCardDecoration(crmColors),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            context.push('/staff/${employee.id}', extra: employee);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -1747,15 +1868,44 @@ class StaffManagementScreen extends HookConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          employee.name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                employee.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 15),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF601A29).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: const Color(0xFF601A29).withValues(alpha: 0.2),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                employee.displayCode,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF601A29),
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         4.h,
-                        Row(
+                        Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
                           children: [
                             if (isAdmin) ...[
                               Container(
@@ -1803,8 +1953,61 @@ class StaffManagementScreen extends HookConsumerWidget {
                                 ),
                               ),
                             ],
+                            // Employment Status Badge
+                            () {
+                              final statusColor = employee.isConfirmed
+                                  ? const Color(0xFF1E7E34)
+                                  : (employee.isProbation
+                                      ? Colors.amber.shade800
+                                      : (employee.isNoticePeriod
+                                          ? Colors.deepOrange
+                                          : Colors.grey));
+                              final statusLabel = employee.isConfirmed
+                                  ? 'Confirmed'
+                                  : (employee.isProbation
+                                      ? 'Probation'
+                                      : (employee.isNoticePeriod
+                                          ? 'Notice'
+                                          : 'Exited'));
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: statusColor.withValues(alpha: 0.25),
+                                      width: 0.6),
+                                ),
+                                child: Text(
+                                  statusLabel,
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: statusColor),
+                                ),
+                              );
+                            }(),
+                            // Performance Grade Pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFC9A66B)
+                                    .withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: const Color(0xFFC9A66B), width: 0.6),
+                              ),
+                              child: Text(
+                                'Grade ${employee.currentGrade}',
+                                style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF601A29)),
+                              ),
+                            ),
                             if (employee.type == 'in-house') ...[
-                              6.w,
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 5, vertical: 2),
@@ -1822,6 +2025,72 @@ class StaffManagementScreen extends HookConsumerWidget {
                                 ),
                               ),
                             ],
+                            // Timebox Biometric Status Badge
+                            if (employee.isTimeboxLinked) ...[
+                              InkWell(
+                                onTap: () => showTimeboxLinkDialog(context, ref, employee),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.teal.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: Colors.teal.withValues(alpha: 0.35),
+                                        width: 0.6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.fingerprint,
+                                          size: 10, color: Colors.teal),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Timebox #${employee.timeboxEmployeeId}',
+                                        style: const TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.teal,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ] else ...[
+                              InkWell(
+                                onTap: () => showTimeboxLinkDialog(context, ref, employee),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                        color: Colors.grey.withValues(alpha: 0.25),
+                                        width: 0.6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.link_off,
+                                          size: 10, color: Colors.grey),
+                                      SizedBox(width: 3),
+                                      Text(
+                                        'No Timebox',
+                                        style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ],
@@ -1833,12 +2102,9 @@ class StaffManagementScreen extends HookConsumerWidget {
                       if (value == 'edit') {
                         onEdit();
                       } else if (value == 'view') {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                StaffDetailsScreen(employee: employee),
-                          ),
-                        );
+                        context.push('/staff/${employee.id}', extra: employee);
+                      } else if (value == 'timebox') {
+                        showTimeboxLinkDialog(context, ref, employee);
                       } else if (value == 'delete') {
                         final confirm = await showDialog<bool>(
                           context: context,
@@ -1897,6 +2163,16 @@ class StaffManagementScreen extends HookConsumerWidget {
                             Icon(Icons.edit, size: 16),
                             SizedBox(width: 8),
                             Text('Edit'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'timebox',
+                        child: Row(
+                          children: [
+                            Icon(Icons.fingerprint, size: 16, color: Colors.teal),
+                            SizedBox(width: 8),
+                            Text('Timebox Biometrics'),
                           ],
                         ),
                       ),
@@ -2055,6 +2331,7 @@ class StaffManagementScreen extends HookConsumerWidget {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

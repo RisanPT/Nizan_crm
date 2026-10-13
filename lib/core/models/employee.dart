@@ -1,5 +1,6 @@
 class Employee {
   final String id;
+  final String employeeCode;
   final String name;
   final String email;
   final String type;
@@ -8,6 +9,19 @@ class Employee {
   final List<String> works;
   final String phone;
   final String status;
+  final String employmentStatus; // 'probation', 'confirmed', 'notice_period', 'exited'
+  final DateTime? dateOfBirth;
+  final DateTime? dateOfJoining;
+  final DateTime? probationEndDate;
+  final String emergencyContactName;
+  final String emergencyContactRelation;
+  final String emergencyContactPhone;
+  final String currentGrade; // 'A', 'B', 'C', 'D'
+  final double overtimeRate;
+  final bool epfApplicable;
+  final bool esiApplicable;
+  final String uan;
+  final String esiNumber;
   final String regionId;
   final String regionName;
   final String zoneId;
@@ -37,9 +51,12 @@ class Employee {
   final String ifscCode;
   final String upiId;
   final String panNumber;
+  final int? timeboxEmployeeId;
+  final String timeboxName;
 
   const Employee({
     required this.id,
+    this.employeeCode = '',
     required this.name,
     required this.email,
     required this.type,
@@ -48,6 +65,19 @@ class Employee {
     this.works = const [],
     required this.phone,
     required this.status,
+    this.employmentStatus = 'probation',
+    this.dateOfBirth,
+    this.dateOfJoining,
+    this.probationEndDate,
+    this.emergencyContactName = '',
+    this.emergencyContactRelation = '',
+    this.emergencyContactPhone = '',
+    this.currentGrade = 'B',
+    this.overtimeRate = 0.0,
+    this.epfApplicable = false,
+    this.esiApplicable = false,
+    this.uan = '',
+    this.esiNumber = '',
     required this.regionId,
     required this.regionName,
     this.zoneId = '',
@@ -73,6 +103,8 @@ class Employee {
     this.ifscCode = '',
     this.upiId = '',
     this.panNumber = '',
+    this.timeboxEmployeeId,
+    this.timeboxName = '',
   });
 
   factory Employee.fromJson(Map<String, dynamic> json) {
@@ -82,8 +114,20 @@ class Employee {
     final district = json['districtId'];
     final pincode = json['pincodeId'];
 
+    final ec = json['emergencyContact'];
+    final ecName = ec is Map ? (ec['name']?.toString() ?? '') : '';
+    final ecRel = ec is Map ? (ec['relation']?.toString() ?? '') : '';
+    final ecPhone = ec is Map ? (ec['phone']?.toString() ?? '') : '';
+
+    final stat = json['statutoryApplicability'];
+    final epf = stat is Map ? (stat['epf'] == true) : false;
+    final esi = stat is Map ? (stat['esi'] == true) : false;
+    final uanVal = stat is Map ? (stat['uan']?.toString() ?? '') : '';
+    final esiNum = stat is Map ? (stat['esiNumber']?.toString() ?? '') : '';
+
     return Employee(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
+      employeeCode: json['employeeCode'] as String? ?? '',
       name: json['name'] as String? ?? '',
       email: json['email'] as String? ?? '',
       type: json['type'] as String? ?? 'in-house',
@@ -95,6 +139,19 @@ class Employee {
           .toList(),
       phone: json['phone'] as String? ?? '',
       status: json['status'] as String? ?? 'active',
+      employmentStatus: json['employmentStatus'] as String? ?? 'probation',
+      dateOfBirth: json['dateOfBirth'] != null ? DateTime.tryParse(json['dateOfBirth'].toString()) : null,
+      dateOfJoining: json['dateOfJoining'] != null ? DateTime.tryParse(json['dateOfJoining'].toString()) : null,
+      probationEndDate: json['probationEndDate'] != null ? DateTime.tryParse(json['probationEndDate'].toString()) : null,
+      emergencyContactName: ecName,
+      emergencyContactRelation: ecRel,
+      emergencyContactPhone: ecPhone,
+      currentGrade: json['currentGrade'] as String? ?? 'B',
+      overtimeRate: (json['overtimeRate'] as num?)?.toDouble() ?? 0.0,
+      epfApplicable: epf,
+      esiApplicable: esi,
+      uan: uanVal,
+      esiNumber: esiNum,
       regionId: region is Map<String, dynamic>
           ? (region['_id'] as String? ?? '')
           : (json['regionId'] as String? ?? ''),
@@ -140,11 +197,14 @@ class Employee {
       ifscCode: json['ifscCode'] as String? ?? '',
       upiId: json['upiId'] as String? ?? '',
       panNumber: json['panNumber'] as String? ?? '',
+      timeboxEmployeeId: (json['timeboxEmployeeId'] as num?)?.toInt(),
+      timeboxName: json['timeboxName'] as String? ?? '',
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      if (employeeCode.isNotEmpty) 'employeeCode': employeeCode,
       'name': name,
       'email': email,
       'type': type,
@@ -153,6 +213,23 @@ class Employee {
       'works': works,
       'phone': phone,
       'status': status,
+      'employmentStatus': employmentStatus,
+      if (dateOfBirth != null) 'dateOfBirth': dateOfBirth!.toIso8601String(),
+      if (dateOfJoining != null) 'dateOfJoining': dateOfJoining!.toIso8601String(),
+      if (probationEndDate != null) 'probationEndDate': probationEndDate!.toIso8601String(),
+      'emergencyContact': {
+        'name': emergencyContactName,
+        'relation': emergencyContactRelation,
+        'phone': emergencyContactPhone,
+      },
+      'currentGrade': currentGrade,
+      'overtimeRate': overtimeRate,
+      'statutoryApplicability': {
+        'epf': epfApplicable,
+        'esi': esiApplicable,
+        'uan': uan,
+        'esiNumber': esiNumber,
+      },
       'regionId': regionId,
       'zoneId': zoneId,
       'stateId': stateId,
@@ -173,8 +250,123 @@ class Employee {
       'ifscCode': ifscCode,
       'upiId': upiId,
       'panNumber': panNumber,
+      if (timeboxEmployeeId != null) 'timeboxEmployeeId': timeboxEmployeeId,
+      if (timeboxName.isNotEmpty) 'timeboxName': timeboxName,
     };
   }
+
+  bool get isTimeboxLinked => timeboxEmployeeId != null;
+
+  Employee copyWith({
+    String? id,
+    String? employeeCode,
+    String? name,
+    String? email,
+    String? type,
+    String? artistRole,
+    String? specialization,
+    List<String>? works,
+    String? phone,
+    String? status,
+    String? employmentStatus,
+    DateTime? dateOfBirth,
+    DateTime? dateOfJoining,
+    DateTime? probationEndDate,
+    String? emergencyContactName,
+    String? emergencyContactRelation,
+    String? emergencyContactPhone,
+    String? currentGrade,
+    double? overtimeRate,
+    bool? epfApplicable,
+    bool? esiApplicable,
+    String? uan,
+    String? esiNumber,
+    String? regionId,
+    String? regionName,
+    String? zoneId,
+    String? zoneName,
+    String? stateId,
+    String? stateName,
+    String? districtId,
+    String? districtName,
+    String? pincodeId,
+    String? pincodeCode,
+    String? category,
+    String? profileImage,
+    String? department,
+    String? role,
+    String? salaryType,
+    double? baseSalary,
+    double? allowances,
+    double? deductions,
+    double? hra,
+    int? hraDay,
+    String? bankName,
+    String? accountNumber,
+    String? ifscCode,
+    String? upiId,
+    String? panNumber,
+    int? timeboxEmployeeId,
+    String? timeboxName,
+  }) {
+    return Employee(
+      id: id ?? this.id,
+      employeeCode: employeeCode ?? this.employeeCode,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      type: type ?? this.type,
+      artistRole: artistRole ?? this.artistRole,
+      specialization: specialization ?? this.specialization,
+      works: works ?? this.works,
+      phone: phone ?? this.phone,
+      status: status ?? this.status,
+      employmentStatus: employmentStatus ?? this.employmentStatus,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      dateOfJoining: dateOfJoining ?? this.dateOfJoining,
+      probationEndDate: probationEndDate ?? this.probationEndDate,
+      emergencyContactName: emergencyContactName ?? this.emergencyContactName,
+      emergencyContactRelation: emergencyContactRelation ?? this.emergencyContactRelation,
+      emergencyContactPhone: emergencyContactPhone ?? this.emergencyContactPhone,
+      currentGrade: currentGrade ?? this.currentGrade,
+      overtimeRate: overtimeRate ?? this.overtimeRate,
+      epfApplicable: epfApplicable ?? this.epfApplicable,
+      esiApplicable: esiApplicable ?? this.esiApplicable,
+      uan: uan ?? this.uan,
+      esiNumber: esiNumber ?? this.esiNumber,
+      regionId: regionId ?? this.regionId,
+      regionName: regionName ?? this.regionName,
+      zoneId: zoneId ?? this.zoneId,
+      zoneName: zoneName ?? this.zoneName,
+      stateId: stateId ?? this.stateId,
+      stateName: stateName ?? this.stateName,
+      districtId: districtId ?? this.districtId,
+      districtName: districtName ?? this.districtName,
+      pincodeId: pincodeId ?? this.pincodeId,
+      pincodeCode: pincodeCode ?? this.pincodeCode,
+      category: category ?? this.category,
+      profileImage: profileImage ?? this.profileImage,
+      department: department ?? this.department,
+      role: role ?? this.role,
+      salaryType: salaryType ?? this.salaryType,
+      baseSalary: baseSalary ?? this.baseSalary,
+      allowances: allowances ?? this.allowances,
+      deductions: deductions ?? this.deductions,
+      hra: hra ?? this.hra,
+      hraDay: hraDay ?? this.hraDay,
+      bankName: bankName ?? this.bankName,
+      accountNumber: accountNumber ?? this.accountNumber,
+      ifscCode: ifscCode ?? this.ifscCode,
+      upiId: upiId ?? this.upiId,
+      panNumber: panNumber ?? this.panNumber,
+      timeboxEmployeeId: timeboxEmployeeId ?? this.timeboxEmployeeId,
+      timeboxName: timeboxName ?? this.timeboxName,
+    );
+  }
+
+  /// Human-readable identifier. Falls back to NZ-xxxx using ID if empty.
+  String get displayCode => employeeCode.isNotEmpty
+      ? employeeCode
+      : (id.length >= 4 ? 'NZ-${id.substring(id.length - 4).toUpperCase()}' : 'NZ-EMP');
 }
 
 /// Selection helpers for assignment/picker dropdowns. Assignment lists should
@@ -193,4 +385,10 @@ extension EmployeeSelection on Employee {
     final r = artistRole.toLowerCase();
     return r == 'artist' || r == 'assistant';
   }
+
+  /// Lifecycle status helpers
+  bool get isProbation => employmentStatus.toLowerCase() == 'probation';
+  bool get isConfirmed => employmentStatus.toLowerCase() == 'confirmed';
+  bool get isNoticePeriod => employmentStatus.toLowerCase() == 'notice_period';
+  bool get isExited => employmentStatus.toLowerCase() == 'exited';
 }

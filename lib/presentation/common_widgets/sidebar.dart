@@ -10,6 +10,8 @@ import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
+import 'package:nizan_crm/features/hr_approvals/service/approval_service.dart';
+import 'package:nizan_crm/features/hr_shared/hr_services_launcher.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -116,7 +118,12 @@ class Sidebar extends ConsumerWidget {
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
-    final isHrRoute = currentPath.startsWith('/staff') || currentPath.startsWith('/hr');
+    // Leave/Approvals are standalone items (also available to ESS employees who
+    // lack the HR group), so they don't count as "HR group" routes here.
+    final isHrRoute = (currentPath.startsWith('/staff') || currentPath.startsWith('/hr')) &&
+        currentPath != '/hr/leave' &&
+        currentPath != '/hr/approvals' &&
+        currentPath != '/hr/home';
     final isCollapsed = isTablet && !isMobile && !ResponsiveBuilder.isTwoPane(context);
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
@@ -470,6 +477,41 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/services/regions'),
                     ),
                   ],
+                  // HR Home — the single hub entry (Me / My Team / Organization).
+                  // Shown first so it leads the HR experience; the "HR" admin
+                  // group below holds the detailed modules for HR/managers.
+                  if (access.canSeeStaff ||
+                      access.isDepartmentHead ||
+                      access.has('leave', false) ||
+                      access.has('org', false))
+                    _SidebarItem(
+                      icon: Icons.badge_outlined,
+                      title: 'HR Home',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/home',
+                      onTap: () => context.go('/hr/home'),
+                    ),
+                  // Leave — every employee (ESS) plus HR/managers.
+                  if (access.canSeeLeaveRequests || access.has('leave', false))
+                    _SidebarItem(
+                      icon: Icons.event_busy_outlined,
+                      title: 'Leave',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/leave',
+                      onTap: () => context.go('/hr/leave'),
+                    ),
+                  // Approvals — managers, department heads and HR.
+                  if (access.isFullAccess ||
+                      access.isDepartmentHead ||
+                      access.has('approvals', false))
+                    _SidebarItem(
+                      icon: Icons.fact_check_outlined,
+                      title: 'Approvals',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/approvals',
+                      trailing: _approvalsBadge(ref, crmColors, isCollapsed),
+                      onTap: () => context.go('/hr/approvals'),
+                    ),
                   if (access.canSeeStaff) ...[
                     _SidebarItem(
                       icon: Icons.groups_outlined,
@@ -489,73 +531,138 @@ class Sidebar extends ConsumerWidget {
                       },
                     ),
                     if (!isCollapsed && effectiveHrExpanded) ...[
-                      if (access.canSeeSub('staff.employees'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.badge_outlined,
-                            title: 'Staff Management',
-                            isCollapsed: false,
-                            isSelected: currentPath.startsWith('/staff'),
-                            onTap: () => context.go('/staff'),
+                      // Quick "All HR Services" launcher
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(14, 4, 8, 8),
+                        child: InkWell(
+                          onTap: () {
+                            final scaffold = Scaffold.maybeOf(context);
+                            if (scaffold?.isDrawerOpen ?? false) {
+                              scaffold!.closeDrawer();
+                            }
+                            showHrServicesLauncher(context);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF601A29).withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFFC9A66B).withValues(alpha: 0.45),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.grid_view_rounded, size: 16, color: Color(0xFFC9A66B)),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'All HR Services',
+                                    style: TextStyle(
+                                      color: Color(0xFFF5F3EF),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Icon(Icons.open_in_new_rounded, size: 13, color: Color(0xFFC9A66B)),
+                              ],
+                            ),
                           ),
                         ),
-                      if (access.canSeeSub('staff.attendance'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.fingerprint_outlined,
-                            title: 'Attendance',
-                            isCollapsed: false,
-                            isSelected: currentPath.startsWith('/hr/attendance'),
-                            onTap: () => context.go('/hr/attendance'),
-                          ),
-                        ),
-                      if (access.canSeeSub('staff.slots'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.event_available_outlined,
-                            title: 'Slot Management',
-                            isCollapsed: false,
-                            isSelected: currentPath.startsWith('/hr/slots'),
-                            onTap: () => context.go('/hr/slots'),
-                          ),
-                        ),
-                      if (access.canSeeSub('staff.slots'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.tune_outlined,
-                            title: 'Slot Capacity',
-                            isCollapsed: false,
-                            isSelected: currentPath.startsWith('/hr/slot-capacity'),
-                            onTap: () => context.go('/hr/slot-capacity'),
-                          ),
-                        ),
-                      if (access.canSeeSub('staff.salaries'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.payments_outlined,
-                            title: 'Salaries & Payroll',
-                            isCollapsed: false,
-                            isSelected: currentPath.startsWith('/hr/salaries'),
-                            onTap: () => context.go('/hr/salaries'),
-                          ),
-                        ),
-                      if (access.canSeeSub('staff.evaluation'))
-                        Padding(
-                          padding: const EdgeInsets.only(left: 14),
-                          child: _SidebarItem(
-                            icon: Icons.workspace_premium_outlined,
-                            title: '5-Pillar Evaluation',
-                            isCollapsed: false,
-                            isSelected:
-                                currentPath.startsWith('/hr/evaluation'),
-                            onTap: () => context.go('/hr/evaluation'),
-                          ),
-                        ),
+                      ),
+                      // People & org
+                      _SidebarSection(
+                        title: 'People',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/staff', '/hr/org', '/hr/designations', '/hr/files', '/hr/logins',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.employees'))
+                            _HrNavItem(icon: Icons.badge_outlined, title: 'Staff Management', route: '/staff', selected: currentPath.startsWith('/staff')),
+                          _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization', route: '/hr/org', selected: currentPath == '/hr/org'),
+                          _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
+                          _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
+                          if (access.isFullAccess || access.isDepartmentHead)
+                            _HrNavItem(icon: Icons.badge_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
+                        ],
+                      ),
+                      // Time & attendance
+                      _SidebarSection(
+                        title: 'Time & Attendance',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/attendance', '/hr/regularization', '/hr/shift', '/hr/timesheet', '/hr/slots', '/hr/slot-capacity',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.attendance'))
+                            _HrNavItem(icon: Icons.fingerprint_outlined, title: 'Attendance', route: '/hr/attendance', selected: currentPath.startsWith('/hr/attendance')),
+                          _HrNavItem(icon: Icons.event_available_outlined, title: 'Regularization', route: '/hr/regularization', selected: currentPath == '/hr/regularization'),
+                          _HrNavItem(icon: Icons.schedule_outlined, title: 'Shifts & Roster', route: '/hr/shift', selected: currentPath == '/hr/shift'),
+                          _HrNavItem(icon: Icons.timer_outlined, title: 'Time Tracker', route: '/hr/timesheet', selected: currentPath == '/hr/timesheet'),
+                          if (access.canSeeSub('staff.slots'))
+                            _HrNavItem(icon: Icons.event_seat_outlined, title: 'Slot Management', route: '/hr/slots', selected: currentPath == '/hr/slots'),
+                          if (access.canSeeSub('staff.slots'))
+                            _HrNavItem(icon: Icons.tune_outlined, title: 'Slot Capacity', route: '/hr/slot-capacity', selected: currentPath.startsWith('/hr/slot-capacity')),
+                        ],
+                      ),
+                      // Payroll & pay
+                      _SidebarSection(
+                        title: 'Payroll & Pay',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/salaries', '/hr/compensation', '/hr/reimbursements', '/hr/travel',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.salaries'))
+                            _HrNavItem(icon: Icons.payments_outlined, title: 'Salaries & Payroll', route: '/hr/salaries', selected: currentPath.startsWith('/hr/salaries')),
+                          _HrNavItem(icon: Icons.account_balance_wallet_outlined, title: 'Compensation', route: '/hr/compensation', selected: currentPath == '/hr/compensation'),
+                          _HrNavItem(icon: Icons.receipt_long_outlined, title: 'Reimbursements', route: '/hr/reimbursements', selected: currentPath == '/hr/reimbursements'),
+                          _HrNavItem(icon: Icons.flight_takeoff_outlined, title: 'Travel', route: '/hr/travel', selected: currentPath == '/hr/travel'),
+                        ],
+                      ),
+                      // Hiring & lifecycle
+                      _SidebarSection(
+                        title: 'Hiring & Lifecycle',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/recruitment', '/hr/onboarding', '/hr/offboarding',
+                        ]),
+                        children: [
+                          _HrNavItem(icon: Icons.work_outline, title: 'Recruitment', route: '/hr/recruitment', selected: currentPath == '/hr/recruitment'),
+                          _HrNavItem(icon: Icons.assignment_turned_in_outlined, title: 'Onboarding', route: '/hr/onboarding', selected: currentPath == '/hr/onboarding'),
+                          _HrNavItem(icon: Icons.logout_outlined, title: 'Offboarding', route: '/hr/offboarding', selected: currentPath == '/hr/offboarding'),
+                        ],
+                      ),
+                      // Growth
+                      _SidebarSection(
+                        title: 'Growth',
+                        hasActive: _hrSectionActive(currentPath, const ['/hr/evaluation', '/hr/lms']),
+                        children: [
+                          if (access.canSeeSub('staff.evaluation'))
+                            _HrNavItem(icon: Icons.star_outline, title: '5-Pillar Evaluation', route: '/hr/evaluation', selected: currentPath.startsWith('/hr/evaluation')),
+                          _HrNavItem(icon: Icons.school_outlined, title: 'Learning', route: '/hr/lms', selected: currentPath == '/hr/lms'),
+                        ],
+                      ),
+                      // Workplace
+                      _SidebarSection(
+                        title: 'Workplace',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/engagement', '/hr/grievance', '/hr/letters',
+                        ]),
+                        children: [
+                          _HrNavItem(icon: Icons.campaign_outlined, title: 'Engagement', route: '/hr/engagement', selected: currentPath == '/hr/engagement'),
+                          _HrNavItem(icon: Icons.report_gmailerrorred_outlined, title: 'Grievances', route: '/hr/grievance', selected: currentPath == '/hr/grievance'),
+                          _HrNavItem(icon: Icons.description_outlined, title: 'HR Letters', route: '/hr/letters', selected: currentPath == '/hr/letters'),
+                        ],
+                      ),
+                      // Insights
+                      _SidebarSection(
+                        title: 'Insights',
+                        hasActive: currentPath == '/hr/analytics',
+                        children: [
+                          _HrNavItem(icon: Icons.insights_outlined, title: 'HR Analytics', route: '/hr/analytics', selected: currentPath == '/hr/analytics'),
+                        ],
+                      ),
                     ],
                   ],
                   if (access.canSeeSales) ...[
@@ -1766,6 +1873,138 @@ Widget? _unreadBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
       style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
     ),
   );
+}
+
+/// Pending-count badge for the sidebar Approvals item.
+/// Gold accent dot when collapsed, maroon pill with gold border when expanded.
+Widget? _approvalsBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
+  final count = ref.watch(approvalInboxProvider).asData?.value.length ?? 0;
+  if (count <= 0) return null;
+  if (collapsed) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: Color(0xFFC9A66B),
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: const Color(0xFF601A29),
+      border: Border.all(color: const Color(0xFFC9A66B), width: 1),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    constraints: const BoxConstraints(minWidth: 18),
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        color: Color(0xFFF5F3EF),
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
+}
+
+/// True when the active route belongs to one of a sidebar section's routes, so
+/// that section can auto-expand.
+bool _hrSectionActive(String path, List<String> routes) =>
+    routes.any((r) => path == r || path.startsWith('$r/'));
+
+/// A single navigation row inside a collapsed HR category (indented a level
+/// deeper than the section label).
+class _HrNavItem extends StatelessWidget {
+  const _HrNavItem({
+    required this.icon,
+    required this.title,
+    required this.route,
+    required this.selected,
+  });
+  final IconData icon;
+  final String title;
+  final String route;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 22),
+      child: _SidebarItem(
+        icon: icon,
+        title: title,
+        isCollapsed: false,
+        isSelected: selected,
+        onTap: () => context.go(route),
+      ),
+    );
+  }
+}
+
+/// A collapsible category inside the HR group: an uppercase label with a chevron
+/// that reveals its [children]. Auto-expands when it holds the active route, and
+/// keeps the user's manual toggle afterwards. Renders nothing when empty (so a
+/// restricted user never sees a bare category label).
+class _SidebarSection extends StatefulWidget {
+  const _SidebarSection({
+    required this.title,
+    required this.children,
+    this.hasActive = false,
+  });
+  final String title;
+  final List<Widget> children;
+  final bool hasActive;
+
+  @override
+  State<_SidebarSection> createState() => _SidebarSectionState();
+}
+
+class _SidebarSectionState extends State<_SidebarSection> {
+  late bool _expanded = widget.hasActive;
+
+  @override
+  void didUpdateWidget(_SidebarSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Navigating into this section (e.g. from HR Home) opens it.
+    if (widget.hasActive && !_expanded) _expanded = true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.children.isEmpty) return const SizedBox.shrink();
+    final muted = Colors.white.withValues(alpha: 0.55);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.title.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w700,
+                      color: muted,
+                    ),
+                  ),
+                ),
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 15, color: muted),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...widget.children,
+      ],
+    );
+  }
 }
 
 class _SidebarItem extends StatelessWidget {

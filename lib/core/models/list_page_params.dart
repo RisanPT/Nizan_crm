@@ -11,6 +11,7 @@ class ListPageParams {
 
   final String? department;
   final String? artistRole;
+  final String? timeboxStatus;
 
   /// Customer list: status filter ('Active'/'Inactive'/'Prospect') and sort key
   /// ('newest'/'oldest'/'name_asc'/'name_desc').
@@ -23,6 +24,7 @@ class ListPageParams {
     this.category,
     this.department,
     this.artistRole,
+    this.timeboxStatus,
     this.search,
     this.status,
     this.sort,
@@ -41,6 +43,7 @@ class ListPageParams {
         other.category == category &&
         other.department == department &&
         other.artistRole == artistRole &&
+        other.timeboxStatus == timeboxStatus &&
         other.search == search &&
         other.status == status &&
         other.sort == sort &&
@@ -58,6 +61,7 @@ class ListPageParams {
         category,
         department,
         artistRole,
+        timeboxStatus,
         search,
         status,
         sort,
