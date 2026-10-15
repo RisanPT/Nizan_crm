@@ -1020,6 +1020,17 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/accounts/dashboard'),
                           ),
                         ),
+                      if (access.canSeeSub('payables.transactions'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.swap_vert_rounded,
+                            title: 'Cash In / Out',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/accounts/transactions',
+                            onTap: () => context.go('/accounts/transactions'),
+                          ),
+                        ),
                       // Operations — nested expandable group.
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
@@ -1603,6 +1614,17 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/fleet/completed-works',
                             onTap: () => context.go('/fleet/completed-works'),
+                          ),
+                        ),
+                      if (access.canSeeSub('fleet.km_report'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.speed_rounded,
+                            title: 'Km Report',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/km-report',
+                            onTap: () => context.go('/fleet/km-report'),
                           ),
                         ),
                       if (access.canSeeSub('fleet.reminders'))

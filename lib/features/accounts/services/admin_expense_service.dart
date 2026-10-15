@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class AdminExpenseStats {
   final int totalCount;
@@ -115,11 +116,24 @@ class AdminExpenseService {
     }
   }
 
-  Future<AdminExpense> verifyAdminExpense(String id, String status) async {
+  /// Expense heads = expense ledgers in the Chart of Accounts.
+  Future<List<ExpenseHead>> getExpenseHeads() async {
+    try {
+      final res = await _dio.get('/admin-expenses/heads');
+      return ((res.data as List?) ?? const [])
+          .map((e) => ExpenseHead.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load expense heads');
+    }
+  }
+
+  /// [money] = which bank / cash account paid it (approval popup).
+  Future<AdminExpense> verifyAdminExpense(String id, String status, {MoneyChoice? money}) async {
     try {
       final response = await _dio.put(
         '/admin-expenses/$id/verify',
-        data: {'status': status},
+        data: {'status': status, ...?money?.toJson()},
       );
       return AdminExpense.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {

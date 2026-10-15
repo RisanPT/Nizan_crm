@@ -18,6 +18,7 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 const _departments = [
   'All',
@@ -217,9 +218,22 @@ class _AdministrativeExpensesScreenState
   }
 
   Future<void> _verifyExpense(AdminExpense expense, String status) async {
+    // Approving asks which bank / cash account paid it.
+    MoneyChoice? money;
+    if (status == 'approved') {
+      money = await showMoneyAccountPicker(
+        context,
+        title: 'Approve expense',
+        amount: expense.amount + (expense.gstType == 'gst' ? expense.gstAmount : 0),
+        moneyIn: false,
+        modes: kAdminPayModes,
+        initialMode: expense.paymentMethod,
+      );
+      if (money == null) return; // cancelled
+    }
     try {
       final service = ref.read(adminExpenseServiceProvider);
-      await service.verifyAdminExpense(expense.id, status);
+      await service.verifyAdminExpense(expense.id, status, money: money);
       ref.refreshData.expenses();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1130,9 +1144,13 @@ class _AddEditAdminExpenseDialogState
     }
   }
 
+  // Expense heads (Chart of Accounts); read in callbacks, watched in build.
+  List<ExpenseHead> get _heads => ref.read(expenseHeadsProvider).value ?? kExpenseHeads;
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    ref.watch(expenseHeadsProvider);
     final employeesAsync = ref.watch(employeesProvider);
 
     // Resolve whether the department must be locked to the signed-in user's own
@@ -1318,7 +1336,7 @@ class _AddEditAdminExpenseDialogState
                   initialValue: _selectedHead,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Expense Head *'),
-                  items: kExpenseHeads
+                  items: _heads
                       .map((h) => DropdownMenuItem(
                             value: h.code,
                             child: Text(h.display, overflow: TextOverflow.ellipsis),
@@ -1328,7 +1346,7 @@ class _AddEditAdminExpenseDialogState
                       (v == null || v.isEmpty) ? 'Select an expense head' : null,
                   onChanged: (val) => setState(() {
                     _selectedHead = val;
-                    final h = expenseHeadByCode(val);
+                    final h = headIn(_heads, val);
                     if (h != null && !h.recurring) _isRecurring = false;
                     if (h != null && h.foreign && _gstType == 'none') _gstType = 'rcm';
                   }),
@@ -1336,7 +1354,7 @@ class _AddEditAdminExpenseDialogState
                 12.h,
 
                 // Bride / event cost tag — mandatory for job-linked heads.
-                if (expenseHeadByCode(_selectedHead)?.jobLinked ?? false) ...[
+                if (headIn(_heads, _selectedHead)?.jobLinked ?? false) ...[
                   TextFormField(
                     controller: _costTagCtrl,
                     decoration: const InputDecoration(
@@ -1368,7 +1386,7 @@ class _AddEditAdminExpenseDialogState
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (expenseHeadByCode(_selectedHead)?.recurring ?? false)
+                    if (headIn(_heads, _selectedHead)?.recurring ?? false)
                       Expanded(
                         child: CheckboxListTile(
                           contentPadding: EdgeInsets.zero,

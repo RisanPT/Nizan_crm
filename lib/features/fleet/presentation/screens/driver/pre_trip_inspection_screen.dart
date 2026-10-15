@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
@@ -23,13 +24,33 @@ class _PreTripInspectionScreenState
   final ImagePicker _picker = ImagePicker();
   final List<XFile> _selectedImages = [];
   final Set<int> _uploadingIndexes = {};
+  final _kmCtrl = TextEditingController();
   bool _isSubmitting = false;
   String? _errorMessage;
 
   static const int _minPhotos = 6;
   static const int _maxPhotos = 8;
 
-  bool get _canStartTrip => _selectedImages.length >= _minPhotos;
+  /// Starting odometer reading, or null until a valid number is entered.
+  double? get _startKm {
+    final v = double.tryParse(_kmCtrl.text.replaceAll(',', '').trim());
+    return (v == null || v < 0) ? null : v;
+  }
+
+  bool get _hasPhotos => _selectedImages.length >= _minPhotos;
+  bool get _canStartTrip => _hasPhotos && _startKm != null;
+
+  /// This job, for the vehicle's last recorded km.
+  FleetJob? get _job =>
+      (ref.read(driverJobsProvider).value ?? const <FleetJob>[])
+          .where((j) => j.id == widget.jobId)
+          .firstOrNull;
+
+  @override
+  void dispose() {
+    _kmCtrl.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= _maxPhotos) {
@@ -75,6 +96,32 @@ class _PreTripInspectionScreenState
 
   Future<void> _startTrip() async {
     if (!_canStartTrip || _isSubmitting) return;
+    final startKm = _startKm!;
+
+    // Odometers only go up — a reading below the last recorded one is
+    // usually a typo, so make the driver confirm it.
+    final lastKm = _job?.vehicleCurrentKm ?? 0;
+    if (lastKm > 0 && startKm < lastKm) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Check the km reading'),
+          content: Text(
+              'You entered ${formatKm(startKm)} km, which is less than this '
+              "vehicle's last recorded reading of ${formatKm(lastKm)} km. "
+              'Start the trip with ${formatKm(startKm)} km anyway?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Fix it')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("Yes, it's correct")),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
 
     setState(() {
       _isSubmitting = true;
@@ -93,7 +140,8 @@ class _PreTripInspectionScreenState
         if (mounted) setState(() => _uploadingIndexes.remove(i));
       }
 
-      await fleetService.startTripWithInspection(widget.jobId, photoUrls);
+      await fleetService.startTripWithInspection(widget.jobId, photoUrls,
+          startKm: startKm);
 
       // ✅ Refresh the jobs provider so dashboard/works screen updates
       ref.refreshData
@@ -149,6 +197,8 @@ class _PreTripInspectionScreenState
                   _buildPhotoGrid(count),
                   const SizedBox(height: 16),
                   _buildPickButtons(),
+                  const SizedBox(height: 16),
+                  _buildKmCard(),
                   const SizedBox(height: 20),
                   _buildStartButton(),
                   const SizedBox(height: 32),
@@ -242,25 +292,25 @@ class _PreTripInspectionScreenState
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: _canStartTrip ? const Color(0xFF2E7D32) : const Color(0xFF4A1942),
+                  color: _hasPhotos ? const Color(0xFF2E7D32) : const Color(0xFF4A1942),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: _canStartTrip
+                  color: _hasPhotos
                       ? const Color(0xFF4CAF50).withValues(alpha: 0.12)
                       : const Color(0xFFFF9800).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  _canStartTrip
-                      ? '✓ Ready to start'
+                  _hasPhotos
+                      ? '✓ Photos done'
                       : 'Need ${_minPhotos - count} more',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: _canStartTrip
+                    color: _hasPhotos
                         ? const Color(0xFF2E7D32)
                         : const Color(0xFFE65100),
                   ),
@@ -276,7 +326,7 @@ class _PreTripInspectionScreenState
               minHeight: 8,
               backgroundColor: Colors.grey.withValues(alpha: 0.15),
               valueColor: AlwaysStoppedAnimation<Color>(
-                _canStartTrip ? const Color(0xFF4CAF50) : const Color(0xFF4A1942),
+                _hasPhotos ? const Color(0xFF4CAF50) : const Color(0xFF4A1942),
               ),
             ),
           ),
@@ -456,6 +506,62 @@ class _PreTripInspectionScreenState
     );
   }
 
+  Widget _buildKmCard() {
+    final lastKm = _job?.vehicleCurrentKm ?? 0;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.speed_rounded, color: Color(0xFF4A1942), size: 20),
+              SizedBox(width: 8),
+              Text('Starting km',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A1A2E))),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+              lastKm > 0
+                  ? 'Enter the odometer reading now. '
+                      'Last recorded: ${formatKm(lastKm)} km'
+                  : 'Enter the odometer reading shown on the vehicle now.',
+              style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _kmCtrl,
+            enabled: !_isSubmitting,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText:
+                  lastKm > 0 ? 'e.g. ${formatKm(lastKm)}' : 'e.g. 45230',
+              suffixText: 'km',
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStartButton() {
     return SizedBox(
       width: double.infinity,
@@ -473,7 +579,9 @@ class _PreTripInspectionScreenState
               ? 'Uploading & Starting...'
               : _canStartTrip
                   ? 'Start Trip'
-                  : 'Add ${_minPhotos - _selectedImages.length} more photos',
+                  : !_hasPhotos
+                      ? 'Add ${_minPhotos - _selectedImages.length} more photos'
+                      : 'Enter starting km',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(

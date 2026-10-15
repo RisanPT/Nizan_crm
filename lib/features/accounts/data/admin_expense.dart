@@ -22,6 +22,16 @@ class ExpenseHead {
   });
 
   String get display => '$code · $label';
+
+  /// From GET /admin-expenses/heads (an expense ledger in the Chart of Accounts).
+  factory ExpenseHead.fromJson(Map<String, dynamic> j) => ExpenseHead(
+        j['code']?.toString() ?? '',
+        j['label']?.toString() ?? '',
+        j['group']?.toString() ?? '',
+        jobLinked: j['jobLinked'] == true,
+        recurring: j['recurring'] == true,
+        foreign: j['foreign'] == true,
+      );
 }
 
 /// The controlled chart of expense heads (must match the backend EXPENSE_HEADS).
@@ -47,6 +57,15 @@ const List<ExpenseHead> kExpenseHeads = [
   ExpenseHead('SAL-01', 'Salary & Allowance', 'Payroll'),
   ExpenseHead('REP-01', 'Repairs & Maintenance', 'Operating Expense'),
 ];
+
+/// [code] in [heads] (the live list), else in the built-in [kExpenseHeads].
+ExpenseHead? headIn(List<ExpenseHead> heads, String? code) {
+  if (code == null || code.isEmpty) return null;
+  for (final h in heads) {
+    if (h.code == code) return h;
+  }
+  return expenseHeadByCode(code);
+}
 
 ExpenseHead? expenseHeadByCode(String? code) {
   if (code == null || code.isEmpty) return null;

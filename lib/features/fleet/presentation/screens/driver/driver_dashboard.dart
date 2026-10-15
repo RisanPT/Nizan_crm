@@ -5,6 +5,7 @@ import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'driver_day.dart';
 
 class DriverDashboard extends ConsumerWidget {
   const DriverDashboard({super.key});
@@ -40,14 +41,10 @@ class DriverDashboard extends ConsumerWidget {
             ),
             jobsAsync.when(
               data: (jobs) {
-                final todayJobs = jobs.where((j) {
-                  final now = DateTime.now();
-                  final start = j.serviceStart.toLocal();
-                  return start.year == now.year &&
-                      start.month == now.month &&
-                      start.day == now.day &&
-                      j.tripStatus != 'completed';
-                }).toList();
+                // Every trip of the day, in order — completed ones stay so
+                // the driver sees the whole day (Trip 1 of 3 …).
+                final todayJobs = todaysTrips(jobs);
+                final running = activeTrip(jobs);
 
                 if (todayJobs.isEmpty) {
                   return SliverToBoxAdapter(child: _buildEmptyState());
@@ -57,7 +54,14 @@ class DriverDashboard extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildJobCard(ctx, ref, todayJobs[i]),
+                      (ctx, i) => _buildJobCard(ctx, ref, todayJobs[i],
+                          index: i,
+                          count: todayJobs.length,
+                          blockedBy: running != null &&
+                                  running.id != todayJobs[i].id &&
+                                  isNotStarted(todayJobs[i])
+                              ? running
+                              : null),
                       childCount: todayJobs.length,
                     ),
                   ),
@@ -151,7 +155,14 @@ class DriverDashboard extends ConsumerWidget {
 
   Widget _buildTodaySummary(AsyncValue<List<FleetJob>> jobsAsync) {
     return jobsAsync.when(
-      data: (jobs) {
+      data: (allJobs) {
+        // This summary sits above "Today's Assignments", so count today's
+        // jobs only (it used to count every job ever assigned).
+        final now = DateTime.now();
+        final jobs = allJobs.where((j) {
+          final s = j.serviceStart.toLocal();
+          return s.year == now.year && s.month == now.month && s.day == now.day;
+        }).toList();
         final total = jobs.length;
         final completed = jobs.where((j) => j.tripStatus == 'completed').length;
         final inProgress =
@@ -227,8 +238,10 @@ class DriverDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildJobCard(BuildContext context, WidgetRef ref, FleetJob job) {
+  Widget _buildJobCard(BuildContext context, WidgetRef ref, FleetJob job,
+      {required int index, required int count, FleetJob? blockedBy}) {
     final statusInfo = _getStatusInfo(job.tripStatus);
+    final done = job.tripStatus == 'completed';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -246,17 +259,29 @@ class DriverDashboard extends ConsumerWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () {
-          if (job.tripStatus == 'unassigned' || job.tripStatus == 'assigned') {
-            context.push('/driver/inspection/${job.id}');
+          if (isNotStarted(job)) {
+            startTrip(context, ref, job);
           } else {
             context.push('/driver/active_job/${job.id}');
           }
         },
-        child: Padding(
+        child: Opacity(
+          opacity: done ? 0.6 : 1,
+          child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (count > 1)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('TRIP ${index + 1} OF $count',
+                      style: const TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.6,
+                          color: Color(0xFF6B1A5F))),
+                ),
               Row(
                 children: [
                   Container(
@@ -352,10 +377,23 @@ class DriverDashboard extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (done && job.tripKm != null) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Icon(Icons.speed_rounded, size: 15, color: Colors.grey[600]),
+                    const SizedBox(width: 6),
+                    Text(
+                        '${formatKm(job.startKm!)} → ${formatKm(job.endKm!)} km · ${formatKm(job.tripKm!)} km driven',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
-              _buildPrimaryButton(context, job),
+              _buildPrimaryButton(context, ref, job, blockedBy: blockedBy),
             ],
           ),
+        ),
         ),
       ),
     );
@@ -383,10 +421,35 @@ class DriverDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildPrimaryButton(BuildContext context, FleetJob job) {
-    final isStart =
-        job.tripStatus == 'unassigned' || job.tripStatus == 'assigned';
+  Widget _buildPrimaryButton(BuildContext context, WidgetRef ref, FleetJob job,
+      {FleetJob? blockedBy}) {
+    final isStart = isNotStarted(job);
     final isActive = job.tripStatus == 'in_progress';
+
+    // Another trip is running: this one starts when that one is completed
+    // (the Complete dialog offers to start it), so no separate start here.
+    if (isStart && blockedBy != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF5F6FA),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.schedule_rounded, size: 16, color: Colors.grey[600]),
+            const SizedBox(width: 6),
+            Text('Up next · starts when you complete the current trip',
+                style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey[700])),
+          ],
+        ),
+      );
+    }
 
     if (isActive) {
       return SizedBox(
@@ -411,8 +474,7 @@ class DriverDashboard extends ConsumerWidget {
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
-          onPressed: () =>
-              context.push('/driver/inspection/${job.id}'),
+          onPressed: () => startTrip(context, ref, job),
           icon: const Icon(Icons.play_arrow_rounded, size: 16),
           label: const Text('Start Trip'),
           style: ElevatedButton.styleFrom(

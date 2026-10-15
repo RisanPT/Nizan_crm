@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/inventory/controllers/inventory_controller.da
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 /// Accounts → Bills / Payables. Vendor bills (from inventory purchases) with
 /// paid/unpaid + GST tracking, bill viewing, and payment recording — Zoho-style.
@@ -557,8 +558,19 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
           Future<void> submit() async {
             final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
             if (amount <= 0) return;
-            setLocal(() => saving = true);
             final messenger = ScaffoldMessenger.of(context);
+            // Which bank / cash account paid it.
+            final money = await showMoneyAccountPicker(
+              dctx,
+              title: 'Pay vendor',
+              amount: amount,
+              moneyIn: false,
+              modes: kPurchasePayModes,
+              initialMode: mode,
+              approveLabel: 'Save payment',
+            );
+            if (money == null) return;
+            setLocal(() => saving = true);
             try {
               await ref.read(inventoryServiceProvider).recordPurchasePayment(
                     b.id,
@@ -566,6 +578,7 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
                     date: payDate,
                     mode: mode,
                     note: noteCtrl.text.trim(),
+                    money: money,
                   );
               ref.refreshData.purchases();
               if (dctx.mounted) Navigator.pop(dctx);
@@ -845,8 +858,21 @@ class _AccountsBillsScreenState extends ConsumerState<AccountsBillsScreen> {
 
   Future<void> _setPaid(Purchase b, bool paid) async {
     final messenger = ScaffoldMessenger.of(context);
+    MoneyChoice? money;
+    if (paid && b.balance > 0) {
+      money = await showMoneyAccountPicker(
+        context,
+        title: 'Mark bill paid',
+        amount: b.balance,
+        moneyIn: false,
+        modes: kPurchasePayModes,
+        initialMode: 'bank_transfer',
+        approveLabel: 'Mark paid',
+      );
+      if (money == null) return;
+    }
     try {
-      await ref.read(inventoryServiceProvider).setPurchasePaid(b.id, paid);
+      await ref.read(inventoryServiceProvider).setPurchasePaid(b.id, paid, money: money);
       ref.refreshData.purchases();
       messenger.showSnackBar(
           SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')));

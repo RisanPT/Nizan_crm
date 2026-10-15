@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'inventory_purchase_screen.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1233,8 +1234,21 @@ class _InventoryPurchasesScreenState
 
   Future<void> _setPaid(Purchase p, bool paid) async {
     final messenger = ScaffoldMessenger.of(context);
+    MoneyChoice? money;
+    if (paid && p.balance > 0) {
+      money = await showMoneyAccountPicker(
+        context,
+        title: 'Mark bill paid',
+        amount: p.balance,
+        moneyIn: false,
+        modes: kPurchasePayModes,
+        initialMode: 'bank_transfer',
+        approveLabel: 'Mark paid',
+      );
+      if (money == null) return;
+    }
     try {
-      await ref.read(inventoryServiceProvider).setPurchasePaid(p.id, paid);
+      await ref.read(inventoryServiceProvider).setPurchasePaid(p.id, paid, money: money);
       ref.refreshData.purchases();
       messenger.showSnackBar(
         SnackBar(content: Text(paid ? 'Marked paid' : 'Marked unpaid')),

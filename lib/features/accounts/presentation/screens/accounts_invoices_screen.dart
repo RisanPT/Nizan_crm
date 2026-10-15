@@ -9,6 +9,9 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
+import 'package:nizan_crm/core/utils/gst_invoice_pdf.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
 import 'package:nizan_crm/core/utils/gst_calculator.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
@@ -43,6 +46,35 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
 
   String _formatDate(DateTime d) =>
       '${d.day} ${_monthAbbr[d.month - 1]} ${d.year}';
+
+  /// Same roles the backend allows for invoice sends (whatsappController).
+  bool get _canSendInvoiceOnWhatsApp => const {'admin', 'accounts', 'finance_head'}
+      .contains(ref.read(authSessionProvider)?.role ?? '');
+
+  String _dmy(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  /// Bookings show their tax invoice number once fully paid (issued by the
+  /// server); until then — and for trials — the booking / trial number.
+  String _invoiceLabel(Booking b, bool isTrial) =>
+      !isTrial && b.hasInvoiceNumber ? b.invoiceNumber : b.displayBookingNumber;
+
+  Widget _invoicePendingTag({required double fontSize}) {
+    final color = Colors.orange.shade700;
+    return Tooltip(
+      message: 'Booking number shown — invoice number is issued once fully paid',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text('INVOICE PENDING',
+            style: TextStyle(
+                color: color, fontSize: fontSize, fontWeight: FontWeight.w800)),
+      ),
+    );
+  }
 
   /// Small status pill used in the receivables hero.
   Widget _pill(String label, Color color, IconData icon) {
@@ -156,7 +188,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
 
             if (_searchQuery.isNotEmpty) {
                final matchesSearch = b.customerName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                   b.displayBookingNumber.toLowerCase().contains(_searchQuery.toLowerCase());
+                   b.displayBookingNumber.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                   b.invoiceNumber.toLowerCase().contains(_searchQuery.toLowerCase());
                if (!matchesSearch) return false;
             }
 
@@ -984,12 +1017,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     Row(
                       children: [
                         Flexible(
-                          child: Text(b.displayBookingNumber,
+                          child: Text(_invoiceLabel(b, isTrial),
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                   color: crm.primary)),
                         ),
+                        if (!isTrial && !b.hasInvoiceNumber) ...[
+                          6.w,
+                          _invoicePendingTag(fontSize: 9),
+                        ],
                         if (isTrial) ...[
                           6.w,
                           Container(
@@ -1148,10 +1185,14 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               Row(
                 children: [
                   Text(
-                    b.displayBookingNumber,
+                    _invoiceLabel(b, isTrial),
                     style: theme.textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.bold),
                   ),
+                  if (!isTrial && !b.hasInvoiceNumber) ...[
+                    8.w,
+                    _invoicePendingTag(fontSize: 10),
+                  ],
                   if (isTrial) ...[
                     8.w,
                     Container(
@@ -1193,32 +1234,72 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     ),
                     12.w,
                   ],
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await printBookingDetails(
-                          b,
-                          variant: isTrial
-                              ? BookingPrintVariant.trialInvoice
-                              : BookingPrintVariant.clientInvoice,
-                        );
-                      } catch (e) {
-                        if (mounted) showErrorSnackBar(context, e);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: crm.primary,
-                      foregroundColor: Colors.white,
+                  // A GST invoice exists only once the booking is fully paid
+                  // and the server has issued its invoice number.
+                  Tooltip(
+                    message: isTrial || b.hasInvoiceNumber
+                        ? ''
+                        : 'Invoice number is issued once the booking is fully paid',
+                    child: ElevatedButton.icon(
+                      onPressed: !isTrial && !b.hasInvoiceNumber
+                          ? null
+                          : () async {
+                              try {
+                                await printBookingDetails(
+                                  b,
+                                  variant: isTrial
+                                      ? BookingPrintVariant.trialInvoice
+                                      : BookingPrintVariant.clientInvoice,
+                                );
+                              } catch (e) {
+                                if (mounted) showErrorSnackBar(context, e);
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: crm.primary,
+                        foregroundColor: Colors.white,
+                      ),
+                      icon: const Icon(Icons.print, size: 16),
+                      label: Text(isTrial
+                          ? 'Print Trial Invoice'
+                          : 'Print Full GST Invoice'),
                     ),
-                    icon: const Icon(Icons.print, size: 16),
-                    label: Text(
-                        isTrial ? 'Print Trial Invoice' : 'Print Full GST Invoice'),
                   ),
                 ],
               )
             ],
           ),
         ),
+        // WhatsApp (TeamN Chat): the full GST invoice PDF, Accounts only —
+        // the server enforces the same roles and the invoice-number rule.
+        if (!isTrial && _canSendInvoiceOnWhatsApp)
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            color: crm.surface,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Builder(builder: (context) {
+                // The exact page "Print Full GST Invoice" prints; the server
+                // renders it with headless Chrome, so WhatsApp gets the same
+                // PDF. Only the web build prints from HTML.
+                final html = bookingPrintHtml(b,
+                    variant: BookingPrintVariant.clientInvoice);
+                return WhatsAppSendButtons(
+                  customerName: b.customerName,
+                  enabled: b.hasInvoiceNumber && html != null,
+                  disabledReason: !b.hasInvoiceNumber
+                      ? 'Invoice number is issued once the booking is fully paid'
+                      : 'Send invoices on WhatsApp from the web CRM',
+                  buildDocument: () async => WhatsAppDocument(
+                    html: html,
+                    filename: gstInvoicePdfFileName(b),
+                    kind: 'invoice',
+                    bookingId: b.id,
+                  ),
+                );
+              }),
+            ),
+          ),
         const Divider(height: 1),
         // Invoice Preview Paper
         Expanded(
@@ -1238,7 +1319,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   ],
                   border: Border.all(color: crm.border),
                 ),
-                child: _buildPreviewPaper(b, theme, crm),
+                child: _buildPreviewPaper(b, theme, crm, isTrial),
               ),
             ),
           ),
@@ -1247,7 +1328,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
     );
   }
 
-  Widget _buildPreviewPaper(Booking b, ThemeData theme, CrmTheme crm) {
+  Widget _buildPreviewPaper(Booking b, ThemeData theme, CrmTheme crm, bool isTrial) {
     final isAdvanceRow = _selectedMonth != null &&
         b.createdAt != null &&
         b.createdAt!.year == _selectedMonth!.year &&
@@ -1317,15 +1398,28 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                     children: [
                       Text('INVOICE NO.', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade500, letterSpacing: 1, fontSize: 10)),
                       4.h,
-                      Text(b.displayBookingNumber, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(isTrial || b.hasInvoiceNumber ? _invoiceLabel(b, isTrial) : 'PENDING',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: isTrial || b.hasInvoiceNumber ? null : Colors.orange.shade700)),
                     ]
                   ),
+                  if (!isTrial) ...[
+                    32.w,
+                    Column(
+                      children: [
+                        Text('BOOKING NO.', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade500, letterSpacing: 1, fontSize: 10)),
+                        4.h,
+                        Text(b.displayBookingNumber, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ]
+                    ),
+                  ],
                   32.w,
                   Column(
                     children: [
-                      Text('DATE', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade500, letterSpacing: 1, fontSize: 10)),
+                      Text(b.invoiceDate != null ? 'INVOICE DATE' : 'DATE', style: theme.textTheme.bodySmall?.copyWith(color: Colors.grey.shade500, letterSpacing: 1, fontSize: 10)),
                       4.h,
-                      Text('${b.bookingDate.day.toString().padLeft(2, '0')}/${b.bookingDate.month.toString().padLeft(2, '0')}/${b.bookingDate.year}', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(_dmy(b.invoiceDate ?? b.bookingDate), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                     ]
                   ),
                   32.w,

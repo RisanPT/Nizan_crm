@@ -18,6 +18,7 @@ const _sections = <_FleetSection>[
   _FleetSection('Expenses', Icons.local_gas_station_outlined, '/fleet/fuel'),
   _FleetSection('Accidents', Icons.warning_amber_rounded, '/fleet/accidents'),
   _FleetSection('Completed Works', Icons.task_alt_rounded, '/fleet/completed-works'),
+  _FleetSection('Km Report', Icons.speed_rounded, '/fleet/km-report'),
   _FleetSection('Service Reminders', Icons.build_circle_outlined, '/fleet/service-reminders'),
 ];
 

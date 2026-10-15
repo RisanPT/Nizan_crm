@@ -20,6 +20,18 @@ class CampaignService {
     }
   }
 
+  /// Names only — for the lead form's campaign picker (open to sales).
+  Future<List<CampaignOption>> getOptions() async {
+    try {
+      final res = await _dio.get('/marketing/campaigns/options');
+      return (res.data as List)
+          .map((e) => CampaignOption.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load campaigns');
+    }
+  }
+
   Future<Campaign> save(Campaign c) async {
     try {
       final res = c.id.isEmpty
@@ -50,3 +62,7 @@ final campaignsProvider = FutureProvider<CampaignBoard>((ref) async {
   final status = ref.watch(campaignStatusFilterProvider);
   return ref.watch(campaignServiceProvider).getCampaigns(status: status);
 });
+
+/// Every campaign (unfiltered) for tagging leads.
+final campaignOptionsProvider = FutureProvider<List<CampaignOption>>(
+    (ref) => ref.watch(campaignServiceProvider).getOptions());

@@ -3,6 +3,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/models/salary.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 final salaryServiceProvider = Provider<SalaryService>((ref) {
   return SalaryService(ref.watch(dioProvider));
@@ -117,10 +118,12 @@ class SalaryService {
     String? transactionRef,
     DateTime? paymentDate,
     String? notes,
+    MoneyChoice? money, // bank / cash account it was paid from
   }) async {
     try {
       final response = await _dio.put('/salaries/$id/pay', data: {
-        'paymentMethod': paymentMethod,
+        ...?money?.toJson(),
+        'paymentMethod': money?.paymentMode ?? paymentMethod,
         'transactionRef': transactionRef ?? '',
         'paymentDate': (paymentDate ?? DateTime.now()).toIso8601String(),
         if (notes != null && notes.isNotEmpty) 'notes': notes,

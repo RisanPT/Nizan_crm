@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 /// Accounts → Operations → Fleet Expenses. Driver-submitted fleet expenses
 /// (with the uploaded bill) surfaced in Accounts, reviewable/approvable here.
@@ -245,8 +246,21 @@ class _AccountsFleetExpensesScreenState
 
   Future<void> _setStatus(FuelExpense e, String status) async {
     final messenger = ScaffoldMessenger.of(context);
+    // Approving asks which bank / cash account paid it.
+    MoneyChoice? money;
+    if (status == 'approved') {
+      money = await showMoneyAccountPicker(
+        context,
+        title: 'Approve fleet expense',
+        amount: e.totalAmount,
+        moneyIn: false,
+        modes: kFleetPayModes,
+        initialMode: e.paymentMode,
+      );
+      if (money == null) return; // cancelled
+    }
     try {
-      await ref.read(fuelExpenseServiceProvider).setStatus(e.id, status);
+      await ref.read(fuelExpenseServiceProvider).setStatus(e.id, status, money: money);
       ref.refreshData.fuelExpenses();
       messenger.showSnackBar(SnackBar(content: Text('Marked $status')));
     } catch (err) {

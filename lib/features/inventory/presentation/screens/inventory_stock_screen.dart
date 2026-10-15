@@ -18,16 +18,6 @@ import 'package:nizan_crm/core/state/data_refresh.dart';
 
 enum StockView { all, kits, remaining }
 
-/// Normalised key for matching a free-text kit item to a studio product.
-String _matchKey(String name, String brand, String shade) {
-  String n(String s) {
-    final t = s.trim().toLowerCase();
-    return t == '—' ? '' : t;
-  }
-
-  return '${n(name)}|${n(brand)}|${n(shade)}';
-}
-
 class InventoryStockScreen extends ConsumerStatefulWidget {
   const InventoryStockScreen({super.key});
 
@@ -369,17 +359,18 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
     final async = ref.watch(inventoryProductsProvider);
     final kits = ref.watch(staffKitsProvider).value ?? const <StaffKit>[];
 
-    // Allocation to kits, keyed by normalised product identity.
+    // Units of each studio product held in staff kits. Assigning to a kit
+    // already moved these out of p.quantity, so p.quantity is what is left in
+    // the studio and these are extra, not a share of it.
     final allocated = <String, int>{};
     for (final k in kits) {
       for (final it in k.items) {
-        final key = _matchKey(it.name, it.brand, it.shade);
-        allocated[key] = (allocated[key] ?? 0) + it.quantity;
+        if (!it.isLinked) continue;
+        allocated[it.productId] = (allocated[it.productId] ?? 0) + it.quantity;
       }
     }
 
-    int allocatedFor(InventoryProduct p) =>
-        allocated[_matchKey(p.name, p.brand, p.shade)] ?? 0;
+    int allocatedFor(InventoryProduct p) => allocated[p.id] ?? 0;
 
     return InvBody(
       isMobile: isMobile,
@@ -408,9 +399,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
             final base = products.where(searchCat).toList();
             final allCount = base.length;
             final kitCount = base.where((p) => allocatedFor(p) > 0).length;
-            final availCount = base
-                .where((p) => (p.quantity - allocatedFor(p)) > 0)
-                .length;
+            final availCount = base.where((p) => p.quantity > 0).length;
 
             // Apply the view filter.
             final filtered = base.where((p) {
@@ -533,7 +522,7 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
                               '$units',
                               'Units in Stock',
                               allocatedUnits > 0
-                                  ? '$allocatedUnits allocated to kits'
+                                  ? '+ $allocatedUnits more in staff kits'
                                   : 'across shown products',
                               Icons.layers_outlined,
                               crm.accent,
@@ -1276,7 +1265,8 @@ class _StockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final p = product;
-    final remaining = (p.quantity - allocated).clamp(0, p.quantity);
+    // Studio stock is already net of kit assignments.
+    final remaining = p.quantity;
     final catColor = categoryColor(p.category);
 
     final noneLeft = view == StockView.remaining && remaining == 0;
@@ -1298,12 +1288,13 @@ class _StockCard extends StatelessWidget {
         break;
       case StockView.kits:
         bigValue = '$allocated';
-        bigCaption = 'of ${p.quantity} in kits';
+        bigCaption = 'in kits · ${p.quantity} in studio';
         bigColor = crm.accent;
         break;
       case StockView.remaining:
         bigValue = '$remaining';
-        bigCaption = allocated > 0 ? 'left · $allocated in kits' : 'available';
+        bigCaption =
+            allocated > 0 ? 'in studio · $allocated in kits' : 'in studio';
         bigColor = remaining == 0 ? crm.destructive : crm.success;
         break;
     }
@@ -1547,13 +1538,7 @@ class _StockCard extends StatelessWidget {
               // ── Gauge / allocation bar ──
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: view == StockView.all
-                    ? TubeGauge(
-                        quantity: p.quantity,
-                        fillLevel: p.fillLevel,
-                        height: 8,
-                      )
-                    : _allocationBar(crm, p, remaining),
+                child: _allocationBar(crm, p, remaining),
               ),
               10.h,
               Padding(
@@ -1613,13 +1598,15 @@ class _StockCard extends StatelessWidget {
     textAlign: TextAlign.end,
   );
 
-  /// Kits / remaining views: share of stock allocated vs left.
+  /// Share of everything the studio owns of [p] that sits in kits (Kits
+  /// view) or is still on the studio shelf (All / Remaining views).
   Widget _allocationBar(CrmTheme crm, InventoryProduct p, int remaining) {
     final isKits = view == StockView.kits;
     final shown = isKits ? allocated : remaining;
-    final frac = p.quantity <= 0
-        ? 0.0
-        : (shown / p.quantity).clamp(0.0, 1.0).toDouble();
+    // Everything the studio owns of this product: on the shelf + in kits.
+    final owned = p.quantity + allocated;
+    final frac =
+        owned <= 0 ? 0.0 : (shown / owned).clamp(0.0, 1.0).toDouble();
     final color = isKits
         ? crm.accent
         : (remaining == 0 ? crm.destructive : crm.success);
@@ -1642,7 +1629,7 @@ class _StockCard extends StatelessWidget {
               ),
             ),
             Text(
-              '$shown / ${p.quantity}',
+              '$shown / $owned',
               style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
             ),
           ],

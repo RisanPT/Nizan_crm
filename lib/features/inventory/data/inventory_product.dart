@@ -5,8 +5,6 @@ class InventoryProduct {
   final String shade;
   final String barcode;
   final int quantity;
-  final int fillLevel; // 0..100, the currently-open tube's remaining fill
-  final int usagePerWork; // % of a tube consumed per completed work
   final double price;
   final String category;
   final String productType;
@@ -24,8 +22,6 @@ class InventoryProduct {
     this.shade = '',
     this.barcode = '',
     this.quantity = 0,
-    this.fillLevel = 100,
-    this.usagePerWork = 10,
     this.price = 0,
     this.category = 'Other',
     this.productType = '',
@@ -39,16 +35,6 @@ class InventoryProduct {
 
   bool get isOut => quantity == 0;
   bool get isLow => quantity > 0 && quantity <= lowStockThreshold;
-
-  /// Open-tube fill as a 0..1 fraction (for gauges).
-  double get fillFraction => fillLevel.clamp(0, 100) / 100.0;
-
-  /// The open tube is nearly empty (≤ 20%) but not out of stock.
-  bool get isTubeLow => quantity > 0 && fillLevel <= 20;
-
-  /// Total remaining measured in tube-equivalents: sealed spares + open tube.
-  double get tubesRemaining =>
-      quantity <= 0 ? 0 : (quantity - 1) + fillFraction;
 
   /// The design's canonical category list.
   static const categories = <String>[
@@ -64,8 +50,6 @@ class InventoryProduct {
       shade: json['shade'] as String? ?? '',
       barcode: json['barcode'] as String? ?? '',
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
-      fillLevel: (json['fillLevel'] as num?)?.toInt() ?? 100,
-      usagePerWork: (json['usagePerWork'] as num?)?.toInt() ?? 10,
       price: (json['price'] as num?)?.toDouble() ?? 0,
       category: json['category'] as String? ?? 'Other',
       productType: json['productType'] as String? ?? '',
@@ -84,8 +68,6 @@ class InventoryProduct {
         'shade': shade,
         'barcode': barcode,
         'quantity': quantity,
-        'fillLevel': fillLevel,
-        'usagePerWork': usagePerWork,
         'price': price,
         'category': category,
         'productType': productType,

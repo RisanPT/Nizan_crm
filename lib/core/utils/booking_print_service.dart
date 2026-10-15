@@ -33,3 +33,9 @@ Future<void> printMultipleBookingDetails(
     variant: variant,
   );
 }
+
+/// The exact HTML document that "Print" opens for [booking] — sent to the
+/// server, which renders it with headless Chrome so WhatsApp gets the very
+/// same PDF. Null where printing isn't HTML-based (mobile / desktop builds).
+String? bookingPrintHtml(Booking booking, {required BookingPrintVariant variant}) =>
+    impl.bookingPrintHtml(booking, variant: variant);

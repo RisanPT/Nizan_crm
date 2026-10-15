@@ -28,6 +28,7 @@ import '../../core/providers/trial_provider.dart';
 import '../../core/models/trial.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 
 class ArtistFinanceScreen extends HookConsumerWidget {
@@ -1765,19 +1766,34 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       required String id,
       required bool isCollection,
       required String action,
+      double amount = 0,
+      String mode = '',
     }) async {
+      // Approving asks where the money moved (mode + bank / cash account).
+      MoneyChoice? money;
+      if (action == 'verified') {
+        money = await showMoneyAccountPicker(
+          context,
+          title: isCollection ? 'Approve collection' : 'Approve expense',
+          amount: amount,
+          moneyIn: isCollection,
+          modes: kCollectionPayModes,
+          initialMode: mode,
+        );
+        if (money == null) return; // cancelled
+      }
       try {
         final verifiedBy = session?.userId ?? '';
         if (isCollection) {
           await ref
               .read(collectionServiceProvider)
-              .verifyCollection(id: id, status: action, verifiedBy: verifiedBy);
+              .verifyCollection(id: id, status: action, verifiedBy: verifiedBy, money: money);
           ref.refreshData.collections();
           ref.refreshData.trials(); // trial paid / balance
         } else {
           await ref
               .read(expenseServiceProvider)
-              .verifyExpense(id: id, status: action, verifiedBy: verifiedBy);
+              .verifyExpense(id: id, status: action, verifiedBy: verifiedBy, money: money);
           ref.refreshData.expenses();
         }
       } catch (e) {
@@ -1944,6 +1960,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               id: c.id,
                               isCollection: true,
                               action: 'verified',
+                              amount: c.amount,
+                              mode: c.paymentMode,
                             ),
                             style: IconButton.styleFrom(
                               foregroundColor: crm.success,
@@ -2234,6 +2252,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               id: e.id,
                               isCollection: false,
                               action: 'verified',
+                              amount: e.amount,
+                              mode: 'upi',
                             ),
                             style: IconButton.styleFrom(
                               foregroundColor: crm.success,

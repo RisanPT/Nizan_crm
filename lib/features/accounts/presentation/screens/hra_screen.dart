@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/accounts/controllers/hra_provider.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/reminder_popup.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -399,11 +400,25 @@ class _HraDialogState extends ConsumerState<_HraDialog> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
+      // Saving as paid asks which bank / cash account paid it.
+      MoneyChoice? money;
+      if (_status == 'paid') {
+        money = await showMoneyAccountPicker(
+          context,
+          title: 'Pay HRA',
+          amount: double.tryParse(_amountCtrl.text.trim()) ?? 0,
+          moneyIn: false,
+          modes: kPayrollPayModes,
+          initialMode: _paymentMethod,
+        );
+        if (money == null) return;
+      }
       final payload = {
         'employeeId': _employeeId,
         'amount': double.tryParse(_amountCtrl.text.trim()) ?? 0,
         'date': _date.toIso8601String(),
-        'paymentMethod': _paymentMethod,
+        ...?money?.toJson(),
+        'paymentMethod': money?.paymentMode ?? _paymentMethod,
         'status': _status,
         'notes': _notesCtrl.text.trim(),
       };

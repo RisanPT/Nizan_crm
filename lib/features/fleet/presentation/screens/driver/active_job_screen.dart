@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'accident_report_screen.dart';
+import 'driver_day.dart';
 
 class ActiveJobScreen extends ConsumerStatefulWidget {
   final String jobId;
@@ -64,11 +65,15 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                   if (job.preTripPhotos.isNotEmpty)
                     _buildPhotosCard(job),
                   const SizedBox(height: 28),
-                  _buildCompleteButton(context, job),
-                  const SizedBox(height: 12),
-                  _buildAddExpenseButton(context, job),
-                  const SizedBox(height: 12),
-                  _buildAccidentButton(context, job),
+                  // Completed / accident trips are view-only — completing
+                  // again is refused by the server.
+                  if (job.tripStatus == 'in_progress') ...[
+                    _buildCompleteButton(context, job),
+                    const SizedBox(height: 12),
+                    _buildAddExpenseButton(context, job),
+                    const SizedBox(height: 12),
+                    _buildAccidentButton(context, job),
+                  ],
                   const SizedBox(height: 32),
                 ],
               ),
@@ -104,8 +109,9 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Active Job',
-                        style: TextStyle(
+                    Text(
+                        job.tripStatus == 'in_progress' ? 'Active Job' : 'Trip Details',
+                        style: const TextStyle(
                             color: Colors.white,
                             fontSize: 20,
                             fontWeight: FontWeight.w800)),
@@ -121,14 +127,14 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                   color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.directions_car_rounded,
+                    const Icon(Icons.directions_car_rounded,
                         color: Colors.white, size: 14),
-                    SizedBox(width: 4),
-                    Text('In Progress',
-                        style: TextStyle(
+                    const SizedBox(width: 4),
+                    Text(_statusLabel(job.tripStatus),
+                        style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.w700)),
@@ -142,7 +148,15 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
     );
   }
 
+  String _statusLabel(String status) => switch (status) {
+        'in_progress' => 'In Progress',
+        'completed' => 'Completed',
+        'accident' => 'Accident',
+        _ => 'Not Started',
+      };
+
   Widget _buildStatusCard(FleetJob job) {
+    if (job.tripStatus != 'in_progress') return _buildDoneCard(job);
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -175,6 +189,59 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                 SizedBox(height: 3),
                 Text('Drive safely. Complete the job when you arrive.',
                     style: TextStyle(fontSize: 12, color: Color(0xFF388E3C))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Status card for a trip that is no longer in progress, with its km.
+  Widget _buildDoneCard(FleetJob job) {
+    final accident = job.tripStatus == 'accident';
+    final color = accident ? const Color(0xFFC62828) : const Color(0xFF455A64);
+    final km = job.tripKm;
+    final kmLine = [
+      if (job.startKm != null) 'Start ${formatKm(job.startKm!)} km',
+      if (job.endKm != null) 'End ${formatKm(job.endKm!)} km',
+      if (km != null) '${formatKm(km)} km driven',
+    ].join(' · ');
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+              accident
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_rounded,
+              color: color,
+              size: 32),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    accident
+                        ? 'Accident reported'
+                        : job.tripStatus == 'completed'
+                            ? 'Trip completed'
+                            : 'Trip not started',
+                    style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: color)),
+                const SizedBox(height: 3),
+                Text(
+                  kmLine.isEmpty ? 'No km recorded for this trip' : kmLine,
+                  style: TextStyle(fontSize: 12, color: color),
+                ),
               ],
             ),
           ),
@@ -221,6 +288,9 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
             _buildDetailRow(Icons.contact_phone_outlined, 'POC',
                 '${job.pocName}${job.pocPhone != null ? " · ${job.pocPhone}" : ""}',
                 const Color(0xFF2196F3)),
+          if (job.startKm != null)
+            _buildDetailRow(Icons.speed_rounded, 'Starting km',
+                '${formatKm(job.startKm!)} km', const Color(0xFFE65100)),
         ],
       ),
     );
@@ -392,104 +462,248 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
   }
 
   Future<void> _confirmComplete(BuildContext context, FleetJob job) async {
-    final jobs = ref.read(driverJobsProvider).value ?? [];
-    final now = DateTime.now();
-    final remaining = jobs.where((j) {
-      if (j.id == job.id) return false;
-      if (j.serviceStart.year != now.year || j.serviceStart.month != now.month || j.serviceStart.day != now.day) return false;
-      return ['unassigned', 'assigned', 'in_progress'].contains(j.tripStatus);
-    }).length;
-    
-    final isLastJob = remaining == 0;
+    final jobs = ref.read(driverJobsProvider).value ?? const <FleetJob>[];
+    // The next trip of the day, if any — offered right here so the driver
+    // completes this one and starts that one in a single tap.
+    final next = nextTripAfter(jobs, job);
+    final carryKm = next != null && sameVehicle(job, next);
+    final isLastJob = next == null;
+
     String? parkedLocation;
+    double? endKm;
+    double? nextKm;
+    var startNext = next != null;
     final locCtrl = TextEditingController();
+    final kmCtrl = TextEditingController();
+    final nextKmCtrl = TextEditingController();
+    String? kmError;
+    String? nextKmError;
+
+    double? parse(TextEditingController c) {
+      final v = double.tryParse(c.text.replaceAll(',', '').trim());
+      return (v == null || v < 0) ? null : v;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32)),
-            SizedBox(width: 8),
-            Text('Complete Job?', style: TextStyle(fontSize: 18)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Are you sure you want to mark this job as completed? This action cannot be undone.'),
-            if (isLastJob) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(child: Text('This is your last job today!', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final km = parse(kmCtrl);
+          final driven =
+              (km != null && job.startKm != null) ? km - job.startKm! : null;
+          return AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32)),
+                SizedBox(width: 8),
+                Text('Complete trip', style: TextStyle(fontSize: 18)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${job.customerName} · this cannot be undone.',
+                      style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 16),
+                  const Text('Ending km',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(
+                    job.startKm != null
+                        ? 'Odometer reading now. Started at ${formatKm(job.startKm!)} km.'
+                        : 'Odometer reading shown on the vehicle now.',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: kmCtrl,
+                    autofocus: true,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setDialog(() => kmError = null),
+                    decoration: InputDecoration(
+                      hintText: job.startKm != null
+                          ? 'e.g. ${formatKm(job.startKm!)}'
+                          : 'e.g. 45310',
+                      suffixText: 'km',
+                      errorText: kmError,
+                      helperText: driven != null && driven >= 0
+                          ? 'Trip distance: ${formatKm(driven)} km'
+                          : null,
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  if (next != null) ...[
+                    const SizedBox(height: 18),
+                    NextTripCard(job: next, label: 'Next trip today'),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: startNext,
+                      onChanged: (v) => setDialog(() => startNext = v),
+                      title: const Text('Start this trip now',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                      subtitle: Text(
+                        !startNext
+                            ? "You'll start it later from the dashboard"
+                            : carryKm
+                                ? 'Starts at your ending km — same vehicle'
+                                : 'Different vehicle — enter its starting km',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (startNext && !carryKm)
+                      TextField(
+                        controller: nextKmCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        onChanged: (_) => setDialog(() => nextKmError = null),
+                        decoration: InputDecoration(
+                          labelText:
+                              'Starting km · ${vehicleLabelOf(next).isEmpty ? 'next vehicle' : vehicleLabelOf(next)}',
+                          suffixText: 'km',
+                          errorText: nextKmError,
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                        ),
+                      ),
                   ],
-                ),
+                  if (isLastJob) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8)),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: Colors.orange, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                              child: Text('This is your last trip today!',
+                                  style: TextStyle(
+                                      color: Colors.orange,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13))),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Where is the vehicle parked?',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: locCtrl,
+                      decoration: const InputDecoration(
+                        hintText: 'e.g., Office Parking, Home, etc.',
+                        border: OutlineInputBorder(),
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 12),
-              const Text('Where is the vehicle parked?', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: locCtrl,
-                decoration: const InputDecoration(
-                  hintText: 'e.g., Office Parking, Home, etc.',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () {
+                  final km = parse(kmCtrl);
+                  if (km == null) {
+                    setDialog(() => kmError = 'Enter the ending km reading');
+                    return;
+                  }
+                  if (job.startKm != null && km < job.startKm!) {
+                    setDialog(() => kmError =
+                        "Can't be less than the starting ${formatKm(job.startKm!)} km");
+                    return;
+                  }
+                  if (startNext && !carryKm) {
+                    final nk = parse(nextKmCtrl);
+                    if (nk == null) {
+                      setDialog(() =>
+                          nextKmError = "Enter the next vehicle's starting km");
+                      return;
+                    }
+                    nextKm = nk;
+                  }
+                  if (isLastJob && locCtrl.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+                        content:
+                            Text('Please enter where you parked the vehicle.')));
+                    return;
+                  }
+                  endKm = km;
+                  parkedLocation = locCtrl.text.trim();
+                  Navigator.pop(ctx, true);
+                },
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white),
+                child: Text(next != null && startNext
+                    ? 'Complete & start next'
+                    : 'Complete'),
               ),
             ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (isLastJob && locCtrl.text.trim().isEmpty) {
-                 ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Please enter where you parked the vehicle.')));
-                 return;
-              }
-              parkedLocation = locCtrl.text.trim();
-              Navigator.pop(ctx, true);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32), foregroundColor: Colors.white),
-            child: const Text('Complete'),
-          ),
-        ],
+          );
+        },
       ),
     );
+    locCtrl.dispose();
+    kmCtrl.dispose();
+    nextKmCtrl.dispose();
 
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || endKm == null || !mounted) return;
 
-    // ignore: use_build_context_synchronously  
+    // ignore: use_build_context_synchronously
     final messenger = ScaffoldMessenger.of(context);
     // ignore: use_build_context_synchronously
     final router = GoRouter.of(context);
 
     setState(() => _isCompleting = true);
     try {
-      await ref.read(fleetServiceProvider).completeJob(jobId: job.id, parkedLocation: parkedLocation?.isNotEmpty == true ? parkedLocation : null);
-      // Jobs are bookings (tripStatus) and the vehicle's parked location moves.
+      final res = await ref.read(fleetServiceProvider).completeJob(
+            jobId: job.id,
+            endKm: endKm!,
+            parkedLocation:
+                parkedLocation?.isNotEmpty == true ? parkedLocation : null,
+            startNextJobId: next != null && startNext ? next.id : null,
+            nextStartKm: nextKm,
+          );
+      // Jobs are bookings (tripStatus) and the vehicle's km / parking moves.
       ref.refreshData
         ..fleetJobs()
         ..bookings()
         ..vehicles();
       if (mounted) {
+        final started = res.nextStarted ? res.nextJob : null;
         messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Job completed! Great work 🎉'),
-            backgroundColor: Color(0xFF2E7D32),
+          SnackBar(
+            content: Text(started != null
+                ? 'Trip completed · next trip (${started.customerName}) started'
+                : res.isLastJob
+                    ? 'All trips done for today! Great work 🎉'
+                    : 'Trip completed 🎉'),
+            backgroundColor: const Color(0xFF2E7D32),
             behavior: SnackBarBehavior.floating,
           ),
         );
-        router.go('/driver/works');
+        // Straight into the next trip, or back to the day's list.
+        router.go(started != null
+            ? '/driver/active_job/${started.id}'
+            : '/driver/jobs');
       }
     } catch (e) {
       if (mounted) {

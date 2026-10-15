@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/accounts/data/sales_return.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class SalesReturnService {
   final Dio _dio;
@@ -29,8 +30,9 @@ class SalesReturnService {
     return SalesReturn.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<SalesReturn> updateStatus(String id, String status) async {
-    final res = await _dio.patch('/sales-returns/$id/status', data: {'status': status});
+  /// Processing a refund sends [money]: the account the refund was paid from.
+  Future<SalesReturn> updateStatus(String id, String status, {MoneyChoice? money}) async {
+    final res = await _dio.patch('/sales-returns/$id/status', data: {'status': status, ...?money?.toJson()});
     return SalesReturn.fromJson(res.data as Map<String, dynamic>);
   }
 

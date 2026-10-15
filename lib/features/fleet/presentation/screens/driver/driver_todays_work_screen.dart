@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
-import 'package:nizan_crm/core/state/data_refresh.dart';
 
 class DriverTodaysWorkScreen extends ConsumerStatefulWidget {
   const DriverTodaysWorkScreen({super.key});
@@ -167,28 +166,9 @@ class _DriverTodaysWorkScreenState extends ConsumerState<DriverTodaysWorkScreen>
 
   Future<void> _handleJobAction(FleetJob job, bool requiresPhotos) async {
     if (job.tripStatus == 'unassigned' || job.tripStatus == 'assigned') {
-      if (requiresPhotos) {
-        // Go to Pre-Trip Inspection which requires 6 photos
-        context.push('/driver/inspection/${job.id}');
-      } else {
-        // Bypass photos and start trip immediately
-        try {
-          final fleetService = ref.read(fleetServiceProvider);
-          await fleetService.startTripWithInspection(job.id, []);
-          ref.refreshData
-            ..fleetJobs()
-            ..bookings(); // jobs are bookings (tripStatus)
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Trip started (photos bypassed)')),
-            );
-          }
-        } catch (e) {
-          if (mounted) {
-            showErrorSnackBar(context, e);
-          }
-        }
-      }
+      // Every trip starts from the Pre-Trip Inspection: the server requires
+      // the photos and the starting km, so there is no bypass.
+      context.push('/driver/inspection/${job.id}');
     } else {
       // Go to Active Job Screen
       context.push('/driver/active_job/${job.id}');

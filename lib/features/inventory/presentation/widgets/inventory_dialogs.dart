@@ -32,10 +32,6 @@ Future<void> showProductDialog(
   final barcodeCtrl = TextEditingController(
     text: product?.barcode ?? initialBarcode ?? '',
   );
-  final fillCtrl = TextEditingController(text: '${product?.fillLevel ?? 100}');
-  final usageCtrl = TextEditingController(
-    text: '${product?.usagePerWork ?? 10}',
-  );
   // Keep the product's own category as-is (even one outside the list) —
   // never silently replace it when the product is edited.
   var category = (product?.category ?? '').trim().isNotEmpty
@@ -72,8 +68,6 @@ Future<void> showProductDialog(
               brandCtrl.text = found.brand;
               shadeCtrl.text = found.shade;
               qtyCtrl.text = '${found.quantity}';
-              fillCtrl.text = '${found.fillLevel}';
-              usageCtrl.text = '${found.usagePerWork}';
               priceCtrl.text = found.price > 0
                   ? found.price.toStringAsFixed(0)
                   : '';
@@ -171,34 +165,6 @@ Future<void> showProductDialog(
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
                             labelText: 'Price (₹)',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: fillCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Tube fill %',
-                            helperText: '100 = full',
-                            suffixText: '%',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: usageCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Use per work',
-                            helperText: '% used / job',
-                            suffixText: '%',
                           ),
                         ),
                       ),
@@ -410,10 +376,6 @@ Future<void> showProductDialog(
                               category: category,
                               productType: editing?.productType ?? '',
                               barcode: barcodeCtrl.text.trim(),
-                              fillLevel:
-                                  int.tryParse(fillCtrl.text.trim()) ?? 100,
-                              usagePerWork:
-                                  int.tryParse(usageCtrl.text.trim()) ?? 10,
                               expiry: expiry,
                             );
                         ref.refreshData.inventory();

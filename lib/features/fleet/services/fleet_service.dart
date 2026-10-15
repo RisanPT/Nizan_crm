@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/features/fleet/data/km_report.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 
@@ -19,11 +20,17 @@ class FleetService {
     }
   }
 
-  Future<FleetJob> startTripWithInspection(String jobId, List<String> photos) async {
+  /// Starts the trip: pre-trip photos plus the vehicle's starting odometer
+  /// reading.
+  Future<FleetJob> startTripWithInspection(
+    String jobId,
+    List<String> photos, {
+    required double startKm,
+  }) async {
     try {
       final response = await _dio.post(
         '/fleet/driver/inspection/$jobId',
-        data: {'photos': photos},
+        data: {'photos': photos, 'startKm': startKm},
       );
       return FleetJob.fromJson(response.data['job']);
     } catch (e) {
@@ -31,15 +38,47 @@ class FleetService {
     }
   }
 
-  Future<({FleetJob job, bool isLastJob})> completeJob({required String jobId, String? parkedLocation}) async {
+  /// Starts a later trip of the day without a new inspection (done once a
+  /// day, on the first trip) — only the starting km is needed.
+  Future<FleetJob> startNextTrip(String jobId, {required double startKm}) async {
+    try {
+      final response = await _dio.post(
+        '/fleet/driver/start-next/$jobId',
+        data: {'startKm': startKm},
+      );
+      return FleetJob.fromJson(response.data['job']);
+    } catch (e) {
+      throw AppException(e, action: 'start trip');
+    }
+  }
+
+  /// Completes the trip with the vehicle's ending odometer reading. With
+  /// [startNextJobId], the server also starts that next trip of the day
+  /// (at [nextStartKm], or at [endKm] when it's the same vehicle).
+  Future<({FleetJob job, bool isLastJob, FleetJob? nextJob, bool nextStarted})>
+      completeJob({
+    required String jobId,
+    required double endKm,
+    String? parkedLocation,
+    String? startNextJobId,
+    double? nextStartKm,
+  }) async {
     try {
       final response = await _dio.post(
         '/fleet/driver/complete/$jobId',
-        data: parkedLocation != null ? {'parkedLocation': parkedLocation} : {},
+        data: {
+          'endKm': endKm,
+          'parkedLocation': ?parkedLocation,
+          'startNextJobId': ?startNextJobId,
+          'nextStartKm': ?nextStartKm,
+        },
       );
+      final next = response.data['nextJob'];
       return (
         job: FleetJob.fromJson(response.data['job']),
         isLastJob: response.data['isLastJob'] == true,
+        nextJob: next is Map<String, dynamic> ? FleetJob.fromJson(next) : null,
+        nextStarted: response.data['nextStarted'] == true,
       );
     } catch (e) {
       throw AppException(e, action: 'complete job');
@@ -138,6 +177,24 @@ class FleetService {
           .toList();
     } catch (e) {
       throw AppException(e, action: 'load completed works');
+    }
+  }
+
+  /// Km driven per driver / vehicle between [from] and [to] (both inclusive).
+  Future<KmReport> getKmReport({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    String day(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    try {
+      final response = await _dio.get(
+        '/fleet/manager/km-report',
+        queryParameters: {'from': day(from), 'to': day(to)},
+      );
+      return KmReport.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load km report');
     }
   }
 

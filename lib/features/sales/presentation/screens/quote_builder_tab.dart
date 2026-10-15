@@ -18,6 +18,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/spot_invoice.dart';
+import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 
@@ -780,25 +781,33 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     if (!ok) _showToast('Could not open WhatsApp');
   }
 
-  Future<void> _downloadPdf(_Quote q) async {
+  String _quotePdfName(_Quote q) {
+    final safeName = q.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+    return 'Quote_${q.no}${safeName.isEmpty ? '' : '_$safeName'}.pdf';
+  }
+
+  /// The quote sheet as shown on screen, as a one-page PDF. Shared by
+  /// "Download PDF" and the WhatsApp (TeamN Chat) buttons.
+  Future<Uint8List> _quotePdfBytes() async {
     final boundary = _sheetKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) return;
+    if (boundary == null) throw StateError('The quote sheet is not on screen');
+    final image = await boundary.toImage(pixelRatio: 2.5);
+    final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
+    final doc = pw.Document();
+    const width = 595.0; // A4 width in points; height follows the sheet.
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat(width, width * image.height / image.width),
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.fill),
+    ));
+    return doc.save();
+  }
+
+  Future<void> _downloadPdf(_Quote q) async {
+    if (_sheetKey.currentContext == null) return;
     setState(() => _busyPdf = true);
     try {
-      final image = await boundary.toImage(pixelRatio: 2.5);
-      final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
-      final doc = pw.Document();
-      const width = 595.0; // A4 width in points; height follows the sheet.
-      doc.addPage(pw.Page(
-        pageFormat: PdfPageFormat(width, width * image.height / image.width),
-        margin: pw.EdgeInsets.zero,
-        build: (_) => pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.fill),
-      ));
-      final safeName = q.name.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
-      await Printing.sharePdf(
-        bytes: await doc.save(),
-        filename: 'Quote_${q.no}${safeName.isEmpty ? '' : '_$safeName'}.pdf',
-      );
+      await Printing.sharePdf(bytes: await _quotePdfBytes(), filename: _quotePdfName(q));
     } catch (_) {
       _showToast('Could not create the PDF');
     } finally {
@@ -1189,6 +1198,38 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
             ),
           ),
         ]),
+        const SizedBox(height: 12),
+        // TeamN Chat: sends this quote's PDF (the sheet on the right).
+        Builder(builder: (context) {
+          final problem = q.name.isEmpty
+              ? 'Enter the client name'
+              : q.phone.replaceAll(RegExp(r'\D'), '').length < 10
+                  ? "Enter the client's WhatsApp number"
+                  : null;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'TeamN Chat · send the quotation PDF',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: pal.muted),
+              ),
+              const SizedBox(height: 6),
+              WhatsAppSendButtons(
+                customerName: q.name,
+                enabled: problem == null,
+                disabledReason: problem,
+                buildDocument: () async => WhatsAppDocument(
+                  pdf: await _quotePdfBytes(),
+                  filename: _quotePdfName(q),
+                  kind: 'quotation',
+                  reference: q.no,
+                  customerName: q.name,
+                  phone: q.phone,
+                ),
+              ),
+            ],
+          );
+        }),
         const SizedBox(height: 8),
         _Btn(
           pal: pal,

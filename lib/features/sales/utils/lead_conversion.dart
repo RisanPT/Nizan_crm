@@ -9,12 +9,19 @@ bool canConvertLead(Lead lead) =>
     lead.status != 'Lost' &&
     lead.status != 'Pending Lost Approval';
 
+/// True once [lead] is Converted — the same customer may book us again for
+/// another event (reception, engagement…). One mobile number = one lead, so a
+/// new lead can't be added for them; instead the converted lead offers
+/// "Add Another Booking". The lead itself stays tied to its first booking
+/// (linkLeadsToBooking never re-points a linked lead).
+bool canAddAnotherBooking(Lead lead) => lead.status == 'Converted';
+
 /// The `/booking/add` route that converts [lead] into a booking. We forward the
 /// customer details we already know (name, phone, email, address, pincode) plus
 /// `leadId`, so the Add Booking screen opens pre-filled and the salesperson only
 /// has to pick the package and the event date(s). On save, the backend links the
 /// new booking to this lead and flips it to Converted (see linkLeadsToBooking).
-String leadToBookingRoute(Lead lead) {
+String leadToBookingRoute(Lead lead, {bool another = false}) {
   final email = lead.email?.trim() ?? '';
   // A not-yet-converted lead usually has no `address` (that's filled from the
   // booking on conversion) — fall back to the town in `location`.
@@ -28,6 +35,7 @@ String leadToBookingRoute(Lead lead) {
     if (email.isNotEmpty) 'email': email,
     if (address.isNotEmpty) 'address': address,
     if (lead.pincode.trim().isNotEmpty) 'pincode': lead.pincode.trim(),
+    if (another) 'another': '1',
   };
   return Uri(path: '/booking/add', queryParameters: params).toString();
 }
@@ -35,4 +43,10 @@ String leadToBookingRoute(Lead lead) {
 /// Opens the pre-filled Add Booking screen for converting [lead].
 void convertLeadToBooking(BuildContext context, Lead lead) {
   context.push(leadToBookingRoute(lead));
+}
+
+/// Opens the same pre-filled Add Booking screen for an already-converted
+/// [lead]'s next event.
+void addAnotherBookingForLead(BuildContext context, Lead lead) {
+  context.push(leadToBookingRoute(lead, another: true));
 }

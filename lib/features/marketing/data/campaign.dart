@@ -119,3 +119,25 @@ class CampaignBoard {
     );
   }
 }
+
+/// A campaign as the lead form's picker sees it — name only, no money figures.
+class CampaignOption {
+  final String id;
+  final String title;
+  final String channel;
+  final String status;
+
+  const CampaignOption({
+    required this.id,
+    required this.title,
+    this.channel = '',
+    this.status = 'active',
+  });
+
+  factory CampaignOption.fromJson(Map<String, dynamic> j) => CampaignOption(
+        id: (j['_id'] ?? '').toString(),
+        title: (j['title'] ?? '').toString(),
+        channel: (j['channel'] ?? '').toString(),
+        status: (j['status'] ?? 'active').toString(),
+      );
+}

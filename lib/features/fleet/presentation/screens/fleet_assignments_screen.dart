@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_models.dart' show formatKm;
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
@@ -1364,7 +1365,13 @@ class _FleetAssignmentsScreenState
                               ),
                             ),
                             child: Text(
-                              isAssigned ? 'Assigned' : 'Pending',
+                              // Show trip progress once the driver acts on it.
+                              switch (booking.tripStatus) {
+                                'in_progress' => 'On Trip',
+                                'completed' => 'Trip Done',
+                                'accident' => 'Accident',
+                                _ => isAssigned ? 'Assigned' : 'Pending',
+                              },
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -1430,7 +1437,12 @@ class _FleetAssignmentsScreenState
                             Expanded(
                               child: Text(
                                 isAssigned
-                                    ? '${booking.driverName} • ${booking.travelMode}'
+                                    ? [
+                                        '${booking.driverName} • ${booking.travelMode}',
+                                        if (booking.startKm != null)
+                                          '${formatKm(booking.startKm!)}'
+                                              '${booking.endKm != null ? ' → ${formatKm(booking.endKm!)} km (${formatKm(booking.endKm! - booking.startKm!)} km)' : ' km start'}',
+                                      ].join(' • ')
                                     : 'Tap to assign transport',
                                 style: TextStyle(
                                   fontSize: 11,

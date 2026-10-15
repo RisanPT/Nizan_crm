@@ -324,6 +324,11 @@ class ManageBookingScreen extends HookConsumerWidget {
     final customPackagePriceCtrl = useTextEditingController(
       text: initialBasePackageAmount.toStringAsFixed(0),
     );
+    // Package + district the saved booking was loaded with. Until the user
+    // changes either, keep the SAVED price — re-pricing on open replaced the
+    // invoiced amount with the list rate (the default rate when no district).
+    final loadedPricingKey = useRef<String?>(null);
+    final pricingTouched = useRef(false);
 
     useEffect(
       () {
@@ -479,6 +484,9 @@ class ManageBookingScreen extends HookConsumerWidget {
               (selectedItem != null && selectedItem.districtId.isNotEmpty)
                   ? selectedItem.districtId
                   : booking.districtId;
+          loadedPricingKey.value =
+              '${selectedPackageId.value}|${selectedDistrictId.value}';
+          pricingTouched.value = false;
           selectedRegionId.value =
               (selectedItem != null && selectedItem.regionId.isNotEmpty)
                   ? selectedItem.regionId
@@ -678,6 +686,11 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     useEffect(
       () {
+        if (booking != null && !pricingTouched.value) {
+          final key = '${selectedPackageId.value}|${selectedDistrictId.value}';
+          if (key == loadedPricingKey.value) return null;
+          pricingTouched.value = true;
+        }
         final selectedPackage = findPackageById(selectedPackageId.value);
         if (selectedPackage != null) {
           packageCtrl.text = selectedPackage.name;
@@ -1621,10 +1634,10 @@ class ManageBookingScreen extends HookConsumerWidget {
                           return GridView.count(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: narrow ? 1 : 5,
+                            crossAxisCount: narrow ? 1 : 3,
                             mainAxisSpacing: 16,
                             crossAxisSpacing: 16,
-                            childAspectRatio: narrow ? 5 : 2.7,
+                            childAspectRatio: narrow ? 5 : 4.5,
                             children: [
                               _buildPackageSelector(
                                 context,
@@ -1635,6 +1648,17 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 packageCtrl,
                                 isExtraDateEntry: isExtraDateEntry,
                                 onPackageChanged: applySelectedPackage,
+                              ),
+                              // District beside the package: its district
+                              // rate drives the price, so fix a wrong district
+                              // here (same value as Logistics & Location).
+                              _buildDistrictRateSelector(
+                                crmColors,
+                                availableDistricts,
+                                findPackageById(selectedPackageId.value),
+                                selectedDistrictId,
+                                districtCtrl,
+                                regionCtrl,
                               ),
                               _buildCurrencyField(
                                 context,
@@ -3659,6 +3683,71 @@ class ManageBookingScreen extends HookConsumerWidget {
         icon: const Icon(Icons.access_time_rounded, size: 18),
         splashRadius: 18,
       ),
+    );
+  }
+
+  /// District picker for the package row — each option shows the selected
+  /// package's rate in that district.
+  static Widget _buildDistrictRateSelector(
+    CrmTheme crmColors,
+    List<District> availableDistricts,
+    ServicePackage? package,
+    ValueNotifier<String> selectedDistrictId,
+    TextEditingController districtCtrl,
+    TextEditingController regionCtrl,
+  ) {
+    final currentValue =
+        availableDistricts.any((d) => d.id == selectedDistrictId.value)
+        ? selectedDistrictId.value
+        : '';
+    String rate(String districtId) => package == null
+        ? ''
+        : ' · ₹${package.effectivePriceForDistrict(districtId).toStringAsFixed(0)}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'DISTRICT (PACKAGE RATE)',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: crmColors.textSecondary,
+            letterSpacing: 1.2,
+          ),
+        ),
+        4.h,
+        DropdownButtonFormField<String>(
+          isExpanded: true,
+          key: ValueKey(
+            'rate-district-$currentValue-${package?.id}-${availableDistricts.length}',
+          ),
+          initialValue: currentValue,
+          items: [
+            DropdownMenuItem(
+              value: '',
+              child: Text('Default rate${rate('')}',
+                  overflow: TextOverflow.ellipsis),
+            ),
+            for (final d in availableDistricts)
+              DropdownMenuItem(
+                value: d.id,
+                child: Text('${d.name}${rate(d.id)}',
+                    overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (value) {
+            selectedDistrictId.value = value ?? '';
+            final selected = availableDistricts.cast<District?>().firstWhere(
+              (d) => d?.id == value,
+              orElse: () => null,
+            );
+            districtCtrl.text = selected?.name ?? '';
+            regionCtrl.text = selected?.regionName ?? '';
+          },
+          decoration: _inputDeco('', crmColors),
+        ),
+      ],
     );
   }
 

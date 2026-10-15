@@ -23,6 +23,14 @@ final staffKitsProvider = FutureProvider<List<StaffKit>>((ref) async {
   return ref.watch(inventoryServiceProvider).getKits();
 });
 
+/// Assignment history for one kit (studio → kit hand-overs, returns,
+/// write-offs). Refreshes whenever the kits reload, i.e. after every save.
+final kitMovementsProvider =
+    FutureProvider.family<List<KitMovement>, String>((ref, kitId) async {
+  ref.watch(staffKitsProvider);
+  return ref.watch(inventoryServiceProvider).getKitMovements(kitId: kitId);
+});
+
 final purchasesProvider = FutureProvider<List<Purchase>>((ref) async {
   return ref.watch(inventoryServiceProvider).getPurchases();
 });

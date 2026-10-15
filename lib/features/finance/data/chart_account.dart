@@ -4,6 +4,8 @@ class ChartAccount {
   final String code;
   final String name;
   final String nature; // asset | liability | equity | income | expense
+  /// Account Type key (e.g. 'bank', 'direct_expense'); see /accounting/account-types.
+  final String accountType;
   final String group;
   final bool isBank;
   final bool isCash;
@@ -20,6 +22,7 @@ class ChartAccount {
     required this.code,
     required this.name,
     required this.nature,
+    this.accountType = '',
     this.group = '',
     this.isBank = false,
     this.isCash = false,
@@ -40,6 +43,7 @@ class ChartAccount {
         code: j['code'] as String? ?? '',
         name: j['name'] as String? ?? '',
         nature: j['nature'] as String? ?? 'expense',
+        accountType: j['accountType'] as String? ?? '',
         group: j['group'] as String? ?? '',
         isBank: j['isBank'] as bool? ?? false,
         isCash: j['isCash'] as bool? ?? false,
@@ -54,6 +58,20 @@ class ChartAccount {
 }
 
 const kAccountNatures = <String>['asset', 'liability', 'equity', 'income', 'expense'];
+
+/// One entry of the Account Type master (GET /accounting/account-types).
+class AccountTypeOption {
+  final String key;
+  final String label;
+  final String nature;
+  const AccountTypeOption({required this.key, required this.label, required this.nature});
+
+  factory AccountTypeOption.fromJson(Map<String, dynamic> j) => AccountTypeOption(
+        key: j['key'] as String? ?? '',
+        label: j['label'] as String? ?? '',
+        nature: j['nature'] as String? ?? '',
+      );
+}
 
 String natureLabel(String n) {
   switch (n) {

@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -185,9 +186,21 @@ class _OperationsSalariesScreenState
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                   onPressed: () async {
+                    // Which bank / cash account paid it.
+                    final money = await showMoneyAccountPicker(
+                      ctx,
+                      title: 'Pay salary',
+                      amount: salary.netAmount,
+                      moneyIn: false,
+                      modes: kPayrollPayModes,
+                      initialMode: paymentMethod,
+                      approveLabel: 'Confirm payment',
+                    );
+                    if (money == null) return;
                     try {
                       await ref.read(salaryServiceProvider).paySalary(
                             salary.id,
+                            money: money,
                             paymentMethod: paymentMethod,
                             transactionRef: refCtrl.text.trim(),
                             paymentDate: paymentDate,

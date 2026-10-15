@@ -15,7 +15,10 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$FleetJob {
 
-@JsonKey(name: '_id') String get id; String get bookingNumber; String? get driverId; dynamic get vehicleId; List<String> get preTripPhotos; String get tripStatus; String get customerName; String? get address; String? get mapUrl; String get service; String? get eventSlot; DateTime get serviceStart; DateTime get serviceEnd; double get travelDistanceKm; String? get pocName; String? get pocPhone; List<Map<String, dynamic>> get assignedStaff;
+@JsonKey(name: '_id') String get id; String get bookingNumber;// An id string, or the populated Employee object (manager endpoints
+// populate it) — dynamic so either parses.
+ dynamic get driverId; dynamic get vehicleId; List<String> get preTripPhotos; String get tripStatus; String get customerName; String? get address; String? get mapUrl; String get service; String? get eventSlot; DateTime get serviceStart; DateTime get serviceEnd; double get travelDistanceKm; String? get pocName; String? get pocPhone; List<Map<String, dynamic>> get assignedStaff;// Odometer readings entered by the driver at trip start / completion.
+ double? get startKm; double? get endKm; DateTime? get tripStartedAt; DateTime? get tripCompletedAt;
 /// Create a copy of FleetJob
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +31,16 @@ $FleetJobCopyWith<FleetJob> get copyWith => _$FleetJobCopyWithImpl<FleetJob>(thi
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is FleetJob&&(identical(other.id, id) || other.id == id)&&(identical(other.bookingNumber, bookingNumber) || other.bookingNumber == bookingNumber)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&const DeepCollectionEquality().equals(other.vehicleId, vehicleId)&&const DeepCollectionEquality().equals(other.preTripPhotos, preTripPhotos)&&(identical(other.tripStatus, tripStatus) || other.tripStatus == tripStatus)&&(identical(other.customerName, customerName) || other.customerName == customerName)&&(identical(other.address, address) || other.address == address)&&(identical(other.mapUrl, mapUrl) || other.mapUrl == mapUrl)&&(identical(other.service, service) || other.service == service)&&(identical(other.eventSlot, eventSlot) || other.eventSlot == eventSlot)&&(identical(other.serviceStart, serviceStart) || other.serviceStart == serviceStart)&&(identical(other.serviceEnd, serviceEnd) || other.serviceEnd == serviceEnd)&&(identical(other.travelDistanceKm, travelDistanceKm) || other.travelDistanceKm == travelDistanceKm)&&(identical(other.pocName, pocName) || other.pocName == pocName)&&(identical(other.pocPhone, pocPhone) || other.pocPhone == pocPhone)&&const DeepCollectionEquality().equals(other.assignedStaff, assignedStaff));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is FleetJob&&(identical(other.id, id) || other.id == id)&&(identical(other.bookingNumber, bookingNumber) || other.bookingNumber == bookingNumber)&&const DeepCollectionEquality().equals(other.driverId, driverId)&&const DeepCollectionEquality().equals(other.vehicleId, vehicleId)&&const DeepCollectionEquality().equals(other.preTripPhotos, preTripPhotos)&&(identical(other.tripStatus, tripStatus) || other.tripStatus == tripStatus)&&(identical(other.customerName, customerName) || other.customerName == customerName)&&(identical(other.address, address) || other.address == address)&&(identical(other.mapUrl, mapUrl) || other.mapUrl == mapUrl)&&(identical(other.service, service) || other.service == service)&&(identical(other.eventSlot, eventSlot) || other.eventSlot == eventSlot)&&(identical(other.serviceStart, serviceStart) || other.serviceStart == serviceStart)&&(identical(other.serviceEnd, serviceEnd) || other.serviceEnd == serviceEnd)&&(identical(other.travelDistanceKm, travelDistanceKm) || other.travelDistanceKm == travelDistanceKm)&&(identical(other.pocName, pocName) || other.pocName == pocName)&&(identical(other.pocPhone, pocPhone) || other.pocPhone == pocPhone)&&const DeepCollectionEquality().equals(other.assignedStaff, assignedStaff)&&(identical(other.startKm, startKm) || other.startKm == startKm)&&(identical(other.endKm, endKm) || other.endKm == endKm)&&(identical(other.tripStartedAt, tripStartedAt) || other.tripStartedAt == tripStartedAt)&&(identical(other.tripCompletedAt, tripCompletedAt) || other.tripCompletedAt == tripCompletedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,bookingNumber,driverId,const DeepCollectionEquality().hash(vehicleId),const DeepCollectionEquality().hash(preTripPhotos),tripStatus,customerName,address,mapUrl,service,eventSlot,serviceStart,serviceEnd,travelDistanceKm,pocName,pocPhone,const DeepCollectionEquality().hash(assignedStaff));
+int get hashCode => Object.hashAll([runtimeType,id,bookingNumber,const DeepCollectionEquality().hash(driverId),const DeepCollectionEquality().hash(vehicleId),const DeepCollectionEquality().hash(preTripPhotos),tripStatus,customerName,address,mapUrl,service,eventSlot,serviceStart,serviceEnd,travelDistanceKm,pocName,pocPhone,const DeepCollectionEquality().hash(assignedStaff),startKm,endKm,tripStartedAt,tripCompletedAt]);
 
 @override
 String toString() {
-  return 'FleetJob(id: $id, bookingNumber: $bookingNumber, driverId: $driverId, vehicleId: $vehicleId, preTripPhotos: $preTripPhotos, tripStatus: $tripStatus, customerName: $customerName, address: $address, mapUrl: $mapUrl, service: $service, eventSlot: $eventSlot, serviceStart: $serviceStart, serviceEnd: $serviceEnd, travelDistanceKm: $travelDistanceKm, pocName: $pocName, pocPhone: $pocPhone, assignedStaff: $assignedStaff)';
+  return 'FleetJob(id: $id, bookingNumber: $bookingNumber, driverId: $driverId, vehicleId: $vehicleId, preTripPhotos: $preTripPhotos, tripStatus: $tripStatus, customerName: $customerName, address: $address, mapUrl: $mapUrl, service: $service, eventSlot: $eventSlot, serviceStart: $serviceStart, serviceEnd: $serviceEnd, travelDistanceKm: $travelDistanceKm, pocName: $pocName, pocPhone: $pocPhone, assignedStaff: $assignedStaff, startKm: $startKm, endKm: $endKm, tripStartedAt: $tripStartedAt, tripCompletedAt: $tripCompletedAt)';
 }
 
 
@@ -48,7 +51,7 @@ abstract mixin class $FleetJobCopyWith<$Res>  {
   factory $FleetJobCopyWith(FleetJob value, $Res Function(FleetJob) _then) = _$FleetJobCopyWithImpl;
 @useResult
 $Res call({
-@JsonKey(name: '_id') String id, String bookingNumber, String? driverId, dynamic vehicleId, List<String> preTripPhotos, String tripStatus, String customerName, String? address, String? mapUrl, String service, String? eventSlot, DateTime serviceStart, DateTime serviceEnd, double travelDistanceKm, String? pocName, String? pocPhone, List<Map<String, dynamic>> assignedStaff
+@JsonKey(name: '_id') String id, String bookingNumber, dynamic driverId, dynamic vehicleId, List<String> preTripPhotos, String tripStatus, String customerName, String? address, String? mapUrl, String service, String? eventSlot, DateTime serviceStart, DateTime serviceEnd, double travelDistanceKm, String? pocName, String? pocPhone, List<Map<String, dynamic>> assignedStaff, double? startKm, double? endKm, DateTime? tripStartedAt, DateTime? tripCompletedAt
 });
 
 
@@ -65,12 +68,12 @@ class _$FleetJobCopyWithImpl<$Res>
 
 /// Create a copy of FleetJob
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? bookingNumber = null,Object? driverId = freezed,Object? vehicleId = freezed,Object? preTripPhotos = null,Object? tripStatus = null,Object? customerName = null,Object? address = freezed,Object? mapUrl = freezed,Object? service = null,Object? eventSlot = freezed,Object? serviceStart = null,Object? serviceEnd = null,Object? travelDistanceKm = null,Object? pocName = freezed,Object? pocPhone = freezed,Object? assignedStaff = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? bookingNumber = null,Object? driverId = freezed,Object? vehicleId = freezed,Object? preTripPhotos = null,Object? tripStatus = null,Object? customerName = null,Object? address = freezed,Object? mapUrl = freezed,Object? service = null,Object? eventSlot = freezed,Object? serviceStart = null,Object? serviceEnd = null,Object? travelDistanceKm = null,Object? pocName = freezed,Object? pocPhone = freezed,Object? assignedStaff = null,Object? startKm = freezed,Object? endKm = freezed,Object? tripStartedAt = freezed,Object? tripCompletedAt = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,bookingNumber: null == bookingNumber ? _self.bookingNumber : bookingNumber // ignore: cast_nullable_to_non_nullable
 as String,driverId: freezed == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as String?,vehicleId: freezed == vehicleId ? _self.vehicleId : vehicleId // ignore: cast_nullable_to_non_nullable
+as dynamic,vehicleId: freezed == vehicleId ? _self.vehicleId : vehicleId // ignore: cast_nullable_to_non_nullable
 as dynamic,preTripPhotos: null == preTripPhotos ? _self.preTripPhotos : preTripPhotos // ignore: cast_nullable_to_non_nullable
 as List<String>,tripStatus: null == tripStatus ? _self.tripStatus : tripStatus // ignore: cast_nullable_to_non_nullable
 as String,customerName: null == customerName ? _self.customerName : customerName // ignore: cast_nullable_to_non_nullable
@@ -84,7 +87,11 @@ as DateTime,travelDistanceKm: null == travelDistanceKm ? _self.travelDistanceKm 
 as double,pocName: freezed == pocName ? _self.pocName : pocName // ignore: cast_nullable_to_non_nullable
 as String?,pocPhone: freezed == pocPhone ? _self.pocPhone : pocPhone // ignore: cast_nullable_to_non_nullable
 as String?,assignedStaff: null == assignedStaff ? _self.assignedStaff : assignedStaff // ignore: cast_nullable_to_non_nullable
-as List<Map<String, dynamic>>,
+as List<Map<String, dynamic>>,startKm: freezed == startKm ? _self.startKm : startKm // ignore: cast_nullable_to_non_nullable
+as double?,endKm: freezed == endKm ? _self.endKm : endKm // ignore: cast_nullable_to_non_nullable
+as double?,tripStartedAt: freezed == tripStartedAt ? _self.tripStartedAt : tripStartedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,tripCompletedAt: freezed == tripCompletedAt ? _self.tripCompletedAt : tripCompletedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 
@@ -169,10 +176,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  String? driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  dynamic driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff,  double? startKm,  double? endKm,  DateTime? tripStartedAt,  DateTime? tripCompletedAt)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _FleetJob() when $default != null:
-return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff);case _:
+return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff,_that.startKm,_that.endKm,_that.tripStartedAt,_that.tripCompletedAt);case _:
   return orElse();
 
 }
@@ -190,10 +197,10 @@ return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  String? driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  dynamic driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff,  double? startKm,  double? endKm,  DateTime? tripStartedAt,  DateTime? tripCompletedAt)  $default,) {final _that = this;
 switch (_that) {
 case _FleetJob():
-return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff);case _:
+return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff,_that.startKm,_that.endKm,_that.tripStartedAt,_that.tripCompletedAt);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -210,10 +217,10 @@ return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_tha
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  String? driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function(@JsonKey(name: '_id')  String id,  String bookingNumber,  dynamic driverId,  dynamic vehicleId,  List<String> preTripPhotos,  String tripStatus,  String customerName,  String? address,  String? mapUrl,  String service,  String? eventSlot,  DateTime serviceStart,  DateTime serviceEnd,  double travelDistanceKm,  String? pocName,  String? pocPhone,  List<Map<String, dynamic>> assignedStaff,  double? startKm,  double? endKm,  DateTime? tripStartedAt,  DateTime? tripCompletedAt)?  $default,) {final _that = this;
 switch (_that) {
 case _FleetJob() when $default != null:
-return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff);case _:
+return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_that.preTripPhotos,_that.tripStatus,_that.customerName,_that.address,_that.mapUrl,_that.service,_that.eventSlot,_that.serviceStart,_that.serviceEnd,_that.travelDistanceKm,_that.pocName,_that.pocPhone,_that.assignedStaff,_that.startKm,_that.endKm,_that.tripStartedAt,_that.tripCompletedAt);case _:
   return null;
 
 }
@@ -225,12 +232,14 @@ return $default(_that.id,_that.bookingNumber,_that.driverId,_that.vehicleId,_tha
 @JsonSerializable()
 
 class _FleetJob implements FleetJob {
-  const _FleetJob({@JsonKey(name: '_id') required this.id, required this.bookingNumber, this.driverId, this.vehicleId, final  List<String> preTripPhotos = const [], this.tripStatus = 'unassigned', required this.customerName, this.address, this.mapUrl, required this.service, this.eventSlot, required this.serviceStart, required this.serviceEnd, this.travelDistanceKm = 0, this.pocName, this.pocPhone, final  List<Map<String, dynamic>> assignedStaff = const []}): _preTripPhotos = preTripPhotos,_assignedStaff = assignedStaff;
+  const _FleetJob({@JsonKey(name: '_id') required this.id, this.bookingNumber = '', this.driverId, this.vehicleId, final  List<String> preTripPhotos = const [], this.tripStatus = 'unassigned', required this.customerName, this.address, this.mapUrl, required this.service, this.eventSlot, required this.serviceStart, required this.serviceEnd, this.travelDistanceKm = 0, this.pocName, this.pocPhone, final  List<Map<String, dynamic>> assignedStaff = const [], this.startKm, this.endKm, this.tripStartedAt, this.tripCompletedAt}): _preTripPhotos = preTripPhotos,_assignedStaff = assignedStaff;
   factory _FleetJob.fromJson(Map<String, dynamic> json) => _$FleetJobFromJson(json);
 
 @override@JsonKey(name: '_id') final  String id;
-@override final  String bookingNumber;
-@override final  String? driverId;
+@override@JsonKey() final  String bookingNumber;
+// An id string, or the populated Employee object (manager endpoints
+// populate it) — dynamic so either parses.
+@override final  dynamic driverId;
 @override final  dynamic vehicleId;
  final  List<String> _preTripPhotos;
 @override@JsonKey() List<String> get preTripPhotos {
@@ -257,6 +266,11 @@ class _FleetJob implements FleetJob {
   return EqualUnmodifiableListView(_assignedStaff);
 }
 
+// Odometer readings entered by the driver at trip start / completion.
+@override final  double? startKm;
+@override final  double? endKm;
+@override final  DateTime? tripStartedAt;
+@override final  DateTime? tripCompletedAt;
 
 /// Create a copy of FleetJob
 /// with the given fields replaced by the non-null parameter values.
@@ -271,16 +285,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _FleetJob&&(identical(other.id, id) || other.id == id)&&(identical(other.bookingNumber, bookingNumber) || other.bookingNumber == bookingNumber)&&(identical(other.driverId, driverId) || other.driverId == driverId)&&const DeepCollectionEquality().equals(other.vehicleId, vehicleId)&&const DeepCollectionEquality().equals(other._preTripPhotos, _preTripPhotos)&&(identical(other.tripStatus, tripStatus) || other.tripStatus == tripStatus)&&(identical(other.customerName, customerName) || other.customerName == customerName)&&(identical(other.address, address) || other.address == address)&&(identical(other.mapUrl, mapUrl) || other.mapUrl == mapUrl)&&(identical(other.service, service) || other.service == service)&&(identical(other.eventSlot, eventSlot) || other.eventSlot == eventSlot)&&(identical(other.serviceStart, serviceStart) || other.serviceStart == serviceStart)&&(identical(other.serviceEnd, serviceEnd) || other.serviceEnd == serviceEnd)&&(identical(other.travelDistanceKm, travelDistanceKm) || other.travelDistanceKm == travelDistanceKm)&&(identical(other.pocName, pocName) || other.pocName == pocName)&&(identical(other.pocPhone, pocPhone) || other.pocPhone == pocPhone)&&const DeepCollectionEquality().equals(other._assignedStaff, _assignedStaff));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _FleetJob&&(identical(other.id, id) || other.id == id)&&(identical(other.bookingNumber, bookingNumber) || other.bookingNumber == bookingNumber)&&const DeepCollectionEquality().equals(other.driverId, driverId)&&const DeepCollectionEquality().equals(other.vehicleId, vehicleId)&&const DeepCollectionEquality().equals(other._preTripPhotos, _preTripPhotos)&&(identical(other.tripStatus, tripStatus) || other.tripStatus == tripStatus)&&(identical(other.customerName, customerName) || other.customerName == customerName)&&(identical(other.address, address) || other.address == address)&&(identical(other.mapUrl, mapUrl) || other.mapUrl == mapUrl)&&(identical(other.service, service) || other.service == service)&&(identical(other.eventSlot, eventSlot) || other.eventSlot == eventSlot)&&(identical(other.serviceStart, serviceStart) || other.serviceStart == serviceStart)&&(identical(other.serviceEnd, serviceEnd) || other.serviceEnd == serviceEnd)&&(identical(other.travelDistanceKm, travelDistanceKm) || other.travelDistanceKm == travelDistanceKm)&&(identical(other.pocName, pocName) || other.pocName == pocName)&&(identical(other.pocPhone, pocPhone) || other.pocPhone == pocPhone)&&const DeepCollectionEquality().equals(other._assignedStaff, _assignedStaff)&&(identical(other.startKm, startKm) || other.startKm == startKm)&&(identical(other.endKm, endKm) || other.endKm == endKm)&&(identical(other.tripStartedAt, tripStartedAt) || other.tripStartedAt == tripStartedAt)&&(identical(other.tripCompletedAt, tripCompletedAt) || other.tripCompletedAt == tripCompletedAt));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,bookingNumber,driverId,const DeepCollectionEquality().hash(vehicleId),const DeepCollectionEquality().hash(_preTripPhotos),tripStatus,customerName,address,mapUrl,service,eventSlot,serviceStart,serviceEnd,travelDistanceKm,pocName,pocPhone,const DeepCollectionEquality().hash(_assignedStaff));
+int get hashCode => Object.hashAll([runtimeType,id,bookingNumber,const DeepCollectionEquality().hash(driverId),const DeepCollectionEquality().hash(vehicleId),const DeepCollectionEquality().hash(_preTripPhotos),tripStatus,customerName,address,mapUrl,service,eventSlot,serviceStart,serviceEnd,travelDistanceKm,pocName,pocPhone,const DeepCollectionEquality().hash(_assignedStaff),startKm,endKm,tripStartedAt,tripCompletedAt]);
 
 @override
 String toString() {
-  return 'FleetJob(id: $id, bookingNumber: $bookingNumber, driverId: $driverId, vehicleId: $vehicleId, preTripPhotos: $preTripPhotos, tripStatus: $tripStatus, customerName: $customerName, address: $address, mapUrl: $mapUrl, service: $service, eventSlot: $eventSlot, serviceStart: $serviceStart, serviceEnd: $serviceEnd, travelDistanceKm: $travelDistanceKm, pocName: $pocName, pocPhone: $pocPhone, assignedStaff: $assignedStaff)';
+  return 'FleetJob(id: $id, bookingNumber: $bookingNumber, driverId: $driverId, vehicleId: $vehicleId, preTripPhotos: $preTripPhotos, tripStatus: $tripStatus, customerName: $customerName, address: $address, mapUrl: $mapUrl, service: $service, eventSlot: $eventSlot, serviceStart: $serviceStart, serviceEnd: $serviceEnd, travelDistanceKm: $travelDistanceKm, pocName: $pocName, pocPhone: $pocPhone, assignedStaff: $assignedStaff, startKm: $startKm, endKm: $endKm, tripStartedAt: $tripStartedAt, tripCompletedAt: $tripCompletedAt)';
 }
 
 
@@ -291,7 +305,7 @@ abstract mixin class _$FleetJobCopyWith<$Res> implements $FleetJobCopyWith<$Res>
   factory _$FleetJobCopyWith(_FleetJob value, $Res Function(_FleetJob) _then) = __$FleetJobCopyWithImpl;
 @override @useResult
 $Res call({
-@JsonKey(name: '_id') String id, String bookingNumber, String? driverId, dynamic vehicleId, List<String> preTripPhotos, String tripStatus, String customerName, String? address, String? mapUrl, String service, String? eventSlot, DateTime serviceStart, DateTime serviceEnd, double travelDistanceKm, String? pocName, String? pocPhone, List<Map<String, dynamic>> assignedStaff
+@JsonKey(name: '_id') String id, String bookingNumber, dynamic driverId, dynamic vehicleId, List<String> preTripPhotos, String tripStatus, String customerName, String? address, String? mapUrl, String service, String? eventSlot, DateTime serviceStart, DateTime serviceEnd, double travelDistanceKm, String? pocName, String? pocPhone, List<Map<String, dynamic>> assignedStaff, double? startKm, double? endKm, DateTime? tripStartedAt, DateTime? tripCompletedAt
 });
 
 
@@ -308,12 +322,12 @@ class __$FleetJobCopyWithImpl<$Res>
 
 /// Create a copy of FleetJob
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? bookingNumber = null,Object? driverId = freezed,Object? vehicleId = freezed,Object? preTripPhotos = null,Object? tripStatus = null,Object? customerName = null,Object? address = freezed,Object? mapUrl = freezed,Object? service = null,Object? eventSlot = freezed,Object? serviceStart = null,Object? serviceEnd = null,Object? travelDistanceKm = null,Object? pocName = freezed,Object? pocPhone = freezed,Object? assignedStaff = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? bookingNumber = null,Object? driverId = freezed,Object? vehicleId = freezed,Object? preTripPhotos = null,Object? tripStatus = null,Object? customerName = null,Object? address = freezed,Object? mapUrl = freezed,Object? service = null,Object? eventSlot = freezed,Object? serviceStart = null,Object? serviceEnd = null,Object? travelDistanceKm = null,Object? pocName = freezed,Object? pocPhone = freezed,Object? assignedStaff = null,Object? startKm = freezed,Object? endKm = freezed,Object? tripStartedAt = freezed,Object? tripCompletedAt = freezed,}) {
   return _then(_FleetJob(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,bookingNumber: null == bookingNumber ? _self.bookingNumber : bookingNumber // ignore: cast_nullable_to_non_nullable
 as String,driverId: freezed == driverId ? _self.driverId : driverId // ignore: cast_nullable_to_non_nullable
-as String?,vehicleId: freezed == vehicleId ? _self.vehicleId : vehicleId // ignore: cast_nullable_to_non_nullable
+as dynamic,vehicleId: freezed == vehicleId ? _self.vehicleId : vehicleId // ignore: cast_nullable_to_non_nullable
 as dynamic,preTripPhotos: null == preTripPhotos ? _self._preTripPhotos : preTripPhotos // ignore: cast_nullable_to_non_nullable
 as List<String>,tripStatus: null == tripStatus ? _self.tripStatus : tripStatus // ignore: cast_nullable_to_non_nullable
 as String,customerName: null == customerName ? _self.customerName : customerName // ignore: cast_nullable_to_non_nullable
@@ -327,7 +341,11 @@ as DateTime,travelDistanceKm: null == travelDistanceKm ? _self.travelDistanceKm 
 as double,pocName: freezed == pocName ? _self.pocName : pocName // ignore: cast_nullable_to_non_nullable
 as String?,pocPhone: freezed == pocPhone ? _self.pocPhone : pocPhone // ignore: cast_nullable_to_non_nullable
 as String?,assignedStaff: null == assignedStaff ? _self._assignedStaff : assignedStaff // ignore: cast_nullable_to_non_nullable
-as List<Map<String, dynamic>>,
+as List<Map<String, dynamic>>,startKm: freezed == startKm ? _self.startKm : startKm // ignore: cast_nullable_to_non_nullable
+as double?,endKm: freezed == endKm ? _self.endKm : endKm // ignore: cast_nullable_to_non_nullable
+as double?,tripStartedAt: freezed == tripStartedAt ? _self.tripStartedAt : tripStartedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,tripCompletedAt: freezed == tripCompletedAt ? _self.tripCompletedAt : tripCompletedAt // ignore: cast_nullable_to_non_nullable
+as DateTime?,
   ));
 }
 

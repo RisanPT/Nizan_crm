@@ -408,7 +408,7 @@ class DataRefresh {
 
   // ── Marketing / reports ─────────────────────────────────────────────────
 
-  void campaigns() => _inv(campaignsProvider);
+  void campaigns() => _all(_inv, [campaignsProvider, campaignOptionsProvider]);
 
   void content() => _all(_inv, [contentByMonthProvider, contentStatsProvider]);
 

@@ -19,14 +19,18 @@ String _money(num v) =>
 /// Finance → Receivables & Payables aging. Who owes us / whom we owe, aged into
 /// 0–30 / 31–60 / 61–90 / 90+ buckets.
 class AgingScreen extends ConsumerStatefulWidget {
-  const AgingScreen({super.key});
+  const AgingScreen({super.key, this.initialKind = 'receivables'});
+
+  /// Tab to open on: 'receivables' | 'payables'.
+  final String initialKind;
 
   @override
   ConsumerState<AgingScreen> createState() => _AgingScreenState();
 }
 
 class _AgingScreenState extends ConsumerState<AgingScreen> {
-  String _kind = 'receivables';
+  late String _kind =
+      widget.initialKind == 'payables' ? 'payables' : 'receivables';
   String _search = '';
   int _visible = kFinancePageSize;
   DateTime? _asOf; // null = today

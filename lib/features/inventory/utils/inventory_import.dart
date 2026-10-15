@@ -58,8 +58,6 @@ const _fieldAliases = <String, List<String>>{
   'category': ['category', 'cat', 'group'],
   'productType': ['producttype', 'type', 'subcategory'],
   'expiry': ['expiry', 'expirydate', 'exp', 'expdate', 'expires'],
-  'fillLevel': ['filllevel', 'fill', 'fillpercent'],
-  'usagePerWork': ['usageperwork', 'usage', 'usagepercent'],
   'lowStockThreshold': [
     'lowstockthreshold',
     'lowstock',
@@ -175,8 +173,6 @@ InventoryImportResult parseInventoryImport(
       final raw = row[col];
       switch (field) {
         case 'quantity':
-        case 'fillLevel':
-        case 'usagePerWork':
         case 'lowStockThreshold':
           final n = _asInt(raw);
           if (n != null) item[field] = n;

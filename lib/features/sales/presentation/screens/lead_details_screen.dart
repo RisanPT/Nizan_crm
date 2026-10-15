@@ -459,6 +459,26 @@ class LeadDetailsScreen extends HookConsumerWidget {
                       ),
                     ),
                   ),
+                // Converted customer booking us again for another event.
+                if (canAddAnotherBooking(lead))
+                  OutlinedButton.icon(
+                    onPressed: () => addAnotherBookingForLead(context, lead),
+                    icon: const Icon(
+                      Icons.add_task_outlined,
+                      size: 16,
+                      color: Color(0xFF10B981),
+                    ),
+                    label: const Text(
+                      'Add Another Booking',
+                      style: TextStyle(color: Color(0xFF10B981)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF10B981)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],

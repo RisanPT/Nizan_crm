@@ -86,3 +86,14 @@ final adminExpenseStatsProvider = FutureProvider<AdminExpenseStats>((ref) async 
   final service = ref.watch(adminExpenseServiceProvider);
   return service.getStats();
 });
+
+/// Expense heads for the Admin Expense form; falls back to the built-in list
+/// when they cannot be loaded.
+final expenseHeadsProvider = FutureProvider<List<ExpenseHead>>((ref) async {
+  try {
+    final heads = await ref.watch(adminExpenseServiceProvider).getExpenseHeads();
+    return heads.isEmpty ? kExpenseHeads : heads;
+  } catch (_) {
+    return kExpenseHeads;
+  }
+});

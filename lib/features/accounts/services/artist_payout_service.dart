@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import 'package:nizan_crm/features/accounts/data/artist_payout.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class ArtistPayoutService {
   final Dio _dio;
@@ -97,10 +98,10 @@ class ArtistPayoutService {
     }
   }
 
-  Future<ArtistPayout> payPayout(String id, {String? paymentMode}) async {
+  Future<ArtistPayout> payPayout(String id, {String? paymentMode, MoneyChoice? money}) async {
     try {
       final res = await _dio.put('/artist-payouts/$id/pay',
-          data: {'paymentMode': ?paymentMode});
+          data: {'paymentMode': ?paymentMode, ...?money?.toJson()});
       return ArtistPayout.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'pay payout');

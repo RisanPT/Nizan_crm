@@ -22,6 +22,7 @@ import 'package:nizan_crm/features/inventory/controllers/inventory_controller.da
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/report_chrome.dart';
 import 'package:nizan_crm/features/finance/utils/csv_export.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/ledger_cash_flow_view.dart';
 
 String _money(num v) => NumberFormat.currency(
         locale: 'en_IN', symbol: '₹', decimalDigits: 0)
@@ -45,6 +46,8 @@ class _CashFlowStatementScreenState
   DateTime? _to;
   DateRangePreset _preset = DateRangePreset.thisMonth;
   String? _drill; // which line we've drilled into
+  // true = from the books (ledger); false = the operational view below.
+  bool _fromBooks = true;
 
   ({
     double collections,
@@ -125,9 +128,50 @@ class _CashFlowStatementScreenState
     return '$f – $t';
   }
 
+  // Switch between the ledger cash flow and the operational one.
+  Widget _viewToggle() => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, icon: Icon(Icons.menu_book_outlined, size: 16), label: Text('From the books')),
+            ButtonSegment(value: false, icon: Icon(Icons.list_alt_outlined, size: 16), label: Text('By operations')),
+          ],
+          selected: {_fromBooks},
+          onSelectionChanged: (v) => setState(() {
+            _fromBooks = v.first;
+            _drill = null;
+          }),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+
+    if (_fromBooks) {
+      return Scaffold(
+        backgroundColor: crm.background,
+        body: ReportChrome(
+          category: 'Business Overview',
+          title: 'Cash Flow Statement',
+          preset: _preset,
+          from: _from,
+          to: _to,
+          onPreset: _applyPreset,
+          onExport: null,
+          onRefresh: () async => ref.invalidate(ledgerCashFlowProvider),
+          child: LedgerCashFlowView(
+            from: _from,
+            to: _to,
+            header: [
+              ReportTitleBlock(title: 'Cash Flow', asOf: false, from: _from, to: _to),
+              12.h,
+              _viewToggle(),
+            ],
+          ),
+        ),
+      );
+    }
 
     final asyncCollections = ref.watch(collectionsProvider);
     final asyncExpenses = ref.watch(expensesProvider);
@@ -240,6 +284,7 @@ class _CashFlowStatementScreenState
             ReportTitleBlock(
                 title: 'Cash Flow', asOf: false, from: _from, to: _to),
             12.h,
+            _viewToggle(),
             _netCard(crm, net),
             18.h,
             _section(crm, 'Cash inflows', crm.success, [

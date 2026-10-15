@@ -47,6 +47,9 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final async = ref.watch(chartAccountsProvider('all'));
+    final types = ref.watch(accountTypesProvider).value ?? const <AccountTypeOption>[];
+    final typeLabel = {for (final t in types) t.key: t.label};
+    final typeOrder = {for (var i = 0; i < types.length; i++) types[i].key: i};
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -74,9 +77,15 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
             final q = _search.trim().toLowerCase();
             final accounts = all.where((a) {
               if (!_showArchived && a.status == 'archived') return false;
-              if (q.isNotEmpty && !'${a.code} ${a.name} ${a.group}'.toLowerCase().contains(q)) return false;
+              final hay = '${a.code} ${a.name} ${a.group} ${typeLabel[a.accountType] ?? ''}';
+              if (q.isNotEmpty && !hay.toLowerCase().contains(q)) return false;
               return true;
-            }).toList();
+            }).toList()
+              // Within each nature, list accounts type by type (Cash, Bank, …).
+              ..sort((x, y) {
+                final t = (typeOrder[x.accountType] ?? 99).compareTo(typeOrder[y.accountType] ?? 99);
+                return t != 0 ? t : x.code.compareTo(y.code);
+              });
             final byNature = <String, List<ChartAccount>>{};
             for (final a in accounts) {
               byNature.putIfAbsent(a.nature, () => []).add(a);
@@ -85,7 +94,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
                 ReportSearchField(
-                  hint: 'Search code, name or group…',
+                  hint: 'Search code, name, type or group…',
                   onChanged: (v) => setState(() => _search = v),
                 ),
                 10.h,
@@ -105,7 +114,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
                     _natureHeader(crm, nature, byNature[nature]!.length),
                     8.h,
                     for (final a in byNature[nature]!)
-                      _accountTile(context, ref, crm, a),
+                      _accountTile(context, ref, crm, a, typeLabel[a.accountType] ?? ''),
                     16.h,
                   ],
               ],
@@ -128,7 +137,7 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
     ]);
   }
 
-  Widget _accountTile(BuildContext context, WidgetRef ref, CrmTheme crm, ChartAccount a) {
+  Widget _accountTile(BuildContext context, WidgetRef ref, CrmTheme crm, ChartAccount a, String typeName) {
     final color = _natureColor(a.nature, crm);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -151,14 +160,20 @@ class _ChartOfAccountsScreenState extends ConsumerState<ChartOfAccountsScreen> {
             Row(children: [
               Flexible(child: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
               if (a.status == 'archived') ...[6.w, _chip(crm, 'Archived', crm.textSecondary)],
-              if (a.isBank) ...[6.w, _chip(crm, 'Bank', const Color(0xFF2563EB))],
-              if (a.isCash) ...[6.w, _chip(crm, 'Cash', const Color(0xFF0D9488))],
-              if (a.isParty) ...[6.w, _chip(crm, 'Party', const Color(0xFF7C3AED))],
               if (a.gstApplicable) ...[6.w, _chip(crm, 'GST', const Color(0xFF0D9488))],
             ]),
-            if (a.group.isNotEmpty) ...[
+            if (typeName.isNotEmpty || a.group.isNotEmpty) ...[
               2.h,
-              Text(a.group, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+              Row(children: [
+                if (typeName.isNotEmpty) ...[_chip(crm, typeName, color), 6.w],
+                if (a.group.isNotEmpty)
+                  Flexible(
+                    child: Text(a.group,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                  ),
+              ]),
             ],
           ]),
         ),
@@ -293,13 +308,13 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
   late final TextEditingController _group;
   late final TextEditingController _opening;
   late final TextEditingController _gstRate;
-  late String _nature;
+  late String _type;
   String _openingType = 'dr';
   bool _gst = false;
-  bool _isBank = false;
-  bool _isCash = false;
-  bool _isParty = false;
   bool _saving = false;
+
+  ChartAccount? get _existing => widget.existing;
+  bool get _isSystem => _existing?.isSystem ?? false;
 
   @override
   void initState() {
@@ -313,13 +328,14 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
         text: a != null && a.gstRate > 0
             ? (a.gstRate == a.gstRate.roundToDouble() ? a.gstRate.toStringAsFixed(0) : a.gstRate.toString())
             : '');
-    _nature = a?.nature ?? 'expense';
+    _type = (a?.accountType.isNotEmpty ?? false) ? a!.accountType : 'indirect_expense';
     _openingType = a?.openingType ?? 'dr';
     _gst = a?.gstApplicable ?? false;
-    _isBank = a?.isBank ?? false;
-    _isCash = a?.isCash ?? false;
-    _isParty = a?.isParty ?? false;
   }
+
+  // Assets & expenses normally open on the debit side, the rest on credit.
+  String _naturalSide(String nature) =>
+      (nature == 'asset' || nature == 'expense') ? 'dr' : 'cr';
 
   @override
   void dispose() {
@@ -336,13 +352,13 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
     final navigator = Navigator.of(context);
     try {
       await ref.read(accountingServiceProvider).saveAccount({
+        // Blank code on a new account → the server assigns the next one
+        // for the type (e.g. BNK-02).
         'code': _code.text.trim(),
         'name': _name.text.trim(),
-        'nature': _nature,
+        // The type sets nature and the cash / bank / party role server-side.
+        'accountType': _type,
         'group': _group.text.trim(),
-        'isBank': _isBank,
-        'isCash': _isCash,
-        'isParty': _isParty,
         'gstApplicable': _gst,
         'gstRate': _gst ? (double.tryParse(_gstRate.text.trim()) ?? 0) : 0,
         'openingBalance': double.tryParse(_opening.text.trim()) ?? 0,
@@ -362,6 +378,31 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final editing = widget.existing != null;
+    final typesAsync = ref.watch(accountTypesProvider);
+    final allTypes = typesAsync.value ?? const <AccountTypeOption>[];
+    // A seeded account can only move between types of its own nature.
+    final types = _isSystem ? allTypes.where((t) => t.nature == _existing!.nature).toList() : allTypes;
+    final selected = types.where((t) => t.key == _type).firstOrNull;
+
+    // Grouped dropdown: a disabled header per nature, then its types.
+    final typeItems = <DropdownMenuItem<String>>[
+      for (final n in kAccountNatures)
+        if (types.any((t) => t.nature == n)) ...[
+          DropdownMenuItem<String>(
+            value: '__$n',
+            enabled: false,
+            child: Text(natureLabel(n).toUpperCase(),
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: _natureColor(n, crm))),
+          ),
+          for (final t in types.where((t) => t.nature == n))
+            DropdownMenuItem<String>(
+              value: t.key,
+              child: Padding(padding: const EdgeInsets.only(left: 12), child: Text(t.label)),
+            ),
+        ],
+    ];
+
     return Dialog(
       backgroundColor: crm.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -375,34 +416,70 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
               Text('${editing ? 'Edit' : 'New'} account',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: crm.textPrimary)),
               16.h,
+              if (typesAsync.isLoading && allTypes.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: LinearProgressIndicator(),
+                )
+              else if (typesAsync.hasError && allTypes.isEmpty)
+                AppErrorView(
+                  error: typesAsync.error!,
+                  compact: true,
+                  onRetry: () => ref.invalidate(accountTypesProvider),
+                )
+              else
+                DropdownButtonFormField<String>(
+                  initialValue: selected?.key,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Account type *',
+                    helperText: selected == null ? null : natureLabel(selected.nature),
+                  ),
+                  items: typeItems,
+                  validator: (v) => (v == null || v.startsWith('__')) ? 'Choose an account type' : null,
+                  onChanged: (v) {
+                    if (v == null || v.startsWith('__')) return;
+                    final t = types.firstWhere((t) => t.key == v);
+                    setState(() {
+                      _type = v;
+                      // New accounts open on the type's natural side by default.
+                      if (!editing) _openingType = _naturalSide(t.nature);
+                    });
+                  },
+                ),
+              12.h,
+              TextFormField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Account name *', hintText: 'e.g. HDFC Current A/c, Studio Rent'),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+              ),
+              12.h,
               Row(children: [
                 SizedBox(
-                  width: 120,
+                  width: 140,
                   child: TextFormField(
                     controller: _code,
-                    enabled: !(editing && widget.existing!.isSystem),
-                    decoration: const InputDecoration(labelText: 'Code *'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    enabled: !_isSystem,
+                    decoration: InputDecoration(
+                      labelText: editing ? 'Code *' : 'Code',
+                      hintText: editing ? null : 'Auto',
+                    ),
+                    validator: (v) => editing && (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                 ),
                 12.w,
                 Expanded(
                   child: TextFormField(
-                    controller: _name,
-                    decoration: const InputDecoration(labelText: 'Account name *'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    controller: _group,
+                    decoration: const InputDecoration(labelText: 'Sub-group (optional)', hintText: 'e.g. Rent, Utilities'),
                   ),
                 ),
               ]),
-              12.h,
-              DropdownButtonFormField<String>(
-                initialValue: _nature,
-                decoration: const InputDecoration(labelText: 'Nature'),
-                items: [for (final n in kAccountNatures) DropdownMenuItem(value: n, child: Text(natureLabel(n)))],
-                onChanged: editing && widget.existing!.isSystem ? null : (v) => setState(() => _nature = v ?? _nature),
-              ),
-              12.h,
-              TextFormField(controller: _group, decoration: const InputDecoration(labelText: 'Group', hintText: 'e.g. Current Assets')),
+              if (!editing) ...[
+                4.h,
+                Text('Leave code blank to number it automatically.',
+                    style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+              ],
               12.h,
               Row(children: [
                 Expanded(
@@ -426,35 +503,11 @@ class _AccountDialogState extends ConsumerState<_AccountDialog> {
                   ),
                 ),
               ]),
-              12.h,
-              Text('ROLE', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5, color: crm.textSecondary)),
-              6.h,
-              Wrap(spacing: 8, children: [
-                FilterChip(
-                  label: const Text('Bank'),
-                  selected: _isBank,
-                  onSelected: (v) => setState(() {
-                    _isBank = v;
-                    if (v) _isCash = false;
-                  }),
-                ),
-                FilterChip(
-                  label: const Text('Cash'),
-                  selected: _isCash,
-                  onSelected: (v) => setState(() {
-                    _isCash = v;
-                    if (v) _isBank = false;
-                  }),
-                ),
-                FilterChip(
-                  label: const Text('Party (A/R–A/P)'),
-                  selected: _isParty,
-                  onSelected: (v) => setState(() => _isParty = v),
-                ),
-              ]),
-              4.h,
-              Text('Bank / Cash accounts show up in Bank Reconciliation.',
-                  style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+              if (_type == 'cash' || _type == 'bank') ...[
+                6.h,
+                Text('Cash and Bank accounts show up in Bank Reconciliation.',
+                    style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+              ],
               6.h,
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
