@@ -34,27 +34,27 @@ import 'package:nizan_crm/features/accounts/presentation/screens/operations_sala
 import '../../presentation/screens/hr_salaries_screen.dart';
 import '../../features/hr/presentation/screens/attendance_summary_screen.dart';
 import '../../features/hr/presentation/screens/hr_evaluation_screen.dart';
-import '../../features/hr_leave/presentation/screens/hr_leave_screen.dart';
-import '../../features/hr_approvals/presentation/screens/hr_approvals_screen.dart';
-import '../../features/hr_home/presentation/screens/hr_home_screen.dart';
-import '../../features/hr_designations/presentation/screens/hr_designations_screen.dart';
-import '../../features/hr_org/presentation/screens/hr_org_screen.dart';
-import '../../features/hr_files/presentation/screens/hr_files_screen.dart';
-import '../../features/hr_ess/presentation/screens/hr_logins_screen.dart';
-import '../../features/hr_shift/presentation/screens/hr_shift_screen.dart';
-import '../../features/hr_timesheet/presentation/screens/hr_timesheet_screen.dart';
-import '../../features/hr_regularization/presentation/screens/hr_regularization_screen.dart';
-import '../../features/hr_recruitment/presentation/screens/hr_recruitment_screen.dart';
-import '../../features/hr_onboarding/presentation/screens/hr_onboarding_screen.dart';
-import '../../features/hr_offboarding/presentation/screens/hr_offboarding_screen.dart';
-import '../../features/hr_reimbursement/presentation/screens/hr_reimbursement_screen.dart';
-import '../../features/hr_travel/presentation/screens/hr_travel_screen.dart';
-import '../../features/hr_compensation/presentation/screens/hr_compensation_screen.dart';
-import '../../features/hr_engagement/presentation/screens/hr_engagement_screen.dart';
-import '../../features/hr_letters/presentation/screens/hr_letters_screen.dart';
-import '../../features/hr_lms/presentation/screens/hr_lms_screen.dart';
-import '../../features/hr_grievance/presentation/screens/hr_grievance_screen.dart';
-import '../../features/hr_analytics/presentation/screens/hr_analytics_screen.dart';
+import '../../features/hr/leave/presentation/screens/hr_leave_screen.dart';
+import '../../features/hr/approvals/presentation/screens/hr_approvals_screen.dart';
+import '../../features/hr/home/presentation/screens/hr_home_screen.dart';
+import '../../features/hr/designations/presentation/screens/hr_designations_screen.dart';
+import '../../features/hr/org/presentation/screens/hr_org_screen.dart';
+import '../../features/hr/files/presentation/screens/hr_files_screen.dart';
+import '../../features/hr/ess/presentation/screens/hr_logins_screen.dart';
+import '../../features/hr/shift/presentation/screens/hr_shift_screen.dart';
+import '../../features/hr/timesheet/presentation/screens/hr_timesheet_screen.dart';
+import '../../features/hr/regularization/presentation/screens/hr_regularization_screen.dart';
+import '../../features/hr/recruitment/presentation/screens/hr_recruitment_screen.dart';
+import '../../features/hr/onboarding/presentation/screens/hr_onboarding_screen.dart';
+import '../../features/hr/offboarding/presentation/screens/hr_offboarding_screen.dart';
+import '../../features/hr/reimbursement/presentation/screens/hr_reimbursement_screen.dart';
+import '../../features/hr/travel/presentation/screens/hr_travel_screen.dart';
+import '../../features/hr/compensation/presentation/screens/hr_compensation_screen.dart';
+import '../../features/hr/engagement/presentation/screens/hr_engagement_screen.dart';
+import '../../features/hr/letters/presentation/screens/hr_letters_screen.dart';
+import '../../features/hr/lms/presentation/screens/hr_lms_screen.dart';
+import '../../features/hr/grievance/presentation/screens/hr_grievance_screen.dart';
+import '../../features/hr/analytics/presentation/screens/hr_analytics_screen.dart';
 import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
 import '../../features/accounts/presentation/screens/sales_returns_screen.dart';
 import '../../features/accounts/presentation/screens/hra_screen.dart';
@@ -124,6 +124,10 @@ import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.da
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
 import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
+import 'package:nizan_crm/features/client_chat/presentation/client_chat_inbox_page.dart';
+import 'package:nizan_crm/features/client_chat/presentation/client_chat_thread_page.dart';
+import 'package:nizan_crm/features/app_clients/presentation/app_clients_inbox_page.dart';
+import 'package:nizan_crm/features/app_clients/presentation/app_client_detail_page.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_project_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/company_projects_screen.dart';
@@ -419,6 +423,20 @@ bool isRouteAllowed(String path, Access access,
   }
   // Client reviews — CRM/sales/accounts + full access (admin/manager).
   if (path.startsWith('/reviews')) {
+    return access.isFullAccess ||
+        access.role == AppRole.crm ||
+        access.role == AppRole.accounts ||
+        access.canSeeSales;
+  }
+  // Client concierge chat — same client-facing staff as reviews.
+  if (path.startsWith('/client-chat')) {
+    return access.isFullAccess ||
+        access.role == AppRole.crm ||
+        access.role == AppRole.accounts ||
+        access.canSeeSales;
+  }
+  // Bridal app clients (brides) — same client-facing staff.
+  if (path.startsWith('/app-clients')) {
     return access.isFullAccess ||
         access.role == AppRole.crm ||
         access.role == AppRole.accounts ||
@@ -1363,6 +1381,26 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/reviews',
             builder: (context, state) => const ReviewsScreen(),
+          ),
+          GoRoute(
+            path: '/client-chat',
+            builder: (context, state) => const ClientChatInboxPage(),
+          ),
+          GoRoute(
+            path: '/client-chat/:id',
+            builder: (context, state) => ClientChatThreadPage(
+              conversationId: state.pathParameters['id'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: '/app-clients',
+            builder: (context, state) => const AppClientsInboxPage(),
+          ),
+          GoRoute(
+            path: '/app-clients/:id',
+            builder: (context, state) => AppClientDetailPage(
+              clientId: state.pathParameters['id'] ?? '',
+            ),
           ),
           GoRoute(
             path: '/it/projects',

@@ -9,7 +9,7 @@ import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
-import 'package:nizan_crm/features/hr_shared/hr_ui.dart';
+import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 /// HR Evaluation & Work Performance Hub — SRS §3.4 compliance.

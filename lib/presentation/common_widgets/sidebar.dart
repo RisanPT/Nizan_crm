@@ -9,9 +9,10 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
+import 'package:nizan_crm/features/client_chat/controllers/live_client_chat.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
-import 'package:nizan_crm/features/hr_approvals/service/approval_service.dart';
-import 'package:nizan_crm/features/hr_shared/hr_services_launcher.dart';
+import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
+import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -802,6 +803,31 @@ class Sidebar extends ConsumerWidget {
                       isCollapsed: isCollapsed,
                       isSelected: currentPath.startsWith('/reviews'),
                       onTap: () => context.go('/reviews'),
+                    ),
+                  // Client concierge chat — same client-facing staff as reviews.
+                  if (access.isFullAccess ||
+                      access.role == AppRole.crm ||
+                      access.role == AppRole.accounts ||
+                      access.canSeeSales)
+                    _SidebarItem(
+                      icon: Icons.forum_outlined,
+                      title: 'Client Chat',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/client-chat'),
+                      trailing: _clientChatBadge(ref, crmColors, isCollapsed),
+                      onTap: () => context.go('/client-chat'),
+                    ),
+                  // Bridal app clients (brides) — profiles, preferences, looks.
+                  if (access.isFullAccess ||
+                      access.role == AppRole.crm ||
+                      access.role == AppRole.accounts ||
+                      access.canSeeSales)
+                    _SidebarItem(
+                      icon: Icons.diversity_1_outlined,
+                      title: 'App Clients',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/app-clients'),
+                      onTap: () => context.go('/app-clients'),
                     ),
 
                   // IT department hub — Projects & Tickets are IT-only; Help Desk
@@ -1852,6 +1878,33 @@ class Sidebar extends ConsumerWidget {
 /// sidebar is expanded, a small dot when collapsed, nothing when all read.
 Widget? _unreadBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
   final count = ref.watch(unreadCountProvider).asData?.value ?? 0;
+  if (count <= 0) return null;
+  if (collapsed) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: crm.destructive, shape: BoxShape.circle),
+    );
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: crm.destructive,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    constraints: const BoxConstraints(minWidth: 18),
+    child: Text(
+      count > 99 ? '99+' : '$count',
+      textAlign: TextAlign.center,
+      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+/// Unread client-message badge for the sidebar Client Chat item. Polls
+/// `/chat/unread-count` every 15s via [clientChatUnreadProvider].
+Widget? _clientChatBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
+  final count = ref.watch(clientChatUnreadProvider).asData?.value ?? 0;
   if (count <= 0) return null;
   if (collapsed) {
     return Container(

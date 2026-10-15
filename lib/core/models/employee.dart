@@ -51,6 +51,9 @@ class Employee {
   final String ifscCode;
   final String upiId;
   final String panNumber;
+  final String? departmentId;
+  final String? reportingManagerId;
+  final String? designationId;
   final int? timeboxEmployeeId;
   final String timeboxName;
 
@@ -91,7 +94,10 @@ class Employee {
     required this.category,
     this.profileImage = '',
     this.department,
+    this.departmentId,
     this.role,
+    this.reportingManagerId,
+    this.designationId,
     this.salaryType = 'fixed_monthly',
     this.baseSalary = 0,
     this.allowances = 0,
@@ -185,7 +191,16 @@ class Employee {
       category: json['category'] as String? ?? 'creative',
       profileImage: json['profileImage'] as String? ?? '',
       department: json['department'] as String?,
+      departmentId: json['departmentId'] is Map
+          ? (json['departmentId']['_id'] as String?)
+          : (json['departmentId'] as String?),
       role: json['role'] as String?,
+      reportingManagerId: json['reportingManagerId'] is Map
+          ? (json['reportingManagerId']['_id'] as String?)
+          : (json['reportingManagerId'] as String?),
+      designationId: json['designationId'] is Map
+          ? (json['designationId']['_id'] as String?)
+          : (json['designationId'] as String?),
       salaryType: json['salaryType'] as String? ?? 'fixed_monthly',
       baseSalary: (json['baseSalary'] as num?)?.toDouble() ?? 0,
       allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
@@ -238,7 +253,10 @@ class Employee {
       'category': category,
       'profileImage': profileImage,
       if (department != null) 'department': department,
+      if (departmentId != null && departmentId!.isNotEmpty) 'departmentId': departmentId,
       if (role != null) 'role': role,
+      if (reportingManagerId != null && reportingManagerId!.isNotEmpty) 'reportingManagerId': reportingManagerId,
+      if (designationId != null && designationId!.isNotEmpty) 'designationId': designationId,
       'salaryType': salaryType,
       'baseSalary': baseSalary,
       'allowances': allowances,
@@ -294,7 +312,10 @@ class Employee {
     String? category,
     String? profileImage,
     String? department,
+    String? departmentId,
     String? role,
+    String? reportingManagerId,
+    String? designationId,
     String? salaryType,
     double? baseSalary,
     double? allowances,
@@ -346,7 +367,10 @@ class Employee {
       category: category ?? this.category,
       profileImage: profileImage ?? this.profileImage,
       department: department ?? this.department,
+      departmentId: departmentId ?? this.departmentId,
       role: role ?? this.role,
+      reportingManagerId: reportingManagerId ?? this.reportingManagerId,
+      designationId: designationId ?? this.designationId,
       salaryType: salaryType ?? this.salaryType,
       baseSalary: baseSalary ?? this.baseSalary,
       allowances: allowances ?? this.allowances,

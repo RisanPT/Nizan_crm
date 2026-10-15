@@ -74,6 +74,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera is used to scan product barcodes and to photograph accident scenes.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone is used to send voice replies to clients in the concierge chat.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is attached to accident reports so the fleet manager knows where it happened.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

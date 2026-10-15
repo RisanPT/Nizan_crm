@@ -15,6 +15,7 @@ import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
 import 'package:nizan_crm/features/hr/presentation/screens/attendance_detail_screen.dart';
+import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
@@ -657,6 +658,20 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     ),
                   ),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final updated = await showCompleteOnboardingDialog(
+                      context,
+                      employee: _employee,
+                      startOnboardingChecklist: false,
+                    );
+                    if (updated != null && mounted) {
+                      setState(() => _employee = updated);
+                    }
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit Profile'),
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -697,7 +712,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                       Icons.calendar_today_outlined,
                       'Date of Joining',
                       _employee.dateOfJoining != null
-                          ? _employee.dateOfJoining!.toLocal().toString().split(' ')[0]
+                          ? _formatDate(_employee.dateOfJoining!)
                           : 'Not recorded',
                       crmColors,
                     ),
@@ -706,7 +721,7 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                       _buildInfoRow(
                         Icons.cake_outlined,
                         'Date of Birth',
-                        _employee.dateOfBirth!.toLocal().toString().split(' ')[0],
+                        _formatDate(_employee.dateOfBirth!),
                         crmColors,
                       ),
                     ],
@@ -1065,6 +1080,12 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime d) {
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final local = d.toLocal();
+    return '${local.day.toString().padLeft(2, '0')} ${months[local.month]} ${local.year}';
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value, dynamic crmColors) {
