@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class FuelExpenseService {
   final Dio _dio;
@@ -78,10 +79,11 @@ class FuelExpenseService {
   }
 
   /// Fleet-manager review action (approve / reject / pending).
-  Future<FuelExpense> setStatus(String id, String status) async {
+  /// [money] = which bank / cash account paid it (approval popup).
+  Future<FuelExpense> setStatus(String id, String status, {MoneyChoice? money}) async {
     try {
-      final response =
-          await _dio.put('/fuel-expenses/$id', data: {'status': status});
+      final response = await _dio
+          .put('/fuel-expenses/$id', data: {'status': status, ...?money?.toJson()});
       return FuelExpense.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'update status');

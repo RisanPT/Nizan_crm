@@ -7,8 +7,10 @@ part 'fleet_models.g.dart';
 abstract class FleetJob with _$FleetJob {
   const factory FleetJob({
     @JsonKey(name: '_id') required String id,
-    required String bookingNumber,
-    String? driverId,
+    @Default('') String bookingNumber,
+    // An id string, or the populated Employee object (manager endpoints
+    // populate it) — dynamic so either parses.
+    dynamic driverId,
     dynamic vehicleId,
     @Default([]) List<String> preTripPhotos,
     @Default('unassigned') String tripStatus,
@@ -23,9 +25,40 @@ abstract class FleetJob with _$FleetJob {
     String? pocName,
     String? pocPhone,
     @Default([]) List<Map<String, dynamic>> assignedStaff,
+    // Odometer readings entered by the driver at trip start / completion.
+    double? startKm,
+    double? endKm,
+    DateTime? tripStartedAt,
+    DateTime? tripCompletedAt,
   }) = _FleetJob;
 
   factory FleetJob.fromJson(Map<String, dynamic> json) => _$FleetJobFromJson(json);
+}
+
+extension FleetJobX on FleetJob {
+  /// Km driven on this trip, once both readings are in.
+  double? get tripKm =>
+      (startKm != null && endKm != null) ? endKm! - startKm! : null;
+
+  /// The vehicle's last recorded odometer reading (0 when unknown).
+  double get vehicleCurrentKm {
+    final v = vehicleId;
+    if (v is Map) return (v['currentKm'] as num?)?.toDouble() ?? 0;
+    return 0;
+  }
+}
+
+/// "12,345" / "12,345.5" — odometer readings for display.
+String formatKm(double km) {
+  final whole = km.truncate();
+  final digits = whole.toString();
+  final buf = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
+    buf.write(digits[i]);
+  }
+  final frac = ((km - whole) * 10).round();
+  return frac == 0 ? buf.toString() : '$buf.$frac';
 }
 
 // Reference fields arrive either as an id string (unpopulated) or a populated

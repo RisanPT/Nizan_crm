@@ -1171,35 +1171,54 @@ class _SpotInvoiceTabState extends ConsumerState<_SpotInvoiceTab> {
     }
   }
 
-  Future<void> _generate(String? districtName) async {
-    if (_customerCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter a customer name')));
-      return;
+  // One quotation = one number: sharing the PDF and sending it on WhatsApp
+  // carry the same QT- number. Any change to what's on it issues a new one.
+  String? _quoteNo;
+  DateTime? _quoteDate;
+  String _quoteSignature = '';
+
+  SpotInvoiceData _quotation(String? districtName) {
+    final signature = [
+      _customerCtrl.text.trim(),
+      _phoneCtrl.text.trim(),
+      districtName ?? '',
+      _noteCtrl.text.trim(),
+      for (final l in _lines) '${l.label}=${l.amount}',
+    ].join('|');
+    if (_quoteNo == null || signature != _quoteSignature) {
+      final now = DateTime.now();
+      _quoteNo =
+          'QT-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch % 100000}';
+      _quoteDate = now;
+      _quoteSignature = signature;
     }
-    if (_lines.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one line item')),
-      );
+    return SpotInvoiceData(
+      invoiceNo: _quoteNo!,
+      customerName: _customerCtrl.text.trim(),
+      customerPhone: _phoneCtrl.text.trim(),
+      district: districtName ?? '',
+      lines: List.of(_lines),
+      date: _quoteDate!,
+      note: _noteCtrl.text.trim(),
+    );
+  }
+
+  /// Why the PDF can't be produced yet, or null when it can.
+  String? _quotationProblem() {
+    if (_customerCtrl.text.trim().isEmpty) return 'Enter a customer name';
+    if (_lines.isEmpty) return 'Add at least one line item';
+    return null;
+  }
+
+  Future<void> _generate(String? districtName) async {
+    final problem = _quotationProblem();
+    if (problem != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(problem)));
       return;
     }
     setState(() => _generating = true);
     try {
-      final now = DateTime.now();
-      final invoiceNo =
-          'QT-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}-${now.millisecondsSinceEpoch % 100000}';
-      await printSpotInvoice(
-        SpotInvoiceData(
-          invoiceNo: invoiceNo,
-          customerName: _customerCtrl.text.trim(),
-          customerPhone: _phoneCtrl.text.trim(),
-          district: districtName ?? '',
-          lines: List.of(_lines),
-          date: now,
-          note: _noteCtrl.text.trim(),
-        ),
-      );
+      await printSpotInvoice(_quotation(districtName));
     } catch (e) {
       if (mounted) {
         showErrorSnackBar(context, e);

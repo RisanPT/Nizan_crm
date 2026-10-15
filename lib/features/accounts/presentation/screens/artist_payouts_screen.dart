@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/accounts/data/artist_payout.dart';
 import 'package:nizan_crm/features/accounts/services/artist_payout_service.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 /// Artist Payouts — the freelancer (outsource artist) compensation ledger.
 /// Accounts creates a per-booking payout, approves it, and pays it (posting a
@@ -441,8 +442,19 @@ class ArtistPayoutsScreen extends ConsumerWidget {
     );
     if (ok != true) return;
     if (!context.mounted) return;
+    // Which bank / cash account paid it.
+    final money = await showMoneyAccountPicker(
+      context,
+      title: 'Pay artist',
+      amount: p.amount,
+      moneyIn: false,
+      modes: kCollectionPayModes,
+      initialMode: p.paymentMode,
+      approveLabel: 'Pay',
+    );
+    if (money == null || !context.mounted) return;
     await _run(context, ref,
-        () => ref.read(artistPayoutServiceProvider).payPayout(p.id), 'Marked paid');
+        () => ref.read(artistPayoutServiceProvider).payPayout(p.id, money: money), 'Marked paid');
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref, ArtistPayout p) async {

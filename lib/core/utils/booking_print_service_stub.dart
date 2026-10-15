@@ -14,3 +14,6 @@ Future<void> printMultipleBookingDetails(
   List<Booking> selectedBookings, {
   required BookingPrintVariant variant,
 }) async {}
+
+// Not HTML-based here — see booking_print_service.dart.
+String? bookingPrintHtml(Booking booking, {required BookingPrintVariant variant}) => null;

@@ -18,6 +18,8 @@ import '../../../../services/report_service.dart';
 import 'package:nizan_crm/features/bookings/services/booking_service.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart' show bookingsRefreshTriggerProvider;
 import '../../../../core/utils/export_utils.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/booking_advances_tab.dart';
 
 // ─── Provider: bookings that have at least one verified collection ────────────
 final _bookingInvoiceSummariesProvider =
@@ -85,7 +87,7 @@ class _AccountsCollectionsScreenState
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -230,6 +232,7 @@ class _AccountsCollectionsScreenState
           tabs: const [
             Tab(icon: Icon(Icons.account_balance_wallet_outlined), text: 'Collections'),
             Tab(icon: Icon(Icons.receipt_long_outlined), text: 'Invoice Balances'),
+            Tab(icon: Icon(Icons.savings_outlined), text: 'Advances'),
           ],
         ),
         16.h,
@@ -259,6 +262,9 @@ class _AccountsCollectionsScreenState
                 fmt: _fmt,
                 currency: _currency,
               ),
+
+              // Tab 3: Booking advances awaiting verification
+              const BookingAdvancesTab(),
             ],
           ),
         ),
@@ -539,6 +545,17 @@ class _AccountsCollectionsScreenState
             ElevatedButton(
               onPressed: () async {
                 final session = ref.read(authSessionProvider);
+                // Where did the money land? (mode + bank / cash account)
+                final money = await showMoneyAccountPicker(
+                  ctx,
+                  title: 'Verify collection',
+                  amount: c.amount,
+                  moneyIn: true,
+                  modes: kCollectionPayModes,
+                  initialMode: c.paymentMode,
+                  approveLabel: 'Verify',
+                );
+                if (money == null) return;
                 try {
                   await ref
                       .read(collectionServiceProvider)
@@ -546,6 +563,7 @@ class _AccountsCollectionsScreenState
                         id: c.id,
                         status: 'verified',
                         verifiedBy: session?.userId ?? '',
+                        money: money,
                       );
                 } catch (e) {
                   if (ctx.mounted) showErrorSnackBar(ctx, e);
@@ -1323,10 +1341,24 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
           _cellBox(
               _cols[3].$2 * scale,
               false,
-              Text('#${b.displayBookingNumber}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: crm.textSecondary))),
+              // Invoice number only once fully paid; until then the booking no.
+              Tooltip(
+                message: b.hasInvoiceNumber
+                    ? 'Booking #${b.displayBookingNumber}'
+                    : 'Booking number — invoice number is issued once fully paid',
+                child: Text(
+                    b.hasInvoiceNumber
+                        ? b.invoiceNumber
+                        : '#${b.displayBookingNumber}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: crm.textSecondary,
+                        fontWeight: b.hasInvoiceNumber
+                            ? FontWeight.w600
+                            : FontWeight.normal)),
+              )),
           _cellBox(_cols[4].$2 * scale, true,
               Text(cur(b.totalPrice), style: const TextStyle(fontSize: 12.5))),
           _cellBox(
@@ -1484,7 +1516,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
   // ── CSV / Excel download ────────────────────────────────────────────────
   Future<void> _download(List<_BookingInvoiceSummary> rows) async {
     final data = <List<dynamic>>[
-      ['Date', 'Customer', 'Service', 'Invoice #', 'Total', 'Discount',
+      ['Date', 'Customer', 'Service', 'Booking #', 'Invoice #', 'Total', 'Discount',
         'Advance', 'Collected', 'Collected By', 'Balance', 'Status'],
     ];
     for (final s in rows) {
@@ -1495,6 +1527,8 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
         b.customerName,
         b.service,
         b.displayBookingNumber,
+        // Blank until fully paid — no invoice number exists yet.
+        b.invoiceNumber,
         b.totalPrice,
         b.discountAmount,
         b.advanceAmount,

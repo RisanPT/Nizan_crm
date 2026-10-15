@@ -73,6 +73,10 @@ class AddBookingScreen extends HookConsumerWidget {
     final isSingleMode = bookingMode.value == 'single';
     final startTime = useState<TimeOfDay>(const TimeOfDay(hour: 9, minute: 0));
     final endTime = useState<TimeOfDay>(const TimeOfDay(hour: 10, minute: 0));
+    // Multi-day programmes: a different start/end for a given date (key =
+    // _dateKey). Days without an entry use the main Start/End time above.
+    final dayTimes =
+        useState<Map<String, ({TimeOfDay start, TimeOfDay end})>>({});
     final totalPrice = useState<double>(0);
     final advanceAmount = useState<double>(0);
     final basePackageAmount = useState<double>(0);
@@ -116,6 +120,13 @@ class AddBookingScreen extends HookConsumerWidget {
             final entryDates = entry.date != null
                 ? <DateTime>[entry.date!]
                 : allDates;
+            // This day's own time (multi-day programme), saved on its line —
+            // the same per-line time Manage Booking edits. '' = main time.
+            final dayTime = entryDates.length == 1
+                ? dayTimes.value[_dateKey(entryDates.first)]
+                : null;
+            final itemStart = dayTime == null ? '' : _hhmm(dayTime.start);
+            final itemEnd = dayTime == null ? '' : _hhmm(dayTime.end);
             // This package's OWN district (falls back to the booking-level
             // district), used both for its district-based price and to store
             // the per-item district so a multi-district booking prices each
@@ -138,6 +149,8 @@ class AddBookingScreen extends HookConsumerWidget {
                   districtId: entryDistrictId,
                   regionId: entryRegionId,
                   addons: entry.addons,
+                  startTime: itemStart,
+                  endTime: itemEnd,
                 ),
               );
             }
@@ -157,6 +170,8 @@ class AddBookingScreen extends HookConsumerWidget {
                 districtId: entryDistrictId,
                 regionId: entryRegionId,
                 addons: entry.addons,
+                startTime: itemStart,
+                endTime: itemEnd,
               ),
             );
           })
@@ -613,6 +628,29 @@ class AddBookingScreen extends HookConsumerWidget {
       if (picked != null) endTime.value = picked;
     }
 
+    // Pick a different start/end for one day of a multi-day programme.
+    Future<void> pickDayTime(DateTime day, {required bool isStart}) async {
+      final key = _dateKey(day);
+      final current =
+          dayTimes.value[key] ?? (start: startTime.value, end: endTime.value);
+      final picked = await showTimePicker(
+        context: context,
+        initialTime: isStart ? current.start : current.end,
+      );
+      if (picked == null) return;
+      var next = isStart
+          ? (start: picked, end: current.end)
+          : (start: current.start, end: picked);
+      final sMin = next.start.hour * 60 + next.start.minute;
+      if (isStart && next.end.hour * 60 + next.end.minute <= sMin) {
+        next = (
+          start: next.start,
+          end: TimeOfDay(hour: (picked.hour + 1).clamp(0, 23), minute: picked.minute),
+        );
+      }
+      dayTimes.value = {...dayTimes.value, key: next};
+    }
+
     String fmtTime(TimeOfDay t) {
       final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
       final m = t.minute.toString().padLeft(2, '0');
@@ -690,6 +728,8 @@ class AddBookingScreen extends HookConsumerWidget {
         startTime.value.hour,
         startTime.value.minute,
       );
+      // Booking-level times stay the MAIN time: days without their own time
+      // inherit it (calendar, prints), so it must not take a later day's time.
       final sEnd = DateTime(
         lastDate.year,
         lastDate.month,
@@ -804,12 +844,15 @@ class AddBookingScreen extends HookConsumerWidget {
         // addBooking already refreshed every dependent view (paginated
         // bookings, clients directory, converted lead, slots, reports).
         final isConversion = (qParams['leadId'] ?? '').isNotEmpty;
+        final isAnotherBooking = qParams['another'] == '1';
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               isConversion
-                  ? 'Lead converted — booking created.'
+                  ? (isAnotherBooking
+                      ? 'Another booking added for this customer.'
+                      : 'Lead converted — booking created.')
                   : bookingItems.length > 1
                       ? 'Booking created with ${bookingItems.length} packages — one invoice.'
                       : 'Booking created and added to calendar.',
@@ -1946,6 +1989,82 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ),
                                     ],
                                   ),
+                                  // Multi-day programme: each later day can
+                                  // run at its own time (e.g. reception in
+                                  // the evening). Defaults to the time above.
+                                  if (selectedDates.value.length > 1) ...[
+                                    12.h,
+                                    Text(
+                                      'Time per day — the time above is used for '
+                                      '${_formatDayLabel(([...selectedDates.value]..sort()).first)}; '
+                                      'change any other day below.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: crmColors.textSecondary,
+                                      ),
+                                    ),
+                                    8.h,
+                                    for (final day
+                                        in ([...selectedDates.value]..sort()).skip(1))
+                                      Builder(builder: (context) {
+                                        final own = dayTimes.value[_dateKey(day)];
+                                        final s = own?.start ?? startTime.value;
+                                        final e = own?.end ?? endTime.value;
+                                        Widget pill(String label, TimeOfDay t, bool isStart) =>
+                                            Expanded(
+                                              child: InkWell(
+                                                onTap: isSubmitting.value
+                                                    ? null
+                                                    : () => pickDayTime(day, isStart: isStart),
+                                                borderRadius: BorderRadius.circular(8),
+                                                child: InputDecorator(
+                                                  decoration: _inputDeco(label, crmColors),
+                                                  child: Text(
+                                                    fmtTime(t),
+                                                    style: TextStyle(
+                                                      fontWeight: own != null
+                                                          ? FontWeight.w600
+                                                          : FontWeight.normal,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                        return Padding(
+                                          padding: const EdgeInsets.only(bottom: 10),
+                                          child: Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 110,
+                                                child: Text(
+                                                  _formatDayLabel(day),
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              pill('Start', s, true),
+                                              12.w,
+                                              pill('End', e, false),
+                                              SizedBox(
+                                                width: 40,
+                                                child: own == null
+                                                    ? null
+                                                    : IconButton(
+                                                        tooltip: 'Use the main time',
+                                                        icon: const Icon(Icons.undo, size: 18),
+                                                        onPressed: () {
+                                                          final m = {...dayTimes.value}
+                                                            ..remove(_dateKey(day));
+                                                          dayTimes.value = m;
+                                                        },
+                                                      ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
                                 ],
                               ),
                               32.h,
@@ -2274,6 +2393,10 @@ String _formatDayLabel(DateTime d) {
   ];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
 }
+
+/// "HH:mm" (24-h) — the per-line time format BookingItem stores.
+String _hhmm(TimeOfDay t) =>
+    '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
 String _dateKey(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

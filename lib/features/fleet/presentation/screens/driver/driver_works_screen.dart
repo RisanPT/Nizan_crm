@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'driver_day.dart';
 
 class DriverWorksScreen extends ConsumerStatefulWidget {
   const DriverWorksScreen({super.key});
@@ -564,8 +565,7 @@ class _DriverWorksScreenState extends ConsumerState<DriverWorksScreen>
   }
 
   Widget _buildActionButton(FleetJob job) {
-    final isStart =
-        job.tripStatus == 'unassigned' || job.tripStatus == 'assigned';
+    final isStart = isNotStarted(job);
     final isActive = job.tripStatus == 'in_progress';
 
     if (isStart) {
@@ -740,8 +740,9 @@ class _DriverWorksScreenState extends ConsumerState<DriverWorksScreen>
   }
 
   void _handleJobAction(FleetJob job) {
-    if (job.tripStatus == 'unassigned' || job.tripStatus == 'assigned') {
-      context.push('/driver/inspection/${job.id}');
+    if (isNotStarted(job)) {
+      // First trip of the day → inspection; later ones → quick km start.
+      startTrip(context, ref, job);
     } else {
       context.push('/driver/active_job/${job.id}');
     }

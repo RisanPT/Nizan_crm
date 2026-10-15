@@ -103,6 +103,9 @@ class FleetCompletedWorksScreen extends ConsumerWidget {
                                 'Customer',
                                 'Vehicle',
                                 'Driver',
+                                'Start km',
+                                'End km',
+                                'Km driven',
                                 'Status'
                               ],
                               buildRow: (j) => [
@@ -112,6 +115,9 @@ class FleetCompletedWorksScreen extends ConsumerWidget {
                                 j.customerName,
                                 vehicleNameOf(j.vehicleId),
                                 driverNameOf(j.driverId),
+                                j.startKm?.toString() ?? '',
+                                j.endKm?.toString() ?? '',
+                                j.tripKm?.toStringAsFixed(1) ?? '',
                                 j.tripStatus,
                               ],
                             ),
@@ -251,6 +257,16 @@ class _CompletedJobCard extends StatelessWidget {
                       _metaRow(crmColors, Icons.directions_car_outlined,
                           'Vehicle · $vehicle'),
                     ],
+                    4.h,
+                    _metaRow(
+                      crmColors,
+                      Icons.speed_rounded,
+                      job.startKm == null && job.endKm == null
+                          ? 'Km · not recorded'
+                          : 'Km · ${job.startKm != null ? formatKm(job.startKm!) : '—'}'
+                              ' → ${job.endKm != null ? formatKm(job.endKm!) : '—'}'
+                              '${job.tripKm != null ? '  (${formatKm(job.tripKm!)} km driven)' : ''}',
+                    ),
                     12.h,
                     if (review != null)
                       _reviewSection(context, review!)

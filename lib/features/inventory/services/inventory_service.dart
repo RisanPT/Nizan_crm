@@ -5,6 +5,7 @@ import 'package:nizan_crm/features/inventory/data/staff_kit.dart';
 import 'package:nizan_crm/features/inventory/data/vendor.dart';
 import 'package:nizan_crm/features/inventory/data/inventory_category.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 /// Sentinel for optional 'clear vs leave unchanged' update params.
 const Object _unset = Object();
@@ -52,8 +53,6 @@ class InventoryService {
     required String category,
     String productType = '',
     String barcode = '',
-    int? fillLevel,
-    int? usagePerWork,
     DateTime? expiry,
     int? lowStockThreshold,
     String notes = '',
@@ -64,8 +63,6 @@ class InventoryService {
       'shade': shade,
       'barcode': barcode,
       'quantity': quantity,
-      'fillLevel': ?fillLevel,
-      'usagePerWork': ?usagePerWork,
       'price': price,
       'category': category,
       'productType': productType,
@@ -137,67 +134,6 @@ class InventoryService {
     }
   }
 
-  // ── Tube consumption ─────────────────────────────────────────────────────
-
-  /// Manually update a product's open-tube fill level (0..100) and, optionally,
-  /// its tube count (quantity). Used by the artist stock/tube adjuster.
-  Future<InventoryProduct> setFill(
-    String id,
-    int fillLevel, {
-    int? quantity,
-  }) async {
-    try {
-      final res = await _dio.patch(
-        '/inventory/products/$id/fill',
-        data: {'fillLevel': fillLevel, 'quantity': ?quantity},
-      );
-      return InventoryProduct.fromJson(res.data as Map<String, dynamic>);
-    } catch (e) {
-      throw AppException(e, action: 'update stock');
-    }
-  }
-
-  /// Deplete tubes for a completed work. With no arguments, the backend
-  /// depletes every product linked in the completing artist's kit(s) by each
-  /// product's usagePerWork%. Returns the number of products updated.
-  Future<int> consumeForWork({String? employeeId}) async {
-    try {
-      final res = await _dio.post(
-        '/inventory/consume',
-        data: {
-          if (employeeId != null && employeeId.isNotEmpty)
-            'employeeId': employeeId,
-        },
-      );
-      final data = res.data as Map<String, dynamic>;
-      final updated = data['updated'];
-      if (updated is num) return updated.toInt();
-      if (updated is List) return updated.length;
-      return 0;
-    } catch (e) {
-      throw AppException(e, action: 'update stock');
-    }
-  }
-
-  /// Update one kit item's per-artist allocation (its tube fill and/or tube
-  /// count). Affects only this artist's kit — never the shared studio stock.
-  Future<StaffKit> updateKitItem(
-    String kitId,
-    int index, {
-    int? fillLevel,
-    int? quantity,
-  }) async {
-    try {
-      final res = await _dio.patch(
-        '/inventory/kits/$kitId/item/$index',
-        data: {'fillLevel': ?fillLevel, 'quantity': ?quantity},
-      );
-      return StaffKit.fromJson(res.data as Map<String, dynamic>);
-    } catch (e) {
-      throw AppException(e, action: 'update allocation');
-    }
-  }
-
   // ── Purchases (stock-in) ─────────────────────────────────────────────────
 
   Future<List<Purchase>> getPurchases() async {
@@ -261,6 +197,7 @@ class InventoryService {
     DateTime? date,
     String mode = 'cash',
     String note = '',
+    MoneyChoice? money, // bank / cash account it was paid from
   }) async {
     try {
       final res = await _dio.post(
@@ -268,8 +205,10 @@ class InventoryService {
         data: {
           'amount': amount,
           'date': (date ?? DateTime.now()).toIso8601String(),
-          'mode': mode,
+          'mode': money?.paymentMode ?? mode,
           'note': note,
+          if (money != null) 'moneyAccountId': money.moneyAccountId,
+          if (money != null) 'paymentRef': money.paymentRef,
         },
       );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
@@ -411,11 +350,17 @@ class InventoryService {
   }
 
   /// Toggle a purchase's ledger payment status (Paid / Not Paid).
-  Future<Purchase> setPurchasePaid(String id, bool paid) async {
+  /// Marking paid settles the balance as one payment from [money]'s account.
+  Future<Purchase> setPurchasePaid(String id, bool paid, {MoneyChoice? money}) async {
     try {
       final res = await _dio.patch(
         '/inventory/purchases/$id/paid',
-        data: {'paid': paid},
+        data: {
+          'paid': paid,
+          if (money != null) 'mode': money.paymentMode,
+          if (money != null) 'moneyAccountId': money.moneyAccountId,
+          if (money != null) 'paymentRef': money.paymentRef,
+        },
       );
       return Purchase.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
@@ -451,18 +396,24 @@ class InventoryService {
     }
   }
 
+  /// Saves the kit's full item list. The server deducts newly assigned units
+  /// of studio products from studio stock; units removed from the kit go back
+  /// to studio stock when [returnToStudio], otherwise they're written off as
+  /// used up.
   Future<StaffKit> saveKit({
     String? id,
     required String name,
     String employeeId = '',
     required List<KitItem> items,
     String notes = '',
+    bool returnToStudio = false,
   }) async {
     final body = {
       'name': name,
       if (employeeId.isNotEmpty) 'employeeId': employeeId,
       'items': items.map((e) => e.toJson()).toList(),
       'notes': notes,
+      if (returnToStudio) 'returnToStudio': true,
     };
     try {
       final res = id == null
@@ -474,11 +425,35 @@ class InventoryService {
     }
   }
 
-  Future<void> deleteKit(String id) async {
+  Future<void> deleteKit(String id, {bool returnToStudio = false}) async {
     try {
-      await _dio.delete('/inventory/kits/$id');
+      await _dio.delete(
+        '/inventory/kits/$id',
+        queryParameters: {if (returnToStudio) 'returnToStudio': 'true'},
+      );
     } catch (e) {
       throw AppException(e, action: 'delete kit');
+    }
+  }
+
+  /// Assignment history, newest first (optionally for one kit / product).
+  Future<List<KitMovement>> getKitMovements({
+    String? kitId,
+    String? productId,
+  }) async {
+    try {
+      final res = await _dio.get(
+        '/inventory/kits/movements',
+        queryParameters: {
+          if (kitId != null && kitId.isNotEmpty) 'kitId': kitId,
+          if (productId != null && productId.isNotEmpty) 'productId': productId,
+        },
+      );
+      return (res.data as List)
+          .map((e) => KitMovement.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load assignment history');
     }
   }
 }

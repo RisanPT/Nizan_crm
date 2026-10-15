@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -123,8 +124,22 @@ class SalesReturnsScreen extends ConsumerWidget {
 
   Future<void> _setStatus(BuildContext context, WidgetRef ref, SalesReturn r, String status) async {
     final messenger = ScaffoldMessenger.of(context);
+    // Processing = the refund is paid: which bank / cash account paid it.
+    MoneyChoice? money;
+    if (status == 'processed') {
+      money = await showMoneyAccountPicker(
+        context,
+        title: 'Process refund',
+        amount: r.amount,
+        moneyIn: false,
+        modes: kPayrollPayModes,
+        initialMode: r.paymentMode,
+        approveLabel: 'Refund paid',
+      );
+      if (money == null) return;
+    }
     try {
-      await ref.read(salesReturnServiceProvider).updateStatus(r.id, status);
+      await ref.read(salesReturnServiceProvider).updateStatus(r.id, status, money: money);
       ref.refreshData.salesReturns();
       messenger.showSnackBar(SnackBar(content: Text('Credit note $status')));
     } catch (e) {

@@ -646,7 +646,7 @@ class BarItem {
 
 /// Ranked horizontal bars — for named categories (salespeople, districts,
 /// campaigns) whose labels are too long for a vertical axis.
-class BarList extends StatelessWidget {
+class BarList extends StatefulWidget {
   final List<BarItem> items;
   final Color color;
   final int maxItems;
@@ -661,9 +661,19 @@ class BarList extends StatelessWidget {
   });
 
   @override
+  State<BarList> createState() => _BarListState();
+}
+
+class _BarListState extends State<BarList> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return EmptyNote(emptyText);
-    final shown = items.take(maxItems).toList();
+    final items = widget.items;
+    final maxItems = widget.maxItems;
+    final color = widget.color;
+    if (items.isEmpty) return EmptyNote(widget.emptyText);
+    final shown = _expanded ? items : items.take(maxItems).toList();
     final maxV = shown.map((e) => e.value).fold<double>(0, math.max);
     return Column(children: [
       for (final it in shown)
@@ -704,7 +714,18 @@ class BarList extends StatelessWidget {
           padding: const EdgeInsets.only(top: 6),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text('+ ${items.length - maxItems} more', style: dashText(11.5, color: kDashMuted)),
+            child: InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text(_expanded ? 'Show less' : '+ ${items.length - maxItems} more',
+                      style: dashText(11.5, weight: FontWeight.w600, color: kBrand)),
+                  Icon(_expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: kBrand),
+                ]),
+              ),
+            ),
           ),
         ),
     ]);

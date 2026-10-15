@@ -652,7 +652,6 @@ class _StockStatusCard extends StatelessWidget {
     final out = products.where((p) => p.isOut).toList();
     final low = products.where((p) => p.isLow).toList();
     final healthy = products.where((p) => !p.isOut && !p.isLow).toList();
-    final tubeLow = products.where((p) => p.isTubeLow).length;
     final total = products.length;
     double val(List<InventoryProduct> l) =>
         l.fold<double>(0, (a, p) => a + p.quantity * p.price);
@@ -783,23 +782,6 @@ class _StockStatusCard extends StatelessWidget {
                 ],
               ),
             ),
-          if (tubeLow > 0) ...[
-            4.h,
-            Row(
-              children: [
-                Icon(Icons.water_drop_outlined, size: 14, color: crm.warning),
-                6.w,
-                Expanded(
-                  child: Text(
-                    '$tubeLow product${tubeLow == 1 ? ' has its' : 's have their'} open tube ≤ 20% full',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
       ),
     );

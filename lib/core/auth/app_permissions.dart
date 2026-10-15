@@ -89,6 +89,7 @@ const List<AppFeature> kAppFeatures = [
   AppFeature('payables', 'Accounts', 'Vendor bills, GST and payables',
       Icons.receipt_long_outlined, subs: [
     AppSubFeature('payables.dashboard', 'Accounts Dashboard'),
+    AppSubFeature('payables.transactions', 'Cash In / Out'),
     AppSubFeature('payables.invoices', 'Invoices'),
     AppSubFeature('payables.bills', 'Bills & Payables'),
     AppSubFeature('payables.collections', 'Artist Collections'),
@@ -130,6 +131,7 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('fleet.fuel', 'Fuel Expenses'),
     AppSubFeature('fleet.accidents', 'Accident Claims'),
     AppSubFeature('fleet.completed', 'Completed Works'),
+    AppSubFeature('fleet.km_report', 'Km Report'),
     AppSubFeature('fleet.reminders', 'Service Reminders'),
   ]),
   AppFeature('reports', 'Reports', 'CEO daily report and analytics',

@@ -489,7 +489,14 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
   final packageAmount   = _packageAmountFromTotal(booking.totalPrice, addonTotal);
   // remainingBalance is derived later from the printed lines (see invoiceTotal).
 
-  final invoiceDate = booking.bookingDate;
+  // The full GST invoice carries the server-issued invoice number + date once
+  // fully paid; receipts / confirmations keep the booking number + event date.
+  final useTaxInvoiceNo =
+      variant == BookingPrintVariant.clientInvoice && booking.hasInvoiceNumber;
+  final invoiceNoStr =
+      useTaxInvoiceNo ? booking.invoiceNumber : booking.displayBookingNumber;
+  final invoiceDate =
+      useTaxInvoiceNo ? (booking.invoiceDate ?? booking.bookingDate) : booking.bookingDate;
   final invoiceDateStr =
       '${invoiceDate.day.toString().padLeft(2, '0')}/${invoiceDate.month.toString().padLeft(2, '0')}/${invoiceDate.year}';
 
@@ -627,7 +634,8 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
         label,
         [
           if (dates.isNotEmpty) dates,
-          scheduleTime,
+          // This day's own time (multi-day programme), else the booking time.
+          _itemScheduleTime(item, booking) ?? scheduleTime,
           if (slot.isNotEmpty) slot,
         ].join('  ·  '),
         incl,
@@ -732,7 +740,7 @@ String _buildClientConfirmationHtml(Booking booking, BookingPrintVariant variant
     <div class="inv-meta-grid">
       <div class="inv-meta-cell">
         <span class="meta-label">INVOICE NO.</span>
-        <span class="meta-val">${_escape(booking.displayBookingNumber)}</span>
+        <span class="meta-val">${_escape(invoiceNoStr)}</span>
       </div>
       <div class="inv-meta-cell">
         <span class="meta-label">DATE</span>
@@ -851,6 +859,21 @@ String _formatDate(DateTime value) {
 }
 
 
+/// "11:00 AM – 2:30 PM" from a line's own "HH:mm" times, or null when the line
+/// has none (it then uses the booking time). A missing end keeps the booking's.
+String? _itemScheduleTime(BookingItem item, Booking booking) {
+  DateTime? parse(String raw) {
+    final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw.trim());
+    if (m == null) return null;
+    return DateTime(2000, 1, 1, int.parse(m.group(1)!), int.parse(m.group(2)!));
+  }
+
+  final start = parse(item.startTime);
+  final end = parse(item.endTime);
+  if (start == null && end == null) return null;
+  return '${_formatTime(start ?? booking.serviceStart)} – ${_formatTime(end ?? booking.serviceEnd)}';
+}
+
 String _formatTime(DateTime value) {
   final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
   final minute = value.minute.toString().padLeft(2, '0');
@@ -952,3 +975,8 @@ Future<void> printMultipleBookingDetails(
 
   await printBookingDetails(virtualBooking, variant: variant);
 }
+
+/// The same document printBookingDetails prints (unchanged), for sending the
+/// identical invoice on WhatsApp — see booking_print_service.dart.
+String? bookingPrintHtml(Booking booking, {required BookingPrintVariant variant}) =>
+    _buildPrintableHtml(booking, variant: variant);

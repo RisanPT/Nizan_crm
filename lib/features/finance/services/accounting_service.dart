@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/accounts/data/accounts_dashboard_summary.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/data/report_models.dart';
@@ -23,6 +24,17 @@ class AccountingService {
           .toList();
     } catch (e) {
       throw AppException(e, action: 'load accounts');
+    }
+  }
+
+  Future<List<AccountTypeOption>> getAccountTypes() async {
+    try {
+      final res = await _dio.get('/accounting/account-types');
+      return (res.data as List)
+          .map((e) => AccountTypeOption.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load account types');
     }
   }
 
@@ -158,6 +170,20 @@ class AccountingService {
       return AgingReport.fromJson(res.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'load $kind');
+    }
+  }
+
+  /// Combined Accounts Dashboard for a period ([from]/[to] = 'yyyy-MM-dd';
+  /// omitted = current month).
+  Future<AccountsDashboardSummary> getDashboardSummary({String? from, String? to}) async {
+    try {
+      final res = await _dio.get('/accounting/dashboard-summary', queryParameters: {
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
+      });
+      return AccountsDashboardSummary.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load accounts dashboard');
     }
   }
 

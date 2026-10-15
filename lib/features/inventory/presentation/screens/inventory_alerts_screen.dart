@@ -11,7 +11,7 @@ import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widg
 
 // ── Alert model helpers ─────────────────────────────────────────────────────
 
-enum _Filter { all, out, low, tube }
+enum _Filter { all, out, low }
 
 enum _Sort { urgent, name, category, cost, recent }
 
@@ -23,10 +23,10 @@ const _sortLabels = {
   _Sort.recent: 'Recently added',
 };
 
-bool _flagged(InventoryProduct p) => p.isOut || p.isLow || p.isTubeLow;
+bool _flagged(InventoryProduct p) => p.isOut || p.isLow;
 
-/// 0 = out of stock, 1 = low stock, 2 = only the open tube is nearly empty.
-int _severity(InventoryProduct p) => p.isOut ? 0 : (p.isLow ? 1 : 2);
+/// 0 = out of stock, 1 = low stock.
+int _severity(InventoryProduct p) => p.isOut ? 0 : 1;
 
 /// Units to buy to get back above the reorder level (at least one).
 int _suggestedQty(InventoryProduct p) {
@@ -43,17 +43,15 @@ int _urgencyCompare(InventoryProduct a, InventoryProduct b) {
       p.quantity / (p.lowStockThreshold <= 0 ? 1 : p.lowStockThreshold);
   final r = ratio(a).compareTo(ratio(b));
   if (r != 0) return r;
-  final f = a.fillLevel.compareTo(b.fillLevel);
-  if (f != 0) return f;
   return a.name.toLowerCase().compareTo(b.name.toLowerCase());
 }
 
 Color _severityColor(CrmTheme crm, InventoryProduct p) => p.isOut
     ? crm.destructive
-    : (p.isLow ? kLowStockColor : crm.warning);
+    : kLowStockColor;
 
 String _severityLabel(InventoryProduct p) =>
-    p.isOut ? 'OUT OF STOCK' : (p.isLow ? 'LOW STOCK' : 'TUBE LOW');
+    p.isOut ? 'OUT OF STOCK' : 'LOW STOCK';
 
 // ── Screen ──────────────────────────────────────────────────────────────────
 
@@ -85,8 +83,6 @@ class _InventoryAlertsScreenState extends ConsumerState<InventoryAlertsScreen> {
         return p.isOut;
       case _Filter.low:
         return p.isLow;
-      case _Filter.tube:
-        return p.isTubeLow;
     }
   }
 
@@ -107,7 +103,6 @@ class _InventoryAlertsScreenState extends ConsumerState<InventoryAlertsScreen> {
           final flagged = products.where(_flagged).toList();
           final out = flagged.where((p) => p.isOut).length;
           final low = flagged.where((p) => p.isLow).length;
-          final tube = flagged.where((p) => p.isTubeLow).length;
           final cost = flagged.fold<double>(0, (a, p) => a + _restockCost(p));
           final cats = flagged.map((p) => p.category).toSet();
           final allCats = products.map((p) => p.category).toSet();
@@ -115,7 +110,6 @@ class _InventoryAlertsScreenState extends ConsumerState<InventoryAlertsScreen> {
             _Filter.all: flagged.length,
             _Filter.out: out,
             _Filter.low: low,
-            _Filter.tube: tube,
           };
 
           // ── Filter / search / sort ──
@@ -184,8 +178,6 @@ class _InventoryAlertsScreenState extends ConsumerState<InventoryAlertsScreen> {
                       Icons.remove_shopping_cart_outlined, crm.destructive),
                   InvKpi('$low', 'Low Stock', 'at or below reorder level',
                       Icons.trending_down_rounded, kLowStockColor),
-                  InvKpi('$tube', 'Tube Nearly Empty', 'open tube ≤ 20% left',
-                      Icons.water_drop_outlined, crm.warning),
                   InvKpi(fmtINR(cost), 'Est. Restock Cost',
                       'suggested qty × unit price',
                       Icons.currency_rupee_rounded, const Color(0xFF6E1423)),
@@ -319,7 +311,6 @@ class _Toolbar extends StatelessWidget {
       _Filter.all: ('All', crm.primary),
       _Filter.out: ('Out', crm.destructive),
       _Filter.low: ('Low', kLowStockColor),
-      _Filter.tube: ('Tube low', crm.warning),
     };
 
     final chips = Wrap(
@@ -678,8 +669,6 @@ class _AlertCard extends StatelessWidget {
                     valueColor: AlwaysStoppedAnimation(color),
                   ),
                 ),
-                12.h,
-                TubeGauge(quantity: p.quantity, fillLevel: p.fillLevel),
                 14.h,
 
                 // ── Reorder suggestion ──
@@ -823,7 +812,7 @@ class _AllStockedUp extends StatelessWidget {
           Text(
               productCount == 0
                   ? 'Add products to start tracking reorder levels.'
-                  : 'All $productCount products are above their reorder level and no open tube is running dry.',
+                  : 'All $productCount products are above their reorder level.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: crm.textSecondary)),
           16.h,
@@ -834,7 +823,6 @@ class _AllStockedUp extends StatelessWidget {
             children: [
               invBadge('0 out of stock', crm.success),
               invBadge('0 low stock', crm.success),
-              invBadge('0 tubes nearly empty', crm.success),
             ],
           ),
         ],

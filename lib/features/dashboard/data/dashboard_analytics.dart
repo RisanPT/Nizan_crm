@@ -358,7 +358,15 @@ class FinanceLine {
 class FinanceMonth {
   final String key;
   final double billed, income, expense, net;
-  const FinanceMonth(this.key, this.billed, this.income, this.expense, this.net);
+
+  /// income = advances + collections.
+  final double advances, collections;
+  const FinanceMonth(this.key, this.billed, this.income, this.expense, this.net,
+      {this.advances = 0, this.collections = 0});
+
+  /// Cash in with or without booking advances.
+  double cashIn(bool withAdvances) => withAdvances ? income : collections;
+  double netCash(bool withAdvances) => cashIn(withAdvances) - expense;
 }
 
 class FinanceDashboard {
@@ -391,7 +399,8 @@ class FinanceDashboard {
       pendingApprovals: f('pendingApprovals'),
       aging: _m(j['aging']).map((key, v) => MapEntry(key, _d(v))),
       trend: _l(j['trend'])
-          .map((t) => FinanceMonth(_s(t['key']), _d(t['billed']), _d(t['income']), _d(t['expense']), _d(t['net'])))
+          .map((t) => FinanceMonth(_s(t['key']), _d(t['billed']), _d(t['income']), _d(t['expense']), _d(t['net']),
+              advances: _d(t['advances']), collections: _d(t['collections'])))
           .toList(),
     );
   }

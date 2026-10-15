@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class CollectionService {
   final Dio _dio;
@@ -121,11 +122,12 @@ class CollectionService {
     required String id,
     required String status, // 'verified' | 'rejected'
     required String verifiedBy,
+    MoneyChoice? money, // where the money landed (approval popup)
   }) async {
     try {
       final response = await _dio.put(
         '/collections/$id/verify',
-        data: {'status': status, 'verifiedBy': verifiedBy},
+        data: {'status': status, 'verifiedBy': verifiedBy, ...?money?.toJson()},
       );
       return ArtistCollection.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {

@@ -494,6 +494,11 @@ class PaginatedBookingsResponse {
 class Booking {
   final String id;
   final String bookingNumber;
+
+  /// Tax invoice number (e.g. "TN/26-27/0001"), issued by the server once the
+  /// booking is fully paid. Empty until then. Server-owned — never sent back.
+  final String invoiceNumber;
+  final DateTime? invoiceDate;
   final String packageId;
   final String regionId;
   final String districtId;
@@ -520,6 +525,11 @@ class Booking {
   final String travelMode;
   final String travelTime;
   final double travelDistanceKm;
+  // Fleet trip state, set by the driver app. Read-only here: never sent back
+  // in toJson, so saving a booking can't overwrite what the driver recorded.
+  final String tripStatus;
+  final double? startKm;
+  final double? endKm;
   final String eventSlot;
   final String requiredRoomDetail;
   final String secondaryContact;
@@ -577,6 +587,8 @@ class Booking {
   const Booking({
     required this.id,
     this.bookingNumber = '',
+    this.invoiceNumber = '',
+    this.invoiceDate,
     this.packageId = '',
     this.regionId = '',
     this.districtId = '',
@@ -599,6 +611,9 @@ class Booking {
     this.travelMode = '',
     this.travelTime = '',
     this.travelDistanceKm = 0,
+    this.tripStatus = 'unassigned',
+    this.startKm,
+    this.endKm,
     this.eventSlot = '',
     this.requiredRoomDetail = '',
     this.secondaryContact = '',
@@ -727,6 +742,8 @@ class Booking {
   // Prefer the server's per-booking verdict; fall back to the local list.
   bool get countsTowardSales =>
       serverCountsTowardSales ?? rules.countsTowardSales(createdBy: createdBy);
+
+  bool get hasInvoiceNumber => invoiceNumber.trim().isNotEmpty;
 
   String get displayBookingNumber {
     final explicitNumber = bookingNumber.trim();
@@ -895,6 +912,10 @@ class Booking {
     return Booking(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
       bookingNumber: json['bookingNumber'] as String? ?? '',
+      invoiceNumber: json['invoiceNumber'] as String? ?? '',
+      invoiceDate: json['invoiceDate'] != null
+          ? DateTime.tryParse(json['invoiceDate'] as String)?.toLocal()
+          : null,
       packageId: json['packageId'] as String? ?? '',
       regionId: json['regionId'] as String? ?? '',
       districtId: json['districtId'] as String? ?? '',
@@ -919,6 +940,9 @@ class Booking {
       travelMode: json['travelMode'] as String? ?? '',
       travelTime: json['travelTime'] as String? ?? '',
       travelDistanceKm: (json['travelDistanceKm'] as num?)?.toDouble() ?? 0,
+      tripStatus: json['tripStatus'] as String? ?? 'unassigned',
+      startKm: (json['startKm'] as num?)?.toDouble(),
+      endKm: (json['endKm'] as num?)?.toDouble(),
       eventSlot: json['eventSlot'] as String? ?? '',
       requiredRoomDetail: json['requiredRoomDetail'] as String? ?? '',
       secondaryContact: json['secondaryContact'] as String? ?? '',
@@ -1108,6 +1132,8 @@ class Booking {
     return Booking(
       id: id ?? this.id,
       bookingNumber: bookingNumber ?? this.bookingNumber,
+      invoiceNumber: invoiceNumber,
+      invoiceDate: invoiceDate,
       packageId: packageId ?? this.packageId,
       regionId: regionId ?? this.regionId,
       districtId: districtId ?? this.districtId,
@@ -1130,6 +1156,9 @@ class Booking {
       travelMode: travelMode ?? this.travelMode,
       travelTime: travelTime ?? this.travelTime,
       travelDistanceKm: travelDistanceKm ?? this.travelDistanceKm,
+      tripStatus: tripStatus,
+      startKm: startKm,
+      endKm: endKm,
       eventSlot: eventSlot ?? this.eventSlot,
       requiredRoomDetail: requiredRoomDetail ?? this.requiredRoomDetail,
       secondaryContact: secondaryContact ?? this.secondaryContact,

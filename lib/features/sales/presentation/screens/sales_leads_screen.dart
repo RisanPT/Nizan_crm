@@ -1103,6 +1103,10 @@ class _LeadForm extends HookConsumerWidget {
               ? customSourceCtrl.text.trim()
               : selectedSource.value,
           'campaignId': selectedCampaignId.value,
+          // Server keeps an existing tag unless removal is explicit.
+          if (selectedCampaignId.value == null &&
+              initialLead?.campaignId != null)
+            'campaignCleared': true,
           'location': locationCtrl.text,
           'leadType': leadTypeCtrl.text,
           'eventType': eventType.value,
@@ -1398,11 +1402,14 @@ class _LeadForm extends HookConsumerWidget {
       responsiveField(
         Consumer(builder: (_, r, _) {
           final campaigns =
-              r.watch(campaignsProvider).asData?.value.campaigns ?? const [];
-          final current = campaigns.any((c) => c.id == selectedCampaignId.value)
-              ? selectedCampaignId.value
-              : null;
+              r.watch(campaignOptionsProvider).asData?.value ?? const [];
+          final current = selectedCampaignId.value;
+          // A tag the list doesn't contain (campaign deleted, or the list
+          // hasn't loaded) is kept as-is rather than silently dropped.
+          final unknownCurrent =
+              current != null && !campaigns.any((c) => c.id == current);
           return DropdownButtonFormField<String?>(
+            key: ValueKey('campaign-${campaigns.length}'),
             initialValue: current,
             isExpanded: true,
             decoration: const InputDecoration(
@@ -1412,6 +1419,11 @@ class _LeadForm extends HookConsumerWidget {
             items: [
               const DropdownMenuItem<String?>(
                   value: null, child: Text('— No campaign —')),
+              if (unknownCurrent)
+                DropdownMenuItem<String?>(
+                    value: current,
+                    child: const Text('Current campaign',
+                        overflow: TextOverflow.ellipsis)),
               for (final c in campaigns)
                 DropdownMenuItem<String?>(
                     value: c.id,
@@ -2351,6 +2363,14 @@ class _LeadCardState extends State<_LeadCard> {
                           tooltip: 'Convert to Booking',
                           color: const Color(0xFFEAB308),
                           onPressed: widget.onConvert,
+                        ),
+                      if (canAddAnotherBooking(lead))
+                        _ActionButton(
+                          icon: Icons.add_task_outlined,
+                          tooltip: 'Add Another Booking',
+                          color: const Color(0xFF10B981),
+                          onPressed: () =>
+                              addAnotherBookingForLead(context, lead),
                         ),
                       _ActionButton(
                         icon: Icons.edit_outlined,

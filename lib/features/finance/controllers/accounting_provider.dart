@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/features/accounts/data/accounts_dashboard_summary.dart';
 import 'package:nizan_crm/features/finance/data/chart_account.dart';
 import 'package:nizan_crm/features/finance/data/journal_entry.dart';
 import 'package:nizan_crm/features/finance/data/report_models.dart';
@@ -18,6 +19,11 @@ final accountingServiceProvider = Provider<AccountingService>((ref) {
 final chartAccountsProvider =
     FutureProvider.family<List<ChartAccount>, String>((ref, nature) async {
   return ref.watch(accountingServiceProvider).getAccounts(nature: nature);
+});
+
+/// Account Type master (Cash, Bank, Direct Expense …), in display order.
+final accountTypesProvider = FutureProvider<List<AccountTypeOption>>((ref) async {
+  return ref.watch(accountingServiceProvider).getAccountTypes();
 });
 
 /// Journal vouchers filtered by type/status and an optional date window
@@ -63,6 +69,14 @@ final agingProvider = FutureProvider.family<AgingReport,
   return ref
       .watch(accountingServiceProvider)
       .getAging(p.kind, asOf: p.asOf.isEmpty ? null : p.asOf);
+});
+
+/// Combined Accounts Dashboard for a period. Key is (from, to) 'yyyy-MM-dd'.
+final accountsDashboardSummaryProvider = FutureProvider.family<
+    AccountsDashboardSummary, ({String from, String to})>((ref, range) async {
+  return ref
+      .watch(accountingServiceProvider)
+      .getDashboardSummary(from: range.from, to: range.to);
 });
 
 /// Statement of account for one party (key: kind + name + phone).

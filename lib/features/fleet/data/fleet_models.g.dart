@@ -8,8 +8,8 @@ part of 'fleet_models.dart';
 
 _FleetJob _$FleetJobFromJson(Map<String, dynamic> json) => _FleetJob(
   id: json['_id'] as String,
-  bookingNumber: json['bookingNumber'] as String,
-  driverId: json['driverId'] as String?,
+  bookingNumber: json['bookingNumber'] as String? ?? '',
+  driverId: json['driverId'],
   vehicleId: json['vehicleId'],
   preTripPhotos:
       (json['preTripPhotos'] as List<dynamic>?)
@@ -32,6 +32,14 @@ _FleetJob _$FleetJobFromJson(Map<String, dynamic> json) => _FleetJob(
           ?.map((e) => e as Map<String, dynamic>)
           .toList() ??
       const [],
+  startKm: (json['startKm'] as num?)?.toDouble(),
+  endKm: (json['endKm'] as num?)?.toDouble(),
+  tripStartedAt: json['tripStartedAt'] == null
+      ? null
+      : DateTime.parse(json['tripStartedAt'] as String),
+  tripCompletedAt: json['tripCompletedAt'] == null
+      ? null
+      : DateTime.parse(json['tripCompletedAt'] as String),
 );
 
 Map<String, dynamic> _$FleetJobToJson(_FleetJob instance) => <String, dynamic>{
@@ -52,6 +60,10 @@ Map<String, dynamic> _$FleetJobToJson(_FleetJob instance) => <String, dynamic>{
   'pocName': instance.pocName,
   'pocPhone': instance.pocPhone,
   'assignedStaff': instance.assignedStaff,
+  'startKm': instance.startKm,
+  'endKm': instance.endKm,
+  'tripStartedAt': instance.tripStartedAt?.toIso8601String(),
+  'tripCompletedAt': instance.tripCompletedAt?.toIso8601String(),
 };
 
 _AccidentReport _$AccidentReportFromJson(

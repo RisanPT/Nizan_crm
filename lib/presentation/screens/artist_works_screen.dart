@@ -14,7 +14,6 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/models/trial.dart';
 import '../../core/providers/trial_provider.dart';
 import '../../core/utils/booking_print_service.dart';
-import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import '../../services/addon_service_service.dart';
 import '../../core/models/addon_service.dart';
 import 'dart:io';
@@ -3526,31 +3525,11 @@ class _WorkTimerWidgetState extends ConsumerState<WorkTimerWidget> {
           const SnackBar(content: Text('✓ Work Marked as Completed')),
         );
       }
-      await _depleteInventoryTubes();
+      // Kit usage is derived on the server from completed lead works, so
+      // completing a work needs no inventory call.
+      ref.refreshData.inventory();
     } finally {
       _completing = false;
-    }
-  }
-
-  /// When an inventory-access artist completes a work, auto-deplete the tubes
-  /// of the products in their kit by each product's usage-per-work %.
-  Future<void> _depleteInventoryTubes() async {
-    final session = ref.read(authSessionProvider);
-    if (session == null || !session.inventoryAccess) return;
-    try {
-      final count =
-          await ref.read(inventoryServiceProvider).consumeForWork();
-      ref.refreshData.inventory();
-      if (mounted && count > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content:
-                Text('Inventory updated · $count product${count == 1 ? '' : 's'} depleted'),
-          ),
-        );
-      }
-    } catch (_) {
-      // Inventory depletion is best-effort; never block work completion.
     }
   }
 

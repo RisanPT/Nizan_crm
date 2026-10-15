@@ -72,6 +72,7 @@ import '../../presentation/screens/artist_works_screen.dart';
 import '../../features/accounts/presentation/screens/accounts_collections_screen.dart';
 import '../../features/accounts/presentation/screens/artist_payouts_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/combined_accounts_dashboard_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/cash_transactions_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
@@ -138,6 +139,7 @@ import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_add_
 
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_accidents_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_completed_works_screen.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_km_report_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_service_reminders_screen.dart';
 import '../../features/trials/presentation/screens/trials_screen.dart';
 import '../../features/trials/presentation/screens/trials_calendar_screen.dart';
@@ -183,6 +185,7 @@ String? subKeyForPath(String path) {
   if (path == '/accounts/artist-collections') return 'payables.collections';
   if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
   if (path == '/accounts/admin-expenses') return 'payables.admin_expenses';
+  if (path == '/accounts/transactions') return 'payables.transactions';
   if (path == '/accounts/subscriptions') return 'payables.subscriptions';
   if (path == '/accounts/admin-salaries') return 'payables.admin_salaries';
   if (path == '/accounts/operations-salaries') return 'payables.operations_salaries';
@@ -235,6 +238,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/fleet/fuel')) return 'fleet.fuel';
   if (path.startsWith('/fleet/accidents')) return 'fleet.accidents';
   if (path.startsWith('/fleet/completed-works')) return 'fleet.completed';
+  if (path.startsWith('/fleet/km-report')) return 'fleet.km_report';
   if (path.startsWith('/fleet/service-reminders')) return 'fleet.reminders';
   // Marketing
   if (path.startsWith('/marketing/competitors')) return 'marketing.competitors';
@@ -381,7 +385,7 @@ String landingRouteFor(Access access,
     '/company-finance', '/company-finance/assets',
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
     '/accounts/artist-collections', '/accounts/fleet-expenses',
-    '/accounts/admin-expenses', '/accounts/subscriptions',
+    '/accounts/admin-expenses', '/accounts/transactions', '/accounts/subscriptions',
     '/accounts/admin-salaries', '/accounts/operations-salaries',
     '/accounts/attendance-payroll', '/accounts/sales-returns', '/accounts/hra',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
@@ -390,6 +394,7 @@ String landingRouteFor(Access access,
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
     '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
+    '/fleet/km-report',
     '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries', '/hr/evaluation',
   ];
   for (final route in candidates) {
@@ -585,6 +590,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Accident Claims';
           } else if (state.uri.path == '/fleet/completed-works') {
             title = 'Completed Works';
+          } else if (state.uri.path == '/fleet/km-report') {
+            title = 'Km Report';
           } else if (state.uri.path == '/fleet/service-reminders') {
             title = 'Service Reminders';
           } else if (state.uri.path == '/driver/jobs') {
@@ -629,6 +636,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Fleet Expenses';
           } else if (state.uri.path == '/accounts/admin-expenses') {
             title = 'Administrative Expenses';
+          } else if (state.uri.path == '/accounts/transactions') {
+            title = 'Cash In / Out';
           } else if (state.uri.path == '/accounts/subscriptions') {
             title = 'Software & Subscriptions';
           } else if (state.uri.path == '/accounts/sales-returns') {
@@ -902,12 +911,20 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const FleetCompletedWorksScreen(),
           ),
           GoRoute(
+            path: '/fleet/km-report',
+            builder: (context, state) => const FleetKmReportScreen(),
+          ),
+          GoRoute(
             path: '/fleet/service-reminders',
             builder: (context, state) => const FleetServiceRemindersScreen(),
           ),
           GoRoute(
             path: '/accounts/dashboard',
             builder: (context, state) => const CombinedAccountsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/transactions',
+            builder: (context, state) => const CashTransactionsScreen(),
           ),
           GoRoute(
             path: '/accounts/reports',
@@ -1279,7 +1296,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/company-finance/aging',
-            builder: (context, state) => const AgingScreen(),
+            builder: (context, state) => AgingScreen(
+              initialKind: state.uri.queryParameters['kind'] ?? 'receivables',
+            ),
           ),
           GoRoute(
             path: '/company-finance/reconciliation',

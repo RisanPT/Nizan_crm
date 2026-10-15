@@ -46,37 +46,49 @@ String _roleLabel(String role) {
   return r[0].toUpperCase() + r.substring(1);
 }
 
-Color _itemColor(CrmTheme crm, KitItem it) => it.isOut
-    ? crm.destructive
-    : (it.isTubeLow ? kLowStockColor : crm.success);
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String _fmtDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
+
+/// 'YYYY-MM-DD' → '12 Oct 2026' (falls back to the raw string).
+String _fmtDayKey(String key) {
+  final d = DateTime.tryParse(key);
+  return d == null ? key : _fmtDate(d);
+}
+
+String _plural(int n, String word) => '$n $word${n == 1 ? '' : 's'}';
+
+/// "~5.5 works / unit" — usage is an estimate, so keep one decimal at most.
+String _perUnitLabel(KitItem it) {
+  final v = it.worksPerUnit;
+  if (v == null) return '';
+  final s = v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+  return '~$s works / unit';
+}
 
 /// Derived numbers for one kit.
 class _KitStats {
   final int items;
   final int units;
-  final int low;
-  final int empty;
   final double value;
-  const _KitStats(this.items, this.units, this.low, this.empty, this.value);
 
-  int get healthy => items - low - empty;
-  int get alerts => low + empty;
-  bool get needsAttention => alerts > 0;
+  /// Works completed as lead since the kit's earliest product assignment.
+  final int works;
+  const _KitStats(this.items, this.units, this.value, this.works);
 
   factory _KitStats.of(StaffKit k, Map<String, InventoryProduct> byId) {
-    var units = 0, low = 0, empty = 0;
+    var units = 0, works = 0;
     var value = 0.0;
     for (final it in k.items) {
       units += it.quantity;
-      if (it.isOut) {
-        empty++;
-      } else if (it.isTubeLow) {
-        low++;
-      }
+      if (it.worksDone > works) works = it.worksDone;
       final p = byId[it.productId];
       if (p != null && it.quantity > 0) value += it.quantity * p.price;
     }
-    return _KitStats(k.items.length, units, low, empty, value);
+    return _KitStats(k.items.length, units, value, works);
   }
 }
 
@@ -94,7 +106,6 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
 
   final _searchCtrl = TextEditingController();
   String _query = '';
-  bool _attentionOnly = false;
 
   /// Kit shown in the side detail panel (wide layouts only).
   String? _selectedId;
@@ -290,6 +301,12 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                           icon: Icons.currency_rupee_rounded,
                           label: 'Value',
                           value: fmtINR(s.value))),
+                  8.w,
+                  Expanded(
+                      child: _MiniStat(
+                          icon: Icons.brush_outlined,
+                          label: 'Works',
+                          value: '${s.works}')),
                 ],
               ),
               14.h,
@@ -300,20 +317,25 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                   children: [
                     Row(
                       children: [
+                        Icon(Icons.insights_outlined,
+                            size: 16, color: crm.primary),
+                        6.w,
                         Expanded(
-                          child: Text('Kit health',
+                          child: Text('How usage is counted',
                               style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
                                   color: crm.textPrimary)),
                         ),
-                        _healthBadge(crm, s),
                       ],
                     ),
-                    10.h,
-                    _HealthBar(stats: s, height: 8),
-                    8.h,
-                    _HealthLegend(stats: s),
+                    6.h,
+                    Text(
+                        'Each product shows the works this artist completed as '
+                        'lead since it was assigned. It is an estimate of '
+                        'usage, not a measured amount.',
+                        style: TextStyle(
+                            fontSize: 12, color: crm.textSecondary)),
                     14.h,
                     Row(
                       children: [
@@ -381,7 +403,7 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
               InvSectionHeader(
                 title: 'Items',
                 count: kit.items.length,
-                subtitle: 'Tick to verify · tap Update to record usage',
+                subtitle: 'Tick to verify what the artist holds',
               ),
               12.h,
               if (kit.items.isEmpty)
@@ -412,204 +434,13 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                     category: byId[kit.items[i].productId]?.category,
                     checked: checked.contains(i),
                     onToggle: () => onToggle(i),
-                    onUpdate: () => _adjustKitItem(kit.id, i, kit.items[i],
-                        _usageFor(products, kit.items[i])),
                   ),
+              20.h,
+              _KitHistory(kitId: kit.id),
             ],
           ),
         ),
       ],
-    );
-  }
-
-  /// usagePerWork of the linked studio product (default 10%).
-  int _usageFor(List<InventoryProduct> products, KitItem it) {
-    if (it.productId.isEmpty) return 10;
-    for (final p in products) {
-      if (p.id == it.productId) return p.usagePerWork;
-    }
-    return 10;
-  }
-
-  /// Adjust a single kit item's PER-ARTIST allocation (tube count + fill).
-  /// Writes only to this artist's kit — never the shared studio stock.
-  Future<void> _adjustKitItem(
-      String kitId, int index, KitItem it, int usage) async {
-    final crm = context.crmColors;
-    final messenger = ScaffoldMessenger.of(context);
-    var level = it.fillLevel.toDouble();
-    var qty = it.quantity;
-    var busy = false;
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetCtx, setSheet) {
-          Future<void> commit() async {
-            setSheet(() => busy = true);
-            try {
-              await ref.read(inventoryServiceProvider).updateKitItem(
-                    kitId,
-                    index,
-                    fillLevel: level.round().clamp(0, 100),
-                    quantity: qty,
-                  );
-              ref.refreshData.inventory();
-              if (sheetCtx.mounted) Navigator.pop(sheetCtx);
-              messenger.showSnackBar(
-                  const SnackBar(content: Text('Allocation updated')));
-            } catch (e) {
-              setSheet(() => busy = false);
-              messenger.showSnackBar(
-                  SnackBar(content: Text(friendlyErrorMessage(e))));
-            }
-          }
-
-          Widget stepBtn(IconData icon, VoidCallback? onTap) => InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                      color: crm.input,
-                      borderRadius: BorderRadius.circular(10)),
-                  child: Icon(icon,
-                      size: 20,
-                      color: onTap == null
-                          ? crm.textSecondary.withValues(alpha: 0.4)
-                          : crm.textPrimary),
-                ),
-              );
-
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-                20, 14, 20, 20 + MediaQuery.of(sheetCtx).viewInsets.bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                        color: crm.border,
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                ),
-                14.h,
-                Text(_kitItemName(it),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 17, fontWeight: FontWeight.bold)),
-                4.h,
-                Text('My allocation · update as you use it',
-                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
-                20.h,
-                Row(
-                  children: [
-                    Icon(Icons.inventory_2_outlined,
-                        size: 18, color: crm.textSecondary),
-                    8.w,
-                    Expanded(
-                      child: Text('Tubes assigned',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                              color: crm.textPrimary)),
-                    ),
-                    stepBtn(Icons.remove,
-                        (busy || qty <= 0) ? null : () => setSheet(() => qty--)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('$qty',
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w800)),
-                    ),
-                    stepBtn(
-                        Icons.add,
-                        busy
-                            ? null
-                            : () => setSheet(() {
-                                  if (qty <= 0 && level <= 0) level = 100;
-                                  qty++;
-                                })),
-                  ],
-                ),
-                18.h,
-                Divider(height: 1, color: crm.border),
-                18.h,
-                Row(
-                  children: [
-                    Text('${level.round()}%',
-                        style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: crm.primary)),
-                    12.w,
-                    Expanded(
-                      child: Slider(
-                        value: level.clamp(0, 100),
-                        min: 0,
-                        max: 100,
-                        divisions: 20,
-                        label: '${level.round()}%',
-                        onChanged:
-                            busy ? null : (v) => setSheet(() => level = v),
-                      ),
-                    ),
-                  ],
-                ),
-                8.h,
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final preset in const [100, 75, 50, 25, 0])
-                      ActionChip(
-                        label: Text('$preset%'),
-                        onPressed: busy
-                            ? null
-                            : () => setSheet(() => level = preset.toDouble()),
-                      ),
-                    ActionChip(
-                      avatar: const Icon(Icons.remove, size: 16),
-                      label: Text('Use (−$usage%)'),
-                      onPressed: busy
-                          ? null
-                          : () => setSheet(
-                              () => level = (level - usage).clamp(0, 100)),
-                    ),
-                  ],
-                ),
-                20.h,
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: busy ? null : commit,
-                    style:
-                        FilledButton.styleFrom(minimumSize: const Size(0, 48)),
-                    child: busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Save allocation'),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
     );
   }
 
@@ -632,8 +463,11 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
             notes: kit.notes,
           );
       ref.refreshData.inventory();
-      messenger.showSnackBar(
-          SnackBar(content: Text('Added ${it.name} to ${kit.name}')));
+      messenger.showSnackBar(SnackBar(
+          content: Text(it.isLinked
+              ? 'Assigned ${it.quantity} × ${it.name} to ${kit.name} · '
+                  'studio stock reduced'
+              : 'Added ${it.name} to ${kit.name}')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
@@ -642,28 +476,48 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
   /// Returns true when the kit was deleted.
   Future<bool> _confirmDeleteKit(StaffKit kit) async {
     final crm = context.crmColors;
-    final ok = await showDialog<bool>(
+    final linkedUnits = kit.items
+        .where((it) => it.isLinked)
+        .fold<int>(0, (a, it) => a + it.quantity);
+    // null = cancelled; true = return units to studio; false = used up / none.
+    final choice = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete kit?'),
-        content: Text(
-            'Remove "${kit.name}" and its ${kit.items.length} '
-            'item${kit.items.length == 1 ? '' : 's'}? This cannot be undone.'),
+        content: Text(linkedUnits == 0
+            ? 'Remove "${kit.name}" and its ${_plural(kit.items.length, 'item')}? '
+                'This cannot be undone.'
+            : '"${kit.name}" still holds ${_plural(linkedUnits, 'unit')} of '
+                'studio products. Return them to studio stock, or mark them '
+                'as used up?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: crm.destructive),
-            child: const Text('Delete'),
-          ),
+          if (linkedUnits > 0) ...[
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              style: TextButton.styleFrom(foregroundColor: crm.destructive),
+              child: const Text('Used up · delete'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Return to studio · delete'),
+            ),
+          ] else
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              style: FilledButton.styleFrom(backgroundColor: crm.destructive),
+              child: const Text('Delete'),
+            ),
         ],
       ),
     );
-    if (ok != true) return false;
+    if (choice == null) return false;
     try {
-      await ref.read(inventoryServiceProvider).deleteKit(kit.id);
+      await ref
+          .read(inventoryServiceProvider)
+          .deleteKit(kit.id, returnToStudio: choice);
       ref.refreshData.inventory();
       if (mounted) {
         setState(() {
@@ -765,24 +619,16 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
       final totalItems = all.fold<int>(0, (a, s) => a + s.items);
       final totalUnits = all.fold<int>(0, (a, s) => a + s.units);
       final totalValue = all.fold<double>(0, (a, s) => a + s.value);
-      final lowItems = all.fold<int>(0, (a, s) => a + s.low);
-      final emptyItems = all.fold<int>(0, (a, s) => a + s.empty);
-      final healthyItems = totalItems - lowItems - emptyItems;
-      final attentionKits = all.where((s) => s.needsAttention).length;
+      final totalWorks = all.fold<int>(0, (a, s) => a + s.works);
       final staffIds = kits
           .map((k) => k.employeeId)
           .where((e) => e.isNotEmpty)
           .toSet();
       final unassigned = kits.where((k) => k.employeeId.isEmpty).length;
-      final healthyPct =
-          totalItems == 0 ? 0 : (healthyItems / totalItems * 100).round();
 
-      // ── Search + filter ──
+      // ── Search ──
       final q = _query.trim().toLowerCase();
       final visible = kits.where((k) {
-        if (_attentionOnly && !(stats[k.id]?.needsAttention ?? false)) {
-          return false;
-        }
         if (q.isEmpty) return true;
         final st = _staff[k.employeeId];
         return k.name.toLowerCase().contains(q) ||
@@ -842,14 +688,8 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
             ),
             16.h,
             InvKpiGrid(width: w, stats: [
-              InvKpi(
-                  '${kits.length}',
-                  'Total Kits',
-                  attentionKits > 0
-                      ? '$attentionKits need attention'
-                      : 'all kits healthy',
-                  Icons.work_outline,
-                  crm.primary),
+              InvKpi('${kits.length}', 'Total Kits', 'one per artist',
+                  Icons.work_outline, crm.primary),
               InvKpi(
                   '${staffIds.length}',
                   'Staff Equipped',
@@ -860,17 +700,14 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                   crm.accent),
               InvKpi('$totalItems', 'Items Allocated', 'products across kits',
                   Icons.inventory_2_outlined, const Color(0xFF9E2B43)),
-              InvKpi('$totalUnits', 'Units Allocated', 'tubes / units in kits',
+              InvKpi('$totalUnits', 'Units Allocated',
+                  'moved out of studio stock',
                   Icons.layers_outlined, const Color(0xFF800020)),
               InvKpi(fmtINR(totalValue), 'Kit Value', 'qty × unit price',
                   Icons.currency_rupee_rounded, const Color(0xFF6E1423)),
-              InvKpi('$healthyItems', 'Healthy Items',
-                  '$healthyPct% of kit items',
-                  Icons.check_circle_outline_rounded, crm.success),
-              InvKpi('$lowItems', 'Running Low', 'open tube ≤ 20%',
-                  Icons.trending_down_rounded, kLowStockColor),
-              InvKpi('$emptyItems', 'Empty', 'no tubes left',
-                  Icons.remove_circle_outline_rounded, crm.destructive),
+              InvKpi('$totalWorks', 'Works Since Assigned',
+                  'completed as lead artist',
+                  Icons.brush_outlined, crm.success),
             ]),
             16.h,
             if (kits.isEmpty)
@@ -897,22 +734,16 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
                 ),
               )
             else ...[
-              _toolbar(crm, w, kits.length, attentionKits),
+              _searchField(),
               14.h,
               if (visible.isEmpty)
-                InvCard(
+                const InvCard(
                   child: SizedBox(
                     height: 220,
                     child: InvEmpty(
-                      icon: _attentionOnly && q.isEmpty
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.search_off_rounded,
-                      title: _attentionOnly && q.isEmpty
-                          ? 'Every kit is healthy'
-                          : 'No kits match',
-                      subtitle: _attentionOnly && q.isEmpty
-                          ? 'No items are running low or empty.'
-                          : 'Try another staff or kit name, or clear the filter.',
+                      icon: Icons.search_off_rounded,
+                      title: 'No kits match',
+                      subtitle: 'Try another staff, kit or product name.',
                     ),
                   ),
                 )
@@ -925,62 +756,28 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
     });
   }
 
-  Widget _toolbar(CrmTheme crm, double w, int total, int attention) {
-    final search = TextField(
-      controller: _searchCtrl,
-      onChanged: (v) => setState(() => _query = v),
-      decoration: InputDecoration(
-        hintText: 'Search staff or kit…',
-        prefixIcon: const Icon(Icons.search, size: 20),
-        suffixIcon: _query.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'Clear',
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () {
-                  _searchCtrl.clear();
-                  setState(() => _query = '');
-                },
-              ),
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-    final filters = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        ChoiceChip(
-          label: Text('All ($total)'),
-          selected: !_attentionOnly,
-          onSelected: (_) => setState(() => _attentionOnly = false),
+  Widget _searchField() => TextField(
+        controller: _searchCtrl,
+        onChanged: (v) => setState(() => _query = v),
+        decoration: InputDecoration(
+          hintText: 'Search staff, kit or product…',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear',
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
-        ChoiceChip(
-          avatar: Icon(Icons.warning_amber_rounded,
-              size: 16,
-              color: _attentionOnly ? null : kLowStockColor),
-          label: Text('Needs attention ($attention)'),
-          selected: _attentionOnly,
-          onSelected: (_) => setState(() => _attentionOnly = true),
-        ),
-      ],
-    );
-    if (w < 640) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [search, 10.h, filters],
       );
-    }
-    return Row(
-      children: [
-        Expanded(child: search),
-        12.w,
-        filters,
-      ],
-    );
-  }
 
   /// Rows of equal-height cards (1 column → plain stacked list).
   Widget _grid(List<Widget> cards, int cols) {
@@ -1012,19 +809,6 @@ class _InventoryKitsScreenState extends ConsumerState<InventoryKitsScreen> {
     }
     return Column(children: rows);
   }
-}
-
-Widget _healthBadge(CrmTheme crm, _KitStats s) {
-  if (s.items == 0) return invBadge('No items', crm.textSecondary);
-  if (s.empty > 0) {
-    return invBadge(
-        '${s.alerts} need${s.alerts == 1 ? 's' : ''} attention', crm.destructive);
-  }
-  if (s.low > 0) {
-    return invBadge(
-        '${s.alerts} need${s.alerts == 1 ? 's' : ''} attention', kLowStockColor);
-  }
-  return invBadge('All good', crm.success);
 }
 
 // ── Kit card ────────────────────────────────────────────────────────────────
@@ -1062,12 +846,9 @@ class _KitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final s = stats;
-    // Worst items first for the preview.
-    int rank(KitItem it) => it.isOut ? 0 : (it.isTubeLow ? 1 : 2);
-    final preview = [...kit.items]..sort((a, b) {
-        final r = rank(a).compareTo(rank(b));
-        return r != 0 ? r : a.fillLevel.compareTo(b.fillLevel);
-      });
+    // Most-used items first for the preview.
+    final preview = [...kit.items]
+      ..sort((a, b) => b.worksDone.compareTo(a.worksDone));
     const maxPreview = 3;
     final more = kit.items.length - maxPreview;
     final vFrac = kit.items.isEmpty ? 0.0 : verified / kit.items.length;
@@ -1168,30 +949,10 @@ class _KitCard extends StatelessWidget {
                         Expanded(
                             child: _MiniStat(
                                 icon: Icons.currency_rupee_rounded,
-                                label: 'Value',
-                                value: fmtINR(s.value))),
+                                label: 'Works',
+                                value: '${s.works}')),
                       ],
                     ),
-                    12.h,
-                    // ── Health ──
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('Kit health',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: crm.textSecondary)),
-                        ),
-                        _healthBadge(crm, s),
-                      ],
-                    ),
-                    8.h,
-                    _HealthBar(stats: s, height: 6),
-                    6.h,
-                    _HealthLegend(stats: s),
                     12.h,
                     // ── Item preview ──
                     if (kit.items.isEmpty)
@@ -1298,7 +1059,6 @@ class _PreviewRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final color = _itemColor(crm, item);
     return Padding(
       padding: const EdgeInsets.only(bottom: 7),
       child: Row(
@@ -1306,33 +1066,23 @@ class _PreviewRow extends StatelessWidget {
           Container(
             width: 6,
             height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            decoration:
+                BoxDecoration(color: crm.primary, shape: BoxShape.circle),
           ),
           8.w,
           Expanded(
-            child: Text(_kitItemName(item),
+            child: Text('${_kitItemName(item)}  ×${item.quantity}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12, color: crm.textPrimary)),
           ),
           8.w,
-          SizedBox(
-            width: 64,
-            child: TubeGauge(
-                quantity: item.quantity,
-                fillLevel: item.fillLevel,
-                height: 6,
-                showLabel: false),
-          ),
-          6.w,
-          SizedBox(
-            width: 40,
-            child: Text(item.isOut ? 'Empty' : '${item.fillLevel}%',
-                textAlign: TextAlign.right,
-                maxLines: 1,
-                style: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-          ),
+          Text(_plural(item.worksDone, 'work'),
+              maxLines: 1,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: crm.textSecondary)),
         ],
       ),
     );
@@ -1346,29 +1096,28 @@ class _KitItemTile extends StatelessWidget {
   final String? category;
   final bool checked;
   final VoidCallback onToggle;
-  final VoidCallback onUpdate;
   const _KitItemTile({
     required this.item,
     required this.category,
     required this.checked,
     required this.onToggle,
-    required this.onUpdate,
   });
 
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final it = item;
-    final color = _itemColor(crm, it);
+    final perUnit = _perUnitLabel(it);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
       decoration: BoxDecoration(
         color: checked ? _kGold.withValues(alpha: 0.08) : crm.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: checked ? _kGold : crm.border),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -1396,14 +1145,14 @@ class _KitItemTile extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.12),
+                    color: crm.primary.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(10)),
                 child: Icon(
                     category == null
                         ? Icons.inventory_2_outlined
                         : productIcon(category!),
                     size: 17,
-                    color: color),
+                    color: crm.primary),
               ),
               10.w,
               Expanded(
@@ -1422,36 +1171,178 @@ class _KitItemTile extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                              it.brand.isEmpty ? 'My allocation' : it.brand,
+                              [
+                                if (it.brand.isNotEmpty) it.brand,
+                                if (it.assignedAt != null)
+                                  'since ${_fmtDate(it.assignedAt!)}',
+                              ].join(' · '),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                   fontSize: 11.5, color: crm.textSecondary)),
                         ),
-                        if (it.isOut || it.isTubeLow) ...[
+                        if (!it.isLinked) ...[
                           6.w,
-                          invBadge(it.isOut ? 'Empty' : 'Low', color),
+                          invBadge('Custom', crm.textSecondary),
                         ],
                       ],
                     ),
                   ],
                 ),
               ),
-              6.w,
-              FilledButton.tonalIcon(
-                onPressed: onUpdate,
-                icon: const Icon(Icons.tune, size: 16),
-                label: const Text('Update'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(0, 34),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
+              8.w,
+              Text('×${it.quantity}',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: crm.textPrimary)),
             ],
           ),
           10.h,
-          TubeGauge(quantity: it.quantity, fillLevel: it.fillLevel),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+                color: crm.input, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Icon(Icons.brush_outlined, size: 15, color: crm.primary),
+                6.w,
+                Text(_plural(it.worksDone, 'work'),
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color: crm.textPrimary)),
+                6.w,
+                Expanded(
+                  child: Text(
+                      [
+                        'as lead since assigned',
+                        if (it.lastWorkDate != null)
+                          'last ${_fmtDayKey(it.lastWorkDate!)}',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                ),
+                if (perUnit.isNotEmpty) ...[
+                  6.w,
+                  Tooltip(
+                    message:
+                        'Works done ÷ ${_plural(it.issuedTotal > 0 ? it.issuedTotal : it.quantity, 'unit')} issued',
+                    child: Text(perUnit,
+                        style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: crm.primary)),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Assignment history ──────────────────────────────────────────────────────
+
+class _KitHistory extends ConsumerWidget {
+  final String kitId;
+  const _KitHistory({required this.kitId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final async = ref.watch(kitMovementsProvider(kitId));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InvSectionHeader(
+          title: 'Assignment history',
+          count: async.value?.length,
+          subtitle: 'Stock handed over, returned or used up',
+        ),
+        10.h,
+        async.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+                child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))),
+          ),
+          error: (e, _) => Text(friendlyErrorMessage(e),
+              style: TextStyle(fontSize: 12, color: crm.destructive)),
+          data: (rows) => rows.isEmpty
+              ? Text('No assignments recorded yet.',
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary))
+              : Column(
+                  children: [for (final m in rows) _MovementRow(m: m)],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MovementRow extends StatelessWidget {
+  final KitMovement m;
+  const _MovementRow({required this.m});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final (IconData icon, Color color, String verb) = switch (m.type) {
+      'assign' => (Icons.call_made_rounded, crm.primary, 'Assigned'),
+      'return' => (Icons.call_received_rounded, crm.success, 'Returned'),
+      _ => (Icons.check_circle_outline_rounded, crm.textSecondary, 'Used up'),
+    };
+    final name = m.shade.isNotEmpty && m.shade != '—'
+        ? '${m.productName} · ${m.shade}'
+        : m.productName;
+    final meta = [
+      if (m.createdAt != null) _fmtDate(m.createdAt!),
+      if (m.byName.isNotEmpty) 'by ${m.byName}',
+      if (m.studioQtyAfter != null) 'studio left: ${m.studioQtyAfter}',
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 15, color: color),
+          ),
+          10.w,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$verb ${m.quantity} × $name',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: crm.textPrimary)),
+                if (meta.isNotEmpty)
+                  Text(meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          TextStyle(fontSize: 11, color: crm.textSecondary)),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1535,74 +1426,6 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-/// Segmented healthy / low / empty bar for a kit.
-class _HealthBar extends StatelessWidget {
-  final _KitStats stats;
-  final double height;
-  const _HealthBar({required this.stats, this.height = 6});
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    final segs = [
-      (stats.healthy, crm.success),
-      (stats.low, kLowStockColor),
-      (stats.empty, crm.destructive),
-    ].where((e) => e.$1 > 0).toList();
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(height),
-      child: SizedBox(
-        height: height,
-        child: segs.isEmpty
-            ? ColoredBox(color: crm.input, child: const SizedBox.expand())
-            : Row(
-                children: [
-                  for (var i = 0; i < segs.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 2),
-                    Expanded(
-                      flex: segs[i].$1,
-                      child: ColoredBox(
-                          color: segs[i].$2,
-                          child: const SizedBox.expand()),
-                    ),
-                  ],
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-class _HealthLegend extends StatelessWidget {
-  final _KitStats stats;
-  const _HealthLegend({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    Widget dot(Color c, String t) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(color: c, shape: BoxShape.circle)),
-            4.w,
-            Text(t, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-          ],
-        );
-    return Wrap(
-      spacing: 12,
-      runSpacing: 4,
-      children: [
-        dot(crm.success, '${stats.healthy} healthy'),
-        dot(kLowStockColor, '${stats.low} low'),
-        dot(crm.destructive, '${stats.empty} empty'),
-      ],
-    );
-  }
-}
-
 // ── Kit editor dialog ─────────────────────────────────────────────────────
 
 Future<void> showKitEditor(BuildContext context, WidgetRef ref,
@@ -1638,6 +1461,25 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
   final crm = context.crmColors;
   final nameCtrl = TextEditingController(text: kit?.name ?? '');
   final items = <KitItem>[...(kit?.items ?? const [])];
+  // Units of each studio product the kit held when the editor opened — the
+  // server deducts only increases over this, and asks what to do with
+  // decreases (return to studio vs used up).
+  final original = <String, int>{};
+  for (final it in kit?.items ?? const <KitItem>[]) {
+    if (it.isLinked) {
+      original[it.productId] = (original[it.productId] ?? 0) + it.quantity;
+    }
+  }
+  final studioQty = {
+    for (final p in ref.read(inventoryProductsProvider).value ??
+        const <InventoryProduct>[])
+      p.id: p.quantity,
+  };
+  // Most units this kit can hold of a product: what it already had plus
+  // what's left in the studio.
+  int maxFor(KitItem it) => it.isLinked
+      ? (original[it.productId] ?? 0) + (studioQty[it.productId] ?? 0)
+      : 9999;
   // Preselect the currently-assigned artist (by Employee id) if it's in range.
   var assigneeEmpId = kit != null &&
           kit.employeeId.isNotEmpty &&
@@ -1652,7 +1494,21 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
       builder: (context, setState) {
         Future<void> addItem() async {
           final it = await _showKitItemDialog(context, ref);
-          if (it != null) setState(() => items.add(it));
+          if (it == null) return;
+          setState(() {
+            // The same studio product twice becomes one line.
+            final i = it.isLinked
+                ? items.indexWhere((e) => e.productId == it.productId)
+                : -1;
+            if (i >= 0) {
+              final merged = items[i].quantity + it.quantity;
+              final cap = maxFor(items[i]);
+              items[i] = items[i].copyWith(
+                  quantity: merged.clamp(1, cap < 1 ? 1 : cap).toInt());
+            } else {
+              items.add(it);
+            }
+          });
         }
 
         return AlertDialog(
@@ -1737,18 +1593,62 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         dense: true,
-                        title: Text(
-                            items[i].shade.isNotEmpty && items[i].shade != '—'
-                                ? '${items[i].name} · ${items[i].shade}'
-                                : items[i].name),
+                        title: Text(_kitItemName(items[i]),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
                         subtitle: Text(
-                            '${items[i].brand}  ×${items[i].quantity}'),
-                        trailing: IconButton(
-                          icon: Icon(Icons.close,
-                              size: 18, color: crm.destructive),
-                          onPressed: () => setState(() => items.removeAt(i)),
+                            [
+                              if (items[i].brand.isNotEmpty) items[i].brand,
+                              if (items[i].isLinked)
+                                '${studioQty[items[i].productId] ?? 0} in studio'
+                              else
+                                'custom item',
+                            ].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'One less',
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.remove, size: 18),
+                              onPressed: items[i].quantity <= 1
+                                  ? null
+                                  : () => setState(() => items[i] = items[i]
+                                      .copyWith(quantity: items[i].quantity - 1)),
+                            ),
+                            Text('${items[i].quantity}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w800)),
+                            IconButton(
+                              tooltip: items[i].quantity >= maxFor(items[i])
+                                  ? 'No more in studio stock'
+                                  : 'One more',
+                              visualDensity: VisualDensity.compact,
+                              icon: const Icon(Icons.add, size: 18),
+                              onPressed: items[i].quantity >= maxFor(items[i])
+                                  ? null
+                                  : () => setState(() => items[i] = items[i]
+                                      .copyWith(quantity: items[i].quantity + 1)),
+                            ),
+                            IconButton(
+                              tooltip: 'Remove from kit',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(Icons.close,
+                                  size: 18, color: crm.destructive),
+                              onPressed: () =>
+                                  setState(() => items.removeAt(i)),
+                            ),
+                          ],
                         ),
                       ),
+                  if (canManage) ...[
+                    8.h,
+                    Text(
+                        'Saving moves newly assigned units out of studio stock.',
+                        style: TextStyle(
+                            fontSize: 11.5, color: crm.textSecondary)),
+                  ],
                 ],
               ),
             ),
@@ -1764,6 +1664,25 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
                   ? null
                   : () async {
                       if (nameCtrl.text.trim().isEmpty) return;
+                      // Units of studio products taken out of the kit: ask
+                      // whether they go back to studio stock or were used up.
+                      final now = <String, int>{};
+                      for (final it in items.where((e) => e.isLinked)) {
+                        now[it.productId] =
+                            (now[it.productId] ?? 0) + it.quantity;
+                      }
+                      final removed = original.entries.fold<int>(
+                          0,
+                          (a, e) =>
+                              a +
+                              (e.value - (now[e.key] ?? 0)).clamp(0, e.value));
+                      var returnToStudio = false;
+                      if (removed > 0) {
+                        final choice = await _askReturnOrUsedUp(
+                            dialogContext, removed);
+                        if (choice == null) return;
+                        returnToStudio = choice;
+                      }
                       setState(() => saving = true);
                       try {
                         await ref.read(inventoryServiceProvider).saveKit(
@@ -1773,6 +1692,8 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
                                   ? (assigneeEmpId ?? '')
                                   : (kit?.employeeId ?? ''),
                               items: items,
+                              notes: kit?.notes ?? '',
+                              returnToStudio: returnToStudio,
                             );
                         ref.refreshData.inventory();
                         if (dialogContext.mounted) {
@@ -1799,9 +1720,41 @@ Future<void> showKitEditor(BuildContext context, WidgetRef ref,
   );
 }
 
-/// Add a kit item by picking from existing stock (products with quantity > 0),
-/// with a manual fallback for anything not yet stocked.
+/// Asks what happens to [units] of studio products taken out of a kit.
+/// Returns true = return to studio stock, false = used up, null = cancel.
+Future<bool?> _askReturnOrUsedUp(BuildContext context, int units) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('${_plural(units, 'unit')} removed from the kit'),
+      content: const Text(
+          'Are these going back to studio stock, or were they used up?'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Used up')),
+        FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Return to studio')),
+      ],
+    ),
+  );
+}
+
+/// Add a kit item by picking from studio stock (the units are deducted from
+/// studio stock when the kit is saved), with a manual fallback for anything
+/// not stocked. Only inventory managers hand out studio stock; others can
+/// only add custom items.
 Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
+  final session = ref.read(authSessionProvider);
+  // Mirrors the server's canManageStudio: manager roles, or an artist given
+  // the inventoryManage capability.
+  final canPickStock =
+      AppRole.fromString(session?.role).canManageInventory ||
+          (session?.inventoryManage ?? false);
   final products = ref.read(inventoryProductsProvider).value ??
       const <InventoryProduct>[];
   // Show all studio products sorted alphabetically.
@@ -1809,7 +1762,9 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
     ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
   InventoryProduct? selected;
-  var custom = allProducts.isEmpty; // no products at all → custom entry
+  String? error;
+  // No products at all (or no right to hand them out) → custom entry.
+  var custom = allProducts.isEmpty || !canPickStock;
   final qtyCtrl = TextEditingController(text: '1');
   final nameCtrl = TextEditingController();
   final brandCtrl = TextEditingController();
@@ -1842,7 +1797,10 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
                     products: allProducts,
                     selected: selected,
                     label: label,
-                    onSelected: (p) => setState(() => selected = p),
+                    onSelected: (p) => setState(() {
+                      selected = p;
+                      error = null;
+                    }),
                   ),
                   if (allProducts.isEmpty)
                     Padding(
@@ -1889,18 +1847,39 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
                         decoration: const InputDecoration(labelText: 'Quantity')),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => custom = !custom),
-                    icon: Icon(custom ? Icons.inventory_2_outlined : Icons.edit,
-                        size: 15),
-                    label: Text(custom
-                        ? 'Pick from stock instead'
-                        : 'Add a custom item'),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(error!,
+                        style:
+                            TextStyle(fontSize: 12, color: crm.destructive)),
+                  )
+                else if (!custom && selected != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(
+                        'These units will be deducted from studio stock '
+                        '(${selected!.quantity} available).',
+                        style: TextStyle(
+                            fontSize: 11.5, color: crm.textSecondary)),
                   ),
-                ),
+                const SizedBox(height: 4),
+                if (canPickStock)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: TextButton.icon(
+                      onPressed: () => setState(() {
+                        custom = !custom;
+                        error = null;
+                      }),
+                      icon: Icon(
+                          custom ? Icons.inventory_2_outlined : Icons.edit,
+                          size: 15),
+                      label: Text(custom
+                          ? 'Pick from stock instead'
+                          : 'Add a custom item'),
+                    ),
+                  ),
                 const SizedBox(height: 8),
               ],
             ),
@@ -1912,6 +1891,19 @@ Future<KitItem?> _showKitItemDialog(BuildContext context, WidgetRef ref) {
             ElevatedButton(
               onPressed: () {
                 final qty = int.tryParse(qtyCtrl.text.trim()) ?? 1;
+                if (qty < 1) {
+                  setState(() => error = 'Quantity must be at least 1.');
+                  return;
+                }
+                if (!custom &&
+                    selected != null &&
+                    qty > selected!.quantity) {
+                  setState(() => error = selected!.quantity == 0
+                      ? '${selected!.name} is out of studio stock.'
+                      : 'Only ${selected!.quantity} × ${selected!.name} '
+                          'left in studio stock.');
+                  return;
+                }
                 if (custom) {
                   if (nameCtrl.text.trim().isEmpty) return;
                   Navigator.pop(
@@ -1968,7 +1960,7 @@ class _ProductPickerField extends StatefulWidget {
 
 class _ProductPickerFieldState extends State<_ProductPickerField> {
   final _searchCtrl = TextEditingController();
-  bool _inStockOnly = false;
+  bool _inStockOnly = true;
   String _query = '';
 
   @override
