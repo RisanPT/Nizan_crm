@@ -13,10 +13,76 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
+import 'package:nizan_crm/features/hr/presentation/screens/attendance_detail_screen.dart';
+import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
 });
+
+class StaffDetailsPage extends ConsumerWidget {
+  final String employeeId;
+  final Employee? initialEmployee;
+
+  const StaffDetailsPage({
+    super.key,
+    required this.employeeId,
+    this.initialEmployee,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (initialEmployee != null) {
+      return StaffDetailsScreen(employee: initialEmployee!);
+    }
+    final empAsync = ref.watch(employeeByIdProvider(employeeId));
+    final crm = context.crmColors;
+    return empAsync.when(
+      loading: () => Scaffold(
+        backgroundColor: crm.background,
+        appBar: AppBar(
+          title: const Text('Staff Profile'),
+          backgroundColor: crm.sidebar,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        backgroundColor: crm.background,
+        appBar: AppBar(
+          title: const Text('Staff Profile'),
+          backgroundColor: crm.sidebar,
+          foregroundColor: Colors.white,
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: crm.destructive),
+              const SizedBox(height: 12),
+              Text(
+                'Could not load staff profile',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: crm.textPrimary),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                friendlyErrorMessage(e),
+                style: TextStyle(color: crm.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.tonal(
+                onPressed: () => ref.invalidate(employeeByIdProvider(employeeId)),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (emp) => StaffDetailsScreen(employee: emp),
+    );
+  }
+}
 
 class StaffDetailsScreen extends ConsumerStatefulWidget {
   final Employee employee;
@@ -432,6 +498,25 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
               runSpacing: 8,
               children: [
                 Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF601A29).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFF601A29).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    _employee.displayCode,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF601A29),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
                     color: levelBackground,
@@ -446,7 +531,57 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                // Lifecycle Status
+                () {
+                  final statusColor = _employee.isConfirmed
+                      ? const Color(0xFF1E7E34)
+                      : (_employee.isProbation
+                          ? Colors.amber.shade800
+                          : (_employee.isNoticePeriod
+                              ? Colors.deepOrange
+                              : Colors.grey));
+                  final statusLabel = _employee.isConfirmed
+                      ? 'Confirmed'
+                      : (_employee.isProbation
+                          ? 'Probation'
+                          : (_employee.isNoticePeriod
+                              ? 'Notice Period'
+                              : 'Exited'));
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: statusColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  );
+                }(),
+                // Grade Pill
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC9A66B).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFC9A66B)),
+                  ),
+                  child: Text(
+                    'Grade ${_employee.currentGrade}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF601A29),
+                    ),
+                  ),
+                ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
@@ -463,7 +598,6 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                   ),
                 ),
                 if (_employee.type == 'in-house') ...[
-                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     decoration: BoxDecoration(
@@ -480,6 +614,64 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     ),
                   ),
                 ],
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () async {
+                    final updated = await showTimeboxLinkDialog(context, ref, _employee);
+                    if (updated != null && mounted) {
+                      setState(() => _employee = updated);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _employee.isTimeboxLinked
+                          ? Colors.teal.withValues(alpha: 0.12)
+                          : Colors.grey.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _employee.isTimeboxLinked
+                            ? Colors.teal.withValues(alpha: 0.4)
+                            : Colors.grey.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _employee.isTimeboxLinked ? Icons.fingerprint : Icons.link_off,
+                          size: 15,
+                          color: _employee.isTimeboxLinked ? Colors.teal : Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _employee.isTimeboxLinked
+                              ? 'Timebox #${_employee.timeboxEmployeeId}'
+                              : 'No Timebox Link',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: _employee.isTimeboxLinked ? Colors.teal : Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final updated = await showCompleteOnboardingDialog(
+                      context,
+                      employee: _employee,
+                      startOnboardingChecklist: false,
+                    );
+                    if (updated != null && mounted) {
+                      setState(() => _employee = updated);
+                    }
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('Edit Profile'),
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -516,7 +708,34 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                     const SizedBox(height: 16),
                     _buildInfoRow(Icons.email_outlined, 'Email', _employee.email.isEmpty ? 'Not provided' : _employee.email, crmColors),
                     const SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.calendar_today_outlined,
+                      'Date of Joining',
+                      _employee.dateOfJoining != null
+                          ? _formatDate(_employee.dateOfJoining!)
+                          : 'Not recorded',
+                      crmColors,
+                    ),
+                    if (_employee.dateOfBirth != null) ...[
+                      const SizedBox(height: 16),
+                      _buildInfoRow(
+                        Icons.cake_outlined,
+                        'Date of Birth',
+                        _formatDate(_employee.dateOfBirth!),
+                        crmColors,
+                      ),
+                    ],
+                    if (_employee.emergencyContactPhone.isNotEmpty || _employee.emergencyContactName.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      _buildInfoRow(
+                        Icons.contact_emergency_outlined,
+                        'Emergency Contact',
+                        '${_employee.emergencyContactName.isNotEmpty ? _employee.emergencyContactName : "Contact"} (${_employee.emergencyContactRelation.isNotEmpty ? _employee.emergencyContactRelation : "Relative"}) • ${_employee.emergencyContactPhone}',
+                        crmColors,
+                      ),
+                    ],
                     if (!isAdmin) ...[
+                      const SizedBox(height: 16),
                       _buildInfoRow(
                         Icons.location_on_outlined,
                         'Assigned Area',
@@ -542,6 +761,65 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            // Statutory & Compliance Master Card
+            Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: crmColors.border),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Statutory & Compliance Master',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Divider(height: 32),
+                    _buildInfoRow(
+                      Icons.fingerprint,
+                      'PAN Identifier',
+                      _employee.panNumber.isNotEmpty ? _employee.panNumber : 'Not recorded',
+                      crmColors,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.security,
+                      'EPF Status',
+                      _employee.epfApplicable
+                          ? 'Applicable (UAN: ${_employee.uan.isNotEmpty ? _employee.uan : "Pending"})'
+                          : 'Not Applicable',
+                      crmColors,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.health_and_safety_outlined,
+                      'ESI Status',
+                      _employee.esiApplicable
+                          ? 'Applicable (ESI No: ${_employee.esiNumber.isNotEmpty ? _employee.esiNumber : "Pending"})'
+                          : 'Not Applicable',
+                      crmColors,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildInfoRow(
+                      Icons.schedule,
+                      'Overtime Hourly Rate',
+                      _employee.overtimeRate > 0
+                          ? '₹${_employee.overtimeRate.toStringAsFixed(0)} / hr'
+                          : 'Standard Base (No OT Override)',
+                      crmColors,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+            _timeboxCard(theme, crmColors),
             const SizedBox(height: 32),
             _scorecardCard(theme, crmColors),
             const SizedBox(height: 32),
@@ -611,6 +889,203 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _timeboxCard(ThemeData theme, dynamic crmColors) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: crmColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.fingerprint, color: Colors.teal, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Timebox Biometric Integration',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final updated = await showTimeboxLinkDialog(context, ref, _employee);
+                    if (updated != null && mounted) {
+                      setState(() => _employee = updated);
+                    }
+                  },
+                  icon: Icon(
+                    _employee.isTimeboxLinked ? Icons.edit_outlined : Icons.link,
+                    size: 16,
+                  ),
+                  label: Text(_employee.isTimeboxLinked ? 'Manage Binding' : 'Link Timebox'),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            if (_employee.isTimeboxLinked) ...[
+              _buildInfoRow(
+                Icons.fingerprint,
+                'Biometric Device ID',
+                'Timebox #${_employee.timeboxEmployeeId}',
+                crmColors,
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                Icons.badge_outlined,
+                'Timebox Profile Name',
+                _employee.timeboxName.isNotEmpty ? _employee.timeboxName : _employee.name,
+                crmColors,
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                Icons.verified_outlined,
+                'Synchronization Status',
+                'Live Biometric Clock-in Linked',
+                crmColors,
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (ctx) => AttendanceDetailScreen(
+                            employeeId: _employee.timeboxEmployeeId!,
+                            employeeName: _employee.timeboxName.isNotEmpty ? _employee.timeboxName : _employee.name,
+                            department: _employee.department ?? 'General',
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.schedule, size: 16),
+                    label: const Text('View Biometric Attendance Logs'),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                    ),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Unlink Timebox Account'),
+                          content: Text(
+                              'Are you sure you want to unlink ${_employee.name} from Timebox #${_employee.timeboxEmployeeId}? Biometric attendance will no longer sync for this staff member.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Unlink'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        final updated = await ref
+                            .read(employeeServiceProvider)
+                            .linkTimebox(_employee.id, timeboxEmployeeId: null, timeboxName: '');
+                        ref.invalidate(paginatedEmployeesProvider);
+                        ref.invalidate(employeesProvider);
+                        ref.invalidate(employeeByIdProvider(_employee.id));
+                        if (mounted) setState(() => _employee = updated);
+                      }
+                    },
+                    icon: const Icon(Icons.link_off, size: 16),
+                    label: const Text('Unlink Biometrics'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.amber.shade900, size: 24),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No Timebox Biometric Profile Linked',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: Colors.amber.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'This staff member is not currently mapped to an employee in the Timebox attendance software. Biometric logs, punch-ins, and monthly attendance won\'t automatically associate with this profile.',
+                            style: TextStyle(fontSize: 12, color: crmColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.teal,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final updated = await showTimeboxLinkDialog(context, ref, _employee);
+                        if (updated != null && mounted) {
+                          setState(() => _employee = updated);
+                        }
+                      },
+                      icon: const Icon(Icons.link, size: 16),
+                      label: const Text('Link Account'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime d) {
+    const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final local = d.toLocal();
+    return '${local.day.toString().padLeft(2, '0')} ${months[local.month]} ${local.year}';
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value, dynamic crmColors) {

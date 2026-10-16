@@ -371,7 +371,9 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: crm.border),
       ),
-      child: ListTile(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
         title: Text(a.customerName.isEmpty ? a.bookingNumber : a.customerName,
             maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(
@@ -408,6 +410,7 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
             ],
           ),
         ]),
+      ),
       ),
     );
   }

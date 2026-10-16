@@ -58,6 +58,11 @@ class ManageBookingScreen extends HookConsumerWidget {
     // re-enters the loading state; a hook after the return would be dropped and
     // the save's finally would then touch a disposed notifier).
     final isSaving = useState(false);
+    // Same reason as isSaving: a delete removes the booking optimistically, so
+    // this screen briefly hits the early not-found return below; a hook declared
+    // after it would be disposed, and a failed delete then crashed resetting it
+    // (hiding the real error).
+    final isDeleting = useState(false);
 
     // Look up the booking from the provider by id
     final asyncSingleBooking = bookingId != 'new' ? ref.watch(singleBookingProvider(bookingId)) : null;
@@ -174,7 +179,6 @@ class ManageBookingScreen extends HookConsumerWidget {
     final selectedDistrictId = useState<String>(booking?.districtId ?? '');
     // Optional community/culture of the event (Marketing "Culture" segment).
     final cultureState = useState<String>(booking?.culture ?? '');
-    final isDeleting = useState(false);
     final selectedPackageId = useState<String>(
       selectedDisplayEntry != null && selectedBookingItemIndex >= 0
           ? booking?.bookingItems[selectedBookingItemIndex].packageId ?? ''
@@ -262,6 +266,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                   ? booking?.discountAmount ?? 0
                   : booking?.discountValue ?? 0)
               .toStringAsFixed(0),
+    );
+    final discountNoteCtrl = useTextEditingController(
+      text: booking?.discountReason ?? '',
     );
     final advanceValue = useValueListenable(advanceCtrl);
     final discountValueListenable = useValueListenable(discountCtrl);
@@ -370,6 +377,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                       ? booking.discountAmount
                       : booking.discountValue))
                   .toStringAsFixed(0);
+          discountNoteCtrl.text = booking.discountReason;
           final initialService =
               selectedDisplayEntry?.service ?? booking.service;
           packageCtrl.text =
@@ -1236,6 +1244,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         discountAmount: appliedDiscount,
         discountType: discountType.value,
         discountValue: rawDiscountValue,
+        discountReason: discountNoteCtrl.text.trim(),
         assignedStaff: summarizedAssignments,
         // Multi-package: add-ons live per package (saved above); keep the
         // booking-level list intact so editing one package doesn't clobber it.
@@ -1635,63 +1644,97 @@ class ManageBookingScreen extends HookConsumerWidget {
                       LayoutBuilder(
                         builder: (ctx, constraints) {
                           final narrow = constraints.maxWidth < 600;
-                          return GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: narrow ? 1 : 3,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio: narrow ? 5 : 4.5,
+                          final packageField = _buildPackageSelector(
+                            context,
+                            crmColors,
+                            asyncPackages,
+                            availablePackages,
+                            selectedPackageId,
+                            packageCtrl,
+                            isExtraDateEntry: isExtraDateEntry,
+                            onPackageChanged: applySelectedPackage,
+                          );
+                          final districtField = _buildDistrictRateSelector(
+                            crmColors,
+                            availableDistricts,
+                            findPackageById(selectedPackageId.value),
+                            selectedDistrictId,
+                            districtCtrl,
+                            regionCtrl,
+                          );
+                          final totalAmountField = _buildCurrencyField(
+                            context,
+                            'TOTAL AMOUNT',
+                            totalAmountCtrl,
+                            crmColors,
+                            readOnly: true,
+                            onChanged: null,
+                          );
+                          final advanceField = _buildCurrencyField(
+                            context,
+                            'ADVANCE PAID',
+                            advanceCtrl,
+                            crmColors,
+                            textColor: Colors.green,
+                          );
+                          final discountField = _buildDiscountField(
+                            context,
+                            crmColors,
+                            discountCtrl,
+                            discountType,
+                            discountNoteCtrl,
+                          );
+                          final forecastField = _buildCurrencyField(
+                            context,
+                            'FORECAST BALANCE',
+                            balanceCtrl,
+                            crmColors,
+                            textColor: Colors.amber,
+                            readOnly: true,
+                          );
+
+                          if (narrow) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                packageField,
+                                16.h,
+                                districtField,
+                                16.h,
+                                totalAmountField,
+                                16.h,
+                                advanceField,
+                                16.h,
+                                discountField,
+                                16.h,
+                                forecastField,
+                              ],
+                            );
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _buildPackageSelector(
-                                context,
-                                crmColors,
-                                asyncPackages,
-                                availablePackages,
-                                selectedPackageId,
-                                packageCtrl,
-                                isExtraDateEntry: isExtraDateEntry,
-                                onPackageChanged: applySelectedPackage,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: packageField),
+                                  16.w,
+                                  Expanded(child: districtField),
+                                  16.w,
+                                  Expanded(child: totalAmountField),
+                                ],
                               ),
-                              // District beside the package: its district
-                              // rate drives the price, so fix a wrong district
-                              // here (same value as Logistics & Location).
-                              _buildDistrictRateSelector(
-                                crmColors,
-                                availableDistricts,
-                                findPackageById(selectedPackageId.value),
-                                selectedDistrictId,
-                                districtCtrl,
-                                regionCtrl,
-                              ),
-                              _buildCurrencyField(
-                                context,
-                                'TOTAL AMOUNT',
-                                totalAmountCtrl,
-                                crmColors,
-                                readOnly: true,
-                                onChanged: null,
-                              ),
-                              _buildCurrencyField(
-                                context,
-                                'ADVANCE PAID',
-                                advanceCtrl,
-                                crmColors,
-                                textColor: Colors.green,
-                              ),
-                              _buildDiscountField(
-                                context,
-                                crmColors,
-                                discountCtrl,
-                                discountType,
-                              ),
-                              _buildCurrencyField(
-                                context,
-                                'FORECAST BALANCE',
-                                balanceCtrl,
-                                crmColors,
-                                textColor: Colors.amber,
-                                readOnly: true,
+                              16.h,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(child: advanceField),
+                                  16.w,
+                                  Expanded(child: discountField),
+                                  16.w,
+                                  Expanded(child: forecastField),
+                                ],
                               ),
                             ],
                           );
@@ -4453,8 +4496,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     TextEditingController ctrl,
-    ValueNotifier<String> discountType,
-  ) {
+    ValueNotifier<String> discountType, [
+    TextEditingController? noteCtrl,
+  ]) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4501,6 +4545,14 @@ class ManageBookingScreen extends HookConsumerWidget {
             ),
           ],
         ),
+        if (noteCtrl != null) ...[
+          6.h,
+          TextFormField(
+            controller: noteCtrl,
+            style: TextStyle(fontSize: 13, color: crmColors.textPrimary),
+            decoration: _inputDeco('Discount note', crmColors),
+          ),
+        ],
       ],
     );
   }

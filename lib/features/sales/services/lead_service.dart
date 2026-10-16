@@ -324,7 +324,7 @@ class LeadService {
           'reason': reason,
           'remarks': remarks,
           'competitorName': competitorName,
-          if (lostAttachment != null) 'lostAttachment': lostAttachment,
+          'lostAttachment': ?lostAttachment,
         },
       );
     } catch (e) {

@@ -441,8 +441,7 @@ class _MobileBookingCard extends StatelessWidget {
     required this.isSelected,
     required this.onSelectChanged,
     required this.onDelete,
-    this.onRowTap,
-  });
+  }) : onRowTap = null;
 
   @override
   Widget build(BuildContext context) {

@@ -157,10 +157,21 @@ class Access {
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
   bool get canSeeCEOReport => has('reports', role.canSeeCEOReport);
 
-  /// Artist Head dashboard — the dedicated artist_head role, an artist flagged
-  /// as also-head, or full-access management.
+  /// Artist Head dashboard — only the dedicated artist_head role, or an artist flagged
+  /// as also-head.
   bool get canSeeArtistHead =>
-      isFullAccess || role == AppRole.artistHead || artistHead;
+      role == AppRole.artistHead || artistHead;
+
+  /// Client reviews & chat — accessible to CRM, Sales, Accounts, and full-access management.
+  bool get canSeeClientReviews =>
+      isFullAccess ||
+      role == AppRole.crm ||
+      role == AppRole.accounts ||
+      canSeeSales;
+
+  bool get canSeeClientChat => canSeeClientReviews;
+  bool get canSeeAppClients => canSeeClientReviews;
+
   // IT hub (projects, task board, and — later — helpdesk tickets). No AppRole
   // matrix entry yet, so it's driven by the granted 'it' permission (admin/
   // manager see it via the isFullAccess bypass).

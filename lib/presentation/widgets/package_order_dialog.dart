@@ -83,7 +83,6 @@ class _PackageOrderDialogState extends ConsumerState<_PackageOrderDialog> {
                     child: ReorderableListView.builder(
                       buildDefaultDragHandles: false,
                       itemCount: order.length,
-                      onReorderItem: _move,
                       itemBuilder: (context, i) {
                         final p = order[i];
                         return Container(
@@ -94,7 +93,9 @@ class _PackageOrderDialogState extends ConsumerState<_PackageOrderDialog> {
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: crm.border),
                           ),
-                          child: ListTile(
+                          child: Material(
+                            color: Colors.transparent,
+                            child: ListTile(
                             dense: true,
                             contentPadding: const EdgeInsets.only(left: 4, right: 4),
                             leading: ReorderableDragStartListener(
@@ -127,8 +128,10 @@ class _PackageOrderDialogState extends ConsumerState<_PackageOrderDialog> {
                               ),
                             ]),
                           ),
-                        );
+                        ),
+                      );
                       },
+                      onReorderItem: _move,
                     ),
                   ),
                 ],

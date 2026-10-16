@@ -13,6 +13,8 @@ import '../../presentation/screens/clients_directory_screen.dart';
 import '../../presentation/screens/client_profile_screen.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/calendar_screen.dart';
 import '../../presentation/screens/staff_management_screen.dart';
+import '../../presentation/screens/staff_details_screen.dart';
+import '../../core/models/employee.dart';
 import '../../presentation/screens/slot_management_screen.dart';
 import '../../features/slots/presentation/screens/slot_capacity_screen.dart';
 import '../../presentation/screens/services_management_screen.dart';
@@ -32,7 +34,30 @@ import 'package:nizan_crm/features/accounts/presentation/screens/operations_sala
 import '../../presentation/screens/hr_salaries_screen.dart';
 import '../../features/hr/presentation/screens/attendance_summary_screen.dart';
 import '../../features/hr/presentation/screens/hr_evaluation_screen.dart';
+import '../../features/hr/leave/presentation/screens/hr_leave_screen.dart';
+import '../../features/hr/approvals/presentation/screens/hr_approvals_screen.dart';
+import '../../features/hr/home/presentation/screens/hr_home_screen.dart';
+import '../../features/hr/designations/presentation/screens/hr_designations_screen.dart';
+import '../../features/hr/org/presentation/screens/hr_org_screen.dart';
+import '../../features/hr/files/presentation/screens/hr_files_screen.dart';
+import '../../features/hr/ess/presentation/screens/hr_logins_screen.dart';
+import '../../features/hr/shift/presentation/screens/hr_shift_screen.dart';
+import '../../features/hr/timesheet/presentation/screens/hr_timesheet_screen.dart';
+import '../../features/hr/regularization/presentation/screens/hr_regularization_screen.dart';
+import '../../features/hr/recruitment/presentation/screens/hr_recruitment_screen.dart';
+import '../../features/hr/onboarding/presentation/screens/hr_onboarding_screen.dart';
+import '../../features/hr/offboarding/presentation/screens/hr_offboarding_screen.dart';
+import '../../features/hr/reimbursement/presentation/screens/hr_reimbursement_screen.dart';
+import '../../features/hr/travel/presentation/screens/hr_travel_screen.dart';
+import '../../features/hr/compensation/presentation/screens/hr_compensation_screen.dart';
+import '../../features/hr/engagement/presentation/screens/hr_engagement_screen.dart';
+import '../../features/hr/letters/presentation/screens/hr_letters_screen.dart';
+import '../../features/hr/lms/presentation/screens/hr_lms_screen.dart';
+import '../../features/hr/grievance/presentation/screens/hr_grievance_screen.dart';
+import '../../features/hr/analytics/presentation/screens/hr_analytics_screen.dart';
 import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
+import '../../features/hr/policies/presentation/screens/hr_policies_screen.dart';
+import '../../features/hr/department_scoring/presentation/screens/hr_department_scoring_screen.dart';
 import '../../features/accounts/presentation/screens/sales_returns_screen.dart';
 import '../../features/accounts/presentation/screens/hra_screen.dart';
 
@@ -65,7 +90,6 @@ import 'package:nizan_crm/features/fleet/presentation/screens/fleet_drivers_scre
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_assignments_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fuel_expenses_screen.dart';
 import '../../presentation/screens/artist_finance_screen.dart';
-import '../../presentation/screens/leave_request_screen.dart';
 import '../../presentation/screens/profile_screen.dart';
 import '../../features/trials/presentation/screens/trial_packages_screen.dart';
 import '../../presentation/screens/artist_works_screen.dart';
@@ -103,6 +127,10 @@ import 'package:nizan_crm/features/finance/presentation/screens/assets_screen.da
 import 'package:nizan_crm/features/finance/presentation/screens/bank_balance_screen.dart';
 import 'package:nizan_crm/features/reports/presentation/screens/company_reports_screen.dart';
 import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.dart';
+import 'package:nizan_crm/features/client_chat/presentation/client_chat_inbox_page.dart';
+import 'package:nizan_crm/features/client_chat/presentation/client_chat_thread_page.dart';
+import 'package:nizan_crm/features/app_clients/presentation/app_clients_inbox_page.dart';
+import 'package:nizan_crm/features/app_clients/presentation/app_client_detail_page.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_project_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/company_projects_screen.dart';
@@ -256,6 +284,27 @@ String? subKeyForPath(String path) {
   if (path == '/hr/slots') return 'staff.slots';
   if (path == '/hr/attendance') return 'staff.attendance';
   if (path == '/hr/evaluation') return 'staff.evaluation';
+  if (path == '/hr/leave') return 'leave';
+  if (path == '/hr/approvals') return 'approvals';
+  if (path == '/hr/designations') return 'designations';
+  if (path == '/hr/org') return 'org';
+  if (path == '/hr/files') return 'hr_files';
+  if (path == '/hr/shift') return 'shift';
+  if (path == '/hr/timesheet') return 'timesheet';
+  if (path == '/hr/regularization') return 'regularization';
+  if (path == '/hr/recruitment') return 'recruitment';
+  if (path == '/hr/onboarding') return 'onboarding';
+  if (path == '/hr/offboarding') return 'offboarding';
+  if (path == '/hr/reimbursements') return 'reimbursement';
+  if (path == '/hr/travel') return 'travel';
+  if (path == '/hr/compensation') return 'compensation';
+  if (path == '/hr/engagement') return 'engagement';
+  if (path == '/hr/letters') return 'hr_letters';
+  if (path == '/hr/lms') return 'lms';
+  if (path == '/hr/grievance') return 'grievance';
+  if (path == '/hr/analytics') return 'hr_analytics';
+  if (path == '/hr/policies') return 'hr_policies';
+  if (path == '/hr/department-scoring') return 'staff.evaluation';
   if (path.startsWith('/staff')) return 'staff.employees';
   return null;
 }
@@ -280,6 +329,106 @@ bool isRouteAllowed(String path, Access access,
   if (path == '/hr/slots') return access.canSeeSub('staff.slots');
   if (path == '/hr/attendance') return access.canSeeSub('staff.attendance');
   if (path == '/hr/evaluation') return access.canSeeSub('staff.evaluation');
+  // Leave is available to every employee (ESS); managers/HR also get approvals.
+  if (path == '/hr/leave') return access.canSeeLeaveRequests || access.has('leave', false);
+  if (path == '/hr/approvals') {
+    return access.isFullAccess || access.isDepartmentHead || access.has('approvals', false);
+  }
+  // HR Home (ESS landing) — anyone with an employee self-service footing.
+  if (path == '/hr/home') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('leave', false) ||
+        access.has('org', false);
+  }
+  if (path == '/hr/designations') {
+    return access.isFullAccess ||
+        access.canSeeStaff ||
+        access.has('designations', false) ||
+        access.has('settings', false);
+  }
+  if (path == '/hr/org') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('org', false);
+  }
+  // Files: HR manages everyone's; an ESS employee sees their own.
+  if (path == '/hr/files') {
+    return access.canSeeStaff || access.has('hr_files', false) || access.has('leave', false);
+  }
+  if (path == '/hr/logins') return access.isFullAccess || access.isDepartmentHead;
+  // Shift management — HR/managers.
+  if (path == '/hr/shift') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('shift', false);
+  }
+  // Time tracker — every employee (ESS) files their own; HR/managers review.
+  if (path == '/hr/timesheet') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('timesheet', false) ||
+        access.has('leave', false);
+  }
+  // Attendance regularization — ESS + HR/managers.
+  if (path == '/hr/regularization') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('leave', false) ||
+        access.has('regularization', false);
+  }
+  // Recruitment / onboarding / offboarding — HR/managers only.
+  if (path == '/hr/recruitment') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('recruitment', false);
+  }
+  if (path == '/hr/onboarding') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('onboarding', false) ||
+        access.has('recruitment', false);
+  }
+  if (path == '/hr/offboarding') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('offboarding', false);
+  }
+  // Reimbursements & travel — ESS files their own; HR/managers review.
+  if (path == '/hr/reimbursements') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('reimbursement', false) ||
+        access.has('leave', false);
+  }
+  if (path == '/hr/travel') {
+    return access.canSeeStaff ||
+        access.isDepartmentHead ||
+        access.has('travel', false) ||
+        access.has('leave', false);
+  }
+  // Compensation — HR/managers only.
+  if (path == '/hr/compensation') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('compensation', false);
+  }
+  // Engagement feed + Learning — everyone (ESS) reads/enrols.
+  if (path == '/hr/engagement') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('engagement', false) || access.has('leave', false);
+  }
+  if (path == '/hr/lms') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('lms', false) || access.has('leave', false);
+  }
+  // Grievance — ESS raises; HR works the queue.
+  if (path == '/hr/grievance') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('grievance', false) || access.has('leave', false);
+  }
+  // HR Letters + Analytics — HR/managers only.
+  if (path == '/hr/letters') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('hr_letters', false);
+  }
+  if (path == '/hr/analytics') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('hr_analytics', false);
+  }
+  // Company & HR Policies — accessible to all employees & staff (essential handbook & code of conduct).
+  if (path == '/hr/policies') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('leave', false) || access.canSeeDashboard;
+  }
+  // Department & Employee Scoring — evaluation & staff performance.
+  if (path == '/hr/department-scoring') {
+    return access.canSeeStaff || access.isDepartmentHead || access.canSeeSub('staff.evaluation') || access.has('staff', false);
+  }
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
   if (path.startsWith('/sales')) {
     final sub = subKeyForPath(path);
@@ -290,10 +439,15 @@ bool isRouteAllowed(String path, Access access,
   }
   // Client reviews — CRM/sales/accounts + full access (admin/manager).
   if (path.startsWith('/reviews')) {
-    return access.isFullAccess ||
-        access.role == AppRole.crm ||
-        access.role == AppRole.accounts ||
-        access.canSeeSales;
+    return access.canSeeClientReviews;
+  }
+  // Client concierge chat — same client-facing staff as reviews.
+  if (path.startsWith('/client-chat')) {
+    return access.canSeeClientChat;
+  }
+  // Bridal app clients (brides) — same client-facing staff.
+  if (path.startsWith('/app-clients')) {
+    return access.canSeeAppClients;
   }
   if (path.startsWith('/it/')) return access.canSeeIt;
   if (path.startsWith('/projects')) return access.canSeePlanning; // company-wide projects (department-scoped server-side)
@@ -396,6 +550,11 @@ String landingRouteFor(Access access,
     '/fleet/accidents', '/fleet/completed-works', '/fleet/service-reminders',
     '/fleet/km-report',
     '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries', '/hr/evaluation',
+    '/hr/home', '/hr/leave', '/hr/approvals', '/hr/designations', '/hr/org',
+    '/hr/files', '/hr/logins', '/hr/shift', '/hr/timesheet', '/hr/regularization',
+    '/hr/recruitment', '/hr/onboarding', '/hr/offboarding',
+    '/hr/reimbursements', '/hr/travel', '/hr/compensation',
+    '/hr/engagement', '/hr/lms', '/hr/grievance', '/hr/letters', '/hr/analytics',
   ];
   for (final route in candidates) {
     if (isRouteAllowed(route, access,
@@ -494,6 +653,48 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Slot Management';
           } else if (state.uri.path == '/hr/evaluation') {
             title = '5-Pillar Evaluations';
+          } else if (state.uri.path == '/hr/leave') {
+            title = 'Leave';
+          } else if (state.uri.path == '/hr/approvals') {
+            title = 'Approvals';
+          } else if (state.uri.path == '/hr/home') {
+            title = 'HR Home';
+          } else if (state.uri.path == '/hr/designations') {
+            title = 'Designations';
+          } else if (state.uri.path == '/hr/org') {
+            title = 'Organization';
+          } else if (state.uri.path == '/hr/files') {
+            title = 'Files';
+          } else if (state.uri.path == '/hr/logins') {
+            title = 'Employee Logins';
+          } else if (state.uri.path == '/hr/shift') {
+            title = 'Shifts & Roster';
+          } else if (state.uri.path == '/hr/timesheet') {
+            title = 'Time Tracker';
+          } else if (state.uri.path == '/hr/regularization') {
+            title = 'Regularization';
+          } else if (state.uri.path == '/hr/recruitment') {
+            title = 'Recruitment';
+          } else if (state.uri.path == '/hr/onboarding') {
+            title = 'Onboarding';
+          } else if (state.uri.path == '/hr/offboarding') {
+            title = 'Offboarding';
+          } else if (state.uri.path == '/hr/reimbursements') {
+            title = 'Reimbursements';
+          } else if (state.uri.path == '/hr/travel') {
+            title = 'Travel';
+          } else if (state.uri.path == '/hr/compensation') {
+            title = 'Compensation';
+          } else if (state.uri.path == '/hr/engagement') {
+            title = 'Engagement';
+          } else if (state.uri.path == '/hr/lms') {
+            title = 'Learning';
+          } else if (state.uri.path == '/hr/grievance') {
+            title = 'Grievances';
+          } else if (state.uri.path == '/hr/letters') {
+            title = 'HR Letters';
+          } else if (state.uri.path == '/hr/analytics') {
+            title = 'HR Analytics';
           } else if (state.uri.path == '/sales') {
             title = 'Sales & Invoices';
           } else if (state.uri.path == '/sales/dashboard') {
@@ -676,8 +877,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Artist Finance';
           } else if (state.uri.path == '/works') {
             title = 'My Works';
-          } else if (state.uri.path == '/leave-requests') {
-            title = 'Leave Requests';
           } else if (state.uri.path == '/notifications') {
             title = 'Notifications';
           } else if (state.uri.path == '/profile') {
@@ -760,10 +959,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ArtistWorksScreen(),
           ),
           GoRoute(
-            path: '/leave-requests',
-            builder: (context, state) => const LeaveRequestScreen(),
-          ),
-          GoRoute(
             path: '/profile',
             builder: (context, state) => const ProfileScreen(),
           ),
@@ -796,6 +991,17 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const StaffManagementScreen(),
           ),
           GoRoute(
+            path: '/staff/:id',
+            builder: (context, state) {
+              final id = state.pathParameters['id'] ?? '';
+              final extra = state.extra;
+              return StaffDetailsPage(
+                employeeId: id,
+                initialEmployee: extra is Employee ? extra : null,
+              );
+            },
+          ),
+          GoRoute(
             path: '/hr/salaries',
             builder: (context, state) => const HRSalariesScreen(),
           ),
@@ -814,6 +1020,98 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/evaluation',
             builder: (context, state) => const HrEvaluationScreen(),
+          ),
+          GoRoute(
+            path: '/hr/home',
+            builder: (context, state) => const HrHomeScreen(),
+          ),
+          GoRoute(
+            path: '/hr/leave',
+            builder: (context, state) => const HrLeaveScreen(),
+          ),
+          GoRoute(
+            path: '/hr/approvals',
+            builder: (context, state) => const HrApprovalsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/designations',
+            builder: (context, state) => const HrDesignationsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/org',
+            builder: (context, state) => const HrOrgScreen(),
+          ),
+          GoRoute(
+            path: '/hr/files',
+            builder: (context, state) => const HrFilesScreen(),
+          ),
+          GoRoute(
+            path: '/hr/logins',
+            builder: (context, state) => const HrLoginsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/shift',
+            builder: (context, state) => const HrShiftScreen(),
+          ),
+          GoRoute(
+            path: '/hr/timesheet',
+            builder: (context, state) => const HrTimesheetScreen(),
+          ),
+          GoRoute(
+            path: '/hr/regularization',
+            builder: (context, state) => const HrRegularizationScreen(),
+          ),
+          GoRoute(
+            path: '/hr/recruitment',
+            builder: (context, state) => const HrRecruitmentScreen(),
+          ),
+          GoRoute(
+            path: '/hr/onboarding',
+            builder: (context, state) => const HrOnboardingScreen(),
+          ),
+          GoRoute(
+            path: '/hr/offboarding',
+            builder: (context, state) => const HrOffboardingScreen(),
+          ),
+          GoRoute(
+            path: '/hr/reimbursements',
+            builder: (context, state) => const HrReimbursementScreen(),
+          ),
+          GoRoute(
+            path: '/hr/travel',
+            builder: (context, state) => const HrTravelScreen(),
+          ),
+          GoRoute(
+            path: '/hr/compensation',
+            builder: (context, state) => const HrCompensationScreen(),
+          ),
+          GoRoute(
+            path: '/hr/engagement',
+            builder: (context, state) => const HrEngagementScreen(),
+          ),
+          GoRoute(
+            path: '/hr/lms',
+            builder: (context, state) => const HrLmsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/grievance',
+            builder: (context, state) => const HrGrievanceScreen(),
+          ),
+          GoRoute(
+            path: '/hr/letters',
+            builder: (context, state) => const HrLettersScreen(),
+          ),
+          GoRoute(
+            path: '/hr/analytics',
+            builder: (context, state) => const HrAnalyticsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/policies',
+            builder: (context, state) => const HrPoliciesScreen(),
+          ),
+          GoRoute(
+            path: '/hr/department-scoring',
+            builder: (context, state) => const HrDepartmentScoringScreen(),
           ),
           GoRoute(
             path: '/accounts/attendance-payroll',
@@ -1111,6 +1409,26 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/reviews',
             builder: (context, state) => const ReviewsScreen(),
+          ),
+          GoRoute(
+            path: '/client-chat',
+            builder: (context, state) => const ClientChatInboxPage(),
+          ),
+          GoRoute(
+            path: '/client-chat/:id',
+            builder: (context, state) => ClientChatThreadPage(
+              conversationId: state.pathParameters['id'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: '/app-clients',
+            builder: (context, state) => const AppClientsInboxPage(),
+          ),
+          GoRoute(
+            path: '/app-clients/:id',
+            builder: (context, state) => AppClientDetailPage(
+              clientId: state.pathParameters['id'] ?? '',
+            ),
           ),
           GoRoute(
             path: '/it/projects',

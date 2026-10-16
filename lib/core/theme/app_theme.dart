@@ -3,20 +3,25 @@ import 'package:google_fonts/google_fonts.dart';
 import 'crm_theme.dart';
 
 class AppTheme {
-  static const _backgroundColor = Color(0xFFFFFFFF);
-  static const _foregroundColor = Color(0xFF601A29);
-  static const _borderColor = Color(0x14000000);
-  static const _inputColor = Color(0xFFF6F7F9);
-  static const _primaryColor = Color(0xFF601A29);
+  // Palette aligned to the approved HRMS design file (HRMS_Design.html):
+  // warm "ground" page background, white card surfaces, warm hairline borders,
+  // warm muted text and the brand maroon + gold. This gives the layered,
+  // warm look of the design instead of a flat pure-white UI.
+  static const _backgroundColor = Color(0xFFF5F3EF); // --ground
+  static const _foregroundColor = Color(0xFF601A29); // --maroon (brand)
+  static const _inkColor = Color(0xFF1C1A19); // --ink (headings/body)
+  static const _borderColor = Color(0xFFECE6DE); // --line
+  static const _inputColor = Color(0xFFFBFAF7);
+  static const _primaryColor = Color(0xFF601A29); // --maroon
   static const _secondaryColor = Color(0xFFF2EDE4);
-  static const _accentColor = Color(0xFFC9A66B);
-  static const _surfaceColor = Color(0xFFFFFFFF);
-  static const _textPrimaryColor = _foregroundColor;
-  static const _textSecondaryColor = Color(0xFF7B8694);
-  static const _successColor = Color(0xFF0B5B37);
-  static const _warningColor = Color(0xFF6A4B00);
-  static const _destructiveColor = Color(0xFF7B1B2A);
-  static const _sidebarColor = Color(0xFF3A101A);
+  static const _accentColor = Color(0xFFC9A66B); // --gold
+  static const _surfaceColor = Color(0xFFFFFFFF); // --surface
+  static const _textPrimaryColor = _inkColor;
+  static const _textSecondaryColor = Color(0xFF8C837B); // --muted
+  static const _successColor = Color(0xFF2E7D4F); // --good
+  static const _warningColor = Color(0xFFA9781B); // --warn
+  static const _destructiveColor = Color(0xFFB23B3B); // --bad
+  static const _sidebarColor = Color(0xFF320D15); // --sidebar
   static const _sidebarForegroundColor = Color(0xFFFFFFFF);
 
   static final crmThemeExtension = CrmTheme(
@@ -45,15 +50,24 @@ class AppTheme {
         secondary: _secondaryColor,
         surface: _surfaceColor,
         onPrimary: _surfaceColor,
-        onSecondary: _foregroundColor,
-        onSurface: _foregroundColor,
+        onSecondary: _inkColor,
+        onSurface: _inkColor,
         error: _destructiveColor,
         onError: _surfaceColor,
       ),
-      textTheme: GoogleFonts.interTextTheme().apply(
-        bodyColor: _textPrimaryColor,
-        displayColor: _textPrimaryColor,
-      ),
+      // Body in Inter, headings in Plus Jakarta Sans (the design's display
+      // face) for the HRMS typographic character.
+      textTheme: GoogleFonts.interTextTheme()
+          .apply(bodyColor: _textPrimaryColor, displayColor: _textPrimaryColor)
+          .copyWith(
+            displayLarge: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: _inkColor),
+            displayMedium: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: _inkColor),
+            displaySmall: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
+            headlineLarge: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
+            headlineMedium: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
+            headlineSmall: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
+            titleLarge: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
+          ),
       extensions: [crmThemeExtension],
       appBarTheme: AppBarTheme(
         backgroundColor: _surfaceColor,

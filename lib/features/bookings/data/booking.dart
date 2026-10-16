@@ -550,6 +550,7 @@ class Booking {
   final double discountAmount;
   final String discountType;
   final double discountValue;
+  final String discountReason;
   final int duplicateCount;
   final String? leadId;
   // The salesperson credited with this booking (User id). Drives the
@@ -635,6 +636,7 @@ class Booking {
     this.discountAmount = 0,
     this.discountType = 'inr',
     this.discountValue = 0,
+    this.discountReason = '',
     this.duplicateCount = 0,
     this.assignedStaff = const [],
     this.addons = const [],
@@ -968,6 +970,7 @@ class Booking {
       discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? 0.0,
       discountType: json['discountType'] as String? ?? 'inr',
       discountValue: (json['discountValue'] as num?)?.toDouble() ?? 0.0,
+      discountReason: (json['discountReason'] ?? json['discountNote'] ?? '').toString(),
       collectedAmount: (json['collectedAmount'] as num?)?.toDouble() ?? 0.0,
       duplicateCount: (json['duplicateCount'] as num?)?.toInt() ?? 0,
       leadId: json['leadId'] as String?,
@@ -1046,6 +1049,7 @@ class Booking {
       'discountAmount': discountAmount,
       'discountType': discountType,
       'discountValue': discountValue,
+      'discountReason': discountReason,
       'duplicateCount': duplicateCount,
       if (leadId != null) 'leadId': leadId,
       if (salesPersonId != null) 'salesPersonId': salesPersonId,
@@ -1111,6 +1115,7 @@ class Booking {
     double? discountAmount,
     String? discountType,
     double? discountValue,
+    String? discountReason,
     int? duplicateCount,
     String? leadId,
     String? salesPersonId,
@@ -1180,6 +1185,7 @@ class Booking {
       discountAmount: discountAmount ?? this.discountAmount,
       discountType: discountType ?? this.discountType,
       discountValue: discountValue ?? this.discountValue,
+      discountReason: discountReason ?? this.discountReason,
       duplicateCount: duplicateCount ?? this.duplicateCount,
       leadId: leadId ?? this.leadId,
       salesPersonId: salesPersonId ?? this.salesPersonId,

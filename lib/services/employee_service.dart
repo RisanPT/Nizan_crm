@@ -18,6 +18,11 @@ final employeesProvider = FutureProvider<List<Employee>>((ref) async {
   return ref.watch(employeeServiceProvider).getEmployees();
 });
 
+final employeeByIdProvider =
+    FutureProvider.family.autoDispose<Employee, String>((ref, id) async {
+  return ref.watch(employeeServiceProvider).getEmployeeById(id);
+});
+
 final paginatedEmployeesProvider =
     FutureProvider.family<PaginatedListResponse<Employee>, ListPageParams>((
       ref,
@@ -48,6 +53,7 @@ final paginatedEmployeesProvider =
             category: params.category,
             department: params.department,
             artistRole: params.artistRole,
+            timeboxStatus: params.timeboxStatus,
             search: params.search,
             zoneId: zoneId,
             stateId: stateId,
@@ -99,6 +105,7 @@ class EmployeeService {
     String? category,
     String? department,
     String? artistRole,
+    String? timeboxStatus,
     String? search,
     String? zoneId,
     String? stateId,
@@ -113,6 +120,7 @@ class EmployeeService {
         if (category != null && category.isNotEmpty) 'category': category,
         if (department != null && department.isNotEmpty && department != 'All') 'department': department,
         if (artistRole != null && artistRole.isNotEmpty && artistRole != 'All') 'artistRole': artistRole,
+        if (timeboxStatus != null && timeboxStatus.isNotEmpty && timeboxStatus != 'All') 'timeboxStatus': timeboxStatus,
         if (search != null && search.isNotEmpty) 'search': search,
         if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
@@ -163,6 +171,25 @@ class EmployeeService {
     String? ifscCode,
     String? upiId,
     String? panNumber,
+    String? employeeCode,
+    DateTime? dateOfBirth,
+    DateTime? dateOfJoining,
+    DateTime? probationEndDate,
+    String? employmentStatus,
+    String? currentGrade,
+    double? overtimeRate,
+    String? departmentId,
+    String? reportingManagerId,
+    String? designationId,
+    String? emergencyContactName,
+    String? emergencyContactRelation,
+    String? emergencyContactPhone,
+    bool? epfApplicable,
+    bool? esiApplicable,
+    String? uan,
+    String? esiNumber,
+    int? timeboxEmployeeId,
+    String? timeboxName,
   }) async {
     try {
       final payload = {
@@ -176,7 +203,10 @@ class EmployeeService {
         'regionId': regionId,
         'category': category,
         if (department != null && department.isNotEmpty) 'department': department,
+        if (departmentId != null && departmentId.isNotEmpty) 'departmentId': departmentId,
         if (role != null && role.isNotEmpty) 'role': role,
+        if (reportingManagerId != null && reportingManagerId.isNotEmpty) 'reportingManagerId': reportingManagerId,
+        if (designationId != null && designationId.isNotEmpty) 'designationId': designationId,
         'works': ?works,
         if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
@@ -193,6 +223,28 @@ class EmployeeService {
         'ifscCode': ?ifscCode,
         'upiId': ?upiId,
         'panNumber': ?panNumber,
+        if (employeeCode != null && employeeCode.isNotEmpty) 'employeeCode': employeeCode,
+        if (dateOfBirth != null) 'dateOfBirth': dateOfBirth.toIso8601String(),
+        if (dateOfJoining != null) 'dateOfJoining': dateOfJoining.toIso8601String(),
+        if (probationEndDate != null) 'probationEndDate': probationEndDate.toIso8601String(),
+        if (employmentStatus != null && employmentStatus.isNotEmpty) 'employmentStatus': employmentStatus,
+        if (currentGrade != null && currentGrade.isNotEmpty) 'currentGrade': currentGrade,
+        'overtimeRate': ?overtimeRate,
+        if (emergencyContactName != null || emergencyContactRelation != null || emergencyContactPhone != null)
+          'emergencyContact': {
+            'name': emergencyContactName ?? '',
+            'relation': emergencyContactRelation ?? '',
+            'phone': emergencyContactPhone ?? '',
+          },
+        if (epfApplicable != null || esiApplicable != null || uan != null || esiNumber != null)
+          'statutoryApplicability': {
+            'epf': epfApplicable ?? false,
+            'esi': esiApplicable ?? false,
+            'uan': uan ?? '',
+            'esiNumber': esiNumber ?? '',
+          },
+        'timeboxEmployeeId': ?timeboxEmployeeId,
+        'timeboxName': ?timeboxName,
       };
 
       if (profileImage != null) {
@@ -206,6 +258,18 @@ class EmployeeService {
       return Employee.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'save employee');
+    }
+  }
+
+  Future<Employee> linkTimebox(String employeeId, {int? timeboxEmployeeId, String? timeboxName}) async {
+    try {
+      final response = await _dio.put('/employees/$employeeId/timebox-link', data: {
+        'timeboxEmployeeId': timeboxEmployeeId,
+        'timeboxName': timeboxName,
+      });
+      return Employee.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'link Timebox profile');
     }
   }
 
