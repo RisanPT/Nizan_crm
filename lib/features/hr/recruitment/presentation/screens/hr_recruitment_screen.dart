@@ -531,6 +531,206 @@ class _HrRecruitmentScreenState extends ConsumerState<HrRecruitmentScreen> with 
   }
 }
 
+Future<void> _confirmDeleteCandidate(BuildContext context, WidgetRef ref, Candidate c) async {
+  bool deleteLinked = c.stage == 'hired';
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 24),
+                const SizedBox(width: 8),
+                const Text('Delete Candidate'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you sure you want to delete "${c.name}" from recruitment?',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This will permanently delete this applicant and their draft offers.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                if (c.stage == 'hired') ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Candidate was marked as HIRED',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange),
+                        ),
+                        const SizedBox(height: 4),
+                        Material(
+                          color: Colors.transparent,
+                          child: CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            title: const Text(
+                              'Also remove mistakenly created Employee & Onboarding record',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            value: deleteLinked,
+                            onChanged: (val) => setDlgState(() => deleteLinked = val ?? false),
+                            controlAffinity: ListTileControlAffinity.leading,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  if (confirmed == true) {
+    try {
+      await ref.read(recruitmentServiceProvider).deleteCandidate(c.id, deleteLinkedEmployee: deleteLinked);
+      ref.invalidate(candidatesProvider);
+      ref.invalidate(offersProvider);
+      ref.invalidate(jobPostsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Candidate "${c.name}" deleted successfully')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(e))),
+        );
+      }
+    }
+  }
+}
+
+Future<void> _confirmDeleteOffer(BuildContext context, WidgetRef ref, Offer o) async {
+  bool deleteLinked = o.status == 'accepted';
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setDlgState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 24),
+                const SizedBox(width: 8),
+                const Text('Delete Offer Letter'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you sure you want to delete the offer for "${o.candidateName}"?',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (o.status == 'accepted') ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'This offer was already ACCEPTED',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange),
+                        ),
+                        const SizedBox(height: 4),
+                        Material(
+                          color: Colors.transparent,
+                          child: CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            dense: true,
+                            title: const Text(
+                              'Also remove mistakenly created Employee & Onboarding record',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            value: deleteLinked,
+                            onChanged: (val) => setDlgState(() => deleteLinked = val ?? false),
+                            controlAffinity: ListTileControlAffinity.leading,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  if (confirmed == true) {
+    try {
+      await ref.read(recruitmentServiceProvider).deleteOffer(o.id, deleteLinkedEmployee: deleteLinked);
+      ref.invalidate(offersProvider);
+      ref.invalidate(candidatesProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Offer for "${o.candidateName}" deleted')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyErrorMessage(e))),
+        );
+      }
+    }
+  }
+}
+
 // ─── Pipeline & Kanban Tab ───────────────────────────────────────────────────
 
 class _PipelineKanbanTab extends ConsumerWidget {
@@ -1165,6 +1365,8 @@ class _PipelineKanbanTab extends ConsumerWidget {
                     onCreateOffer(c);
                   } else if (action == 'edit') {
                     onEditCandidate(c);
+                  } else if (action == 'delete') {
+                    _confirmDeleteCandidate(context, ref, c);
                   } else {
                     // Update stage
                     await ref.read(recruitmentServiceProvider).saveCandidate({'stage': action}, id: c.id);
@@ -1185,6 +1387,16 @@ class _PipelineKanbanTab extends ConsumerWidget {
                     ),
                   const PopupMenuItem(value: 'edit', child: Text('Edit Candidate Details')),
                   const PopupMenuItem(value: 'offer', child: Text('Generate Offer Letter')),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 14, color: Colors.red),
+                        SizedBox(width: 8),
+                        Text('Delete Candidate', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
                   const PopupMenuDivider(),
                   const PopupMenuItem(enabled: false, child: Text('Move Stage: ', style: TextStyle(fontWeight: FontWeight.bold))),
                   ...kCandidateStages.where((s) => s != c.stage).map((s) => PopupMenuItem(value: s, child: Text('→ ${titleCase(s)}'))),
@@ -3171,6 +3383,16 @@ class _CandidatesListTabState extends ConsumerState<_CandidatesListTab> {
                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4)),
                 child: const Text('Edit', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
               ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                tooltip: 'Delete Candidate',
+                onPressed: () => _confirmDeleteCandidate(context, ref, c),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ],
           ),
         ],
@@ -4086,6 +4308,17 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
                   style: FilledButton.styleFrom(backgroundColor: widget.crm.success),
                 ),
               ],
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                tooltip: 'Delete Offer',
+                onPressed: () => _confirmDeleteOffer(context, ref, o),
+                style: IconButton.styleFrom(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ],
           ),
         ],
@@ -5398,8 +5631,21 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
                 border: Border(top: BorderSide(color: crm.border.faded(0.8))),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  if (widget.existing != null) ...[
+                    TextButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () async {
+                              final existing = widget.existing!;
+                              Navigator.of(context).pop(false);
+                              _confirmDeleteCandidate(context, ref, existing);
+                            },
+                      icon: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                      label: const Text('Delete Candidate', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                  const Spacer(),
                   OutlinedButton(
                     onPressed: _busy ? null : () => Navigator.of(context).pop(false),
                     child: const Text('Cancel'),

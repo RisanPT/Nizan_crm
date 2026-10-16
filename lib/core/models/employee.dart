@@ -391,6 +391,14 @@ class Employee {
   String get displayCode => employeeCode.isNotEmpty
       ? employeeCode
       : (id.length >= 4 ? 'NZ-${id.substring(id.length - 4).toUpperCase()}' : 'NZ-EMP');
+
+  /// Effective designation label falling back to role, artistRole, or specialization.
+  String get designation {
+    if (role != null && role!.trim().isNotEmpty) return role!.trim();
+    if (artistRole.isNotEmpty && artistRole.toLowerCase() != 'artist') return artistRole;
+    if (specialization.isNotEmpty) return specialization;
+    return 'Specialist';
+  }
 }
 
 /// Selection helpers for assignment/picker dropdowns. Assignment lists should

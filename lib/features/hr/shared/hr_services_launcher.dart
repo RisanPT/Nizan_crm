@@ -251,6 +251,22 @@ final List<HrServiceDescriptor> kHrServices = [
     tags: ['letters', 'templates', 'experience', 'relieving', 'appointment', 'pdf'],
   ),
   const HrServiceDescriptor(
+    title: 'Department & Employee Scoring',
+    subtitle: 'Studio performance leaderboards, quality index & KPIs',
+    icon: Icons.leaderboard_outlined,
+    route: '/hr/department-scoring',
+    category: 'Growth & Workplace',
+    tags: ['scoring', 'department', 'leaderboard', 'quality', 'ranking', 'employee score'],
+  ),
+  const HrServiceDescriptor(
+    title: 'Company & HR Policies',
+    subtitle: 'Workplace handbook, code of conduct & digital acknowledgments',
+    icon: Icons.policy_outlined,
+    route: '/hr/policies',
+    category: 'Growth & Workplace',
+    tags: ['policy', 'policies', 'handbook', 'rules', 'posh', 'conduct', 'hygiene'],
+  ),
+  const HrServiceDescriptor(
     title: 'HR Analytics',
     subtitle: 'Headcount, attrition & department workload KPIs',
     icon: Icons.insights_outlined,

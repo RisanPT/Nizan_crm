@@ -93,6 +93,9 @@ class Sidebar extends ConsumerWidget {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final isTablet = ResponsiveBuilder.isTablet(context);
     final currentPath = GoRouterState.of(context).uri.path;
+    final session = ref.watch(authSessionProvider);
+    final role = ref.watch(effectiveRoleProvider);
+    final access = ref.watch(effectiveAccessProvider);
     final isFleetRoute = currentPath.startsWith('/fleet');
     // Operations (Dashboard / Artist Finance / Artist Collection / Fleet Expenses / Operations Salaries) live under Accounts.
     final isOperationsRoute = currentPath == '/accounts/operations-dashboard' ||
@@ -122,7 +125,7 @@ class Sidebar extends ConsumerWidget {
     // Leave/Approvals are standalone items (also available to ESS employees who
     // lack the HR group), so they don't count as "HR group" routes here.
     final isHrRoute = (currentPath.startsWith('/staff') || currentPath.startsWith('/hr')) &&
-        currentPath != '/hr/leave' &&
+        (!access.canSeeStaff ? currentPath != '/hr/leave' : true) &&
         currentPath != '/hr/approvals' &&
         currentPath != '/hr/home';
     final isCollapsed = isTablet && !isMobile && !ResponsiveBuilder.isTwoPane(context);
@@ -153,34 +156,25 @@ class Sidebar extends ConsumerWidget {
         (contentExpanded || (isContentRoute && !contentUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
 
-    // Resolve current role from session, honouring the active workspace so a
-    // dual-role artist who switched to the inventory workspace sees the
-    // inventory-manager sidebar (and vice-versa).
-    final session = ref.watch(authSessionProvider);
-    final role = ref.watch(effectiveRoleProvider);
-    // Feature visibility comes from the role's editable permission set (or the
-    // built-in inventory-manager matrix when in the inventory workspace).
-    final access = ref.watch(effectiveAccessProvider);
-
     return Container(
       width: width,
       color: crmColors.sidebar,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          24.h,
+          16.h,
           _buildLogo(context, isCollapsed: isCollapsed),
           if (ref.watch(isDualRoleProvider)) ...[
-            16.h,
+            12.h,
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 12 : 16),
+              padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 10 : 14),
               child: WorkspaceSwitchTile(collapsed: isCollapsed),
             ),
           ],
-          32.h,
+          14.h,
           Expanded(
             child: ListView(
-              padding: 16.p,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               children: [
                 // Notifications — available to every role.
                 _SidebarItem(
@@ -380,11 +374,15 @@ class Sidebar extends ConsumerWidget {
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────
-                  if (access.canSeeDashboard || access.canSeeClients ||
-                      access.canSeeCalendar || access.canSeeBookings ||
-                      access.canSeeTrials) ...[
+                  if (access.canSeeDashboard ||
+                      access.canSeeClients ||
+                      access.canSeeClientReviews ||
+                      access.canSeeBookings ||
+                      access.canSeeCalendar ||
+                      access.canSeeTrials ||
+                      access.canSeeArtistHead) ...[
                     _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
-                    8.h,
+                    4.h,
                   ],
                   if (access.canSeeDashboard)
                     _SidebarItem(
@@ -394,9 +392,73 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/',
                       onTap: () => context.go('/'),
                     ),
-                  // Artist Head org-wide dashboard — the dedicated artist_head
-                  // role, or an artist also flagged as head (keeps their own
-                  // dashboard at '/').
+                  if (access.canSeeClients)
+                    _SidebarItem(
+                      icon: Icons.people_outline,
+                      title: 'Clients',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/client') &&
+                          !currentPath.startsWith('/client-chat'),
+                      onTap: () => context.go('/clients'),
+                    ),
+                  if (access.canSeeClientReviews)
+                    _SidebarItem(
+                      icon: Icons.reviews_outlined,
+                      title: 'Client Reviews',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/reviews'),
+                      onTap: () => context.go('/reviews'),
+                    ),
+                  if (access.canSeeClientChat)
+                    _SidebarItem(
+                      icon: Icons.forum_outlined,
+                      title: 'Client Chat',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/client-chat'),
+                      trailing: _clientChatBadge(ref, crmColors, isCollapsed),
+                      onTap: () => context.go('/client-chat'),
+                    ),
+                  if (access.canSeeAppClients)
+                    _SidebarItem(
+                      icon: Icons.diversity_1_outlined,
+                      title: 'App Clients',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/app-clients'),
+                      onTap: () => context.go('/app-clients'),
+                    ),
+                  if (access.canSeeBookings)
+                    _SidebarItem(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Booking',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/booking'),
+                      onTap: () => context.go('/booking/requests'),
+                    ),
+                  if (access.canSeeCalendar)
+                    _SidebarItem(
+                      icon: Icons.calendar_month,
+                      title: 'Calendar',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/calendar',
+                      onTap: () => context.go('/calendar'),
+                    ),
+                  if (access.canSeeTrials) ...[
+                    _SidebarItem(
+                      icon: Icons.event_available_outlined,
+                      title: 'Trials',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
+                      onTap: () => context.go('/trials'),
+                    ),
+                    _SidebarItem(
+                      icon: Icons.auto_awesome_mosaic_outlined,
+                      title: 'Trial Packages',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/trial-packages'),
+                      onTap: () => context.go('/trial-packages'),
+                    ),
+                  ],
+                  // Artist Head org-wide dashboard — shown ONLY if user is artist head
                   if (access.canSeeArtistHead) ...[
                     _SidebarItem(
                       icon: Icons.insights_outlined,
@@ -414,46 +476,6 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/artist-head/artists'),
                     ),
                   ],
-                  if (access.canSeeClients)
-                    _SidebarItem(
-                      icon: Icons.people_outline,
-                      title: 'Clients',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/client'),
-                      onTap: () => context.go('/clients'),
-                    ),
-                  if (access.canSeeCalendar)
-                    _SidebarItem(
-                      icon: Icons.calendar_month,
-                      title: 'Calendar',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/calendar',
-                      onTap: () => context.go('/calendar'),
-                    ),
-                  if (access.canSeeTrials)
-                    _SidebarItem(
-                      icon: Icons.event_available_outlined,
-                      title: 'Trials',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
-                      onTap: () => context.go('/trials'),
-                    ),
-                  if (access.canSeeTrials)
-                    _SidebarItem(
-                      icon: Icons.auto_awesome_mosaic_outlined,
-                      title: 'Trial Packages',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/trial-packages'),
-                      onTap: () => context.go('/trial-packages'),
-                    ),
-                  if (access.canSeeBookings)
-                    _SidebarItem(
-                      icon: Icons.receipt_long_outlined,
-                      title: 'Booking',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/booking'),
-                      onTap: () => context.go('/booking/requests'),
-                    ),
 
                   // ── ERP SECTION ──────────────────────────────────────────────
                   if (access.canSeeServices || access.canSeeStaff ||
@@ -492,8 +514,8 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/hr/home',
                       onTap: () => context.go('/hr/home'),
                     ),
-                  // Leave — every employee (ESS) plus HR/managers.
-                  if (access.canSeeLeaveRequests || access.has('leave', false))
+                  // Leave — every employee (ESS) without full HRMS access
+                  if (!access.canSeeStaff && (access.canSeeLeaveRequests || access.has('leave', false)))
                     _SidebarItem(
                       icon: Icons.event_busy_outlined,
                       title: 'Leave',
@@ -516,7 +538,7 @@ class Sidebar extends ConsumerWidget {
                   if (access.canSeeStaff) ...[
                     _SidebarItem(
                       icon: Icons.groups_outlined,
-                      title: 'HR',
+                      title: 'HRMS',
                       isCollapsed: isCollapsed,
                       isSelected: isHrRoute,
                       trailing: isCollapsed
@@ -574,57 +596,10 @@ class Sidebar extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      // People & org
-                      _SidebarSection(
-                        title: 'People',
-                        hasActive: _hrSectionActive(currentPath, const [
-                          '/staff', '/hr/org', '/hr/designations', '/hr/files', '/hr/logins',
-                        ]),
-                        children: [
-                          if (access.canSeeSub('staff.employees'))
-                            _HrNavItem(icon: Icons.badge_outlined, title: 'Staff Management', route: '/staff', selected: currentPath.startsWith('/staff')),
-                          _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization', route: '/hr/org', selected: currentPath == '/hr/org'),
-                          _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
-                          _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
-                          if (access.isFullAccess || access.isDepartmentHead)
-                            _HrNavItem(icon: Icons.badge_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
-                        ],
-                      ),
-                      // Time & attendance
-                      _SidebarSection(
-                        title: 'Time & Attendance',
-                        hasActive: _hrSectionActive(currentPath, const [
-                          '/hr/attendance', '/hr/regularization', '/hr/shift', '/hr/timesheet', '/hr/slots', '/hr/slot-capacity',
-                        ]),
-                        children: [
-                          if (access.canSeeSub('staff.attendance'))
-                            _HrNavItem(icon: Icons.fingerprint_outlined, title: 'Attendance', route: '/hr/attendance', selected: currentPath.startsWith('/hr/attendance')),
-                          _HrNavItem(icon: Icons.event_available_outlined, title: 'Regularization', route: '/hr/regularization', selected: currentPath == '/hr/regularization'),
-                          _HrNavItem(icon: Icons.schedule_outlined, title: 'Shifts & Roster', route: '/hr/shift', selected: currentPath == '/hr/shift'),
-                          _HrNavItem(icon: Icons.timer_outlined, title: 'Time Tracker', route: '/hr/timesheet', selected: currentPath == '/hr/timesheet'),
-                          if (access.canSeeSub('staff.slots'))
-                            _HrNavItem(icon: Icons.event_seat_outlined, title: 'Slot Management', route: '/hr/slots', selected: currentPath == '/hr/slots'),
-                          if (access.canSeeSub('staff.slots'))
-                            _HrNavItem(icon: Icons.tune_outlined, title: 'Slot Capacity', route: '/hr/slot-capacity', selected: currentPath.startsWith('/hr/slot-capacity')),
-                        ],
-                      ),
-                      // Payroll & pay
-                      _SidebarSection(
-                        title: 'Payroll & Pay',
-                        hasActive: _hrSectionActive(currentPath, const [
-                          '/hr/salaries', '/hr/compensation', '/hr/reimbursements', '/hr/travel',
-                        ]),
-                        children: [
-                          if (access.canSeeSub('staff.salaries'))
-                            _HrNavItem(icon: Icons.payments_outlined, title: 'Salaries & Payroll', route: '/hr/salaries', selected: currentPath.startsWith('/hr/salaries')),
-                          _HrNavItem(icon: Icons.account_balance_wallet_outlined, title: 'Compensation', route: '/hr/compensation', selected: currentPath == '/hr/compensation'),
-                          _HrNavItem(icon: Icons.receipt_long_outlined, title: 'Reimbursements', route: '/hr/reimbursements', selected: currentPath == '/hr/reimbursements'),
-                          _HrNavItem(icon: Icons.flight_takeoff_outlined, title: 'Travel', route: '/hr/travel', selected: currentPath == '/hr/travel'),
-                        ],
-                      ),
-                      // Hiring & lifecycle
+                      // 1. Hiring & Lifecycle (FIRST in HRMS)
                       _SidebarSection(
                         title: 'Hiring & Lifecycle',
+                        defaultExpanded: true,
                         hasActive: _hrSectionActive(currentPath, const [
                           '/hr/recruitment', '/hr/onboarding', '/hr/offboarding',
                         ]),
@@ -634,31 +609,84 @@ class Sidebar extends ConsumerWidget {
                           _HrNavItem(icon: Icons.logout_outlined, title: 'Offboarding', route: '/hr/offboarding', selected: currentPath == '/hr/offboarding'),
                         ],
                       ),
-                      // Growth
+                      // 2. People & Organization
                       _SidebarSection(
-                        title: 'Growth',
-                        hasActive: _hrSectionActive(currentPath, const ['/hr/evaluation', '/hr/lms']),
+                        title: 'People & Organization',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/staff', '/hr/org', '/hr/designations', '/hr/files', '/hr/logins',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.employees'))
+                            _HrNavItem(icon: Icons.badge_outlined, title: 'Staff Directory', route: '/staff', selected: currentPath.startsWith('/staff')),
+                          _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization Chart', route: '/hr/org', selected: currentPath == '/hr/org'),
+                          _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
+                          _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
+                          if (access.isFullAccess || access.isDepartmentHead)
+                            _HrNavItem(icon: Icons.key_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
+                        ],
+                      ),
+                      // 3. Time & Attendance
+                      _SidebarSection(
+                        title: 'Time & Attendance',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/attendance', '/hr/leave', '/hr/regularization', '/hr/shift', '/hr/timesheet', '/hr/slots', '/hr/slot-capacity',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.attendance'))
+                            _HrNavItem(icon: Icons.fingerprint_outlined, title: 'Attendance', route: '/hr/attendance', selected: currentPath.startsWith('/hr/attendance')),
+                          _HrNavItem(icon: Icons.event_busy_outlined, title: 'Leave Management', route: '/hr/leave', selected: currentPath == '/hr/leave'),
+                          _HrNavItem(icon: Icons.event_available_outlined, title: 'Regularization', route: '/hr/regularization', selected: currentPath == '/hr/regularization'),
+                          _HrNavItem(icon: Icons.schedule_outlined, title: 'Shifts & Roster', route: '/hr/shift', selected: currentPath == '/hr/shift'),
+                          _HrNavItem(icon: Icons.timer_outlined, title: 'Time Tracker', route: '/hr/timesheet', selected: currentPath == '/hr/timesheet'),
+                          if (access.canSeeSub('staff.slots'))
+                            _HrNavItem(icon: Icons.event_seat_outlined, title: 'Slot Management', route: '/hr/slots', selected: currentPath == '/hr/slots'),
+                          if (access.canSeeSub('staff.slots'))
+                            _HrNavItem(icon: Icons.tune_outlined, title: 'Slot Capacity', route: '/hr/slot-capacity', selected: currentPath.startsWith('/hr/slot-capacity')),
+                        ],
+                      ),
+                      // 4. Payroll & Compensation
+                      _SidebarSection(
+                        title: 'Payroll & Compensation',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/salaries', '/hr/compensation', '/hr/reimbursements', '/hr/travel',
+                        ]),
+                        children: [
+                          if (access.canSeeSub('staff.salaries'))
+                            _HrNavItem(icon: Icons.payments_outlined, title: 'Salaries & Payroll', route: '/hr/salaries', selected: currentPath.startsWith('/hr/salaries')),
+                          _HrNavItem(icon: Icons.account_balance_wallet_outlined, title: 'Compensation', route: '/hr/compensation', selected: currentPath == '/hr/compensation'),
+                          _HrNavItem(icon: Icons.receipt_long_outlined, title: 'Reimbursements', route: '/hr/reimbursements', selected: currentPath == '/hr/reimbursements'),
+                          _HrNavItem(icon: Icons.flight_takeoff_outlined, title: 'Travel Expenses', route: '/hr/travel', selected: currentPath == '/hr/travel'),
+                        ],
+                      ),
+                      // 5. Growth & Performance
+                      _SidebarSection(
+                        title: 'Growth & Performance',
+                        hasActive: _hrSectionActive(currentPath, const [
+                          '/hr/evaluation', '/hr/department-scoring', '/hr/lms',
+                        ]),
                         children: [
                           if (access.canSeeSub('staff.evaluation'))
                             _HrNavItem(icon: Icons.star_outline, title: '5-Pillar Evaluation', route: '/hr/evaluation', selected: currentPath.startsWith('/hr/evaluation')),
-                          _HrNavItem(icon: Icons.school_outlined, title: 'Learning', route: '/hr/lms', selected: currentPath == '/hr/lms'),
+                          _HrNavItem(icon: Icons.leaderboard_outlined, title: 'Department Scoring', route: '/hr/department-scoring', selected: currentPath == '/hr/department-scoring'),
+                          _HrNavItem(icon: Icons.school_outlined, title: 'Training & LMS', route: '/hr/lms', selected: currentPath == '/hr/lms'),
                         ],
                       ),
-                      // Workplace
+                      // 6. Workplace & Culture
                       _SidebarSection(
-                        title: 'Workplace',
+                        title: 'Workplace & Culture',
                         hasActive: _hrSectionActive(currentPath, const [
-                          '/hr/engagement', '/hr/grievance', '/hr/letters',
+                          '/hr/engagement', '/hr/policies', '/hr/grievance', '/hr/letters',
                         ]),
                         children: [
                           _HrNavItem(icon: Icons.campaign_outlined, title: 'Engagement', route: '/hr/engagement', selected: currentPath == '/hr/engagement'),
+                          _HrNavItem(icon: Icons.policy_outlined, title: 'Policies & Handbook', route: '/hr/policies', selected: currentPath == '/hr/policies'),
                           _HrNavItem(icon: Icons.report_gmailerrorred_outlined, title: 'Grievances', route: '/hr/grievance', selected: currentPath == '/hr/grievance'),
                           _HrNavItem(icon: Icons.description_outlined, title: 'HR Letters', route: '/hr/letters', selected: currentPath == '/hr/letters'),
                         ],
                       ),
-                      // Insights
+                      // 7. Insights & Analytics
                       _SidebarSection(
-                        title: 'Insights',
+                        title: 'Insights & Analytics',
                         hasActive: currentPath == '/hr/analytics',
                         children: [
                           _HrNavItem(icon: Icons.insights_outlined, title: 'HR Analytics', route: '/hr/analytics', selected: currentPath == '/hr/analytics'),
@@ -776,59 +804,6 @@ class Sidebar extends ConsumerWidget {
                       ),
                     ],
                   ],
-                  if (access.canSeeCompanyReports)
-                    _SidebarItem(
-                      icon: Icons.folder_shared_outlined,
-                      title: 'Company Reports',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/company-reports'),
-                      onTap: () => context.go('/company-reports'),
-                    ),
-                  if (access.canSeePlanning)
-                    _SidebarItem(
-                      icon: Icons.hub_outlined,
-                      title: 'Company Projects',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/projects' || currentPath.startsWith('/projects/'),
-                      onTap: () => context.go('/projects'),
-                    ),
-                  // Client reviews — CRM / sales / accounts / full access.
-                  if (access.isFullAccess ||
-                      access.role == AppRole.crm ||
-                      access.role == AppRole.accounts ||
-                      access.canSeeSales)
-                    _SidebarItem(
-                      icon: Icons.reviews_outlined,
-                      title: 'Client Reviews',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/reviews'),
-                      onTap: () => context.go('/reviews'),
-                    ),
-                  // Client concierge chat — same client-facing staff as reviews.
-                  if (access.isFullAccess ||
-                      access.role == AppRole.crm ||
-                      access.role == AppRole.accounts ||
-                      access.canSeeSales)
-                    _SidebarItem(
-                      icon: Icons.forum_outlined,
-                      title: 'Client Chat',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/client-chat'),
-                      trailing: _clientChatBadge(ref, crmColors, isCollapsed),
-                      onTap: () => context.go('/client-chat'),
-                    ),
-                  // Bridal app clients (brides) — profiles, preferences, looks.
-                  if (access.isFullAccess ||
-                      access.role == AppRole.crm ||
-                      access.role == AppRole.accounts ||
-                      access.canSeeSales)
-                    _SidebarItem(
-                      icon: Icons.diversity_1_outlined,
-                      title: 'App Clients',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/app-clients'),
-                      onTap: () => context.go('/app-clients'),
-                    ),
 
                   // IT department hub — Projects & Tickets are IT-only; Help Desk
                   // is open to every department. Grouped under one "IT" parent.
@@ -1640,6 +1615,22 @@ class Sidebar extends ConsumerWidget {
                         ),
                     ],
                   ],
+                  if (access.canSeePlanning)
+                    _SidebarItem(
+                      icon: Icons.hub_outlined,
+                      title: 'Company Projects',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/projects' || currentPath.startsWith('/projects/'),
+                      onTap: () => context.go('/projects'),
+                    ),
+                  if (access.canSeeCompanyReports)
+                    _SidebarItem(
+                      icon: Icons.folder_shared_outlined,
+                      title: 'Company Reports',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/company-reports'),
+                      onTap: () => context.go('/company-reports'),
+                    ),
 
                   // ── MY TEAM (Department Heads only) ─────────────────────────
                   if (access.canManageTeam && !access.isFullAccess) ...[
@@ -1828,40 +1819,74 @@ class Sidebar extends ConsumerWidget {
     final crmColors = context.crmColors;
     final theme = Theme.of(context);
     return Padding(
-      padding: 16.px,
+      padding: EdgeInsets.symmetric(horizontal: isCollapsed ? 10 : 14, vertical: 2),
       child: Row(
         mainAxisAlignment: isCollapsed
             ? MainAxisAlignment.center
             : MainAxisAlignment.start,
         children: [
           Container(
-            padding: 8.p,
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: crmColors.surface,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.20),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Image.asset(
               'assets/images/teamn_logo.png',
-              height: 48,
-              width: 48,
+              height: isCollapsed ? 36 : 42,
+              width: isCollapsed ? 36 : 42,
             ),
           ),
           if (!isCollapsed) ...[
             12.w,
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Team N\nERP',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: crmColors.sidebarForeground,
-                    fontWeight: FontWeight.w900,
-                    height: 1.1,
-                    fontSize: 16,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Team N',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.2,
+                      fontSize: 16,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 3),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC9A66B).withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFFC9A66B).withValues(alpha: 0.38),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Text(
+                      'ERP SUITE',
+                      style: TextStyle(
+                        color: Color(0xFFE8C88A),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 8.5,
+                        letterSpacing: 0.9,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -1876,21 +1901,38 @@ class Sidebar extends ConsumerWidget {
   }) {
     final crmColors = theme.extension<CrmTheme>()!;
     if (isCollapsed) {
-      return Center(
-        child: Divider(
-          color: crmColors.sidebarForeground.withValues(alpha: 0.16),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: Container(
+            width: 24,
+            height: 1,
+            color: crmColors.sidebarForeground.withValues(alpha: 0.16),
+          ),
         ),
       );
     }
     return Padding(
-      padding: 8.px,
-      child: Text(
-        title,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: crmColors.sidebarForeground.withValues(alpha: 0.54),
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.2,
-        ),
+      padding: const EdgeInsets.fromLTRB(10, 14, 10, 6),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: crmColors.sidebarForeground.withValues(alpha: 0.50),
+              fontWeight: FontWeight.w700,
+              fontSize: 10,
+              letterSpacing: 1.3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 1,
+              color: crmColors.sidebarForeground.withValues(alpha: 0.10),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2028,17 +2070,19 @@ class _SidebarSection extends StatefulWidget {
     required this.title,
     required this.children,
     this.hasActive = false,
+    this.defaultExpanded = false,
   });
   final String title;
   final List<Widget> children;
   final bool hasActive;
+  final bool defaultExpanded;
 
   @override
   State<_SidebarSection> createState() => _SidebarSectionState();
 }
 
 class _SidebarSectionState extends State<_SidebarSection> {
-  late bool _expanded = widget.hasActive;
+  late bool _expanded = widget.hasActive || widget.defaultExpanded;
 
   @override
   void didUpdateWidget(_SidebarSection oldWidget) {
@@ -2103,63 +2147,85 @@ class _SidebarItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
-      margin: 4.py,
+    final itemWidget = AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
         color: isSelected
-            ? Colors.white.withValues(alpha: 0.10)
+            ? Colors.white.withValues(alpha: 0.12)
             : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(9),
+        border: isSelected
+            ? Border.all(
+                color: const Color(0xFFC9A66B).withValues(alpha: 0.40),
+                width: 1,
+              )
+            : null,
       ),
-      child: InkWell(
-        onTap: onTap == null
-            ? null
-            : () {
-                onTap!();
-                // In the mobile nav drawer, close it after navigating to a leaf
-                // item. Group headers (which carry a trailing expand chevron)
-                // keep the drawer open so their sub-items can be reached.
-                if (trailing == null) {
-                  final scaffold = Scaffold.maybeOf(context);
-                  if (scaffold?.isDrawerOpen ?? false) scaffold!.closeDrawer();
-                }
-              },
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: 12.p,
-          child: Row(
-            mainAxisAlignment: isCollapsed
-                ? MainAxisAlignment.center
-                : MainAxisAlignment.start,
-            children: [
-              Icon(
-                icon,
-                color: isSelected
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.70),
-                size: 22,
-              ),
-              if (!isCollapsed) ...[
-                12.w,
-                Expanded(
-                  child: Text(
-                    title,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.70),
-                      fontWeight: isSelected
-                          ? FontWeight.w600
-                          : FontWeight.normal,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap == null
+              ? null
+              : () {
+                  onTap!();
+                  if (trailing == null) {
+                    final scaffold = Scaffold.maybeOf(context);
+                    if (scaffold?.isDrawerOpen ?? false) scaffold!.closeDrawer();
+                  }
+                },
+          borderRadius: BorderRadius.circular(9),
+          hoverColor: Colors.white.withValues(alpha: 0.06),
+          splashColor: Colors.white.withValues(alpha: 0.08),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCollapsed ? 8 : 10,
+              vertical: 8,
+            ),
+            child: Row(
+              mainAxisAlignment: isCollapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected
+                      ? const Color(0xFFF5E6CA)
+                      : Colors.white.withValues(alpha: 0.72),
+                  size: 20,
+                ),
+                if (!isCollapsed) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: isSelected
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.75),
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
-                ),
-                ...?(trailing != null ? [trailing!] : null),
+                  ?trailing,
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
+
+    if (isCollapsed) {
+      return Tooltip(
+        message: title,
+        waitDuration: const Duration(milliseconds: 300),
+        child: itemWidget,
+      );
+    }
+    return itemWidget;
   }
 }

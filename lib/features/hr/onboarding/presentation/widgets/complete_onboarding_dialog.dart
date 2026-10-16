@@ -1137,13 +1137,16 @@ class _CompleteOnboardingDialogState
             ),
             child: Column(
               children: [
-                SwitchListTile(
-                  title: const Text('EPF Applicable (Provident Fund)', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Enables PF deduction & contribution in monthly payroll', style: TextStyle(fontSize: 12)),
-                  value: _epfApplicable,
-                  activeThumbColor: crm.primary,
-                  onChanged: (v) => setState(() => _epfApplicable = v),
-                  contentPadding: EdgeInsets.zero,
+                Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile(
+                    title: const Text('EPF Applicable (Provident Fund)', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Enables PF deduction & contribution in monthly payroll', style: TextStyle(fontSize: 12)),
+                    value: _epfApplicable,
+                    activeThumbColor: crm.primary,
+                    onChanged: (v) => setState(() => _epfApplicable = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
                 if (_epfApplicable) ...[
                   const SizedBox(height: 8),
@@ -1171,13 +1174,16 @@ class _CompleteOnboardingDialogState
             ),
             child: Column(
               children: [
-                SwitchListTile(
-                  title: const Text('ESIC Applicable (Employee State Insurance)', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Required for gross salary up to ₹21,000/month', style: TextStyle(fontSize: 12)),
-                  value: _esiApplicable,
-                  activeThumbColor: crm.primary,
-                  onChanged: (v) => setState(() => _esiApplicable = v),
-                  contentPadding: EdgeInsets.zero,
+                Material(
+                  color: Colors.transparent,
+                  child: SwitchListTile(
+                    title: const Text('ESIC Applicable (Employee State Insurance)', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Required for gross salary up to ₹21,000/month', style: TextStyle(fontSize: 12)),
+                    value: _esiApplicable,
+                    activeThumbColor: crm.primary,
+                    onChanged: (v) => setState(() => _esiApplicable = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 ),
                 if (_esiApplicable) ...[
                   const SizedBox(height: 8),
@@ -1328,44 +1334,47 @@ class _CompleteOnboardingDialogState
                   final tb = filtered[i];
                   final isSelected = _timeboxEmployeeId == tb.id;
 
-                  return ListTile(
-                    dense: true,
-                    leading: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: isSelected ? crm.primary : crm.background,
-                      child: Text(
-                        '#${tb.id}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : crm.textPrimary,
+                  return Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 16,
+                        backgroundColor: isSelected ? crm.primary : crm.background,
+                        child: Text(
+                          '#${tb.id}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? Colors.white : crm.textPrimary,
+                          ),
                         ),
                       ),
-                    ),
-                    title: Text(
-                      tb.fullName,
-                      style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                        color: isSelected ? crm.primary : crm.textPrimary,
+                      title: Text(
+                        tb.fullName,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                          color: isSelected ? crm.primary : crm.textPrimary,
+                        ),
                       ),
-                    ),
-                    subtitle: Text(
-                      '${tb.email} · ${tb.department.isNotEmpty ? tb.department : 'General'}',
-                      style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
-                    ),
-                    trailing: isSelected
-                        ? const Icon(Icons.check_circle, color: Color(0xFF059669), size: 20)
-                        : OutlinedButton(
-                            onPressed: () => setState(() {
-                              _timeboxEmployeeId = tb.id;
-                              _timeboxName = tb.fullName;
-                            }),
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      subtitle: Text(
+                        '${tb.email} · ${tb.department.isNotEmpty ? tb.department : 'General'}',
+                        style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                      ),
+                      trailing: isSelected
+                          ? const Icon(Icons.check_circle, color: Color(0xFF059669), size: 20)
+                          : OutlinedButton(
+                              onPressed: () => setState(() {
+                                _timeboxEmployeeId = tb.id;
+                                _timeboxName = tb.fullName;
+                              }),
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              ),
+                              child: const Text('Select'),
                             ),
-                            child: const Text('Select'),
-                          ),
+                    ),
                   );
                 },
               ),

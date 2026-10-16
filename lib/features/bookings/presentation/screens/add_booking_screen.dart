@@ -89,6 +89,7 @@ class AddBookingScreen extends HookConsumerWidget {
     // raw number the user typed; the resolved rupee amount is computed below.
     final discountType = useState<String>('inr');
     final discountCtrl = useTextEditingController();
+    final discountNoteCtrl = useTextEditingController();
     final discountValue = useState<double>(0);
     final totalPackageCount = bookingCart.value.fold<int>(
       0,
@@ -790,6 +791,8 @@ class AddBookingScreen extends HookConsumerWidget {
           totalPrice: totalPrice.value,
           discountAmount: computedDiscount(),
           discountType: discountType.value,
+          discountValue: discountValue.value,
+          discountReason: discountNoteCtrl.text.trim(),
           advanceAmount: advanceAmount.value,
           leadId: qParams['leadId'],
           bookingItems: bookingItems,
@@ -2117,6 +2120,18 @@ class AddBookingScreen extends HookConsumerWidget {
                                       ),
                                     ),
                                 ],
+                              ),
+                              8.h,
+                              TextField(
+                                controller: discountNoteCtrl,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: crmColors.textPrimary,
+                                ),
+                                decoration: _inputDeco(
+                                  'Discount note',
+                                  crmColors,
+                                ),
                               ),
                               16.h,
                               // ── Totals + Submit ──────────────────────────────

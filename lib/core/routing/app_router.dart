@@ -56,6 +56,8 @@ import '../../features/hr/lms/presentation/screens/hr_lms_screen.dart';
 import '../../features/hr/grievance/presentation/screens/hr_grievance_screen.dart';
 import '../../features/hr/analytics/presentation/screens/hr_analytics_screen.dart';
 import '../../features/hr/presentation/screens/attendance_payroll_screen.dart';
+import '../../features/hr/policies/presentation/screens/hr_policies_screen.dart';
+import '../../features/hr/department_scoring/presentation/screens/hr_department_scoring_screen.dart';
 import '../../features/accounts/presentation/screens/sales_returns_screen.dart';
 import '../../features/accounts/presentation/screens/hra_screen.dart';
 
@@ -301,6 +303,8 @@ String? subKeyForPath(String path) {
   if (path == '/hr/lms') return 'lms';
   if (path == '/hr/grievance') return 'grievance';
   if (path == '/hr/analytics') return 'hr_analytics';
+  if (path == '/hr/policies') return 'hr_policies';
+  if (path == '/hr/department-scoring') return 'staff.evaluation';
   if (path.startsWith('/staff')) return 'staff.employees';
   return null;
 }
@@ -417,6 +421,14 @@ bool isRouteAllowed(String path, Access access,
   if (path == '/hr/analytics') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('hr_analytics', false);
   }
+  // Company & HR Policies — accessible to all employees & staff (essential handbook & code of conduct).
+  if (path == '/hr/policies') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('leave', false) || access.canSeeDashboard;
+  }
+  // Department & Employee Scoring — evaluation & staff performance.
+  if (path == '/hr/department-scoring') {
+    return access.canSeeStaff || access.isDepartmentHead || access.canSeeSub('staff.evaluation') || access.has('staff', false);
+  }
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
   if (path.startsWith('/sales')) {
     final sub = subKeyForPath(path);
@@ -427,24 +439,15 @@ bool isRouteAllowed(String path, Access access,
   }
   // Client reviews — CRM/sales/accounts + full access (admin/manager).
   if (path.startsWith('/reviews')) {
-    return access.isFullAccess ||
-        access.role == AppRole.crm ||
-        access.role == AppRole.accounts ||
-        access.canSeeSales;
+    return access.canSeeClientReviews;
   }
   // Client concierge chat — same client-facing staff as reviews.
   if (path.startsWith('/client-chat')) {
-    return access.isFullAccess ||
-        access.role == AppRole.crm ||
-        access.role == AppRole.accounts ||
-        access.canSeeSales;
+    return access.canSeeClientChat;
   }
   // Bridal app clients (brides) — same client-facing staff.
   if (path.startsWith('/app-clients')) {
-    return access.isFullAccess ||
-        access.role == AppRole.crm ||
-        access.role == AppRole.accounts ||
-        access.canSeeSales;
+    return access.canSeeAppClients;
   }
   if (path.startsWith('/it/')) return access.canSeeIt;
   if (path.startsWith('/projects')) return access.canSeePlanning; // company-wide projects (department-scoped server-side)
@@ -1101,6 +1104,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/analytics',
             builder: (context, state) => const HrAnalyticsScreen(),
+          ),
+          GoRoute(
+            path: '/hr/policies',
+            builder: (context, state) => const HrPoliciesScreen(),
+          ),
+          GoRoute(
+            path: '/hr/department-scoring',
+            builder: (context, state) => const HrDepartmentScoringScreen(),
           ),
           GoRoute(
             path: '/accounts/attendance-payroll',

@@ -251,7 +251,9 @@ class _CashTransactionsScreenState extends ConsumerState<CashTransactionsScreen>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: crm.border),
       ),
-      child: ListTile(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
         onTap: () => _openForm(type: t.type, existing: t),
         leading: CircleAvatar(
           backgroundColor: color.withValues(alpha: 0.12),
@@ -288,6 +290,7 @@ class _CashTransactionsScreenState extends ConsumerState<CashTransactionsScreen>
             ],
           ),
         ]),
+      ),
       ),
     );
   }

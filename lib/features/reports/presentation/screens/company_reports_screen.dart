@@ -324,7 +324,9 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: crm.border)),
-      child: ListTile(
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
         onTap: () => _openViewer(r),
         leading: CircleAvatar(
           backgroundColor: crm.primary.withValues(alpha: 0.1),
@@ -391,6 +393,7 @@ class _CompanyReportsScreenState extends ConsumerState<CompanyReportsScreen> {
               ),
           ],
         ),
+      ),
       ),
     );
   }

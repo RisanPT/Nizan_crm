@@ -66,9 +66,14 @@ class RecruitmentService {
     }
   }
 
-  Future<void> deleteCandidate(String id) async {
+  Future<void> deleteCandidate(String id, {bool deleteLinkedEmployee = false}) async {
     try {
-      await _dio.delete('/recruitment/candidates/$id');
+      await _dio.delete(
+        '/recruitment/candidates/$id',
+        queryParameters: {
+          if (deleteLinkedEmployee) 'deleteLinkedEmployee': 'true',
+        },
+      );
     } catch (e) {
       throw AppException(e, action: 'delete candidate');
     }
@@ -106,6 +111,19 @@ class RecruitmentService {
       await _dio.post('/recruitment/offers/$id/decline');
     } catch (e) {
       throw AppException(e, action: 'decline offer');
+    }
+  }
+
+  Future<void> deleteOffer(String id, {bool deleteLinkedEmployee = false}) async {
+    try {
+      await _dio.delete(
+        '/recruitment/offers/$id',
+        queryParameters: {
+          if (deleteLinkedEmployee) 'deleteLinkedEmployee': 'true',
+        },
+      );
+    } catch (e) {
+      throw AppException(e, action: 'delete offer');
     }
   }
 

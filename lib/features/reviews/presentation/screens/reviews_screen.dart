@@ -143,41 +143,44 @@ class ReviewsScreen extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: r.complaint ? crm.warning : crm.border),
       ),
-      child: ListTile(
-        onTap: pending
-            ? null
-            : () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ReviewDetailScreen(reviewId: r.id)),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          onTap: pending
+              ? null
+              : () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => ReviewDetailScreen(reviewId: r.id)),
+                  ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  r.brideName.isEmpty ? 'Bride' : r.brideName,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                r.brideName.isEmpty ? 'Bride' : r.brideName,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            if (pending)
-              _badge(crm, 'Awaiting', crm.textSecondary)
-            else ...[
-              _scorePill(crm, '${r.brideScore}★'),
-              if (r.nps != null) ...[6.0.gap, _badge(crm, 'NPS ${r.nps}', crm.accent)],
+              if (pending)
+                _badge(crm, 'Awaiting', crm.textSecondary)
+              else ...[
+                _scorePill(crm, '${r.brideScore}★'),
+                if (r.nps != null) ...[6.0.gap, _badge(crm, 'NPS ${r.nps}', crm.accent)],
+              ],
             ],
-          ],
+          ),
+          subtitle: Text(
+            [
+              if (r.artistName.isNotEmpty) r.artistName,
+              if (r.bookingNumber.isNotEmpty) '#${r.bookingNumber}',
+              _date(r.submittedAt ?? r.createdAt),
+              if (r.complaint) '⚠ needs follow-up',
+            ].where((s) => s.isNotEmpty).join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: pending ? null : const Icon(Icons.chevron_right),
         ),
-        subtitle: Text(
-          [
-            if (r.artistName.isNotEmpty) r.artistName,
-            if (r.bookingNumber.isNotEmpty) '#${r.bookingNumber}',
-            _date(r.submittedAt ?? r.createdAt),
-            if (r.complaint) '⚠ needs follow-up',
-          ].where((s) => s.isNotEmpty).join(' · '),
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-        ),
-        trailing: pending ? null : const Icon(Icons.chevron_right),
       ),
     );
   }

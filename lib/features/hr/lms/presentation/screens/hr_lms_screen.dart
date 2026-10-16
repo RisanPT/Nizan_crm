@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/hr/lms/data/lms_models.dart';
 import 'package:nizan_crm/features/hr/lms/service/lms_service.dart';
+import 'package:nizan_crm/features/hr/lms/presentation/widgets/training_modules_tabs.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 
 /// Redesigned HR Learning & Orientation screen matching HRMS_Design.html (#s-training).
@@ -68,7 +69,7 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _tabController.addListener(() {
       if (_tabController.index != _activeTabIndex && mounted) {
         setState(() => _activeTabIndex = _tabController.index);
@@ -106,6 +107,11 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
               index: _activeTabIndex,
               children: [
                 _OrientationTab(crm: crm, canManage: canManage),
+                SyllabusTutorialsTab(crm: crm, canManage: canManage),
+                MentorTrainerFlowTab(crm: crm, canManage: canManage),
+                EvaluationScoringTab(crm: crm, canManage: canManage),
+                QualityIndexTab(crm: crm),
+                GalpAmoBundleTab(crm: crm, canManage: canManage),
                 _CoursesTab(crm: crm, canManage: canManage),
                 _SkillsMatrixTab(crm: crm),
               ],
@@ -208,15 +214,29 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
         boxShadow: hrCardShadow(),
       ),
       padding: const EdgeInsets.all(4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _tabPill(crm, 0, 'Orientation (1-Week Plan)', Icons.calendar_today_outlined),
-          const SizedBox(width: 4),
-          _tabPill(crm, 1, 'Courses & LMS', Icons.school_outlined),
-          const SizedBox(width: 4),
-          _tabPill(crm, 2, 'Skills Matrix', Icons.auto_awesome_outlined),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _tabPill(crm, 0, 'Orientation Plan', Icons.calendar_today_outlined),
+            const SizedBox(width: 4),
+            _tabPill(crm, 1, 'Syllabus & Tutorials', Icons.menu_book_rounded),
+            const SizedBox(width: 4),
+            _tabPill(crm, 2, 'Mentor & Trainer Flow', Icons.people_alt_outlined),
+            const SizedBox(width: 4),
+            _tabPill(crm, 3, 'Evaluation & Scoring', Icons.fact_check_outlined),
+            const SizedBox(width: 4),
+            _tabPill(crm, 4, 'Quality Index', Icons.speed_rounded),
+            const SizedBox(width: 4),
+            _tabPill(crm, 5, 'GALP & AMO Bundles', Icons.military_tech_outlined),
+            const SizedBox(width: 4),
+            _tabPill(crm, 6, 'Courses & LMS', Icons.school_outlined),
+            const SizedBox(width: 4),
+            _tabPill(crm, 7, 'Skills Matrix', Icons.auto_awesome_outlined),
+          ],
+        ),
       ),
     );
   }
