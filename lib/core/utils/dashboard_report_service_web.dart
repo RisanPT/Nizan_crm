@@ -1,4 +1,7 @@
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:csv/csv.dart';
+import 'file_saver.dart';
 import 'dart:js_interop';
 
 import 'package:flutter/services.dart' show rootBundle;
@@ -1158,5 +1161,237 @@ pw.Widget _monthWiseSummaryTable(List<Lead> leads) {
     cellPadding: const pw.EdgeInsets.all(6),
     cellAlignment: pw.Alignment.centerLeft,
     cellStyle: const pw.TextStyle(fontSize: 8),
+  );
+}
+
+// ═══ CSV version of the same reports ══════════════════════════════════════
+// Same _buildReport numbers, same sections, columns and Total rows as the PDF
+// above — one block per section, amounts as plain numbers for spreadsheets.
+
+Future<void> downloadDashboardReportCsv({
+  required DateTime month,
+  required List<Booking> bookings,
+  required List<ServicePackage> packages,
+  required List<Employee> employees,
+  String reportType = 'executive',
+  List<Lead> leads = const [],
+  List<ArtistCollection> collections = const [],
+  bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
+}) async {
+  final report = _buildReport(
+    month,
+    bookings,
+    packages,
+    employees,
+    useEventDate: useEventDate,
+    startDate: startDate,
+    endDate: endDate,
+    reportType: reportType,
+  );
+
+  final title = switch (reportType) {
+    'sales' => 'Team N ERP Sales Report',
+    'marketing' => 'Team N ERP Marketing Report',
+    'crm' => 'Team N ERP Client Relations Report',
+    'finance' => 'Team N ERP Finance Report',
+    'ceo_daily' => 'DAILY SALES REPORT | Team N ERP',
+    'forecast' => 'Team N ERP Sales Forecast Report',
+    _ => reportType.startsWith('month_end_cashflow') ? 'Month End Cash Flow Report' : 'Team N ERP Executive Overview',
+  };
+
+  // Same rounding as the PDF ("INR 1234"), kept numeric for Excel.
+  num amt(double v) => num.parse(v.toStringAsFixed(0));
+
+  String districtOf(Booking booking) {
+    var d = booking.district.trim();
+    if (d.isEmpty && booking.districtId.isNotEmpty && districts.isNotEmpty) {
+      for (final x in districts) {
+        if (x.id == booking.districtId && x.name.isNotEmpty) {
+          d = x.name.trim();
+          break;
+        }
+      }
+    }
+    return d.isEmpty ? booking.region.trim() : d;
+  }
+
+  double addonsOf(Booking b) => b.addons.fold<double>(0.0, (s, a) => s + a.amount * a.persons);
+  double balanceOf(Booking b) =>
+      (b.totalPrice - b.advanceAmount - b.discountAmount).clamp(0, double.infinity).toDouble();
+
+  final rows = <List<dynamic>>[
+    [title],
+    [
+      reportType == 'ceo_daily'
+          ? 'Report Date: ${_dateLabel(DateTime.now())}'
+          : (startDate != null && endDate != null)
+              ? 'Reporting Period: ${_dateLabel(startDate)} - ${_dateLabel(endDate)}'
+              : 'Reporting Period: ${_monthLabel(month)}',
+    ],
+    if (activeFilters != null && activeFilters.isNotEmpty) ['Active Filters: $activeFilters'],
+  ];
+
+  void section(String name) => rows
+    ..add(const [])
+    ..add([name]);
+
+  void metrics(List<(String, Object)> items) {
+    rows.add(const ['Metric', 'Value']);
+    for (final (label, value) in items) {
+      rows.add([label, value]);
+    }
+  }
+
+  void dailyRevenue() {
+    rows.add(const ['Day', 'Bookings', 'Revenue']);
+    for (final r in report.dailyRevenue) {
+      rows.add([r.dayLabel, r.bookingsCount, amt(r.revenue)]);
+    }
+    if (report.dailyRevenue.isNotEmpty) {
+      rows.add([
+        'Total',
+        report.dailyRevenue.fold<int>(0, (s, r) => s + r.bookingsCount),
+        amt(report.dailyRevenue.fold<double>(0.0, (s, r) => s + r.revenue)),
+      ]);
+    }
+  }
+
+  void bookingTable(List<Booking> list) {
+    rows.add(const [
+      'Client', 'Phone', 'Service', 'District', 'Booked', 'Event', 'Status',
+      'Advance', 'Discount', 'Add-ons', 'Total', 'Balance',
+    ]);
+    for (final b in list) {
+      rows.add([
+        b.customerName,
+        b.phone,
+        b.service,
+        districtOf(b),
+        _dateLabel(b.createdAt ?? b.bookingDate),
+        _dateLabel(b.serviceStart),
+        b.status.toUpperCase(),
+        amt(b.advanceAmount),
+        amt(b.discountAmount),
+        amt(addonsOf(b)),
+        amt(b.totalPrice),
+        amt(balanceOf(b)),
+      ]);
+    }
+    if (list.isNotEmpty) {
+      rows.add([
+        'Total', '', '', '', '', '', '',
+        amt(list.fold<double>(0.0, (s, b) => s + b.advanceAmount)),
+        amt(list.fold<double>(0.0, (s, b) => s + b.discountAmount)),
+        amt(list.fold<double>(0.0, (s, b) => s + addonsOf(b))),
+        amt(list.fold<double>(0.0, (s, b) => s + b.totalPrice)),
+        amt(list.fold<double>(0.0, (s, b) => s + balanceOf(b))),
+      ]);
+    }
+  }
+
+  if (reportType == 'executive' || reportType == 'sales') {
+    section('Summary');
+    metrics([
+      ('Total Sales', amt(report.totalSales)),
+      ('Advance Collected', amt(report.totalAdvance)),
+      ('Total Discounts', amt(report.totalDiscount)),
+      ('Forecast Amount', amt(report.forecastAmount)),
+      ('Total Works', report.totalWorks),
+      ('Completed Works', report.completedWorks),
+      ('Cancelled Works', report.cancelledWorks),
+    ]);
+    section('Daily Revenue Overview');
+    dailyRevenue();
+  }
+
+  if (reportType == 'forecast') {
+    section('Summary');
+    metrics([
+      ('Active Works', report.totalWorks),
+      ('Forecast Amount', amt(report.forecastAmount)),
+    ]);
+    section('Pending Collections (Forecast)');
+    bookingTable(report.pendingBookings);
+    section('Upcoming Bookings');
+    bookingTable(report.upcomingBookings);
+  }
+
+  if (reportType == 'executive' || reportType == 'marketing') {
+    section('Top Services Performance');
+    rows.add(const ['Service', 'Bookings', 'Price']);
+    for (final s in report.topServices) {
+      rows.add([s.name, s.bookingsCount, amt(s.amount)]);
+    }
+  }
+
+  if (reportType == 'executive' || reportType == 'crm') {
+    section('Top Staff Performance');
+    rows.add(const ['Staff', 'Role', 'Appointments']);
+    for (final s in report.topStaff) {
+      rows.add([s.name, s.role, s.appointmentsCount]);
+    }
+  }
+
+  if (reportType == 'executive' || reportType == 'sales' || reportType == 'crm') {
+    section('Monthly Bookings Ledger');
+    bookingTable(report.monthBookingsList);
+  }
+
+  if (reportType == 'finance') {
+    section('Financial Summary');
+    dailyRevenue();
+    section('Expense Overview');
+    rows.add(const ['Detailed expense breakdown is available in the Accounts module.']);
+  }
+
+  if (reportType == 'ceo_daily') {
+    section('Daily Performance Metrics');
+    metrics([('Total Leads', leads.length)]);
+    section('Recent Collections');
+    bookingTable(report.todaysBookings);
+    section('Detailed Sales Records');
+    bookingTable(report.todaysBookings);
+  }
+
+  if (reportType.startsWith('month_end_cashflow')) {
+    section('Summary');
+    metrics([
+      if (reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Advance')
+        ('Advances Collected', amt(report.cashFlowAdvances)),
+      if (reportType == 'month_end_cashflow_All' || reportType == 'month_end_cashflow_Collection')
+        ('Balances Collected', amt(report.cashFlowCurrentEvents)),
+      ('Total Inflow (Filtered)', amt(report.cashFlowTotal)),
+    ]);
+    section('Cash Flow Ledger');
+    rows.add(const ['Date', 'Client', 'Phone', 'Service', 'District', 'Transaction Type', 'Amount']);
+    for (final tx in report.cashFlowTransactions) {
+      rows.add([
+        _dateLabel(tx.date),
+        tx.clientName,
+        tx.booking.phone,
+        tx.booking.service,
+        districtOf(tx.booking),
+        tx.type,
+        amt(tx.amount),
+      ]);
+    }
+    if (report.cashFlowTransactions.isNotEmpty) {
+      rows.add([
+        'Total', '', '', '', '', '',
+        amt(report.cashFlowTransactions.fold<double>(0.0, (s, tx) => s + tx.amount)),
+      ]);
+    }
+  }
+
+  // BOM so Excel reads names in Malayalam / other scripts correctly.
+  final csv = '﻿${const CsvEncoder().convert(rows)}';
+  await saveFileBytes(
+    '$reportType-report-${month.year}-${month.month.toString().padLeft(2, '0')}.csv',
+    utf8.encode(csv),
+    mime: 'text/csv',
   );
 }

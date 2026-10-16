@@ -39,6 +39,38 @@ Future<void> downloadDashboardReport({
   );
 }
 
+/// The same report as [downloadDashboardReport], as a CSV file (same
+/// sections, columns and totals).
+Future<void> downloadDashboardReportCsv({
+  required DateTime month,
+  required List<Booking> bookings,
+  required List<ServicePackage> packages,
+  required List<Employee> employees,
+  String reportType = 'executive',
+  List<Lead> leads = const [],
+  List<ArtistCollection> collections = const [],
+  bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
+}) {
+  return impl.downloadDashboardReportCsv(
+    month: month,
+    bookings: bookings,
+    packages: packages,
+    employees: employees,
+    reportType: reportType,
+    leads: leads,
+    collections: collections,
+    useEventDate: useEventDate,
+    startDate: startDate,
+    endDate: endDate,
+    districts: districts,
+    activeFilters: activeFilters,
+  );
+}
+
 Future<void> downloadLeadsReport({
   required List<Lead> leads,
   String statusFilter = 'All',

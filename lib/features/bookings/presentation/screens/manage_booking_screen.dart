@@ -30,6 +30,7 @@ import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/widgets/map_link_distance_helper.dart';
 
 /// 'YYYY-MM-DD' key used for a booking's per-date map overrides (`dateMaps`).
 String _dateKey(DateTime d) =>
@@ -281,6 +282,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     // CRM-only fields (empty until filled by user)
     final mapUrlCtrl = useTextEditingController();
     useListenable(mapUrlCtrl);
+    // Ticks when the USER edits / pastes the map link (not when a saved
+    // booking loads into the field) — drives the auto distance lookup.
+    final mapLinkEdits = useValueNotifier<int>(0);
     final travelModeCtrl = useTextEditingController();
     final travelTimeCtrl = useTextEditingController();
     final travelDistanceCtrl = useTextEditingController(
@@ -1742,6 +1746,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     endTimeCtrl,
                     previousArtistWork,
                     previousWorkDistanceKm,
+                    mapLinkEdits,
                   ),
                   24.h,
                   _buildScheduledDates(
@@ -1778,6 +1783,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           endTimeCtrl,
                           previousArtistWork,
                           previousWorkDistanceKm,
+                          mapLinkEdits,
                         ),
                       ),
                       24.w,
@@ -2321,6 +2327,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     TextEditingController endCtrl,
     BookingDisplayEntry? previousArtistWork,
     double? previousWorkDistanceKm,
+    ValueNotifier<int> mapLinkEdits,
   ) {
     return _SectionCard(
       title: 'Logistics & Location',
@@ -2353,6 +2360,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     'MAP URL / COORDINATES',
                     mapUrlCtrl,
                     hint: 'Google Maps Link',
+                    onChanged: (_) => mapLinkEdits.value++,
                     suffixIcon: mapUrlCtrl.text.trim().isNotEmpty
                         ? IconButton(
                             icon: Icon(Icons.open_in_new_rounded, color: crmColors.primary),
@@ -2396,6 +2404,13 @@ class ManageBookingScreen extends HookConsumerWidget {
                 ],
               );
             },
+          ),
+          // Map link → road distance / drive time from HQ (fills the fields).
+          MapLinkDistanceHelper(
+            mapUrlCtrl: mapUrlCtrl,
+            distanceCtrl: travelDistanceCtrl,
+            timeCtrl: travelTimeCtrl,
+            userEdits: mapLinkEdits,
           ),
           if (availableVehicles.isNotEmpty) ...[
             24.h,
@@ -3608,6 +3623,7 @@ class ManageBookingScreen extends HookConsumerWidget {
     bool readOnly = false,
     VoidCallback? onTap,
     Widget? suffixIcon,
+    ValueChanged<String>? onChanged,
   }) {
     final crmColors = context.crmColors;
     return Column(
@@ -3628,6 +3644,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           keyboardType: keyboardType,
           readOnly: readOnly,
           onTap: onTap,
+          onChanged: onChanged,
           style: TextStyle(
             color: textColor,
             fontWeight: textColor != null ? FontWeight.bold : FontWeight.normal,

@@ -18,6 +18,9 @@ class ExportSalesReportDialog extends StatefulWidget {
   final void Function(bool) onJanMarReport;
   final void Function(bool, DateTime, String) onMonthEndCashFlowReport;
 
+  /// Shows the PDF / CSV switch; called with true when CSV is chosen.
+  final ValueChanged<bool>? onFormatChanged;
+
   const ExportSalesReportDialog({
     super.key,
     required this.financialYear,
@@ -35,6 +38,7 @@ class ExportSalesReportDialog extends StatefulWidget {
     required this.onOctDecReport,
     required this.onJanMarReport,
     required this.onMonthEndCashFlowReport,
+    this.onFormatChanged,
   });
 
   @override
@@ -43,6 +47,7 @@ class ExportSalesReportDialog extends StatefulWidget {
 
 class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
   late bool _useEventDate;
+  bool _asCsv = false;
 
   @override
   void initState() {
@@ -162,6 +167,40 @@ class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
                 ),
               ],
             ),
+            // Every report below downloads in the chosen format — same
+            // sections, columns and totals either way.
+            if (widget.onFormatChanged != null) ...[
+              12.h,
+              Row(
+                children: [
+                  const Text(
+                    'File Format:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  16.w,
+                  Expanded(
+                    child: SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('PDF'), icon: Icon(Icons.picture_as_pdf_outlined, size: 16)),
+                        ButtonSegment(value: true, label: Text('CSV'), icon: Icon(Icons.table_view_outlined, size: 16)),
+                      ],
+                      selected: {_asCsv},
+                      onSelectionChanged: (Set<bool> v) {
+                        setState(() => _asCsv = v.first);
+                        widget.onFormatChanged!(_asCsv);
+                      },
+                      style: ButtonStyle(
+                        textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             16.h,
             if (widget.activeFilters != null && widget.activeFilters!.isNotEmpty) ...[
               Container(

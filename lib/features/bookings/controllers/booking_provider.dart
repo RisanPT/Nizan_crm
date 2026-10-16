@@ -37,6 +37,8 @@ class PaginatedBookingsParams {
   // Filter by the user who ENTERED the booking (Booking.createdBy) — the
   // "Added By" filter (sales / CRM / managers / admin all enter bookings).
   final String? createdBy;
+  // Package filter: bookings using this package on any line.
+  final String? packageId;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -58,6 +60,7 @@ class PaginatedBookingsParams {
     this.to,
     this.salesPersonId,
     this.createdBy,
+    this.packageId,
   });
 
   @override
@@ -81,7 +84,8 @@ class PaginatedBookingsParams {
         other.from == from &&
         other.to == to &&
         other.salesPersonId == salesPersonId &&
-        other.createdBy == createdBy;
+        other.createdBy == createdBy &&
+        other.packageId == packageId;
   }
 
   @override
@@ -105,6 +109,7 @@ class PaginatedBookingsParams {
     to,
     salesPersonId,
     createdBy,
+    packageId,
   );
 }
 
@@ -155,6 +160,7 @@ final paginatedBookingsProvider =
             to: params.to,
             salesPersonId: params.salesPersonId,
             createdBy: params.createdBy,
+            packageId: params.packageId,
           );
     });
 

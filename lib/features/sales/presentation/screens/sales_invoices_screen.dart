@@ -17,6 +17,8 @@ import '../../../../core/utils/dashboard_report_service.dart';
 import '../../../../core/utils/responsive_builder.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../services/package_service.dart';
+import 'package:nizan_crm/core/models/service_package.dart';
+import 'package:nizan_crm/features/bookings/utils/package_filter.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../presentation/widgets/export_sales_report_dialog.dart';
 import '../../../../core/utils/booking_print_service.dart';
@@ -87,6 +89,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final dateTo = useState<DateTime?>(null);
     // "Added By" filter — who ENTERED the booking (Booking.createdBy). '' = all.
     final selectedCreatorId = useState<String>('');
+    // Package filter — bookings using this package on any line. '' = all.
+    final selectedPackageId = useState<String>('');
+    final allPackages = ref.watch(packagesProvider).value ?? const <ServicePackage>[];
+    final selectedPackage = allPackages
+        .cast<ServicePackage?>()
+        .firstWhere((p) => p?.id == selectedPackageId.value, orElse: () => null);
     final session = ref.watch(authSessionProvider);
     // Managers / admins / CRM / department heads may slice by who added a booking.
     final canFilterByCreator = session != null &&
@@ -124,9 +132,9 @@ class SalesBookingsScreen extends HookConsumerWidget {
       return '$startYear-${((startYear + 1) % 100).toString().padLeft(2, '0')}';
     });
 
-    final pageParams = PaginatedBookingsParams(
-      page: pageState.value,
-      limit: pageSize,
+    PaginatedBookingsParams listParams(int page, int limit) => PaginatedBookingsParams(
+      page: page,
+      limit: limit,
       search: searchQuery.value,
       duplicatesOnly: duplicatesOnly.value,
       financialYear: selectedFY.value,
@@ -138,7 +146,10 @@ class SalesBookingsScreen extends HookConsumerWidget {
       from: _ymd(dateFrom.value),
       to: _ymd(dateTo.value),
       createdBy: selectedCreatorId.value.isEmpty ? null : selectedCreatorId.value,
+      packageId: selectedPackageId.value.isEmpty ? null : selectedPackageId.value,
     );
+    final pageParams = listParams(pageState.value, pageSize);
+
     final asyncPaginatedBookings = ref.watch(
       paginatedBookingsProvider(pageParams),
     );
@@ -208,8 +219,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
     bool matchesCreator(Booking b) =>
         selectedCreatorId.value.isEmpty || b.createdBy == selectedCreatorId.value;
 
+    bool matchesPackage(Booking b) =>
+        selectedPackage == null || bookingUsesPackage(b, selectedPackage);
+
     final geoFilteredAllBookings = allBookings
-        .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b) && matchesCreator(b))
+        .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b) && matchesCreator(b) && matchesPackage(b))
         .toList();
 
     int countPackages(Iterable<Booking> bookings) {
@@ -412,9 +426,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
           final name = creatorOptions[selectedCreatorId.value];
           if (name != null) parts.add('Added By: $name');
         }
+        if (selectedPackage != null) parts.add('Package: ${selectedPackage.name}');
         return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
       })();
 
+      // PDF / CSV — chosen in the dialog; every report below follows it.
+      var asCsv = false;
       showDialog(
         context: context,
         builder: (dialogCtx) => ExportSalesReportDialog(
@@ -424,7 +441,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
           onTodayReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -438,7 +455,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
           onDailyPerformance: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -452,7 +469,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
           onExecutiveSummary: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -463,10 +480,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
               activeFilters: activeFiltersStr,
             ),
           ),
+          onFormatChanged: (v) => asCsv = v,
           onFullLedger: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -480,7 +498,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
           onMonthEndCashFlowReport: (useEventDate, selectedMonth, transactionType) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: selectedMonth,
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -494,7 +512,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
           onForecastReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,
-            action: () => downloadDashboardReport(
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
               bookings: geoFilteredAllBookings,
               packages: packages,
@@ -511,7 +529,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             action: () {
               final parts = selectedFY.value.split('-');
               final startYear = int.parse(parts[0]);
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 4),
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -531,7 +549,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             action: () {
               final parts = selectedFY.value.split('-');
               final startYear = int.parse(parts[0]);
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 7),
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -551,7 +569,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             action: () {
               final parts = selectedFY.value.split('-');
               final startYear = int.parse(parts[0]);
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 10),
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -571,7 +589,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             action: () {
               final parts = selectedFY.value.split('-');
               final endYear = 2000 + int.parse(parts[1]);
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(endYear, 1),
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -590,7 +608,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () {
               final now = DateTime.now();
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: now,
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -609,7 +627,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () {
               final now = DateTime.now();
-              return downloadDashboardReport(
+              return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: now,
                 bookings: geoFilteredAllBookings,
                 packages: packages,
@@ -1162,6 +1180,14 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             underline: const SizedBox(),
                             icon: const Icon(Icons.keyboard_arrow_down, size: 18),
                           ),
+                        ),
+                        // ── Package (any line of the booking) Dropdown ──
+                        PackageFilterDropdown(
+                          value: selectedPackageId.value,
+                          onChanged: (id) {
+                            selectedPackageId.value = id;
+                            pageState.value = 1;
+                          },
                         ),
                         // ── Added By (who entered the booking) Dropdown ──
                         if (canFilterByCreator) ...[

@@ -10,6 +10,9 @@ import 'package:nizan_crm/core/providers/trial_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
 import 'package:nizan_crm/core/utils/gst_invoice_pdf.dart';
+import 'package:nizan_crm/core/models/service_package.dart';
+import 'package:nizan_crm/services/package_service.dart';
+import 'package:nizan_crm/features/bookings/utils/package_filter.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
 import 'package:nizan_crm/core/utils/gst_calculator.dart';
@@ -30,6 +33,7 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
   DateTime? _selectedMonth;
   String _paymentStatusFilter = 'All';
   String _source = 'all'; // all | bookings | trials
+  String _packageId = ''; // package filter ('' = all)
   int _currentPage = 1;
   static const int _itemsPerPage = 15;
 
@@ -172,6 +176,9 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
         .map(_bookingFromTrial)
         .toList();
     final trialIds = trialInvoices.map((b) => b.id).toSet();
+    final selectedPackage = (ref.watch(packagesProvider).value ?? const <ServicePackage>[])
+        .cast<ServicePackage?>()
+        .firstWhere((p) => p?.id == _packageId, orElse: () => null);
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -211,6 +218,11 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
               if (!eventInSelectedMonth && !isConfirmedFutureWork) {
                 return false;
               }
+            }
+
+            // Package: the booking uses it on any line (trials never match).
+            if (selectedPackage != null && !bookingUsesPackage(b, selectedPackage)) {
+              return false;
             }
 
             if (_paymentStatusFilter != 'All') {
@@ -394,6 +406,16 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                               },
                             ),
                           ),
+                        ),
+                        16.w,
+                        // Package filter
+                        PackageFilterDropdown(
+                          value: _packageId,
+                          onChanged: (id) => setState(() {
+                            _packageId = id;
+                            _currentPage = 1;
+                            _selectedInvoice = null;
+                          }),
                         ),
                         16.w,
                         // Search

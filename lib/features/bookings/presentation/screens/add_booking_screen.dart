@@ -20,6 +20,7 @@ import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/widgets/hq_distance_line.dart';
 
 class AddBookingScreen extends HookConsumerWidget {
   const AddBookingScreen({super.key});
@@ -125,8 +126,14 @@ class AddBookingScreen extends HookConsumerWidget {
             final dayTime = entryDates.length == 1
                 ? dayTimes.value[_dateKey(entryDates.first)]
                 : null;
-            final itemStart = dayTime == null ? '' : _hhmm(dayTime.start);
-            final itemEnd = dayTime == null ? '' : _hhmm(dayTime.end);
+            // A package's own time (Multiple mode, same-day packages at
+            // different times) beats the day's time; '' = main time.
+            final itemStart = entry.startTime.isNotEmpty
+                ? entry.startTime
+                : (dayTime == null ? '' : _hhmm(dayTime.start));
+            final itemEnd = entry.endTime.isNotEmpty
+                ? entry.endTime
+                : (dayTime == null ? '' : _hhmm(dayTime.end));
             // This package's OWN district (falls back to the booking-level
             // district), used both for its district-based price and to store
             // the per-item district so a multi-district booking prices each
@@ -626,6 +633,38 @@ class AddBookingScreen extends HookConsumerWidget {
         initialTime: endTime.value,
       );
       if (picked != null) endTime.value = picked;
+    }
+
+    // The time a package row will actually use: its own → its day's → main.
+    ({TimeOfDay start, TimeOfDay end, bool own}) packageTime(_BookingCartEntry e) {
+      final day = e.date == null ? null : dayTimes.value[_dateKey(e.date!)];
+      final s = _parseHhmm(e.startTime) ?? day?.start ?? startTime.value;
+      final en = _parseHhmm(e.endTime) ?? day?.end ?? endTime.value;
+      return (start: s, end: en, own: e.startTime.isNotEmpty || e.endTime.isNotEmpty);
+    }
+
+    // Set a start then an end time for one package row.
+    Future<void> pickPackageTime(int index) async {
+      final cur = packageTime(bookingCart.value[index]);
+      final start = await showTimePicker(
+        context: context,
+        initialTime: cur.start,
+        helpText: 'PACKAGE START TIME',
+      );
+      if (start == null || !context.mounted) return;
+      var endInitial = cur.end;
+      if (endInitial.hour * 60 + endInitial.minute <= start.hour * 60 + start.minute) {
+        endInitial = TimeOfDay(hour: (start.hour + 1).clamp(0, 23), minute: start.minute);
+      }
+      final end = await showTimePicker(
+        context: context,
+        initialTime: endInitial,
+        helpText: 'PACKAGE END TIME',
+      );
+      if (end == null) return;
+      final list = [...bookingCart.value];
+      list[index] = list[index].copyWith(startTime: _hhmm(start), endTime: _hhmm(end));
+      bookingCart.value = list;
     }
 
     // Pick a different start/end for one day of a multi-day programme.
@@ -1161,6 +1200,11 @@ class AddBookingScreen extends HookConsumerWidget {
                                     ),
                                   ),
                                 ],
+                              ),
+                              // Road distance from HQ (HiLITE Business Park).
+                              HqDistanceLine(
+                                addressCtrl: addressCtrl,
+                                pincodeCtrl: pincodeCtrl,
                               ),
                               10.h,
                               CheckboxListTile(
@@ -1742,6 +1786,55 @@ class AddBookingScreen extends HookConsumerWidget {
                                                             ]),
                                                           ),
                                                         );
+                                                      }),
+                                                    ],
+                                                    // Per-package time — two
+                                                    // packages on the same day
+                                                    // can run at different times.
+                                                    if (!isSingleMode) ...[
+                                                      6.h,
+                                                      Builder(builder: (ctx) {
+                                                        final t = packageTime(entry.value);
+                                                        return Row(children: [
+                                                          Expanded(
+                                                            child: InkWell(
+                                                              onTap: isSubmitting.value
+                                                                  ? null
+                                                                  : () => pickPackageTime(entry.key),
+                                                              child: InputDecorator(
+                                                                decoration: const InputDecoration(
+                                                                  isDense: true,
+                                                                  border: OutlineInputBorder(),
+                                                                  contentPadding:
+                                                                      EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                                                  prefixIcon: Icon(Icons.schedule, size: 16),
+                                                                  prefixIconConstraints:
+                                                                      BoxConstraints(minWidth: 32, minHeight: 0),
+                                                                ),
+                                                                child: Text(
+                                                                  '${fmtTime(t.start)} – ${fmtTime(t.end)}'
+                                                                  '${t.own ? '' : '  (day time)'}',
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                  style: TextStyle(
+                                                                    fontWeight: t.own ? FontWeight.w700 : FontWeight.normal,
+                                                                    color: t.own ? crmColors.textPrimary : crmColors.textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          if (t.own)
+                                                            IconButton(
+                                                              tooltip: 'Use the day time',
+                                                              icon: const Icon(Icons.undo, size: 18),
+                                                              onPressed: () {
+                                                                final list = [...bookingCart.value];
+                                                                list[entry.key] = list[entry.key]
+                                                                    .copyWith(startTime: '', endTime: '');
+                                                                bookingCart.value = list;
+                                                              },
+                                                            ),
+                                                        ]);
                                                       }),
                                                     ],
                                                     if (entry.value.eventSlot
@@ -2346,6 +2439,11 @@ class _BookingCartEntry {
   /// under this package.
   final List<BookingAddon> addons;
 
+  /// This package's own start / end ("HH:mm"), for two packages on the
+  /// same day at different times. '' = the day's time (or the main time).
+  final String startTime;
+  final String endTime;
+
   const _BookingCartEntry({
     required this.id,
     required this.packageId,
@@ -2357,6 +2455,8 @@ class _BookingCartEntry {
     this.date,
     this.districtId = '',
     this.addons = const [],
+    this.startTime = '',
+    this.endTime = '',
   });
 
   _BookingCartEntry copyWith({
@@ -2370,6 +2470,8 @@ class _BookingCartEntry {
     DateTime? date,
     String? districtId,
     List<BookingAddon>? addons,
+    String? startTime,
+    String? endTime,
   }) {
     return _BookingCartEntry(
       id: id ?? this.id,
@@ -2382,6 +2484,8 @@ class _BookingCartEntry {
       date: date ?? this.date,
       districtId: districtId ?? this.districtId,
       addons: addons ?? this.addons,
+      startTime: startTime ?? this.startTime,
+      endTime: endTime ?? this.endTime,
     );
   }
 }
@@ -2392,6 +2496,15 @@ String _formatDayLabel(DateTime d) {
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
   ];
   return '${d.day} ${months[d.month - 1]} ${d.year}';
+}
+
+/// "HH:mm" → TimeOfDay, or null when empty / invalid.
+TimeOfDay? _parseHhmm(String raw) {
+  final m = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw.trim());
+  if (m == null) return null;
+  final h = int.parse(m.group(1)!), min = int.parse(m.group(2)!);
+  if (h > 23 || min > 59) return null;
+  return TimeOfDay(hour: h, minute: min);
 }
 
 /// "HH:mm" (24-h) — the per-line time format BookingItem stores.

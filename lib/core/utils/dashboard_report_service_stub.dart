@@ -32,3 +32,20 @@ Future<void> downloadLeadsReport({
 }) async {
   throw UnsupportedError('Leads PDF export is only available on web.');
 }
+
+Future<void> downloadDashboardReportCsv({
+  required DateTime month,
+  required List<Booking> bookings,
+  required List<ServicePackage> packages,
+  required List<Employee> employees,
+  String reportType = 'executive',
+  List<Lead> leads = const [],
+  List<ArtistCollection> collections = const [],
+  bool useEventDate = false,
+  DateTime? startDate,
+  DateTime? endDate,
+  List<District> districts = const [],
+  String? activeFilters,
+}) async {
+  throw UnsupportedError('Dashboard CSV export is not available on this platform.');
+}
