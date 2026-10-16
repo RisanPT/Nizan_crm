@@ -1397,6 +1397,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               bookingId: state.pathParameters['id'] ?? '1042',
               bookingEntryId: state.uri.queryParameters['entry'],
             ),
+            // Leaving with unsaved edits asks save / discard / keep editing.
+            onExit: (context, state) => ManageBookingScreen.canLeave(),
           ),
           GoRoute(
             path: '/finance',

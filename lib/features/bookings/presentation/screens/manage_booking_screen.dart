@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -40,6 +41,14 @@ class ManageBookingScreen extends HookConsumerWidget {
   final String bookingId;
   final String? bookingEntryId;
 
+  // Asks "save / discard / keep editing" when the open booking has unsaved
+  // changes. Set by the live screen; used by the router's onExit and by the
+  // in-page package switch / add / remove (same route, so onExit can't see it).
+  static Future<bool> Function()? _leaveGuard;
+
+  /// True when it's fine to leave the booking being edited.
+  static Future<bool> canLeave() async => await (_leaveGuard?.call() ?? Future.value(true));
+
   const ManageBookingScreen({
     super.key,
     required this.bookingId,
@@ -63,6 +72,13 @@ class ManageBookingScreen extends HookConsumerWidget {
     // after it would be disposed, and a failed delete then crashed resetting it
     // (hiding the real error).
     final isDeleting = useState(false);
+    // Redesigned layout: which tab is open, and the unsaved-changes baseline
+    // (the form as loaded, serialised). Declared here so they survive the
+    // brief loading states a save / delete triggers.
+    final activeTab = useState(0);
+    final baseline = useRef<String?>(null);
+    final snapshotFn = useRef<String Function()?>(null);
+    final guardFn = useRef<Future<bool> Function()?>(null);
 
     // Look up the booking from the provider by id
     final asyncSingleBooking = bookingId != 'new' ? ref.watch(singleBookingProvider(bookingId)) : null;
@@ -167,7 +183,6 @@ class ManageBookingScreen extends HookConsumerWidget {
 
     // ── Editable state (pre-filled from booking, editable by user) ──────────
     final statusState = useState(booking?.id != null ? 'confirmed' : 'pending');
-    final checklistCompleted = useState(false);
     final contentRequired = useState(false);
     final assignments = useState<List<BookingAssignment>>([]);
     final showAllTodayWorks = useState(false);
@@ -833,6 +848,27 @@ class ManageBookingScreen extends HookConsumerWidget {
       return null;
     }, [selectedDistrictId.value, availableDistricts, booking?.id]);
 
+    // Unsaved-changes baseline: re-taken after the booking (re)loads or the
+    // lookup lists that fill in names arrive — after the frame, once every
+    // load effect above has filled the form.
+    useEffect(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        baseline.value = snapshotFn.value?.call();
+      });
+      return null;
+    }, [
+      booking == null ? '' : jsonEncode(booking.toJson()),
+      bookingEntryId,
+      availablePackages.length,
+      availableDistricts.length,
+      availableStaff.length,
+      availableAddonServices.length,
+    ]);
+    useEffect(() {
+      ManageBookingScreen._leaveGuard = () => guardFn.value?.call() ?? Future.value(true);
+      return () => ManageBookingScreen._leaveGuard = null;
+    }, const []);
+
     if (booking == null) {
       return Center(
         child: Column(
@@ -1297,7 +1333,22 @@ class ManageBookingScreen extends HookConsumerWidget {
       return currentBookingSnapshot;
     }
 
-    // Shared save handler, reused by the bottom button AND the floating button.
+    // ── Unsaved changes: the current form vs. the form as loaded ──────────
+    String snapshotKey() {
+      try {
+        return jsonEncode(buildCurrentBookingSnapshot().toJson());
+      } catch (_) {
+        return '';
+      }
+    }
+
+    snapshotFn.value = snapshotKey;
+    bool isDirty() {
+      final b = baseline.value;
+      return b != null && snapshotKey() != b;
+    }
+
+    // Shared save handler (the pinned save bar).
     // (isSaving is declared at the top of build so the hook survives the
     // save-triggered refetch's brief loading state.)
     Future<void> saveBooking() async {
@@ -1316,6 +1367,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           }
           return;
         }
+        // Saved — what's on screen is now the stored version.
+        baseline.value = snapshotKey();
         if (!context.mounted) return;
         try {
           await showPrintDialog(savedBooking);
@@ -1338,843 +1391,687 @@ class ManageBookingScreen extends HookConsumerWidget {
       }
     }
 
-    return SelectionArea(
-      child: Stack(
+    // "Unsaved changes" prompt — leaving, switching package, add / remove.
+    Future<bool> confirmLeave() async {
+      if (!isDirty()) return true;
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Unsaved changes'),
+          content: const Text('This booking has changes that are not saved yet.'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, 'stay'), child: const Text('Keep editing')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'discard'),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Discard changes'),
+            ),
+            FilledButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text('Save and continue')),
+          ],
+        ),
+      );
+      if (choice == 'discard') {
+        baseline.value = null; // nothing to protect any more
+        return true;
+      }
+      if (choice == 'save') {
+        await saveBooking();
+        return !isDirty();
+      }
+      return false;
+    }
+
+    guardFn.value = confirmLeave;
+
+    // ── Delete (header "⋯" menu) ─────────────────────────────────────────
+    Future<void> deleteBooking() async {
+      final shouldDelete = await showDeleteDialog();
+      if (!shouldDelete || !context.mounted) return;
+      isDeleting.value = true;
+      try {
+        await ref.read(bookingProvider.notifier).removeBooking(booking.id);
+        if (context.mounted) {
+          // Nothing left to save — don't ask about unsaved changes on the way out.
+          baseline.value = null;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Booking deleted.')),
+          );
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/calendar');
+          }
+        }
+      } catch (error) {
+        if (context.mounted) {
+          isDeleting.value = false;
+          showErrorSnackBar(context, error);
+        }
+      }
+    }
+
+    Future<void> sendReview() async {
+      try {
+        final link = await ref.read(reviewServiceProvider).getReviewLink(booking.id);
+        // May have just created the review record.
+        ref.refreshData.reviews();
+        await WhatsAppService.sendReviewRequest(booking, link);
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      }
+    }
+
+    // ── Layout helpers ───────────────────────────────────────────────────
+    // Fields in as many columns as fit (1 on phones, up to [maxCols]).
+    Widget fieldGrid(List<Widget> fields, {int maxCols = 3}) {
+      return LayoutBuilder(builder: (ctx, c) {
+        final cols = (c.maxWidth ~/ 240).clamp(1, maxCols);
+        const gap = 16.0;
+        final w = (c.maxWidth - gap * (cols - 1)) / cols;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [for (final f in fields) SizedBox(width: w, child: f)],
+        );
+      });
+    }
+
+    final snapshot = buildCurrentBookingSnapshot();
+    final barTotal = snapshot.totalPrice;
+    final barDiscount = snapshot.discountAmount;
+    final barAdvance = snapshot.advanceAmount;
+    final barBalance = (barTotal - barDiscount - barAdvance - snapshot.collectedAmount)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    String rupees(double v) => '₹${v.toStringAsFixed(0)}';
+
+    final statusLabel = statusState.value.isEmpty
+        ? 'Pending'
+        : '${statusState.value[0].toUpperCase()}${statusState.value.substring(1)}';
+    final statusColor = switch (statusState.value.toLowerCase()) {
+      'completed' => Colors.green.shade700,
+      'confirmed' => crmColors.primary,
+      'cancelled' => Colors.red.shade700,
+      'postponed' => Colors.orange.shade800,
+      _ => Colors.blueGrey,
+    };
+
+    // ── Header ───────────────────────────────────────────────────────────
+    final header = Container(
+      padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: crmColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: crmColors.border),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          SingleChildScrollView(
-            child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ─────────────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                  IconButton(
-                    onPressed: () => context.pop(),
-                    icon: const Icon(Icons.arrow_back),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            IconButton(
+              tooltip: 'Back',
+              onPressed: () => context.canPop() ? context.pop() : context.go('/calendar'),
+              icon: const Icon(Icons.arrow_back),
+            ),
+            4.w,
+            Flexible(
+              child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    booking.customerName.isEmpty ? 'Booking' : booking.customerName,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'Manage Booking #$displayBookingNumber',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    [
+                      '#$displayBookingNumber',
+                      if (booking.hasInvoiceNumber) booking.invoiceNumber,
+                      if (booking.createdByName.isNotEmpty) 'by ${booking.createdByName}',
+                    ].join(' · '),
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12.5, color: crmColors.textSecondary),
                   ),
-                  if (booking.createdByName.isNotEmpty) ...[ 
-                    12.w,
-                    Chip(
-                      avatar: const Icon(Icons.person_outline, size: 14),
-                      label: Text(
-                        'By ${booking.createdByName}',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      side: BorderSide(color: crmColors.border),
-                    ),
-                  ],
-                  12.w,
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await showPrintDialog(buildCurrentBookingSnapshot());
-                      } catch (e) {
-                        if (context.mounted) showErrorSnackBar(context, e);
-                      }
-                    },
-                    icon: const Icon(Icons.print_outlined, size: 18),
-                    label: const Text('Print'),
+                ],
+              ),
+            ),
+            ),
+            12.w,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(statusLabel,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: statusColor)),
+            ),
+          ]),
+          Wrap(spacing: 8, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  await showPrintDialog(buildCurrentBookingSnapshot());
+                } catch (e) {
+                  if (context.mounted) showErrorSnackBar(context, e);
+                }
+              },
+              icon: const Icon(Icons.print_outlined, size: 18),
+              label: const Text('Print'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  await WhatsAppService.sendInvoiceMessage(booking);
+                } catch (e) {
+                  if (context.mounted) showErrorSnackBar(context, e);
+                }
+              },
+              icon: const Icon(Icons.chat_outlined, size: 18),
+              label: const Text('WhatsApp'),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.green.shade700),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              icon: isDeleting.value
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.more_vert),
+              enabled: !isDeleting.value,
+              onSelected: (v) {
+                if (v == 'review') sendReview();
+                if (v == 'calendar') context.go('/calendar');
+                if (v == 'delete') deleteBooking();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'review',
+                  child: ListTile(dense: true, leading: Icon(Icons.rate_review_outlined), title: Text('Send review request')),
+                ),
+                const PopupMenuItem(
+                  value: 'calendar',
+                  child: ListTile(dense: true, leading: Icon(Icons.calendar_month_outlined), title: Text('Go to calendar')),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    dense: true,
+                    leading: Icon(Icons.delete_outline, color: Colors.red.shade600),
+                    title: Text('Delete booking', style: TextStyle(color: Colors.red.shade600)),
                   ),
-                  12.w,
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await WhatsAppService.sendInvoiceMessage(booking);
-                      } catch (e) {
-                        if (context.mounted) showErrorSnackBar(context, e);
-                      }
-                    },
-                    icon: const Icon(Icons.chat_outlined, size: 18),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                    ),
-                  ),
-                  12.w,
-                  // Fetches (or creates) the review link for this booking and
-                  // opens WhatsApp with a short review-request message.
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        final link = await ref
-                            .read(reviewServiceProvider)
-                            .getReviewLink(booking.id);
-                        // May have just created the review record.
-                        ref.refreshData.reviews();
-                        await WhatsAppService.sendReviewRequest(booking, link);
-                      } catch (e) {
-                        if (context.mounted) showErrorSnackBar(context, e);
-                      }
-                    },
-                    icon: const Icon(Icons.rate_review_outlined, size: 18),
-                    label: const Text('Send Review'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: crmColors.primary,
-                    ),
-                  ),
-                  12.w,
-                  OutlinedButton.icon(
-                    onPressed: isDeleting.value
-                        ? null
-                        : () async {
-                            final shouldDelete = await showDeleteDialog();
-                            if (!shouldDelete || !context.mounted) return;
+                ),
+              ],
+            ),
+          ]),
+        ],
+      ),
+    );
 
-                            isDeleting.value = true;
-                            try {
-                              await ref
-                                  .read(bookingProvider.notifier)
-                                  .removeBooking(booking.id);
-
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Booking deleted successfully.',
-                                    ),
-                                  ),
-                                );
-                                if (context.canPop()) {
-                                  context.pop();
-                                } else {
-                                  context.go('/calendar');
-                                }
-                              }
-                            } catch (error) {
-                              if (context.mounted) {
-                                isDeleting.value = false;
-                                showErrorSnackBar(context, error);
-                              }
-                            }
-                          },
-                    icon: isDeleting.value
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.delete_outline, size: 18),
-                    label: Text(isDeleting.value ? 'Deleting...' : 'Delete'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
+    // ── Tabs ─────────────────────────────────────────────────────────────
+    const tabs = [
+      (Icons.inventory_2_outlined, 'This package'),
+      (Icons.person_outline, 'Client'),
+      (Icons.groups_2_outlined, 'Team'),
+      (Icons.route_outlined, 'Logistics'),
+      (Icons.sticky_note_2_outlined, 'Notes'),
+    ];
+    final tabBar = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (var i = 0; i < tabs.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: InkWell(
+              onTap: () => activeTab.value = i,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: activeTab.value == i ? crmColors.primary : Colors.transparent,
+                      width: 2.5,
                     ),
                   ),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(tabs[i].$1, size: 18,
+                      color: activeTab.value == i ? crmColors.primary : crmColors.textSecondary),
+                  6.w,
+                  Text(
+                    tabs[i].$2,
+                    style: TextStyle(
+                      fontWeight: activeTab.value == i ? FontWeight.bold : FontWeight.w500,
+                      color: activeTab.value == i ? crmColors.textPrimary : crmColors.textSecondary,
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+      ]),
+    );
+
+    Widget scopeHint(String text) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(children: [
+            Icon(Icons.info_outline, size: 15, color: crmColors.textSecondary),
+            6.w,
+            Expanded(
+              child: Text(text, style: TextStyle(fontSize: 12, color: crmColors.textSecondary)),
+            ),
+          ]),
+        );
+    final editingLabel = selectedDisplayEntry == null
+        ? 'this booking'
+        : '${selectedDisplayEntry.service.isEmpty ? 'this package' : selectedDisplayEntry.service} on ${_formatDateOnly(selectedDisplayEntry.calendarDate)}';
+
+    // Tab 1 — the package being edited.
+    Widget packageTab() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionCard(
+              title: 'Package & schedule',
+              subtitle: 'Changes here apply to $editingLabel',
+              child: fieldGrid([
+                _buildDropdown(
+                  context,
+                  'STATUS',
+                  const ['pending', 'confirmed', 'completed', 'postponed', 'cancelled'],
+                  statusState.value,
+                  (v) => statusState.value = v ?? statusState.value,
+                ),
+                _buildField(
+                  context,
+                  'EVENT DATE',
+                  bookingDateCtrl,
+                  readOnly: true,
+                  onTap: () async {
+                    final initialDate = _parseDateInput(bookingDateCtrl.text.trim()) ??
+                        canonicalBookingDate ??
+                        booking.bookingDate;
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initialDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) bookingDateCtrl.text = _formatDateOnly(picked);
+                  },
+                  suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                ),
+                _buildTimeField(context, 'START TIME', startTimeCtrl),
+                _buildTimeField(context, 'END TIME', endTimeCtrl),
+                _buildPackageSelector(
+                  context,
+                  crmColors,
+                  asyncPackages,
+                  availablePackages,
+                  selectedPackageId,
+                  packageCtrl,
+                  isExtraDateEntry: isExtraDateEntry,
+                  onPackageChanged: applySelectedPackage,
+                ),
+                _buildDistrictRateSelector(
+                  crmColors,
+                  availableDistricts,
+                  findPackageById(selectedPackageId.value),
+                  selectedDistrictId,
+                  districtCtrl,
+                  regionCtrl,
+                ),
+                if (selectedPackageId.value.isEmpty) ...[
+                  _buildField(context, 'CUSTOM PACKAGE NAME', packageCtrl, hint: 'Enter custom package name'),
+                  _buildCurrencyField(
+                    context,
+                    'CUSTOM PACKAGE PRICE',
+                    customPackagePriceCtrl,
+                    crmColors,
+                    onChanged: (value) => basePackageAmount.value = double.tryParse(value.trim()) ?? 0.0,
+                  ),
+                ],
+              ]),
+            ),
+            16.h,
+            _SectionCard(
+              title: 'Price & payment',
+              subtitle: 'Discount applies to the whole booking',
+              child: fieldGrid([
+                _buildCurrencyField(context, 'PACKAGE TOTAL', totalAmountCtrl, crmColors, readOnly: true, onChanged: null),
+                _buildCurrencyField(context, 'ADVANCE PAID', advanceCtrl, crmColors, textColor: Colors.green),
+                _buildDiscountField(context, crmColors, discountCtrl, discountType, discountNoteCtrl),
+                _buildCurrencyField(context, 'FORECAST BALANCE', balanceCtrl, crmColors, textColor: Colors.amber, readOnly: true),
+              ], maxCols: 4),
+            ),
+            16.h,
+            _SectionCard(
+              title: 'Add-ons',
+              child: _buildAddonEditor(context, crmColors, addons, availableAddonServices, asyncAddonServices),
+            ),
+          ],
+        );
+
+    // Tab 2 — booking-wide client details.
+    Widget clientTab() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionCard(
+              title: 'Client details',
+              subtitle: 'Shared by every package in this booking',
+              child: fieldGrid([
+                _buildField(context, 'CUSTOMER NAME', nameCtrl),
+                _buildField(context, 'CONTACT NUMBER', phoneCtrl, keyboardType: TextInputType.phone),
+                _buildField(context, 'EMAIL', emailCtrl, keyboardType: TextInputType.emailAddress),
+                _buildField(context, 'ADDRESS', addressCtrl),
+                _buildField(context, 'PINCODE', pincodeCtrl, keyboardType: TextInputType.number),
+                _buildField(
+                  context,
+                  'BOOKED DATE',
+                  bookedDateCtrl,
+                  readOnly: true,
+                  onTap: () async {
+                    final initialDate = _parseDateInput(bookedDateCtrl.text.trim()) ??
+                        booking.createdAt ??
+                        DateTime.now();
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initialDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) bookedDateCtrl.text = _formatDateOnly(picked);
+                  },
+                  suffixIcon: const Icon(Icons.bookmark_added_outlined, size: 18),
+                ),
+              ]),
+            ),
+            16.h,
+            _buildScheduledDates(context, crmColors, booking, secondaryPhoneCtrl),
+            16.h,
+            _SectionCard(
+              title: 'Bride / client reference looks',
+              subtitle: 'Shared with the assigned artists',
+              titleColor: Colors.pinkAccent,
+              child: ReferenceImagesPanel(
+                images: referenceImages.value,
+                onChanged: (next) => referenceImages.value = next,
+                emptyHint: 'Upload the looks the client wants recreated — artists '
+                    'will see them on their job screen.',
+              ),
+            ),
+          ],
+        );
+
+    // Tab 3 — artists, POC, drivers, extra staff.
+    Widget teamTab() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (todayArtistEntries.length > 1) ...[
+              _buildTodayWorksSection(context, crmColors, currentArtistName, todayArtistEntries, showAllTodayWorks),
+              16.h,
+            ],
+            _buildArtistAssignment(
+              context,
+              crmColors,
+              isTablet || isMobile,
+              assignments,
+              availableStaff,
+              asyncEmployees,
+              availableVehicles,
+              temporaryStaffCtrl,
+              assignArtistId,
+              assignRoleCtrl,
+              assignmentType,
+              selectedPocId,
+            ),
+            16.h,
+            _SectionCard(
+              title: 'Content & capture',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildField(context, 'CAPTURE STAFF (PHOTO/VIDEO)', captureStaffCtrl),
+                  8.h,
+                  // Own Material so the tile's ripple isn't hidden by the card.
+                  Material(
+                    type: MaterialType.transparency,
+                    child: CheckboxListTile(
+                      value: contentRequired.value,
+                      onChanged: (v) => contentRequired.value = v ?? false,
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: const Text('Content creation required (social media)'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+    // Tab 4 — where and how: map / travel / room / outfit looks.
+    Widget logisticsTab() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            scopeHint('Location, travel and room apply to $editingLabel.'),
+            _buildLogistics(
+              context,
+              crmColors,
+              asyncDistricts,
+              availableDistricts,
+              selectedDistrictId,
+              availableDrivers,
+              availableVehicles,
+              districtCtrl,
+              regionCtrl,
+              cultureState,
+              mapUrlCtrl,
+              travelModeCtrl,
+              travelTimeCtrl,
+              travelDistanceCtrl,
+              eventSlots,
+              eventSlotInputCtrl,
+              roomCtrl,
+              startTimeCtrl,
+              endTimeCtrl,
+              previousArtistWork,
+              previousWorkDistanceKm,
+              mapLinkEdits,
+              showTimes: false, // start / end live on "This package"
+            ),
+            16.h,
+            _SectionCard(
+              title: 'Outfit looks',
+              child: _OutfitLooksEditor(
+                looks: outfitLooks.value,
+                onChanged: (updated) => outfitLooks.value = updated,
+              ),
+            ),
+          ],
+        );
+
+    // Tab 5 — instructions and private remarks.
+    Widget notesTab() => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SectionCard(
+              title: 'Staff instructions',
+              subtitle: 'Shown to the team for $editingLabel',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildTextArea(context, 'STAFF INSTRUCTIONS / NEEDS', staffNeedsCtrl),
+                  8.h,
+                  Wrap(spacing: 8, children: [
+                    ActionChip(
+                      label: const Text('Add list item', style: TextStyle(fontSize: 11)),
+                      onPressed: () {
+                        final text = staffNeedsCtrl.text;
+                        var nextNum = 1;
+                        for (final line in text.split('\n').reversed) {
+                          final match = RegExp(r'^(\d+)\.').firstMatch(line.trim());
+                          if (match != null) {
+                            nextNum = int.parse(match.group(1)!) + 1;
+                            break;
+                          }
+                        }
+                        final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
+                        staffNeedsCtrl.text = '$text$prefix$nextNum. ';
+                        staffNeedsCtrl.selection =
+                            TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
+                      },
+                    ),
+                    ActionChip(
+                      label: const Text('Paste map link', style: TextStyle(fontSize: 11)),
+                      onPressed: () async {
+                        final clip = await Clipboard.getData(Clipboard.kTextPlain);
+                        final pasted = clip?.text?.trim() ?? '';
+                        final text = staffNeedsCtrl.text;
+                        final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
+                        if (pasted.startsWith('http://') || pasted.startsWith('https://')) {
+                          staffNeedsCtrl.text = '$text${prefix}Location Map: $pasted\n';
+                        } else if (pasted.isNotEmpty) {
+                          staffNeedsCtrl.text = '$text${prefix}Location: $pasted\n';
+                        } else {
+                          staffNeedsCtrl.text = '$text${prefix}Location Map: [Paste Link Here]\n';
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Clipboard is empty or does not contain text.')),
+                            );
+                          }
+                        }
+                        staffNeedsCtrl.selection =
+                            TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
+                      },
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+            16.h,
+            _SectionCard(
+              title: 'CRM internal remarks',
+              subtitle: 'Private — not shown to the client',
+              child: _buildTextArea(context, 'CRM INTERNAL REMARKS', remarksCtrl, hint: 'Any private notes...'),
+            ),
+          ],
+        );
+
+    final tabBody = switch (activeTab.value) {
+      1 => clientTab(),
+      2 => teamTab(),
+      3 => logisticsTab(),
+      4 => notesTab(),
+      _ => packageTab(),
+    };
+
+    // ── Save bar (pinned) ────────────────────────────────────────────────
+    Widget figure(String label, String value, Color color) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(fontSize: 11.5, color: crmColors.textSecondary)),
+            Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+          ],
+        );
+    final watchedControllers = Listenable.merge([
+      nameCtrl, phoneCtrl, emailCtrl, addressCtrl, pincodeCtrl, bookingDateCtrl,
+      bookedDateCtrl, startTimeCtrl, endTimeCtrl, advanceCtrl, discountCtrl,
+      discountNoteCtrl, packageCtrl, customPackagePriceCtrl, mapUrlCtrl,
+      travelModeCtrl, travelTimeCtrl, travelDistanceCtrl, roomCtrl,
+      secondaryPhoneCtrl, captureStaffCtrl, temporaryStaffCtrl, staffNeedsCtrl,
+      remarksCtrl,
+    ]);
+    final saveBar = Material(
+      color: crmColors.surface,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Wrap(
+            spacing: 24,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Wrap(spacing: 22, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                figure('Total (all packages)', rupees(barTotal), crmColors.textPrimary),
+                if (barDiscount > 0) figure('Discount', '− ${rupees(barDiscount)}', crmColors.accent),
+                figure('Advance', rupees(barAdvance), Colors.green.shade700),
+                figure('Balance', rupees(barBalance), crmColors.textPrimary),
+              ]),
+              Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 6, children: [
+                ListenableBuilder(
+                  listenable: watchedControllers,
+                  builder: (_, _) => isDirty()
+                      ? Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.circle, size: 9, color: Colors.orange.shade700),
+                            6.w,
+                            Text('Unsaved changes',
+                                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.orange.shade800)),
+                          ]),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                FilledButton.icon(
+                  onPressed: isSaving.value ? null : saveBooking,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: crmColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  ),
+                  icon: isSaving.value
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.save_rounded),
+                  label: Text(isSaving.value ? 'Saving…' : 'Save changes',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return SelectionArea(
+      child: Column(children: [
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(0, 4, 0, 32),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    header,
+                    16.h,
+                    if (booking.bookingItems.isNotEmpty) ...[
+                      _buildBookingItemsOverview(
+                          context, ref, crmColors, booking, selectedBookingItemIndex, selectedPrintItemIndices),
+                      12.h,
+                    ],
+                    tabBar,
+                    Divider(height: 1, color: crmColors.border),
+                    16.h,
+                    tabBody,
                   ],
                 ),
               ),
-              if (!isMobile)
-                TextButton.icon(
-                  onPressed: () => context.go('/calendar'),
-                  icon: const Icon(Icons.arrow_back, size: 16),
-                  label: const Text('Back to Calendar'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: crmColors.textSecondary,
-                  ),
-                ),
-            ],
-          ),
-          24.h,
-
-          if (todayArtistEntries.length > 1) ...[
-            _buildTodayWorksSection(
-              context,
-              crmColors,
-              currentArtistName,
-              todayArtistEntries,
-              showAllTodayWorks,
-            ),
-            24.h,
-          ],
-
-          Container(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Packages/slots in this booking (item-based bookings) ──
-                _SectionCard(
-                  title: 'Bride / Client Reference Looks',
-                  subtitle: 'Shared with the assigned artists',
-                  titleColor: Colors.pinkAccent,
-                  child: ReferenceImagesPanel(
-                    images: referenceImages.value,
-                    onChanged: (next) => referenceImages.value = next,
-                    emptyHint:
-                        'Upload the looks the client wants recreated — artists '
-                        'will see them on their job screen.',
-                  ),
-                ),
-                24.h,
-                if (booking.bookingItems.isNotEmpty) ...[
-                  _buildBookingItemsOverview(
-                      context, ref, crmColors, booking, selectedBookingItemIndex, selectedPrintItemIndices),
-                  24.h,
-                ],
-                // ── Core details ──────────────────────────────────────────
-                _SectionCard(
-                  title: 'Core Booking Management',
-                  subtitle: 'Status, Customer & Financials',
-                  titleColor: Colors.amber,
-                  child: Column(
-                    children: [
-                      LayoutBuilder(
-                        builder: (ctx, constraints) {
-                          final narrow = constraints.maxWidth < 600;
-                          return GridView.count(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            crossAxisCount: narrow ? 1 : 5,
-                            mainAxisSpacing: 16,
-                            crossAxisSpacing: 16,
-                            childAspectRatio: narrow ? 5 : 2.5,
-                            children: [
-                              _buildDropdown(
-                                context,
-                                'STATUS',
-                                [
-                                  'pending',
-                                  'confirmed',
-                                  'completed',
-                                  'postponed',
-                                  'cancelled',
-                                ],
-                                statusState.value,
-                                (v) =>
-                                    statusState.value = v ?? statusState.value,
-                              ),
-                              _buildField(context, 'CUSTOMER NAME', nameCtrl),
-                              _buildField(
-                                context,
-                                'CONTACT NUMBER',
-                                phoneCtrl,
-                                keyboardType: TextInputType.phone,
-                              ),
-                              _buildField(
-                                context,
-                                'EMAIL',
-                                emailCtrl,
-                                keyboardType: TextInputType.emailAddress,
-                              ),
-                              _buildField(context, 'ADDRESS', addressCtrl),
-                              _buildField(
-                                context,
-                                'PINCODE',
-                                pincodeCtrl,
-                                keyboardType: TextInputType.number,
-                              ),
-                              _buildField(
-                                context,
-                                'EVENT DATE',
-                                bookingDateCtrl,
-                                readOnly: true,
-                                onTap: () async {
-                                  final initialDate =
-                                      _parseDateInput(
-                                        bookingDateCtrl.text.trim(),
-                                      ) ??
-                                      canonicalBookingDate ??
-                                      booking.bookingDate;
-                                  final picked = await showDatePicker(
-                                    context: context,
-                                    initialDate: initialDate,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2035),
-                                  );
-                                  if (picked != null) {
-                                    bookingDateCtrl.text = _formatDateOnly(
-                                      picked,
-                                    );
-                                  }
-                                },
-                                suffixIcon: const Icon(
-                                  Icons.calendar_today_outlined,
-                                  size: 18,
-                                ),
-                              ),
-                              _buildField(
-                                context,
-                                'BOOKED DATE',
-                                bookedDateCtrl,
-                                readOnly: true,
-                                onTap: () async {
-                                  final initialDate =
-                                      _parseDateInput(
-                                        bookedDateCtrl.text.trim(),
-                                      ) ??
-                                      booking.createdAt ??
-                                      DateTime.now();
-                                  final picked = await showDatePicker(
-                                    context: context,
-                                    initialDate: initialDate,
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2035),
-                                  );
-                                  if (picked != null) {
-                                    bookedDateCtrl.text = _formatDateOnly(
-                                      picked,
-                                    );
-                                  }
-                                },
-                                suffixIcon: const Icon(
-                                  Icons.bookmark_added_outlined,
-                                  size: 18,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      24.h,
-                      const Divider(),
-                      24.h,
-                      LayoutBuilder(
-                        builder: (ctx, constraints) {
-                          final narrow = constraints.maxWidth < 600;
-                          final packageField = _buildPackageSelector(
-                            context,
-                            crmColors,
-                            asyncPackages,
-                            availablePackages,
-                            selectedPackageId,
-                            packageCtrl,
-                            isExtraDateEntry: isExtraDateEntry,
-                            onPackageChanged: applySelectedPackage,
-                          );
-                          final districtField = _buildDistrictRateSelector(
-                            crmColors,
-                            availableDistricts,
-                            findPackageById(selectedPackageId.value),
-                            selectedDistrictId,
-                            districtCtrl,
-                            regionCtrl,
-                          );
-                          final totalAmountField = _buildCurrencyField(
-                            context,
-                            'TOTAL AMOUNT',
-                            totalAmountCtrl,
-                            crmColors,
-                            readOnly: true,
-                            onChanged: null,
-                          );
-                          final advanceField = _buildCurrencyField(
-                            context,
-                            'ADVANCE PAID',
-                            advanceCtrl,
-                            crmColors,
-                            textColor: Colors.green,
-                          );
-                          final discountField = _buildDiscountField(
-                            context,
-                            crmColors,
-                            discountCtrl,
-                            discountType,
-                            discountNoteCtrl,
-                          );
-                          final forecastField = _buildCurrencyField(
-                            context,
-                            'FORECAST BALANCE',
-                            balanceCtrl,
-                            crmColors,
-                            textColor: Colors.amber,
-                            readOnly: true,
-                          );
-
-                          if (narrow) {
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                packageField,
-                                16.h,
-                                districtField,
-                                16.h,
-                                totalAmountField,
-                                16.h,
-                                advanceField,
-                                16.h,
-                                discountField,
-                                16.h,
-                                forecastField,
-                              ],
-                            );
-                          }
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: packageField),
-                                  16.w,
-                                  Expanded(child: districtField),
-                                  16.w,
-                                  Expanded(child: totalAmountField),
-                                ],
-                              ),
-                              16.h,
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: advanceField),
-                                  16.w,
-                                  Expanded(child: discountField),
-                                  16.w,
-                                  Expanded(child: forecastField),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      if (selectedPackageId.value.isEmpty) ...[
-                        16.h,
-                        _buildField(
-                          context,
-                          'CUSTOM PACKAGE NAME',
-                          packageCtrl,
-                          hint: 'Enter custom package name',
-                        ),
-                        16.h,
-                        _buildCurrencyField(
-                          context,
-                          'CUSTOM PACKAGE PRICE',
-                          customPackagePriceCtrl,
-                          crmColors,
-                          onChanged: (value) {
-                            final typedVal = double.tryParse(value.trim()) ?? 0.0;
-                            basePackageAmount.value = typedVal;
-                          },
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                24.h,
-
-                // ── Logistics + Scheduled Dates ──────────────────────────
-                if (isMobile) ...[
-                  _buildLogistics(
-                    context,
-                    crmColors,
-                    asyncDistricts,
-                    availableDistricts,
-                    selectedDistrictId,
-                    availableDrivers,
-                    availableVehicles,
-                    districtCtrl,
-                    regionCtrl,
-                    cultureState,
-                    mapUrlCtrl,
-                    travelModeCtrl,
-                    travelTimeCtrl,
-                    travelDistanceCtrl,
-                    eventSlots,
-                    eventSlotInputCtrl,
-                    roomCtrl,
-                    startTimeCtrl,
-                    endTimeCtrl,
-                    previousArtistWork,
-                    previousWorkDistanceKm,
-                    mapLinkEdits,
-                  ),
-                  24.h,
-                  _buildScheduledDates(
-                    context,
-                    crmColors,
-                    booking,
-                    secondaryPhoneCtrl,
-                  ),
-                ] else ...[
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: _buildLogistics(
-                          context,
-                          crmColors,
-                          asyncDistricts,
-                          availableDistricts,
-                          selectedDistrictId,
-                          availableDrivers,
-                          availableVehicles,
-                          districtCtrl,
-                          regionCtrl,
-                          cultureState,
-                          mapUrlCtrl,
-                          travelModeCtrl,
-                          travelTimeCtrl,
-                          travelDistanceCtrl,
-                          eventSlots,
-                          eventSlotInputCtrl,
-                          roomCtrl,
-                          startTimeCtrl,
-                          endTimeCtrl,
-                          previousArtistWork,
-                          previousWorkDistanceKm,
-                          mapLinkEdits,
-                        ),
-                      ),
-                      24.w,
-                      Expanded(
-                        flex: 1,
-                        child: _buildScheduledDates(
-                          context,
-                          crmColors,
-                          booking,
-                          secondaryPhoneCtrl,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                24.h,
-
-                // ── Artist Assignment ─────────────────────────────────────
-                _buildArtistAssignment(
-                  context,
-                  crmColors,
-                  isTablet || isMobile,
-                  assignments,
-                  availableStaff,
-                  asyncEmployees,
-                  availableVehicles,
-                  temporaryStaffCtrl,
-                  assignArtistId,
-                  assignRoleCtrl,
-                  assignmentType,
-                  selectedPocId,
-                ),
-                24.h,
-
-                // ── Service Specifics ─────────────────────────────────────
-                _SectionCard(
-                  title: 'Service Specifics & Media',
-                  child: Column(
-                    children: [
-                      Flex(
-                        direction: isMobile ? Axis.vertical : Axis.horizontal,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: isMobile ? 0 : 1,
-                            child: Column(
-                              children: [
-                                _OutfitLooksEditor(
-                                  looks: outfitLooks.value,
-                                  onChanged: (updated) =>
-                                      outfitLooks.value = updated,
-                                ),
-                                16.h,
-                                _buildField(
-                                  context,
-                                  'CAPTURE STAFF (PHOTO/VIDEO)',
-                                  captureStaffCtrl,
-                                ),
-                                16.h,
-                                _buildField(
-                                  context,
-                                  'TEMPORARY STAFF FOR THIS BOOKING',
-                                  temporaryStaffCtrl,
-                                  hint: 'Temporary hires for this event only',
-                                ),
-                                16.h,
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: crmColors.surface,
-                                    border: Border.all(color: crmColors.border),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Checkbox(
-                                        value: contentRequired.value,
-                                        onChanged: (v) =>
-                                            contentRequired.value = v!,
-                                        activeColor: Colors.amber,
-                                      ),
-                                      Flexible(
-                                        child: Text(
-                                          'CONTENT CREATION REQUIRED (SOCIAL MEDIA)',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: crmColors.textPrimary,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (isMobile) 16.h else 32.w,
-                          Expanded(
-                            flex: isMobile ? 0 : 1,
-                            child: Column(
-                              children: [
-                                _buildAddonEditor(
-                                  context,
-                                  crmColors,
-                                  addons,
-                                  availableAddonServices,
-                                  asyncAddonServices,
-                                ),
-                                16.h,
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _buildTextArea(
-                                      context,
-                                      'STAFF INSTRUCTIONS / NEEDS',
-                                      staffNeedsCtrl,
-                                    ),
-                                    8.h,
-                                    Wrap(
-                                      spacing: 8,
-                                      children: [
-                                        ActionChip(
-                                          label: const Text('Add List Item', style: TextStyle(fontSize: 10)),
-                                          onPressed: () {
-                                            final text = staffNeedsCtrl.text;
-                                            final lines = text.split('\n');
-                                            int nextNum = 1;
-                                            for (final line in lines.reversed) {
-                                              final match = RegExp(r'^(\d+)\.').firstMatch(line.trim());
-                                              if (match != null) {
-                                                nextNum = int.parse(match.group(1)!) + 1;
-                                                break;
-                                              }
-                                            }
-                                            final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
-                                            staffNeedsCtrl.text = '$text$prefix$nextNum. ';
-                                            staffNeedsCtrl.selection = TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
-                                          },
-                                        ),
-                                        ActionChip(
-                                          label: const Text('Paste Map Link', style: TextStyle(fontSize: 10)),
-                                          onPressed: () async {
-                                            final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-                                            final pastedText = clipboardData?.text?.trim() ?? '';
-                                            
-                                            final text = staffNeedsCtrl.text;
-                                            final prefix = text.isEmpty || text.endsWith('\n') ? '' : '\n';
-                                            
-                                            if (pastedText.isNotEmpty && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
-                                              staffNeedsCtrl.text = '$text${prefix}Location Map: $pastedText\n';
-                                            } else if (pastedText.isNotEmpty) {
-                                              staffNeedsCtrl.text = '$text${prefix}Location: $pastedText\n';
-                                            } else {
-                                              staffNeedsCtrl.text = '$text${prefix}Location Map: [Paste Link Here]\n';
-                                              if (context.mounted) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Clipboard is empty or does not contain text.')),
-                                                );
-                                              }
-                                            }
-                                            
-                                            staffNeedsCtrl.selection = TextSelection.fromPosition(TextPosition(offset: staffNeedsCtrl.text.length));
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      24.h,
-                      const Divider(),
-                      24.h,
-                      _buildTextArea(
-                        context,
-                        'CRM INTERNAL REMARKS',
-                        remarksCtrl,
-                        hint: 'Any private notes...',
-                      ),
-                    ],
-                  ),
-                ),
-                24.h,
-
-                // ── Completion Action ─────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: crmColors.surface,
-                    border: Border.all(
-                      color: Colors.amber.withValues(alpha: 0.2),
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Flex(
-                    direction: isMobile ? Axis.vertical : Axis.horizontal,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Transform.scale(
-                            scale: 1.5,
-                            child: Checkbox(
-                              value: checklistCompleted.value,
-                              onChanged: (v) => checklistCompleted.value = v!,
-                              activeColor: Colors.green,
-                            ),
-                          ),
-                          16.w,
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'MARK CHECKLIST COMPLETE',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                              Text(
-                                'Verifies all logistics and staffing for export',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: crmColors.textSecondary,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      if (isMobile) 24.h,
-                      SizedBox(
-                        width: isMobile ? double.infinity : 250,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final updatedBooking =
-                                buildCurrentBookingSnapshot();
-
-                            // DEBUG: print what is being sent to the server
-                            debugPrint(
-                              '[SAVE] totalPrice=${updatedBooking.totalPrice}, '
-                              'addons=${updatedBooking.addons.map((a) => "${a.service}:${a.amount}x${a.persons}").toList()}',
-                            );
-
-                            Booking? savedBooking;
-                            try {
-                              savedBooking = await ref
-                                  .read(bookingProvider.notifier)
-                                  .updateBooking(updatedBooking);
-                            } catch (error) {
-                              if (context.mounted) {
-                                showErrorSnackBar(context, error);
-                              }
-                              return;
-                            }
-
-                            if (!context.mounted) {
-                              return;
-                            }
-
-                            try {
-                              await showPrintDialog(savedBooking);
-                            } catch (error) {
-                              if (context.mounted) {
-                                showWarningSnackBar(context,
-                                    'Booking saved, but the print/WhatsApp step failed: ${friendlyErrorMessage(error)}');
-                              }
-                            }
-
-                            // Stay on the manage screen after saving. Previously
-                            // it popped the screen unconditionally, so choosing
-                            // "Later" (skip PDF) kicked the user out of the
-                            // booking. They now leave via the back / calendar
-                            // button when they're actually done.
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Booking updated'),
-                                  backgroundColor: Colors.green,
-                                ),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.amber,
-                            foregroundColor: Colors.black,
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text(
-                            'SAVE CHANGES',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                48.h,
-              ],
             ),
           ),
-        ],
-      ),
-    ),
-          // Floating save button — always in reach on this long form.
-          Positioned(
-            right: 24,
-            bottom: 24,
-            child: FloatingActionButton.extended(
-              heroTag: 'manageBookingSave',
-              onPressed: isSaving.value ? null : saveBooking,
-              backgroundColor: crmColors.primary,
-              foregroundColor: Colors.white,
-              icon: isSaving.value
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.save_rounded),
-              label: Text(isSaving.value ? 'Saving…' : 'Save changes'),
-            ),
-          ),
-        ],
-      ),
-  );
+        ),
+        saveBar,
+      ]),
+    );
   }
 
   Widget _buildTodayWorksSection(
@@ -2198,9 +2095,12 @@ class ManageBookingScreen extends HookConsumerWidget {
             (entry) => Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: InkWell(
-                onTap: () => context.go(
-                  '/booking/manage/${entry.booking.id}?entry=${Uri.encodeComponent(entry.id)}',
-                ),
+                onTap: () async {
+                  if (!await ManageBookingScreen.canLeave() || !context.mounted) return;
+                  context.go(
+                    '/booking/manage/${entry.booking.id}?entry=${Uri.encodeComponent(entry.id)}',
+                  );
+                },
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
                   padding: const EdgeInsets.all(16),
@@ -2370,8 +2270,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     TextEditingController endCtrl,
     BookingDisplayEntry? previousArtistWork,
     double? previousWorkDistanceKm,
-    ValueNotifier<int> mapLinkEdits,
-  ) {
+    ValueNotifier<int> mapLinkEdits, {
+    bool showTimes = true,
+  }) {
     return _SectionCard(
       title: 'Logistics & Location',
       child: Column(
@@ -2599,6 +2500,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             roomCtrl,
             hint: 'e.g. NIL or Room 202',
           ),
+          if (showTimes) ...[
           24.h,
           const Divider(),
           24.h,
@@ -2623,6 +2525,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               ),
             ],
           ),
+          ],
         ],
       ),
     );
@@ -2790,7 +2693,8 @@ class ManageBookingScreen extends HookConsumerWidget {
             ),
             child: Row(
               children: [
-                Column(
+                Expanded(
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Total (all packages)',
@@ -2806,7 +2710,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                             color: Colors.white)),
                   ],
                 ),
-                const Spacer(),
+                ),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
@@ -2909,8 +2813,11 @@ class ManageBookingScreen extends HookConsumerWidget {
                           visualDensity: VisualDensity.compact,
                           icon: Icon(Icons.edit_outlined,
                               size: 18, color: crm.textSecondary),
-                          onPressed: () => context.go(
-                              '/booking/manage/${booking.id}?entry=${Uri.encodeComponent('${booking.id}::$index::0')}'),
+                          onPressed: () async {
+                            if (!await ManageBookingScreen.canLeave() || !context.mounted) return;
+                            context.go(
+                                '/booking/manage/${booking.id}?entry=${Uri.encodeComponent('${booking.id}::$index::0')}');
+                          },
                         ),
                       IconButton(
                         tooltip: 'Print single PDF',
@@ -2939,8 +2846,10 @@ class ManageBookingScreen extends HookConsumerWidget {
                           visualDensity: VisualDensity.compact,
                           icon: Icon(Icons.delete_outline,
                               size: 18, color: crm.destructive),
-                          onPressed: () => _removeBookingItem(
-                              context, ref, booking, index, currentItemIndex),
+                          onPressed: () async {
+                            if (!await ManageBookingScreen.canLeave() || !context.mounted) return;
+                            await _removeBookingItem(context, ref, booking, index, currentItemIndex);
+                          },
                         ),
                     ],
                   ),
@@ -2951,7 +2860,10 @@ class ManageBookingScreen extends HookConsumerWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: () => _addBookingItem(context, ref, booking),
+              onPressed: () async {
+                if (!await ManageBookingScreen.canLeave() || !context.mounted) return;
+                await _addBookingItem(context, ref, booking);
+              },
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add package'),
               style: OutlinedButton.styleFrom(
@@ -4036,13 +3948,16 @@ class ManageBookingScreen extends HookConsumerWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'PACKAGE / ADD-ON DETAILS',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: crmColors.textSecondary,
-                letterSpacing: 1.2,
+            Flexible(
+              child: Text(
+                'PACKAGE / ADD-ON DETAILS',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: crmColors.textSecondary,
+                  letterSpacing: 1.2,
+                ),
               ),
             ),
             TextButton.icon(
@@ -4517,6 +4432,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             SizedBox(
               width: 96,
               child: DropdownButtonFormField<String>(
+                isExpanded: true, // fits the 96px box (was overflowing)
                 initialValue: discountType.value,
                 items: const [
                   DropdownMenuItem(value: 'inr', child: Text('INR')),
