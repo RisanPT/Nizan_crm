@@ -408,18 +408,21 @@ class _DesktopBookingRow extends StatelessWidget {
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
             SizedBox(
-              width: 60,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: IconButton(
-                  onPressed: onDelete,
-                  tooltip: 'Delete booking',
-                  icon: Icon(
-                    Icons.delete_outline,
-                    color: crmColors.destructive,
-                    size: 20,
+              width: 100,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _ConfirmationWhatsApp(booking: booking),
+                  IconButton(
+                    onPressed: onDelete,
+                    tooltip: 'Delete booking',
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: crmColors.destructive,
+                      size: 20,
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
@@ -544,9 +547,11 @@ class _MobileBookingCard extends StatelessWidget {
                         ],
                       ),
                       8.h,
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                        _ConfirmationWhatsApp(booking: booking),
+                        TextButton.icon(
                           onPressed: onDelete,
                           style: TextButton.styleFrom(
                               visualDensity: VisualDensity.compact,
@@ -554,6 +559,7 @@ class _MobileBookingCard extends StatelessWidget {
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
                         ),
+                        ],
                       ),
                     ],
                   ),
@@ -1277,4 +1283,32 @@ String _formatDate(DateTime value) {
   final day = value.day.toString().padLeft(2, '0');
   final month = months[value.month - 1];
   return '$day-$month-${value.year}';
+}
+
+/// WhatsApp icon on a booking row: sends the Booking Confirmation PDF (the
+/// exact "Print → Client confirmation" page, rendered on the server) to the
+/// WhatsApp team or straight to the client via TeamN Chat.
+class _ConfirmationWhatsApp extends StatelessWidget {
+  final Booking booking;
+  const _ConfirmationWhatsApp({required this.booking});
+
+  @override
+  Widget build(BuildContext context) {
+    // The confirmation is an HTML print page — only the web build has it.
+    final html = bookingPrintHtml(booking, variant: BookingPrintVariant.clientConfirmation);
+    final cancelled = ['cancelled', 'canceled', 'rejected'].contains(booking.status.toLowerCase());
+    return WhatsAppSendMenu(
+      customerName: booking.customerName,
+      enabled: html != null && !cancelled,
+      disabledReason: cancelled
+          ? 'Cancelled booking — nothing to confirm'
+          : 'Send booking confirmations from the web CRM',
+      buildDocument: () async => WhatsAppDocument(
+        html: html,
+        filename: 'Booking_Confirmation_${booking.displayBookingNumber}.pdf',
+        kind: 'confirmation',
+        bookingId: booking.id,
+      ),
+    );
+  }
 }

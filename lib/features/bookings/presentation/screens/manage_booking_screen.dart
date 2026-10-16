@@ -72,10 +72,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     // after it would be disposed, and a failed delete then crashed resetting it
     // (hiding the real error).
     final isDeleting = useState(false);
-    // Redesigned layout: which tab is open, and the unsaved-changes baseline
+    // Redesigned layout: the unsaved-changes baseline
     // (the form as loaded, serialised). Declared here so they survive the
     // brief loading states a save / delete triggers.
-    final activeTab = useState(0);
     final baseline = useRef<String?>(null);
     final snapshotFn = useRef<String Function()?>(null);
     final guardFn = useRef<Future<bool> Function()?>(null);
@@ -1613,51 +1612,7 @@ class ManageBookingScreen extends HookConsumerWidget {
       ),
     );
 
-    // ── Tabs ─────────────────────────────────────────────────────────────
-    const tabs = [
-      (Icons.inventory_2_outlined, 'This package'),
-      (Icons.person_outline, 'Client'),
-      (Icons.groups_2_outlined, 'Team'),
-      (Icons.route_outlined, 'Logistics'),
-      (Icons.sticky_note_2_outlined, 'Notes'),
-    ];
-    final tabBar = SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: [
-        for (var i = 0; i < tabs.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: InkWell(
-              onTap: () => activeTab.value = i,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(
-                      color: activeTab.value == i ? crmColors.primary : Colors.transparent,
-                      width: 2.5,
-                    ),
-                  ),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(tabs[i].$1, size: 18,
-                      color: activeTab.value == i ? crmColors.primary : crmColors.textSecondary),
-                  6.w,
-                  Text(
-                    tabs[i].$2,
-                    style: TextStyle(
-                      fontWeight: activeTab.value == i ? FontWeight.bold : FontWeight.w500,
-                      color: activeTab.value == i ? crmColors.textPrimary : crmColors.textSecondary,
-                    ),
-                  ),
-                ]),
-              ),
-            ),
-          ),
-      ]),
-    );
-
+    // ── Sections (one page) ──────────────────────────────────────────────
     Widget scopeHint(String text) => Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Row(children: [
@@ -1672,8 +1627,8 @@ class ManageBookingScreen extends HookConsumerWidget {
         ? 'this booking'
         : '${selectedDisplayEntry.service.isEmpty ? 'this package' : selectedDisplayEntry.service} on ${_formatDateOnly(selectedDisplayEntry.calendarDate)}';
 
-    // Tab 1 — the package being edited.
-    Widget packageTab() => Column(
+    // The package being edited.
+    Widget packageSection() => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _SectionCard(
@@ -1757,8 +1712,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ],
         );
 
-    // Tab 2 — booking-wide client details.
-    Widget clientTab() => Column(
+    // Booking-wide client details.
+    Widget clientSection() => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _SectionCard(
@@ -1808,8 +1763,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ],
         );
 
-    // Tab 3 — artists, POC, drivers, extra staff.
-    Widget teamTab() => Column(
+    // Artists, POC, drivers, extra staff.
+    Widget teamSection() => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (todayArtistEntries.length > 1) ...[
@@ -1855,8 +1810,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ],
         );
 
-    // Tab 4 — where and how: map / travel / room / outfit looks.
-    Widget logisticsTab() => Column(
+    // Where and how: map / travel / room / outfit looks.
+    Widget logisticsSection() => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             scopeHint('Location, travel and room apply to $editingLabel.'),
@@ -1883,7 +1838,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               previousArtistWork,
               previousWorkDistanceKm,
               mapLinkEdits,
-              showTimes: false, // start / end live on "This package"
+              showTimes: false, // start / end are in "Package & schedule"
             ),
             16.h,
             _SectionCard(
@@ -1896,8 +1851,8 @@ class ManageBookingScreen extends HookConsumerWidget {
           ],
         );
 
-    // Tab 5 — instructions and private remarks.
-    Widget notesTab() => Column(
+    // Instructions and private remarks.
+    Widget notesSection() => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _SectionCard(
@@ -1963,13 +1918,22 @@ class ManageBookingScreen extends HookConsumerWidget {
           ],
         );
 
-    final tabBody = switch (activeTab.value) {
-      1 => clientTab(),
-      2 => teamTab(),
-      3 => logisticsTab(),
-      4 => notesTab(),
-      _ => packageTab(),
-    };
+    // One page, in the order staff work through a booking: the package,
+    // the client, the team, the logistics, then notes.
+    final pageBody = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        packageSection(),
+        24.h,
+        clientSection(),
+        24.h,
+        teamSection(),
+        24.h,
+        logisticsSection(),
+        24.h,
+        notesSection(),
+      ],
+    );
 
     // ── Save bar (pinned) ────────────────────────────────────────────────
     Widget figure(String label, String value, Color color) => Column(
@@ -2059,10 +2023,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           context, ref, crmColors, booking, selectedBookingItemIndex, selectedPrintItemIndices),
                       12.h,
                     ],
-                    tabBar,
-                    Divider(height: 1, color: crmColors.border),
-                    16.h,
-                    tabBody,
+                    pageBody,
                   ],
                 ),
               ),
@@ -2344,11 +2305,14 @@ class ManageBookingScreen extends HookConsumerWidget {
                       decimal: true,
                     ),
                   ),
-                  _buildSlotEditor(ctx, eventSlots, eventSlotInputCtrl),
                 ],
               );
             },
           ),
+          // Below the grid (not a fixed-height grid cell) so the slot chips
+          // can take the height they need on phones.
+          16.h,
+          _buildSlotEditor(context, eventSlots, eventSlotInputCtrl),
           // Map link → road distance / drive time from HQ (fills the fields).
           MapLinkDistanceHelper(
             mapUrlCtrl: mapUrlCtrl,
@@ -3330,8 +3294,12 @@ class ManageBookingScreen extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // Wraps on phones (label above the type chips) instead of overflowing.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
             children: [
               Text(
                 isTypeLead
@@ -3351,6 +3319,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _typeChip(
                     'LEAD',
@@ -4975,63 +4944,43 @@ class _SectionCard extends StatelessWidget {
     this.titleColor,
   });
 
+  // Minimal card: flat surface, hairline border, sentence-case title.
+  // A Material (not a decorated box) so ripples on tiles inside stay visible.
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
-    return Container(
-      padding: EdgeInsets.all(ResponsiveBuilder.isMobile(context) ? 16 : 24),
-      decoration: BoxDecoration(
-        color: crmColors.background,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: crmColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+    final mobile = ResponsiveBuilder.isMobile(context);
+    return Material(
+      color: crmColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: crmColors.border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: titleColor ?? crmColors.textPrimary,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      4.h,
-                      Text(
-                        subtitle!.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: crmColors.textSecondary,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: EdgeInsets.all(mobile ? 14 : 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: crmColors.textPrimary,
+              ),
+            ),
+            if (subtitle != null) ...[
+              2.h,
+              Text(
+                subtitle!,
+                style: TextStyle(fontSize: 12, color: crmColors.textSecondary),
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-          child,
-        ],
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
       ),
     );
   }

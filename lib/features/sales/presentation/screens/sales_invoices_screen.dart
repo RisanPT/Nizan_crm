@@ -22,6 +22,7 @@ import 'package:nizan_crm/features/bookings/utils/package_filter.dart';
 import '../../../../core/providers/auth_provider.dart';
 import '../../../../presentation/widgets/export_sales_report_dialog.dart';
 import '../../../../core/utils/booking_print_service.dart';
+import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
 import '../../../../services/zone_service.dart';
 import '../../../../services/state_service.dart';
 import '../../../../services/region_service.dart';
@@ -1643,7 +1644,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                                   Expanded(child: _HeaderText('Advance')),
                                   Expanded(child: _HeaderText('Total')),
                                   Expanded(child: _HeaderText('Balance')),
-                                  SizedBox(width: 60),
+                                  SizedBox(width: 100), // WhatsApp + delete
                                 ],
                               ),
                             ),
