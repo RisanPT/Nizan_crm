@@ -427,9 +427,19 @@ class SalesBookingsScreen extends HookConsumerWidget {
           final name = creatorOptions[selectedCreatorId.value];
           if (name != null) parts.add('Added By: $name');
         }
-        if (selectedPackage != null) parts.add('Package: ${selectedPackage.name}');
+        if (selectedPackage != null) {
+          final n = totalPackageCount(geoFilteredAllBookings, selectedPackage);
+          parts.add('Package: ${selectedPackage.name} - ${geoFilteredAllBookings.length} bookings, '
+              '$n package${n == 1 ? '' : 's'} in total (amounts are full booking totals)');
+        }
         return parts.isEmpty ? 'All Bookings' : parts.join(' • ');
       })();
+
+      // With a package filter, report rows name only that package (× n when
+      // taken more than once) instead of every package on the booking.
+      final reportBookings = selectedPackage == null
+          ? geoFilteredAllBookings
+          : geoFilteredAllBookings.map((b) => withOnlyPackage(b, selectedPackage)).toList();
 
       // PDF / CSV — chosen in the dialog; every report below follows it.
       var asCsv = false;
@@ -444,7 +454,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'ceo_daily',
@@ -458,7 +468,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'sales',
@@ -472,7 +482,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'executive',
@@ -487,7 +497,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'crm',
@@ -501,7 +511,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: selectedMonth,
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'month_end_cashflow_$transactionType',
@@ -515,7 +525,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
             crmColors: crmColors,
             action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
               month: DateTime.now(),
-              bookings: geoFilteredAllBookings,
+              bookings: reportBookings,
               packages: packages,
               employees: employees,
               reportType: 'forecast',
@@ -532,7 +542,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 4),
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -552,7 +562,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 7),
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -572,7 +582,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final startYear = int.parse(parts[0]);
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(startYear, 10),
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -592,7 +602,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final endYear = 2000 + int.parse(parts[1]);
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: DateTime(endYear, 1),
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -611,7 +621,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final now = DateTime.now();
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: now,
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -630,7 +640,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
               final now = DateTime.now();
               return (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
                 month: now,
-                bookings: geoFilteredAllBookings,
+                bookings: reportBookings,
                 packages: packages,
                 employees: employees,
                 reportType: 'sales',
@@ -1573,6 +1583,12 @@ class SalesBookingsScreen extends HookConsumerWidget {
                     ),
                   ),
                 ),
+              if (selectedPackage != null && !isMonthlyView.value)
+                _PackageCountBanner(
+                  packageName: selectedPackage.name,
+                  bookings: response.totalItems,
+                  packages: response.summary.packageCount,
+                ),
               if (isMonthlyView.value)
                 _MonthlySalesSummaryView(
                   financialYear: selectedFY.value,
@@ -1598,6 +1614,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                               .map(
                                 (booking) => _MobileBookingCard(
                                   booking: booking,
+                                  packageFilter: selectedPackage,
                                   isSelected: selectedIds.value.contains(
                                     booking.id,
                                   ),
@@ -1653,6 +1670,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
                               (booking) => _DesktopBookingRow(
                                 onRowTap: () => selectedPanelBooking.value = booking,
                                 booking: booking,
+                                packageFilter: selectedPackage,
                                 isSelected: selectedIds.value.contains(
                                   booking.id,
                                 ),

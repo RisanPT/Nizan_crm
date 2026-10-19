@@ -10,6 +10,7 @@ import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 import 'package:nizan_crm/features/client_chat/controllers/live_client_chat.dart';
+import 'package:nizan_crm/features/sales/services/goal_service.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
 
@@ -759,6 +760,18 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/sales/targets',
                             onTap: () => context.go('/sales/targets'),
+                          ),
+                        ),
+                      // Day / week / month report against company goals, MTD, print.
+                      if (canViewGoalReport(access.roleKey) && access.canSeeSub('sales.report'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.bar_chart_rounded,
+                            title: 'Report & Goals',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/sales/report' || currentPath == '/sales/goals',
+                            onTap: () => context.go('/sales/report'),
                           ),
                         ),
                       // Same YoY Sales Calendar the Marketing team has.

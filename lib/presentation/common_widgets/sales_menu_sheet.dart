@@ -6,6 +6,7 @@ import '../../core/auth/access_control.dart';
 import '../../core/auth/workspace.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
+import '../../features/sales/services/goal_service.dart';
 import '../../features/sales/services/sales_target_service.dart';
 import 'workspace_switcher.dart';
 
@@ -37,6 +38,8 @@ List<_Group> _groupsFor(Access access) {
     _Group('Sales', [
       if (canSetSalesTargets(access.roleKey) && access.canSeeSub('sales.targets'))
         const _Item('Sales Targets', Icons.flag_outlined, '/sales/targets'),
+      if (canViewGoalReport(access.roleKey) && access.canSeeSub('sales.report'))
+        const _Item('Report & Goals', Icons.bar_chart_rounded, '/sales/report'),
       if (access.canSeeSub('sales.dashboard'))
         const _Item('Sales Dashboard', Icons.insights_outlined, '/sales/dashboard'),
       if (access.canSeeSub('sales.invoices'))

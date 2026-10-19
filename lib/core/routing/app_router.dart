@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../auth/app_role.dart';
 import '../auth/access_control.dart';
 import '../../presentation/common_widgets/main_layout.dart';
+import '../../features/help/presentation/help_assistant.dart';
 import '../../presentation/screens/dashboard_screen.dart';
 import '../../presentation/screens/artist_head_dashboard_screen.dart';
 import '../../presentation/screens/artist_directory_screen.dart';
@@ -173,6 +174,8 @@ import '../../features/trials/presentation/screens/trials_screen.dart';
 import '../../features/trials/presentation/screens/trials_calendar_screen.dart';
 import '../../features/trials/presentation/screens/manage_trial_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_targets_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_goals_report_screen.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/sales_goals_screen.dart';
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -202,6 +205,7 @@ String? subKeyForPath(String path) {
   if (path == '/sales/cancelled') return 'sales.cancelled';
   if (path == '/sales/booking-map') return 'sales.booking_map';
   if (path == '/sales/targets') return 'sales.targets';
+  if (path == '/sales/report' || path == '/sales/goals') return 'sales.report';
   if (path == '/sales') return 'sales.invoices';
   // Accounts (payables)
   if (path == '/accounts/dashboard') return 'payables.dashboard';
@@ -715,6 +719,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Booking Map';
           } else if (state.uri.path == '/sales/targets') {
             title = 'Sales Targets';
+          } else if (state.uri.path == '/sales/report') {
+            title = 'Sales Report & Goals';
+          } else if (state.uri.path == '/sales/goals') {
+            title = 'Goals';
           } else if (state.uri.path == '/sales/calendar') {
             title = 'Sales Calendar';
           } else if (state.uri.path == '/reports/analyst') {
@@ -911,7 +919,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
                 context.go('/');
               }
             },
-            child: MainLayout(title: title, child: child),
+            child: HelpAssistantOverlay(
+                child: MainLayout(title: title, child: child)),
           );
         },
         routes: [
@@ -1153,6 +1162,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/sales/targets',
             builder: (context, state) => const SalesTargetsScreen(),
+          ),
+          GoRoute(
+            path: '/sales/report',
+            builder: (context, state) => const SalesGoalsReportScreen(),
+          ),
+          GoRoute(
+            path: '/sales/goals',
+            builder: (context, state) => const SalesGoalsScreen(),
           ),
           // Same Sales Calendar the Marketing team uses, mounted for Sales too.
           GoRoute(
@@ -1397,8 +1414,6 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               bookingId: state.pathParameters['id'] ?? '1042',
               bookingEntryId: state.uri.queryParameters['entry'],
             ),
-            // Leaving with unsaved edits asks save / discard / keep editing.
-            onExit: (context, state) => ManageBookingScreen.canLeave(),
           ),
           GoRoute(
             path: '/finance',

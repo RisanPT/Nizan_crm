@@ -139,7 +139,9 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
         return false;
     }
   }
-  String _iso(DateTime? d) => d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
+  // Plain calendar day ('2026-10-31'): the server reads it as an IST day and
+  // includes the whole of `to`.
+  String _iso(DateTime? d) => d == null ? '' : DateFormat('yyyy-MM-dd').format(d);
 
   void _sort(String key) => setState(() {
         if (_sortBy == key) {
@@ -285,6 +287,16 @@ class _SalesReportScreenState extends ConsumerState<SalesReportScreen> {
             selected: _groupBy == 'day',
             onSelected: (_) => setState(() {
               _groupBy = 'day';
+              _visible = kFinancePageSize;
+            }),
+          ),
+          8.w,
+          // Weeks start on Monday; each row is labelled with its Monday.
+          ChoiceChip(
+            label: const Text('Week'),
+            selected: _groupBy == 'week',
+            onSelected: (_) => setState(() {
+              _groupBy = 'week';
               _visible = kFinancePageSize;
             }),
           ),
