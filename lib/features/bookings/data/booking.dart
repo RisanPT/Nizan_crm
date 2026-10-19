@@ -433,11 +433,16 @@ class BookingPageSummary {
   final int completedCount;
   final int cancelledCount;
 
+  /// How many times the filtered package was taken across all matching
+  /// bookings (every page). Null when no package filter is on.
+  final int? packageCount;
+
   const BookingPageSummary({
     this.totalSales = 0,
     this.totalAdvance = 0,
     this.completedCount = 0,
     this.cancelledCount = 0,
+    this.packageCount,
   });
 
   factory BookingPageSummary.fromJson(Map<String, dynamic> json) {
@@ -446,6 +451,7 @@ class BookingPageSummary {
       totalAdvance: (json['totalAdvance'] as num?)?.toDouble() ?? 0,
       completedCount: (json['completedCount'] as num?)?.toInt() ?? 0,
       cancelledCount: (json['cancelledCount'] as num?)?.toInt() ?? 0,
+      packageCount: (json['packageCount'] as num?)?.toInt(),
     );
   }
 }

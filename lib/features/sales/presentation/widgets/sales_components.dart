@@ -296,12 +296,17 @@ class _DesktopBookingRow extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onRowTap;
 
+  /// While filtering by a package, the row shows only that package (with
+  /// "× n" if taken more than once) instead of every package on the booking.
+  final ServicePackage? packageFilter;
+
   const _DesktopBookingRow({
     required this.booking,
     required this.isSelected,
     required this.onSelectChanged,
     required this.onDelete,
     this.onRowTap,
+    this.packageFilter,
   });
 
   @override
@@ -373,7 +378,9 @@ class _DesktopBookingRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    booking.service,
+                    packageFilter == null
+                        ? booking.service
+                        : packageLabelFor(booking, packageFilter!),
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                   if (booking.duplicateCount > 1)
@@ -439,11 +446,15 @@ class _MobileBookingCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onRowTap;
 
+  /// See [_DesktopBookingRow.packageFilter].
+  final ServicePackage? packageFilter;
+
   const _MobileBookingCard({
     required this.booking,
     required this.isSelected,
     required this.onSelectChanged,
     required this.onDelete,
+    this.packageFilter,
   }) : onRowTap = null;
 
   @override
@@ -513,7 +524,7 @@ class _MobileBookingCard extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              '#${booking.displayBookingNumber}  ·  ${booking.service}',
+                              '#${booking.displayBookingNumber}  ·  ${packageFilter == null ? booking.service : packageLabelFor(booking, packageFilter!)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -624,6 +635,53 @@ class _MiniFinance extends StatelessWidget {
               color: crmColors.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown above the list while filtering by a package: which package, how many
+/// bookings match, and how many times that package was taken in total.
+class _PackageCountBanner extends StatelessWidget {
+  final String packageName;
+  final int bookings;
+  final int? packages;
+
+  const _PackageCountBanner({
+    required this.packageName,
+    required this.bookings,
+    required this.packages,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final crmColors = context.crmColors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: crmColors.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crmColors.primary.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.inventory_2_outlined, size: 18, color: crmColors.primary),
+          10.w,
+          Expanded(
+            child: Text(
+              packages == null
+                  ? '$packageName  ·  $bookings booking${bookings == 1 ? '' : 's'}'
+                  : '$packageName  ·  $bookings booking${bookings == 1 ? '' : 's'}  ·  '
+                      '$packages package${packages == 1 ? '' : 's'} in total',
+              style: TextStyle(
+                color: crmColors.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+              ),
             ),
           ),
         ],

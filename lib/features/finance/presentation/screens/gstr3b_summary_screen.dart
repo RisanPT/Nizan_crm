@@ -30,8 +30,9 @@ class _Gstr3bSummaryScreenState extends ConsumerState<Gstr3bSummaryScreen> {
   DateTime? _to;
   DateRangePreset _preset = DateRangePreset.thisMonth;
 
-  String _iso(DateTime? d) =>
-      d == null ? '' : DateTime(d.year, d.month, d.day).toIso8601String();
+  // Plain calendar day ('2026-10-31'): the server reads it as an IST day and
+  // includes the whole of `to`.
+  String _iso(DateTime? d) => d == null ? '' : DateFormat('yyyy-MM-dd').format(d);
   ({String from, String to}) get _range => (from: _iso(_from), to: _iso(_to));
 
   ({GstSummary s, double taxable})? _last;
