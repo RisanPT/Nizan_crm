@@ -11,7 +11,6 @@ import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 import 'package:nizan_crm/features/client_chat/controllers/live_client_chat.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
-import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
 
 class Sidebar extends ConsumerWidget {
@@ -122,12 +121,9 @@ class Sidebar extends ConsumerWidget {
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
-    // Leave/Approvals are standalone items (also available to ESS employees who
-    // lack the HR group), so they don't count as "HR group" routes here.
+    // Leave is a standalone item for ESS employees who lack full HRMS access.
     final isHrRoute = (currentPath.startsWith('/staff') || currentPath.startsWith('/hr')) &&
-        (!access.canSeeStaff ? currentPath != '/hr/leave' : true) &&
-        currentPath != '/hr/approvals' &&
-        currentPath != '/hr/home';
+        (!access.canSeeStaff ? currentPath != '/hr/leave' : true);
     final isCollapsed = isTablet && !isMobile && !ResponsiveBuilder.isTwoPane(context);
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
@@ -500,20 +496,6 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/services/regions'),
                     ),
                   ],
-                  // HR Home — the single hub entry (Me / My Team / Organization).
-                  // Shown first so it leads the HR experience; the "HR" admin
-                  // group below holds the detailed modules for HR/managers.
-                  if (access.canSeeStaff ||
-                      access.isDepartmentHead ||
-                      access.has('leave', false) ||
-                      access.has('org', false))
-                    _SidebarItem(
-                      icon: Icons.badge_outlined,
-                      title: 'HR Home',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/hr/home',
-                      onTap: () => context.go('/hr/home'),
-                    ),
                   // Leave — every employee (ESS) without full HRMS access
                   if (!access.canSeeStaff && (access.canSeeLeaveRequests || access.has('leave', false)))
                     _SidebarItem(
@@ -522,18 +504,6 @@ class Sidebar extends ConsumerWidget {
                       isCollapsed: isCollapsed,
                       isSelected: currentPath == '/hr/leave',
                       onTap: () => context.go('/hr/leave'),
-                    ),
-                  // Approvals — managers, department heads and HR.
-                  if (access.isFullAccess ||
-                      access.isDepartmentHead ||
-                      access.has('approvals', false))
-                    _SidebarItem(
-                      icon: Icons.fact_check_outlined,
-                      title: 'Approvals',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/hr/approvals',
-                      trailing: _approvalsBadge(ref, crmColors, isCollapsed),
-                      onTap: () => context.go('/hr/approvals'),
                     ),
                   if (access.canSeeStaff) ...[
                     _SidebarItem(
@@ -1992,40 +1962,6 @@ Widget? _clientChatBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
   );
 }
 
-/// Pending-count badge for the sidebar Approvals item.
-/// Gold accent dot when collapsed, maroon pill with gold border when expanded.
-Widget? _approvalsBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
-  final count = ref.watch(approvalInboxProvider).asData?.value.length ?? 0;
-  if (count <= 0) return null;
-  if (collapsed) {
-    return Container(
-      width: 8,
-      height: 8,
-      decoration: const BoxDecoration(
-        color: Color(0xFFC9A66B),
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: BoxDecoration(
-      color: const Color(0xFF601A29),
-      border: Border.all(color: const Color(0xFFC9A66B), width: 1),
-      borderRadius: BorderRadius.circular(10),
-    ),
-    constraints: const BoxConstraints(minWidth: 18),
-    child: Text(
-      count > 99 ? '99+' : '$count',
-      textAlign: TextAlign.center,
-      style: const TextStyle(
-        color: Color(0xFFF5F3EF),
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-      ),
-    ),
-  );
-}
 
 /// True when the active route belongs to one of a sidebar section's routes, so
 /// that section can auto-expand.
