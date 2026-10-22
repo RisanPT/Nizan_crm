@@ -1790,6 +1790,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     previousArtistWork,
                     previousWorkDistanceKm,
                     mapLinkEdits,
+                    booking,
                   ),
                   24.h,
                   _buildScheduledDates(
@@ -1827,6 +1828,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           previousArtistWork,
                           previousWorkDistanceKm,
                           mapLinkEdits,
+                          booking,
                         ),
                       ),
                       24.w,
@@ -2370,8 +2372,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     TextEditingController endCtrl,
     BookingDisplayEntry? previousArtistWork,
     double? previousWorkDistanceKm,
-    ValueNotifier<int> mapLinkEdits,
-  ) {
+    ValueNotifier<int> mapLinkEdits, [
+    Booking? booking,
+  ]) {
     return _SectionCard(
       title: 'Logistics & Location',
       child: Column(
@@ -2599,6 +2602,85 @@ class ManageBookingScreen extends HookConsumerWidget {
             roomCtrl,
             hint: 'e.g. NIL or Room 202',
           ),
+          if (booking?.artistTripOtp != null &&
+              booking!.artistTripOtp!.isNotEmpty) ...[
+            16.h,
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: booking.artistOtpVerifiedAt != null
+                    ? const Color(0xFF22C55E).withValues(alpha: 0.08)
+                    : const Color(0xFF4A1942).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: booking.artistOtpVerifiedAt != null
+                      ? const Color(0xFF22C55E).withValues(alpha: 0.3)
+                      : const Color(0xFF4A1942).withValues(alpha: 0.2),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    booking.artistOtpVerifiedAt != null
+                        ? Icons.verified_rounded
+                        : Icons.vpn_key_rounded,
+                    color: booking.artistOtpVerifiedAt != null
+                        ? const Color(0xFF22C55E)
+                        : const Color(0xFF4A1942),
+                    size: 20,
+                  ),
+                  12.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Driver Trip Start OTP: ${booking.artistTripOtp}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: crmColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          booking.artistOtpVerifiedAt != null
+                              ? 'Trip started & OTP verified'
+                              : 'Visible to assigned lead artist & assistants on their schedule page',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: crmColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: booking.artistOtpVerifiedAt != null
+                          ? const Color(0xFF22C55E).withValues(alpha: 0.15)
+                          : const Color(0xFF4A1942).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      booking.artistOtpVerifiedAt != null
+                          ? 'VERIFIED'
+                          : 'ACTIVE',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: booking.artistOtpVerifiedAt != null
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFF4A1942),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           24.h,
           const Divider(),
           24.h,

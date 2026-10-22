@@ -164,6 +164,55 @@ const List<String> kEventTypes = [
   'Other',
 ];
 
+/// Canonical lead source options. Default is WhatsApp (Organic).
+const String kDefaultLeadSource = 'WhatsApp (Organic)';
+
+const List<String> kLeadSources = [
+  'WhatsApp (Organic)',
+  'IG Leads — Main Page',
+  'IG Leads — Kerala Page',
+  'Paid Ads Leads',
+  'Trial Campaign Leads',
+  'YouTube',
+  'Reference',
+  'Walk-in',
+  'Other',
+];
+
+const List<String> kLeadSourceFilters = ['All', ...kLeadSources];
+
+/// Coerce raw or legacy lead source to a known valid source, or 'Other'.
+String coerceLeadSource(String? s) {
+  if (s == null || s.trim().isEmpty) return kDefaultLeadSource;
+  final trimmed = s.trim();
+  if (kLeadSources.contains(trimmed)) return trimmed;
+  final lower = trimmed.toLowerCase();
+  if (lower.contains('whatsapp') || lower == 'wa') {
+    return 'WhatsApp (Organic)';
+  }
+  if (lower.contains('kerala')) {
+    return 'IG Leads — Kerala Page';
+  }
+  if (lower.contains('trial')) {
+    return 'Trial Campaign Leads';
+  }
+  if (lower.contains('paid') || lower.contains('ad')) {
+    return 'Paid Ads Leads';
+  }
+  if (lower.contains('main') || lower == 'instagram' || lower == 'ig') {
+    return 'IG Leads — Main Page';
+  }
+  if (lower.contains('youtube')) return 'YouTube';
+  if (lower.contains('reference') || lower.contains('referral')) return 'Reference';
+  if (lower.contains('walk')) return 'Walk-in';
+  return 'Other';
+}
+
+bool _isKnownSource(String? s) {
+  if (s == null) return false;
+  return kLeadSources.contains(s);
+}
+
 /// Map a possibly-legacy status onto a selectable one so a status dropdown
 /// never gets a `value` that isn't among its items (which would assert).
 String coerceLeadStatus(String s) => kLeadStatuses.contains(s) ? s : 'Contacted';
@@ -556,7 +605,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                         onChanged: (val) {
                                           if (val != null) onFilterChange(selectedSource, val);
                                         },
-                                        items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
+                                        items: kLeadSourceFilters.map((s) {
                                           return DropdownMenuItem(
                                             value: s,
                                             child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
@@ -693,7 +742,7 @@ class SalesLeadsScreen extends HookConsumerWidget {
                                   onChanged: (val) {
                                     if (val != null) onFilterChange(selectedSource, val);
                                   },
-                                  items: ['All', 'Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].map((s) {
+                                  items: kLeadSourceFilters.map((s) {
                                     return DropdownMenuItem(
                                       value: s,
                                       child: Text(s == 'All' ? 'All Sources' : s, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -998,9 +1047,15 @@ class _LeadForm extends HookConsumerWidget {
     final nameCtrl      = useTextEditingController(text: initialLead?.name ?? '');
     final phoneCtrl     = useTextEditingController(text: initialLead?.phone ?? '');
     final alternateCtrl = useTextEditingController(text: initialLead?.alternateNumber ?? '');
-    final selectedSource   = useState(initialLead?.source ?? 'Instagram');
+    final initialSrc = initialLead?.source;
+    final coercedInitialSrc = initialSrc != null && initialSrc.isNotEmpty
+        ? coerceLeadSource(initialSrc)
+        : kDefaultLeadSource;
+    final selectedSource   = useState(coercedInitialSrc);
     final customSourceCtrl = useTextEditingController(
-      text: _isKnownSource(initialLead?.source) ? '' : (initialLead?.source ?? ''),
+      text: (coercedInitialSrc == 'Other' && initialSrc != null && !kLeadSources.contains(initialSrc))
+          ? initialSrc
+          : '',
     );
     // Marketing campaign this lead is attributed to (drives campaign ROI).
     final selectedCampaignId = useState<String?>(initialLead?.campaignId);
@@ -1055,11 +1110,7 @@ class _LeadForm extends HookConsumerWidget {
         if (parsed.phone.isNotEmpty)    phoneCtrl.text    = parsed.phone;
         if (parsed.location.isNotEmpty) locationCtrl.text = parsed.location;
         if (parsed.source.isNotEmpty) {
-          const knownSources = ['Instagram', 'YouTube', 'Reference', 'Walk-in'];
-          final matched = knownSources.firstWhere(
-            (s) => s.toLowerCase() == parsed.source.toLowerCase(),
-            orElse: () => 'Other',
-          );
+          final matched = coerceLeadSource(parsed.source);
           selectedSource.value = matched;
           if (matched == 'Other') customSourceCtrl.text = parsed.source;
         }
@@ -1371,15 +1422,17 @@ class _LeadForm extends HookConsumerWidget {
             labelText: 'Source',
             prefixIcon: Icon(Icons.campaign_outlined),
           ),
-          items: ['Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other']
+          items: kLeadSources
               .map((s) => DropdownMenuItem(value: s, child: Text(s, overflow: TextOverflow.ellipsis)))
               .toList(),
           onChanged: (v) {
-            selectedSource.value = v!;
-            if (v != 'Other') customSourceCtrl.clear();
+            if (v != null) {
+              selectedSource.value = v;
+              if (v != 'Other') customSourceCtrl.clear();
+            }
           },
         ),
-        desktopWidth: 180,
+        desktopWidth: 220,
       ),
 
       // Custom Source
@@ -1792,10 +1845,6 @@ class _LeadForm extends HookConsumerWidget {
   }
 }
 
-bool _isKnownSource(String? s) {
-  if (s == null) return false;
-  return ['Instagram', 'YouTube', 'Reference', 'Walk-in', 'Other'].contains(s);
-}
 
 // ─────────────────────────────────────────────────────────
 //  Edit Lead Dialog / Bottom Sheet

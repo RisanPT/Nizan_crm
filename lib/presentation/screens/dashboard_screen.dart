@@ -2438,121 +2438,173 @@ class _ArtistMiniCard extends StatelessWidget {
     final statusColor = _statusColor(booking.status);
     final opacity = dimmed ? 0.65 : 1.0;
 
-    return Opacity(
-      opacity: opacity,
-      child: Container(
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: crm.border.faded(0.5)),
-          boxShadow: dimmed
-              ? null
-              : [
-                  BoxShadow(
-                    color: statusColor.withValues(alpha: 0.1),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-        ),
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    statusColor.withValues(alpha: 0.2),
-                    statusColor.withValues(alpha: 0.05),
+    return InkWell(
+      onTap: () => context.go('/works'),
+      borderRadius: BorderRadius.circular(20),
+      child: Opacity(
+        opacity: opacity,
+        child: Container(
+          decoration: BoxDecoration(
+            color: crm.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: crm.border.faded(0.5)),
+            boxShadow: dimmed
+                ? null
+                : [
+                    BoxShadow(
+                      color: statusColor.withValues(alpha: 0.1),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
                   ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                border: Border.all(color: statusColor.withValues(alpha: 0.2)),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                booking.initials,
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                  color: statusColor,
-                ),
-              ),
-            ),
-            16.w,
-
-            // Name + service
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    booking.customerName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          ),
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      statusColor.withValues(alpha: 0.2),
+                      statusColor.withValues(alpha: 0.05),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  4.h,
-                  Text(
-                    booking.service,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: crm.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            12.w,
-
-            // Time + date
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _fmtTime(booking.serviceStart),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  booking.initials,
                   style: TextStyle(
                     fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                    fontSize: 18,
                     color: statusColor,
                   ),
                 ),
-                6.h,
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: statusColor.withValues(alpha: 0.2),
+              ),
+              16.w,
+
+              // Name + service
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      booking.customerName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  child: Text(
-                    _fmt(booking.serviceStart),
+                    4.h,
+                    Text(
+                      booking.service,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: crm.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (booking.artistTripOtp != null &&
+                        booking.artistTripOtp!.isNotEmpty) ...[
+                      6.h,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: booking.artistOtpVerifiedAt != null
+                              ? const Color(0xFF22C55E).withValues(alpha: 0.1)
+                              : const Color(0xFF6B1A5F).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: booking.artistOtpVerifiedAt != null
+                                ? const Color(0xFF22C55E).withValues(alpha: 0.3)
+                                : const Color(0xFF6B1A5F).withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              booking.artistOtpVerifiedAt != null
+                                  ? Icons.check_circle_rounded
+                                  : Icons.key_rounded,
+                              size: 11,
+                              color: booking.artistOtpVerifiedAt != null
+                                  ? const Color(0xFF22C55E)
+                                  : const Color(0xFF6B1A5F),
+                            ),
+                            4.w,
+                            Text(
+                              booking.artistOtpVerifiedAt != null
+                                  ? 'Trip Started'
+                                  : 'Trip OTP: ${booking.artistTripOtp}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing:
+                                    booking.artistOtpVerifiedAt != null ? 0 : 0.5,
+                                color: booking.artistOtpVerifiedAt != null
+                                    ? const Color(0xFF22C55E)
+                                    : const Color(0xFF6B1A5F),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              12.w,
+
+              // Time + date
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _fmtTime(booking.serviceStart),
                     style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 14,
                       color: statusColor,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  6.h,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: statusColor.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Text(
+                      _fmt(booking.serviceStart),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

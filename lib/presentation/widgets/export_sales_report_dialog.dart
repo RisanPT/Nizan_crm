@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/extensions/space_extension.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/sales_eod_dialog.dart';
 
 class ExportSalesReportDialog extends StatefulWidget {
   final String financialYear;
@@ -17,6 +18,7 @@ class ExportSalesReportDialog extends StatefulWidget {
   final void Function(bool) onOctDecReport;
   final void Function(bool) onJanMarReport;
   final void Function(bool, DateTime, String) onMonthEndCashFlowReport;
+  final VoidCallback? onSalesEodReport;
 
   /// Shows the PDF / CSV switch; called with true when CSV is chosen.
   final ValueChanged<bool>? onFormatChanged;
@@ -38,6 +40,7 @@ class ExportSalesReportDialog extends StatefulWidget {
     required this.onOctDecReport,
     required this.onJanMarReport,
     required this.onMonthEndCashFlowReport,
+    this.onSalesEodReport,
     this.onFormatChanged,
   });
 
@@ -252,6 +255,20 @@ class _ExportSalesReportDialogState extends State<ExportSalesReportDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildSectionHeader(theme, 'Core Performance & Ledgers'),
+                    12.h,
+                    _OptionCard(
+                      icon: Icons.assignment_turned_in_outlined,
+                      title: 'Sales End of Day (EOD) Report',
+                      subtitle: 'Daily call outcomes, leads converted, closed bookings & PDF download.',
+                      onTap: () {
+                        Navigator.pop(context);
+                        if (widget.onSalesEodReport != null) {
+                          widget.onSalesEodReport!();
+                        } else {
+                          showSalesEodDialog(context);
+                        }
+                      },
+                    ),
                     12.h,
                     _OptionCard(
                       icon: Icons.calendar_today_outlined,

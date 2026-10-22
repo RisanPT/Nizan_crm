@@ -587,6 +587,10 @@ class Booking {
   /// booking is saved as completed. Not persisted; used to append the link to
   /// the completion WhatsApp message.
   final String reviewUrl;
+  /// 4-digit verification OTP generated for artists/assistants to share with the driver.
+  final String? artistTripOtp;
+  /// Timestamp when the driver successfully verified the OTP and started the trip.
+  final DateTime? artistOtpVerifiedAt;
   /// Set by the server: whether this booking counts toward sales totals.
   /// Null when the server predates this field (falls back to the local rule).
   final bool? serverCountsTowardSales;
@@ -659,6 +663,8 @@ class Booking {
     this.reviewUrl = '',
     this.serverCountsTowardSales,
     this.createdBy = '',
+    this.artistTripOtp,
+    this.artistOtpVerifiedAt,
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -1010,6 +1016,10 @@ class Booking {
       createdBy: json['createdBy'] is Map
           ? (json['createdBy']['_id'] as String? ?? '')
           : (json['createdBy'] as String? ?? ''),
+      artistTripOtp: json['artistTripOtp'] as String?,
+      artistOtpVerifiedAt: json['artistOtpVerifiedAt'] != null
+          ? DateTime.tryParse(json['artistOtpVerifiedAt'] as String)?.toLocal()
+          : null,
     );
   }
 
@@ -1074,6 +1084,10 @@ class Booking {
           ? outfitDetails
           : outfitLooks.map((l) => l.outfitDetails).where((s) => s.isNotEmpty).join(' | '),
       'referenceImages': referenceImages,
+      if (artistTripOtp != null && artistTripOtp!.isNotEmpty)
+        'artistTripOtp': artistTripOtp,
+      if (artistOtpVerifiedAt != null)
+        'artistOtpVerifiedAt': artistOtpVerifiedAt!.toIso8601String(),
     };
   }
 
@@ -1139,6 +1153,8 @@ class Booking {
     String? createdByName,
     String? createdBy,
     String? reviewUrl,
+    String? artistTripOtp,
+    DateTime? artistOtpVerifiedAt,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -1210,6 +1226,8 @@ class Booking {
       createdBy: createdBy ?? this.createdBy,
       reviewUrl: reviewUrl ?? this.reviewUrl,
       serverCountsTowardSales: serverCountsTowardSales,
+      artistTripOtp: artistTripOtp ?? this.artistTripOtp,
+      artistOtpVerifiedAt: artistOtpVerifiedAt ?? this.artistOtpVerifiedAt,
     );
   }
 }

@@ -100,7 +100,7 @@ class Lead {
       name: json['name'] as String? ?? '',
       email: json['email'] as String?,
       phone: json['phone'] as String? ?? '',
-      source: json['source'] as String? ?? 'Walk-in',
+      source: json['source'] as String? ?? 'WhatsApp (Organic)',
       campaignId: json['campaignId'] is Map
           ? json['campaignId']['_id'] as String?
           : json['campaignId'] as String?,

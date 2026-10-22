@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/combined_targets_section.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/sales_eod_dialog.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 
 const _months = [
@@ -101,6 +102,7 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                   dueCount: dueFollowUps.length,
                   unread: unread,
                   onBell: () => context.go('/notifications'),
+                  onEod: () => showSalesEodDialog(context),
                   onView: () => context.go('/sales/leads'),
                 ),
                 Padding(
@@ -134,7 +136,7 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                               onTap: () => context.go('/sales/leads'),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: _ActionCard(
                               icon: Icons.receipt_long_rounded,
@@ -144,7 +146,22 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                               onTap: () => context.go('/sales/leads?tab=quote'),
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _ActionCard(
+                              icon: Icons.summarize_rounded,
+                              label: 'Daily EOD\nReport',
+                              filled: false,
+                              color: const Color(0xFF601A29),
+                              onTap: () => showSalesEodDialog(context),
+                            ),
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      _EodBannerCard(
+                        crm: crm,
+                        onTap: () => showSalesEodDialog(context),
                       ),
                       const SizedBox(height: 26),
 
@@ -200,6 +217,7 @@ class _Hero extends StatelessWidget {
   final int dueCount;
   final int unread;
   final VoidCallback onBell;
+  final VoidCallback onEod;
   final VoidCallback onView;
 
   const _Hero({
@@ -211,6 +229,7 @@ class _Hero extends StatelessWidget {
     required this.dueCount,
     required this.unread,
     required this.onBell,
+    required this.onEod,
     required this.onView,
   });
 
@@ -279,6 +298,9 @@ class _Hero extends StatelessWidget {
                   ],
                 ),
               ),
+              // EOD Report button
+              _HeroEodButton(onTap: onEod),
+              const SizedBox(width: 8),
               // Notification bell (moved out of the shell app bar for this tab).
               _HeroBell(unread: unread, onTap: onBell),
               const SizedBox(width: 10),
@@ -719,3 +741,149 @@ class _FollowUpTile extends StatelessWidget {
     );
   }
 }
+
+class _HeroEodButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _HeroEodButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Download EOD Report',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.summarize_outlined, color: Colors.white, size: 21),
+        ),
+      ),
+    );
+  }
+}
+
+class _EodBannerCard extends StatelessWidget {
+  final CrmTheme crm;
+  final VoidCallback onTap;
+
+  const _EodBannerCard({required this.crm, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                const Color(0xFF601A29).withValues(alpha: 0.08),
+                const Color(0xFF8B2539).withValues(alpha: 0.03),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF601A29).withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF601A29),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF601A29).withValues(alpha: 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'End of Day (EOD) Report',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14.5,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF601A29).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'PDF',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF601A29),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Daily calls, leads, closed bookings & direct download',
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF601A29),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.download_rounded, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      'Download',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
