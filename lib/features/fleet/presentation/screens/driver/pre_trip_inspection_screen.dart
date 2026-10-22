@@ -25,6 +25,7 @@ class _PreTripInspectionScreenState
   final List<XFile> _selectedImages = [];
   final Set<int> _uploadingIndexes = {};
   final _kmCtrl = TextEditingController();
+  final _otpCtrl = TextEditingController();
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -37,18 +38,21 @@ class _PreTripInspectionScreenState
     return (v == null || v < 0) ? null : v;
   }
 
-  bool get _hasPhotos => _selectedImages.length >= _minPhotos;
-  bool get _canStartTrip => _hasPhotos && _startKm != null;
-
-  /// This job, for the vehicle's last recorded km.
+  /// This job, for the vehicle's last recorded km and staff assignments.
   FleetJob? get _job =>
       (ref.read(driverJobsProvider).value ?? const <FleetJob>[])
           .where((j) => j.id == widget.jobId)
           .firstOrNull;
 
+  bool get _requiresOtp => _job?.requiresArtistOtp ?? false;
+  bool get _hasValidOtp => !_requiresOtp || _otpCtrl.text.trim().length == 4;
+  bool get _hasPhotos => _selectedImages.length >= _minPhotos;
+  bool get _canStartTrip => _hasPhotos && _startKm != null && _hasValidOtp;
+
   @override
   void dispose() {
     _kmCtrl.dispose();
+    _otpCtrl.dispose();
     super.dispose();
   }
 
@@ -140,8 +144,12 @@ class _PreTripInspectionScreenState
         if (mounted) setState(() => _uploadingIndexes.remove(i));
       }
 
-      await fleetService.startTripWithInspection(widget.jobId, photoUrls,
-          startKm: startKm);
+      await fleetService.startTripWithInspection(
+        widget.jobId,
+        photoUrls,
+        startKm: startKm,
+        artistOtp: _requiresOtp ? _otpCtrl.text.trim() : null,
+      );
 
       // ✅ Refresh the jobs provider so dashboard/works screen updates
       ref.refreshData
@@ -199,6 +207,10 @@ class _PreTripInspectionScreenState
                   _buildPickButtons(),
                   const SizedBox(height: 16),
                   _buildKmCard(),
+                  if (_requiresOtp) ...[
+                    const SizedBox(height: 16),
+                    _buildOtpCard(),
+                  ],
                   const SizedBox(height: 20),
                   _buildStartButton(),
                   const SizedBox(height: 32),
@@ -562,6 +574,176 @@ class _PreTripInspectionScreenState
     );
   }
 
+  Widget _buildOtpCard() {
+    final isOtpComplete = _otpCtrl.text.trim().length == 4;
+    final isOtpError = _errorMessage != null &&
+        (_errorMessage!.toLowerCase().contains('otp') ||
+            _errorMessage!.toLowerCase().contains('verification'));
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: isOtpError
+            ? Border.all(color: Colors.red.shade400, width: 1.5)
+            : Border.all(color: Colors.grey.withValues(alpha: 0.15)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4A1942).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.verified_user_rounded,
+                  color: Color(0xFF4A1942),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Artist Trip OTP',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A1A2E),
+                      ),
+                    ),
+                    Text(
+                      'Required before starting the trip',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4A1942).withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF4A1942).withValues(alpha: 0.2),
+                  ),
+                ),
+                child: const Text(
+                  '4-DIGIT PIN',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF4A1942),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Ask the lead artist or assistant for the 4-digit OTP shown on their schedule or dashboard.',
+            style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _otpCtrl,
+            enabled: !_isSubmitting,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 16,
+              color: Color(0xFF1A1A2E),
+            ),
+            onChanged: (val) {
+              if (_errorMessage != null) setState(() => _errorMessage = null);
+              setState(() {});
+            },
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: '••••',
+              hintStyle: TextStyle(
+                fontSize: 26,
+                letterSpacing: 16,
+                color: Colors.grey.withValues(alpha: 0.4),
+              ),
+              filled: true,
+              fillColor: const Color(0xFFF9FAFB),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isOtpError ? Colors.red : Colors.grey.shade300,
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: isOtpError
+                      ? Colors.red
+                      : isOtpComplete
+                          ? const Color(0xFF2E7D32)
+                          : Colors.grey.shade300,
+                  width: isOtpComplete ? 1.5 : 1,
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF4A1942),
+                  width: 2,
+                ),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                isOtpComplete
+                    ? Icons.check_circle_rounded
+                    : Icons.info_outline_rounded,
+                size: 14,
+                color: isOtpComplete ? const Color(0xFF2E7D32) : Colors.grey[600],
+              ),
+              const SizedBox(width: 6),
+              Text(
+                isOtpComplete
+                    ? '4-digit OTP entered'
+                    : 'Enter all 4 digits provided by the artist',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isOtpComplete ? FontWeight.w700 : FontWeight.w500,
+                  color: isOtpComplete
+                      ? const Color(0xFF2E7D32)
+                      : Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStartButton() {
     return SizedBox(
       width: double.infinity,
@@ -577,11 +759,13 @@ class _PreTripInspectionScreenState
         label: Text(
           _isSubmitting
               ? 'Uploading & Starting...'
-              : _canStartTrip
-                  ? 'Start Trip'
-                  : !_hasPhotos
-                      ? 'Add ${_minPhotos - _selectedImages.length} more photos'
-                      : 'Enter starting km',
+              : !_hasPhotos
+                  ? 'Add ${_minPhotos - _selectedImages.length} more photos'
+                  : _startKm == null
+                      ? 'Enter starting km'
+                      : !_hasValidOtp
+                          ? 'Enter 4-digit Artist OTP'
+                          : 'Start Trip',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(

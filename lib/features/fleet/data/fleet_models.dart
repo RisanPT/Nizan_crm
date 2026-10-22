@@ -46,6 +46,9 @@ extension FleetJobX on FleetJob {
     if (v is Map) return (v['currentKm'] as num?)?.toDouble() ?? 0;
     return 0;
   }
+
+  /// Whether this trip has assigned staff/artists and therefore requires 4-digit OTP verification.
+  bool get requiresArtistOtp => assignedStaff.isNotEmpty;
 }
 
 /// "12,345" / "12,345.5" — odometer readings for display.

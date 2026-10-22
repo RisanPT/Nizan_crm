@@ -21,16 +21,22 @@ class FleetService {
   }
 
   /// Starts the trip: pre-trip photos plus the vehicle's starting odometer
-  /// reading.
+  /// reading, and the 4-digit Artist OTP when staff are assigned.
   Future<FleetJob> startTripWithInspection(
     String jobId,
     List<String> photos, {
     required double startKm,
+    String? artistOtp,
   }) async {
     try {
       final response = await _dio.post(
         '/fleet/driver/inspection/$jobId',
-        data: {'photos': photos, 'startKm': startKm},
+        data: {
+          'photos': photos,
+          'startKm': startKm,
+          if (artistOtp != null && artistOtp.trim().isNotEmpty)
+            'artistOtp': artistOtp.trim(),
+        },
       );
       return FleetJob.fromJson(response.data['job']);
     } catch (e) {
@@ -39,12 +45,20 @@ class FleetService {
   }
 
   /// Starts a later trip of the day without a new inspection (done once a
-  /// day, on the first trip) — only the starting km is needed.
-  Future<FleetJob> startNextTrip(String jobId, {required double startKm}) async {
+  /// day, on the first trip) — starting km and artist OTP (if staff assigned).
+  Future<FleetJob> startNextTrip(
+    String jobId, {
+    required double startKm,
+    String? artistOtp,
+  }) async {
     try {
       final response = await _dio.post(
         '/fleet/driver/start-next/$jobId',
-        data: {'startKm': startKm},
+        data: {
+          'startKm': startKm,
+          if (artistOtp != null && artistOtp.trim().isNotEmpty)
+            'artistOtp': artistOtp.trim(),
+        },
       );
       return FleetJob.fromJson(response.data['job']);
     } catch (e) {

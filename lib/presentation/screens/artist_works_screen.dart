@@ -1551,7 +1551,10 @@ class _AnimatedWorkCard extends ConsumerWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (booking.pocName.trim().isNotEmpty || booking.captureStaffDetails.trim().isNotEmpty) ...[
+                            if (booking.pocName.trim().isNotEmpty ||
+                                booking.captureStaffDetails.trim().isNotEmpty ||
+                                (booking.artistTripOtp != null &&
+                                    booking.artistTripOtp!.isNotEmpty)) ...[
                               6.h,
                               Wrap(
                                 spacing: 6,
@@ -1618,6 +1621,56 @@ class _AnimatedWorkCard extends ConsumerWidget {
                                               fontSize: 9,
                                               fontWeight: FontWeight.w700,
                                               color: Colors.orange,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (booking.artistTripOtp != null &&
+                                      booking.artistTripOtp!.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: booking.artistOtpVerifiedAt != null
+                                            ? const Color(0xFF22C55E)
+                                                .withValues(alpha: 0.08)
+                                            : const Color(0xFF6B1A5F)
+                                                .withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: booking.artistOtpVerifiedAt != null
+                                              ? const Color(0xFF22C55E)
+                                                  .withValues(alpha: 0.25)
+                                              : const Color(0xFF6B1A5F)
+                                                  .withValues(alpha: 0.25),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            booking.artistOtpVerifiedAt != null
+                                                ? Icons.check_circle_rounded
+                                                : Icons.key_rounded,
+                                            size: 10,
+                                            color: booking.artistOtpVerifiedAt != null
+                                                ? const Color(0xFF22C55E)
+                                                : const Color(0xFF6B1A5F),
+                                          ),
+                                          4.w,
+                                          Text(
+                                            booking.artistOtpVerifiedAt != null
+                                                ? 'TRIP STARTED'
+                                                : 'TRIP OTP: ${booking.artistTripOtp}',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                              color: booking.artistOtpVerifiedAt != null
+                                                  ? const Color(0xFF22C55E)
+                                                  : const Color(0xFF6B1A5F),
                                             ),
                                           ),
                                         ],
@@ -2160,6 +2213,150 @@ class _ExpandedDetails extends ConsumerWidget {
                         ),
                       ),
                   ],
+                ),
+                14.h,
+              ],
+
+              // Driver & Trip Start OTP verification
+              if (booking.artistTripOtp != null &&
+                  booking.artistTripOtp!.isNotEmpty) ...[
+                _DetailLabel('Driver & Trip Verification'),
+                6.h,
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: booking.artistOtpVerifiedAt != null
+                        ? const Color(0xFF22C55E).withValues(alpha: 0.06)
+                        : const Color(0xFF4A1942).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: booking.artistOtpVerifiedAt != null
+                          ? const Color(0xFF22C55E).withValues(alpha: 0.3)
+                          : const Color(0xFF4A1942).withValues(alpha: 0.2),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                booking.artistOtpVerifiedAt != null
+                                    ? Icons.verified_rounded
+                                    : Icons.vpn_key_rounded,
+                                size: 16,
+                                color: booking.artistOtpVerifiedAt != null
+                                    ? const Color(0xFF22C55E)
+                                    : const Color(0xFF4A1942),
+                              ),
+                              8.w,
+                              Text(
+                                'Trip Start OTP',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: crm.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: booking.artistOtpVerifiedAt != null
+                                  ? const Color(0xFF22C55E)
+                                      .withValues(alpha: 0.12)
+                                  : const Color(0xFF4A1942)
+                                      .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              booking.artistOtpVerifiedAt != null
+                                  ? '✓ VERIFIED'
+                                  : 'SHARE WITH DRIVER',
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: booking.artistOtpVerifiedAt != null
+                                    ? const Color(0xFF22C55E)
+                                    : const Color(0xFF4A1942),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      10.h,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: booking.artistOtpVerifiedAt != null
+                                    ? const Color(0xFF22C55E)
+                                        .withValues(alpha: 0.4)
+                                    : const Color(0xFF4A1942)
+                                        .withValues(alpha: 0.3),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              booking.artistTripOtp!,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 6,
+                                color: booking.artistOtpVerifiedAt != null
+                                    ? const Color(0xFF22C55E)
+                                    : const Color(0xFF4A1942),
+                              ),
+                            ),
+                          ),
+                          10.w,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (booking.driverName.trim().isNotEmpty)
+                                  Text(
+                                    'Driver: ${booking.driverName}',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: crm.textPrimary,
+                                    ),
+                                  ),
+                                Text(
+                                  booking.artistOtpVerifiedAt != null
+                                      ? 'Trip started & verified'
+                                      : 'Provide this code to driver to start trip',
+                                  style: TextStyle(
+                                    fontSize: 10.5,
+                                    color: crm.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
                 14.h,
               ],

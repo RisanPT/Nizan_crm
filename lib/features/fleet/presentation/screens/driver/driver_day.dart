@@ -120,6 +120,8 @@ Future<bool> showQuickStartSheet(
 }) async {
   final kmCtrl = TextEditingController(
       text: suggestedKm == null ? '' : formatKm(suggestedKm).replaceAll(',', ''));
+  final otpCtrl = TextEditingController();
+  final requiresOtp = job.requiresArtistOtp;
   String? error;
   var busy = false;
   final result = await showModalBottomSheet<bool>(
@@ -136,12 +138,20 @@ Future<bool> showQuickStartSheet(
             setSheet(() => error = 'Enter the starting km reading');
             return;
           }
+          if (requiresOtp && otpCtrl.text.trim().length != 4) {
+            setSheet(() => error = 'Enter the 4-digit Artist Trip OTP');
+            return;
+          }
           setSheet(() {
             busy = true;
             error = null;
           });
           try {
-            await ref.read(fleetServiceProvider).startNextTrip(job.id, startKm: km);
+            await ref.read(fleetServiceProvider).startNextTrip(
+                  job.id,
+                  startKm: km,
+                  artistOtp: requiresOtp ? otpCtrl.text.trim() : null,
+                );
             ref.refreshData
               ..fleetJobs()
               ..bookings();
@@ -174,8 +184,12 @@ Future<bool> showQuickStartSheet(
               const Text('Start next trip',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              Text("Today's inspection is done — just confirm the km.",
-                  style: TextStyle(fontSize: 12.5, color: Colors.grey[600])),
+              Text(
+                requiresOtp
+                    ? "Confirm the km and enter the artist's 4-digit OTP."
+                    : "Today's inspection is done — just confirm the km.",
+                style: TextStyle(fontSize: 12.5, color: Colors.grey[600]),
+              ),
               const SizedBox(height: 14),
               NextTripCard(job: job),
               const SizedBox(height: 16),
@@ -193,6 +207,31 @@ Future<bool> showQuickStartSheet(
                   border: const OutlineInputBorder(),
                 ),
               ),
+              if (requiresOtp) ...[
+                const SizedBox(height: 16),
+                TextField(
+                  controller: otpCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 4,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 12,
+                  ),
+                  decoration: InputDecoration(
+                    labelText: 'Artist Trip OTP (4 digits)',
+                    hintText: '••••',
+                    counterText: '',
+                    prefixIcon: const Icon(Icons.verified_user_outlined),
+                    helperText: 'Shown on the artist or assistant schedule page',
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (_) {
+                    if (error != null) setSheet(() => error = null);
+                  },
+                ),
+              ],
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
@@ -220,6 +259,7 @@ Future<bool> showQuickStartSheet(
     ),
   );
   kmCtrl.dispose();
+  otpCtrl.dispose();
   return result == true;
 }
 
