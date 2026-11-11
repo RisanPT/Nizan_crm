@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
 
@@ -38,6 +40,17 @@ Future<Uint8List> buildSalesEodPdfBytes(SalesEodReport report) async {
   final monthLabel = report.monthName.isNotEmpty ? report.monthName : 'Current Month';
   final subtitle = 'Report Date: $dateLabel  |  Sales Person: $repName  |  Month: $monthLabel  |  Lead-count: ${report.leadCountTask}';
 
+  final sections = _buildSalesEodSections(report);
+
+  return buildBrandedReportBytes(
+    title: title,
+    subtitle: subtitle,
+    sections: sections,
+  );
+}
+
+/// The report's tables, shared by the PDF and CSV exports.
+List<PdfSection> _buildSalesEodSections(SalesEodReport report) {
   final sections = <PdfSection>[];
 
   // ── 1. Table 1: TODAY — ACHIEVABLE TARGET vs ACHIEVED (Screenshot 2) ──
@@ -129,10 +142,34 @@ Future<Uint8List> buildSalesEodPdfBytes(SalesEodReport report) async {
         ['Paid Ads Leads', '${report.paidAdsLeads.today.toInt()}', '${report.paidAdsLeads.mtd.toInt()}'],
         if (report.trialCampaignLeads.today > 0 || report.trialCampaignLeads.mtd > 0)
           ['Trial Campaign Leads', '${report.trialCampaignLeads.today.toInt()}', '${report.trialCampaignLeads.mtd.toInt()}'],
+        if (report.otherLeads.today > 0 || report.otherLeads.mtd > 0)
+          ['Other Leads (YouTube, Reference, Walk-in)', '${report.otherLeads.today.toInt()}', '${report.otherLeads.mtd.toInt()}'],
         ['Leads Contacted', '${report.leadsContacted.today.toInt()}', '${report.leadsContacted.mtd.toInt()}'],
         ['Follow-ups Done', '${report.followUpsDone.today.toInt()}', '${report.followUpsDone.mtd.toInt()}'],
         ['Contacted -> Booking %', '${report.contactedToBookingPct.today.toStringAsFixed(1)}%', '${report.contactedToBookingPct.mtd.toStringAsFixed(1)}%'],
         ['Team Missed Leads (IG - WhatsApp)', '${report.teamMissedLeads.today.toInt()}', '${report.teamMissedLeads.mtd.toInt()}'],
+      ],
+    ),
+  );
+
+  // ── 4b. Lead count source + team cross-check (manual count vs saved) ──
+  String checkCell(EodLeadCountCheck c) => c.hasManual ? '${c.manualCount}' : 'not entered';
+  String savedCell(EodLeadCountCheck c) => c.hasManual ? '${c.savedInCrm}' : '-';
+  String gapCell(EodLeadCountCheck c) => c.hasManual ? '${c.notLogged}' : '-';
+  String sourceCell(EodLeadCountCheck c) => switch (c.source) {
+        'manual' => 'Manual team count',
+        'mixed' => 'Manual (${c.manualDays}d) + form (${c.formDays}d)',
+        _ => 'Form leads',
+      };
+  sections.add(
+    PdfSection(
+      'LEAD COUNT CROSS-CHECK (TEAM)',
+      ['Check', 'Today', 'MTD'],
+      [
+        ['Lead counts taken from', sourceCell(report.leadCheckToday), sourceCell(report.leadCheckMtd)],
+        ['Manual team count', checkCell(report.leadCheckToday), checkCell(report.leadCheckMtd)],
+        ['Leads saved in CRM (same days)', savedCell(report.leadCheckToday), savedCell(report.leadCheckMtd)],
+        ['Not yet saved as lead', gapCell(report.leadCheckToday), gapCell(report.leadCheckMtd)],
       ],
     ),
   );
@@ -192,15 +229,21 @@ Future<Uint8List> buildSalesEodPdfBytes(SalesEodReport report) async {
       ]);
     }
 
+    // Days with a manual team count: leads sit on the team row only.
+    final teamDates = {
+      for (final r in report.ledgerRows)
+        if (r.isTeamCount) r.date,
+    };
     for (final r in report.ledgerRows) {
+      String lead(int n) => !r.isTeamCount && teamDates.contains(r.date) ? '-' : '$n';
       ledgerTableRows.add([
         r.date,
         r.salesPersonName,
-        '${r.whatsappLeads}',
-        '${r.igMainLeads}',
-        '${r.igKeralaLeads}',
-        '${r.paidAdsLeads}',
-        '${r.trialCampaignLeads}',
+        lead(r.whatsappLeads),
+        lead(r.igMainLeads),
+        lead(r.igKeralaLeads),
+        lead(r.paidAdsLeads),
+        lead(r.trialCampaignLeads),
         '${r.leadsContacted}',
         '${r.followUpsDone}',
         '${r.organicBookings}',
@@ -268,20 +311,48 @@ Future<Uint8List> buildSalesEodPdfBytes(SalesEodReport report) async {
     );
   }
 
-  return buildBrandedReportBytes(
-    title: title,
-    subtitle: subtitle,
-    sections: sections,
-  );
+  return sections;
 }
 
 /// Computes the standard file name for the EOD report.
-String getSalesEodFileName(SalesEodReport report) {
-  final cleanDate = report.date.replaceAll('-', '');
+String getSalesEodFileName(SalesEodReport report, {String ext = 'pdf'}) {
+  final cleanDate = report.date.replaceAll('-', '').replaceAll(' ', '');
   final cleanName = report.isTeam || report.salesPerson == null
       ? 'team'
       : report.salesPerson!.name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
-  return 'sales_eod_${cleanDate}_$cleanName.pdf';
+  return 'sales_eod_${cleanDate}_$cleanName.$ext';
+}
+
+/// Builds the EOD report as CSV bytes (UTF-8 with BOM so Excel shows
+/// non-English customer names correctly). Each table is separated by a blank row.
+Uint8List buildSalesEodCsvBytes(SalesEodReport report) {
+  final rows = <List<dynamic>>[
+    ['End of Day Sales Report'],
+    [
+      'Report Date',
+      report.reportDateFormatted.isNotEmpty ? report.reportDateFormatted : report.date,
+      'Sales Person',
+      report.isTeam || report.salesPerson == null ? 'All Sales Team' : report.salesPerson!.name,
+    ],
+  ];
+  for (final s in _buildSalesEodSections(report)) {
+    rows
+      ..add([])
+      ..add([s.title])
+      ..add(s.headers)
+      ..addAll(s.rows);
+  }
+  final csv = const CsvEncoder().convert(rows);
+  return Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
+}
+
+/// Downloads the EOD report as a CSV file.
+Future<void> downloadSalesEodCsv(SalesEodReport report) async {
+  await saveFileBytes(
+    getSalesEodFileName(report, ext: 'csv'),
+    buildSalesEodCsvBytes(report),
+    mime: 'text/csv',
+  );
 }
 
 /// Generates and triggers downloading the EOD report as a branded PDF file.
@@ -329,6 +400,16 @@ String formatSalesEodWhatsAppText(SalesEodReport report) {
   buffer.writeln('• IG Leads (Kerala): ${report.igKeralaLeads.today.toInt()} / ${report.igKeralaLeads.mtd.toInt()}');
   buffer.writeln('• Paid Ads: ${report.paidAdsLeads.today.toInt()} / ${report.paidAdsLeads.mtd.toInt()}');
   buffer.writeln('• Trial Campaign: ${report.trialCampaignLeads.today.toInt()} / ${report.trialCampaignLeads.mtd.toInt()}');
+  if (report.otherLeads.today > 0 || report.otherLeads.mtd > 0) {
+    buffer.writeln('• Other (YouTube, Reference, Walk-in): ${report.otherLeads.today.toInt()} / ${report.otherLeads.mtd.toInt()}');
+  }
+  final lc = report.leadCheckToday;
+  if (lc.hasManual) {
+    buffer.writeln('• Cross-check (team): counted ${lc.manualCount}, saved in CRM ${lc.savedInCrm}'
+        '${lc.notLogged > 0 ? ', ${lc.notLogged} not saved yet' : ''}');
+  } else {
+    buffer.writeln('• (No manual lead count entered — figures from saved leads)');
+  }
   buffer.writeln('• Contacted: ${report.leadsContacted.today.toInt()} | Follow-ups: ${report.followUpsDone.today.toInt()}');
 
   buffer.writeln('\n💳 *ORDER VALUE & PAYMENTS*');

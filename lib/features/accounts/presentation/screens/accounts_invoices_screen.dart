@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/booking_amount_breakdown.dart';
 import 'package:nizan_crm/core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/providers/trial_provider.dart';
@@ -1328,7 +1329,19 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(32),
             child: Center(
-              child: Container(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Amount breakdown: packages, add-ons, discount, advance,
+                  // collections and balance — before the invoice paper.
+                  if (!isTrial) ...[
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 800),
+                      child: BookingAmountBreakdown(booking: b),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  Container(
                 constraints: const BoxConstraints(maxWidth: 800),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -1342,6 +1355,8 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   border: Border.all(color: crm.border),
                 ),
                 child: _buildPreviewPaper(b, theme, crm, isTrial),
+                  ),
+                ],
               ),
             ),
           ),
@@ -1359,7 +1374,13 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
          (b.bookingDate.year == _selectedMonth!.year && b.bookingDate.month > _selectedMonth!.month));
 
     final bal = b.balanceDue;
-    final pkgAmount = b.totalPrice - b.addons.fold<double>(0, (s, a) => s + (a.amount * a.persons));
+    final amounts = BookingAmounts.of(b);
+    final serviceLines = <BreakdownLine>[
+      ...amounts.packages,
+      for (final a in amounts.addons) BreakdownLine(label: a.invoiceLabel, amount: a.amount),
+      if (amounts.otherCharges != 0)
+        BreakdownLine(label: 'Other charges', amount: amounts.otherCharges),
+    ];
     final maroon = const Color(0xFF601a29);
     final totalCgst = GstCalculator.cgst(b.totalPrice);
     final totalSgst = GstCalculator.sgst(b.totalPrice);
@@ -1549,31 +1570,22 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                       _pdfTh(isAdvanceRow ? 'AMOUNT' : 'TOTAL (INCL. GST)', theme, right: true),
                     ],
                   ),
-                  TableRow(
-                    children: [
-                      _pdfTd(b.service, theme),
-                      _pdfTdCenter(GstCalculator.defaultSacCode, theme),
-                      _pdfTdRight(_currency(isAdvanceRow ? pkgAmount : GstCalculator.baseAmount(pkgAmount)), theme),
-                      if (!isAdvanceRow) ...[
-                        _pdfTdBoldRight(_currency(GstCalculator.cgst(pkgAmount)), theme),
-                        _pdfTdBoldRight(_currency(GstCalculator.sgst(pkgAmount)), theme),
-                      ],
-                      _pdfTdBoldRight(_currency(pkgAmount), theme),
-                    ],
-                  ),
-                  for (final addon in b.addons)
+                  // One row per package, per add-on (booking-level AND
+                  // per-package on multi-package bookings) and any other
+                  // charge — same lines as the amount breakdown card.
+                  for (final line in serviceLines)
                     TableRow(
                       children: [
-                        _pdfTd('${addon.service}${addon.persons > 1 ? ' × ${addon.persons}' : ''}', theme),
+                        _pdfTd(line.label, theme),
                         _pdfTdCenter(GstCalculator.defaultSacCode, theme),
-                        _pdfTdRight(_currency(isAdvanceRow ? addon.amount * addon.persons : GstCalculator.baseAmount(addon.amount * addon.persons)), theme),
+                        _pdfTdRight(_currency(isAdvanceRow ? line.amount : GstCalculator.baseAmount(line.amount)), theme),
                         if (!isAdvanceRow) ...[
-                          _pdfTdBoldRight(_currency(GstCalculator.cgst(addon.amount * addon.persons)), theme),
-                          _pdfTdBoldRight(_currency(GstCalculator.sgst(addon.amount * addon.persons)), theme),
+                          _pdfTdBoldRight(_currency(GstCalculator.cgst(line.amount)), theme),
+                          _pdfTdBoldRight(_currency(GstCalculator.sgst(line.amount)), theme),
                         ],
-                        _pdfTdBoldRight(_currency(addon.amount * addon.persons), theme),
+                        _pdfTdBoldRight(_currency(line.amount), theme),
                       ],
-                    )
+                    ),
                 ],
               ),
               

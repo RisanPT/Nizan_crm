@@ -16,6 +16,7 @@ import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
 import 'package:nizan_crm/features/hr/presentation/screens/attendance_detail_screen.dart';
 import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
+import 'package:nizan_crm/features/hr/audit/change_history_card.dart';
 
 final staffIncrementsProvider = FutureProvider.family.autoDispose<List<SalaryIncrement>, String>((ref, employeeId) {
   return ref.watch(employeeServiceProvider).getIncrements(employeeId);
@@ -885,6 +886,9 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                   ),
                 ),
               ),
+            // HR change log — only for company-wide pay access (self-hiding).
+            const SizedBox(height: 32),
+            ChangeHistoryCard(employeeId: _employee.id),
           ],
         ),
       ),

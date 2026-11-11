@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/bank_account.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 
 final _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -30,6 +31,7 @@ class BookingAdvance {
   final String advanceMode;
   final String advancePaymentRef;
   final String accountName;
+  final String advanceScreenshotUrl;
 
   const BookingAdvance({
     required this.id,
@@ -43,6 +45,7 @@ class BookingAdvance {
     this.advanceMode = '',
     this.advancePaymentRef = '',
     this.accountName = '',
+    this.advanceScreenshotUrl = '',
   });
 
   factory BookingAdvance.fromJson(Map<String, dynamic> j) {
@@ -59,6 +62,7 @@ class BookingAdvance {
       advanceMode: j['advanceMode']?.toString() ?? '',
       advancePaymentRef: j['advancePaymentRef']?.toString() ?? '',
       accountName: acc is Map ? acc['name']?.toString() ?? '' : '',
+      advanceScreenshotUrl: j['advanceScreenshotUrl']?.toString() ?? '',
     );
   }
 }
@@ -391,6 +395,16 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           Text(_inr.format(a.advanceAmount), style: const TextStyle(fontWeight: FontWeight.w800)),
           const SizedBox(width: 4),
+          if (a.advanceScreenshotUrl.isNotEmpty)
+            IconButton(
+              tooltip: 'View payment screenshot',
+              icon: const Icon(Icons.image_outlined, color: Color(0xFF6366F1)),
+              onPressed: () => showDialog(
+                context: context,
+                barrierColor: Colors.transparent,
+                builder: (_) => CollectionImageViewerDialog(url: a.advanceScreenshotUrl),
+              ),
+            ),
           if (!recorded)
             IconButton(
               tooltip: 'Record (choose account)',

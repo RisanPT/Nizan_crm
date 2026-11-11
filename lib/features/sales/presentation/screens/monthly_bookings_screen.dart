@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/sales/utils/second_look.dart';
 
 const _months = [
   '', 'January', 'February', 'March', 'April', 'May', 'June',
@@ -48,6 +49,8 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
     final query = useState<String>('');
     // When set, the screen shows a MONTH RANGE (e.g. Mar–Aug) instead of one month.
     final range = useState<DateTimeRange?>(null);
+    // Only bookings that include a second-look add-on (Hindu extra look / Christian Manthrakodi look).
+    final secondLookOnly = useState<bool>(false);
 
     final bookingsAsync = ref.watch(bookingProvider);
     // Recompute sales totals once the "doesn't count toward sales" list loads.
@@ -113,10 +116,13 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
           }).toList()
             ..sort((a, b) => basisDate(b).compareTo(basisDate(a)));
 
+          final secondLookCount = inMonth.where(tookSecondLook).length;
+          final byLook = secondLookOnly.value ? inMonth.where(tookSecondLook).toList() : inMonth;
+
           final q = query.value.trim().toLowerCase();
           final visible = q.isEmpty
-              ? inMonth
-              : inMonth.where((b) =>
+              ? byLook
+              : byLook.where((b) =>
                   b.customerName.toLowerCase().contains(q) ||
                   b.phone.toLowerCase().contains(q) ||
                   b.service.toLowerCase().contains(q) ||
@@ -144,6 +150,9 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                 onSearch: (v) => query.value = v,
                 onPickRange: pickRange,
                 onClearRange: () => range.value = null,
+                secondLookOnly: secondLookOnly.value,
+                secondLookCount: secondLookCount,
+                onSecondLook: (v) => secondLookOnly.value = v,
               ),
               const Divider(height: 1),
               Expanded(
@@ -169,6 +178,27 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                           ),
                           const Spacer(),
                           Text('${visible.length} shown', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                          8.w,
+                          OutlinedButton.icon(
+                            onPressed: visible.isEmpty
+                                ? null
+                                : () async {
+                                    try {
+                                      await exportBookingsCsv(
+                                        visible,
+                                        periodLabel: periodLabel,
+                                        secondLookOnly: secondLookOnly.value,
+                                      );
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(friendlyErrorMessage(e))),
+                                      );
+                                    }
+                                  },
+                            icon: const Icon(Icons.download_rounded, size: 16),
+                            label: const Text('Export CSV'),
+                          ),
                         ],
                       ),
                       10.h,
@@ -213,7 +243,13 @@ class _Controls extends StatelessWidget {
     required this.onSearch,
     required this.onPickRange,
     required this.onClearRange,
+    required this.secondLookOnly,
+    required this.secondLookCount,
+    required this.onSecondLook,
   });
+  final bool secondLookOnly;
+  final int secondLookCount;
+  final ValueChanged<bool> onSecondLook;
   final DateTime month;
   final CrmTheme crm;
   final bool eventBasis;
@@ -310,7 +346,8 @@ class _Controls extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-      child: LayoutBuilder(builder: (ctx, c) {
+      child: Column(children: [
+        LayoutBuilder(builder: (ctx, c) {
         if (c.maxWidth >= 720) {
           return Row(children: [
             Expanded(flex: 2, child: monthBar),
@@ -328,6 +365,17 @@ class _Controls extends StatelessWidget {
           search,
         ]);
       }),
+        10.h,
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilterChip(
+            avatar: Icon(Icons.auto_awesome_rounded, size: 16, color: secondLookOnly ? crm.primary : crm.textSecondary),
+            label: Text('Took second look ($secondLookCount)'),
+            selected: secondLookOnly,
+            onSelected: onSecondLook,
+          ),
+        ),
+      ]),
     );
   }
 
@@ -478,6 +526,8 @@ class _BookingCard extends StatelessWidget {
             _chip(Icons.celebration_outlined, 'Event: ${_fmtDate(booking.bookingDate)}', crm.accent, highlight: eventBasis),
             _chip(Icons.bookmark_added_outlined, 'Booked: ${_fmtDate(booking.createdAt ?? booking.bookingDate)}', crm.primary, highlight: !eventBasis),
           ]),
+          10.h,
+          _Details(booking: booking, crm: crm),
           const Divider(height: 22),
           Row(
             children: [
@@ -514,6 +564,65 @@ class _BookingCard extends StatelessWidget {
         Text(k, style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
         2.h,
         Text(v, style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: color)),
+      ],
+    );
+  }
+}
+
+/// Package(s) taken and every add-on on the booking; second-look add-ons are
+/// highlighted so they stand out from the rest.
+class _Details extends StatelessWidget {
+  const _Details({required this.booking, required this.crm});
+  final Booking booking;
+  final CrmTheme crm;
+
+  @override
+  Widget build(BuildContext context) {
+    final packages = bookingPackages(booking);
+    final addons = bookingAddons(booking);
+    final style = TextStyle(fontSize: 12, color: crm.textPrimary);
+    final label = TextStyle(fontSize: 10.5, color: crm.textSecondary, fontWeight: FontWeight.w700);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(packages.length > 1 ? 'PACKAGES' : 'PACKAGE', style: label),
+        4.h,
+        for (final p in packages)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 3),
+            child: Text(packageLabel(p), style: style),
+          ),
+        if (addons.isNotEmpty) ...[
+          8.h,
+          Text('ADD-ONS', style: label),
+          4.h,
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final a in addons)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (isSecondLookAddon(a) ? crm.accent : crm.textSecondary).withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: (isSecondLookAddon(a) ? crm.accent : crm.textSecondary).withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Text(
+                    addonLabel(a),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSecondLookAddon(a) ? FontWeight.w800 : FontWeight.w600,
+                      color: isSecondLookAddon(a) ? crm.accent : crm.textSecondary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }

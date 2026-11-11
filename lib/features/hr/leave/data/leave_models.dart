@@ -4,8 +4,11 @@
 
 double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
-DateTime? _date(dynamic v) =>
-    (v == null) ? null : DateTime.tryParse(v.toString());
+DateTime? _date(dynamic v) {
+  if (v == null) return null;
+  final d = DateTime.tryParse(v.toString());
+  return d?.toLocal();
+}
 
 String _idOf(dynamic v) {
   if (v is Map) return (v['_id'] as String?) ?? '';
@@ -61,7 +64,12 @@ class LeaveBalance {
   final bool paid;
   final double allocated;
   final double used;
+  /// credited + carried forward − used − pending. Negative = overdrawn.
   final double available;
+  /// Monthly credit so far this year (annual quota / 12 × months).
+  final double credited;
+  final double carriedForward;
+  final double pending;
 
   const LeaveBalance({
     required this.leaveTypeId,
@@ -71,7 +79,13 @@ class LeaveBalance {
     this.allocated = 0,
     this.used = 0,
     this.available = 0,
+    this.credited = 0,
+    this.carriedForward = 0,
+    this.pending = 0,
   });
+
+  /// A paid type with a quota; LWP / quota 0 are not limited.
+  bool get limited => paid && allocated > 0;
 
   factory LeaveBalance.fromJson(Map<String, dynamic> j) => LeaveBalance(
         leaveTypeId: _idOf(j['leaveTypeId']),
@@ -81,6 +95,9 @@ class LeaveBalance {
         allocated: _d(j['allocated']),
         used: _d(j['used']),
         available: _d(j['available']),
+        credited: _d(j['credited']),
+        carriedForward: _d(j['carriedForward']),
+        pending: _d(j['pending']),
       );
 }
 

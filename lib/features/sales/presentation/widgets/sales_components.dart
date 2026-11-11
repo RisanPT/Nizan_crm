@@ -313,7 +313,7 @@ class _DesktopBookingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
     final balance =
-        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount)
+        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount - booking.collectedAmount)
                 .clamp(0, double.infinity))
             .toDouble();
 
@@ -383,6 +383,14 @@ class _DesktopBookingRow extends StatelessWidget {
                         : packageLabelFor(booking, packageFilter!),
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
+                  if (tookSecondLook(booking))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        bookingAddons(booking).where(isSecondLookAddon).map((a) => a.service).join(', '),
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: crmColors.accent),
+                      ),
+                    ),
                   if (booking.duplicateCount > 1)
                     Padding(
                       padding: const EdgeInsets.only(top: 4),
@@ -455,13 +463,14 @@ class _MobileBookingCard extends StatelessWidget {
     required this.onSelectChanged,
     required this.onDelete,
     this.packageFilter,
-  }) : onRowTap = null;
+    this.onRowTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final crmColors = context.crmColors;
     final balance =
-        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount)
+        ((booking.totalPrice - booking.advanceAmount - booking.discountAmount - booking.collectedAmount)
                 .clamp(0, double.infinity))
             .toDouble();
 
@@ -539,6 +548,13 @@ class _MobileBookingCard extends StatelessWidget {
                           ],
                         ],
                       ),
+                      if (tookSecondLook(booking)) ...[
+                        6.h,
+                        Text(
+                          bookingAddons(booking).where(isSecondLookAddon).map((a) => a.service).join(', '),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crmColors.accent),
+                        ),
+                      ],
                       16.h,
                       Wrap(
                         spacing: 12,

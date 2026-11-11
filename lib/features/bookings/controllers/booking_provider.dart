@@ -39,6 +39,8 @@ class PaginatedBookingsParams {
   final String? createdBy;
   // Package filter: bookings using this package on any line.
   final String? packageId;
+  // Only bookings with a second-look add-on (Hindu extra look / Christian Manthrakodi look).
+  final bool secondLook;
 
   const PaginatedBookingsParams({
     required this.page,
@@ -61,6 +63,7 @@ class PaginatedBookingsParams {
     this.salesPersonId,
     this.createdBy,
     this.packageId,
+    this.secondLook = false,
   });
 
   @override
@@ -85,11 +88,12 @@ class PaginatedBookingsParams {
         other.to == to &&
         other.salesPersonId == salesPersonId &&
         other.createdBy == createdBy &&
-        other.packageId == packageId;
+        other.packageId == packageId &&
+        other.secondLook == secondLook;
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     page,
     limit,
     search,
@@ -110,7 +114,8 @@ class PaginatedBookingsParams {
     salesPersonId,
     createdBy,
     packageId,
-  );
+    secondLook,
+  ]);
 }
 
 final bookingsRefreshTriggerProvider = StateProvider<int>((ref) => 0);
@@ -161,6 +166,7 @@ final paginatedBookingsProvider =
             salesPersonId: params.salesPersonId,
             createdBy: params.createdBy,
             packageId: params.packageId,
+            secondLook: params.secondLook,
           );
     });
 

@@ -48,6 +48,8 @@ import '../../features/hr/regularization/presentation/screens/hr_regularization_
 import '../../features/hr/recruitment/presentation/screens/hr_recruitment_screen.dart';
 import '../../features/hr/onboarding/presentation/screens/hr_onboarding_screen.dart';
 import '../../features/hr/offboarding/presentation/screens/hr_offboarding_screen.dart';
+import 'package:nizan_crm/features/hr/assets/presentation/screens/hr_assets_screen.dart';
+import 'package:nizan_crm/features/hr/ess/presentation/screens/my_payslips_screen.dart';
 import '../../features/hr/reimbursement/presentation/screens/hr_reimbursement_screen.dart';
 import '../../features/hr/travel/presentation/screens/hr_travel_screen.dart';
 import '../../features/hr/compensation/presentation/screens/hr_compensation_screen.dart';
@@ -70,6 +72,7 @@ import '../../features/sales/presentation/screens/monthly_bookings_screen.dart';
 import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
 import '../../features/sales/presentation/screens/booking_map_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
+import '../../features/marketing/presentation/screens/marketing_eod_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
 import '../../features/marketing/presentation/screens/content_calendar_screen.dart';
@@ -173,9 +176,20 @@ import 'package:nizan_crm/features/fleet/presentation/screens/fleet_service_remi
 import '../../features/trials/presentation/screens/trials_screen.dart';
 import '../../features/trials/presentation/screens/trials_calendar_screen.dart';
 import '../../features/trials/presentation/screens/manage_trial_screen.dart';
+import '../../features/consultations/presentation/screens/consultations_calendar_screen.dart';
+import '../../features/consultations/presentation/screens/consultations_list_screen.dart';
+import '../../features/consultations/presentation/screens/consultation_form_screen.dart';
+import '../../features/consultations/presentation/screens/consultation_detail_screen.dart';
+import '../../features/consultations/presentation/screens/after_call_form_screen.dart';
+import '../../features/consultations/presentation/screens/stylist_clients_screen.dart';
+import '../../features/consultations/data/stylist_client.dart' show parseDay;
+import '../../features/consultations/presentation/screens/stylist_client_screen.dart';
+import '../../features/consultations/presentation/screens/stylist_client_form_screen.dart';
+import '../../features/consultations/presentation/screens/consultations_dashboard_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_targets_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_goals_report_screen.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_goals_screen.dart';
+import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 // Create a global key for the root navigator
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 final shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -299,6 +313,7 @@ String? subKeyForPath(String path) {
   if (path == '/hr/recruitment') return 'recruitment';
   if (path == '/hr/onboarding') return 'onboarding';
   if (path == '/hr/offboarding') return 'offboarding';
+  if (path == '/hr/assets') return 'offboarding';
   if (path == '/hr/reimbursements') return 'reimbursement';
   if (path == '/hr/travel') return 'travel';
   if (path == '/hr/compensation') return 'compensation';
@@ -335,6 +350,8 @@ bool isRouteAllowed(String path, Access access,
   if (path == '/hr/evaluation') return access.canSeeSub('staff.evaluation');
   // Leave is available to every employee (ESS); managers/HR also get approvals.
   if (path == '/hr/leave') return access.canSeeLeaveRequests || access.has('leave', false);
+  // Own payslips — every signed-in staff member (server returns only theirs).
+  if (path == '/hr/my-payslips') return true;
   if (path == '/hr/approvals') {
     return access.isFullAccess || access.isDepartmentHead || access.has('approvals', false);
   }
@@ -387,6 +404,10 @@ bool isRouteAllowed(String path, Access access,
         access.has('onboarding', false) ||
         access.has('recruitment', false);
   }
+  // Employee assets — HR, and dept heads for their own team (server-scoped).
+  if (path == '/hr/assets') {
+    return access.canSeeStaff || access.isDepartmentHead || access.has('offboarding', false);
+  }
   if (path == '/hr/offboarding') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('offboarding', false);
   }
@@ -427,10 +448,12 @@ bool isRouteAllowed(String path, Access access,
   }
   // Company & HR Policies — accessible to all employees & staff (essential handbook & code of conduct).
   if (path == '/hr/policies') {
+    if (!kShowHrPreviewScreens) return false; // mock screen — hidden for now
     return access.canSeeStaff || access.isDepartmentHead || access.has('leave', false) || access.canSeeDashboard;
   }
   // Department & Employee Scoring — evaluation & staff performance.
   if (path == '/hr/department-scoring') {
+    if (!kShowHrPreviewScreens) return false; // mock screen — hidden for now
     return access.canSeeStaff || access.isDepartmentHead || access.canSeeSub('staff.evaluation') || access.has('staff', false);
   }
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
@@ -505,6 +528,8 @@ bool isRouteAllowed(String path, Access access,
   // open. canSeeTrials falls back to canSeeBookings for permission-less legacy
   // roles, so nothing changes for them.
   if (path.startsWith('/trials')) return access.canSeeTrials;
+  if (path.startsWith('/consultations')) return access.canSeeConsultations;
+  if (path.startsWith('/stylist')) return access.canSeeConsultations;
   if (path.startsWith('/driver')) return role == AppRole.driver || role == AppRole.fleetManager || access.isFullAccess;
   if (path.startsWith('/reports')) return access.canSeeCEOReport;
   if (path.startsWith('/settings')) return access.canSeeSettings;
@@ -556,7 +581,7 @@ String landingRouteFor(Access access,
     '/staff', '/hr/slots', '/hr/slot-capacity', '/hr/salaries', '/hr/evaluation',
     '/hr/home', '/hr/leave', '/hr/approvals', '/hr/designations', '/hr/org',
     '/hr/files', '/hr/logins', '/hr/shift', '/hr/timesheet', '/hr/regularization',
-    '/hr/recruitment', '/hr/onboarding', '/hr/offboarding',
+    '/hr/recruitment', '/hr/onboarding', '/hr/offboarding', '/hr/assets',
     '/hr/reimbursements', '/hr/travel', '/hr/compensation',
     '/hr/engagement', '/hr/lms', '/hr/grievance', '/hr/letters', '/hr/analytics',
   ];
@@ -681,6 +706,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Recruitment';
           } else if (state.uri.path == '/hr/onboarding') {
             title = 'Onboarding';
+          } else if (state.uri.path == '/hr/my-payslips') {
+            title = 'My Payslips';
+          } else if (state.uri.path == '/hr/assets') {
+            title = 'Employee Assets';
           } else if (state.uri.path == '/hr/offboarding') {
             title = 'Offboarding';
           } else if (state.uri.path == '/hr/reimbursements') {
@@ -855,6 +884,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'HRA · House Rent Allowance';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
+          } else if (state.uri.path == '/marketing/eod') {
+            title = 'Marketing EOD & Team Log';
           } else if (state.uri.path == '/marketing/competitors') {
             title = 'Competitors';
           } else if (state.uri.path == '/marketing/scores') {
@@ -901,6 +932,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Manage Trial';
           } else if (state.uri.path == '/trial-packages') {
             title = 'Trial Packages';
+          } else if (state.uri.path == '/consultations') {
+            title = 'Calendar';
+          } else if (state.uri.path == '/consultations/list') {
+            title = 'Calendar';
+          } else if (state.uri.path == '/consultations/dashboard') {
+            title = 'Today';
+          } else if (state.uri.path == '/consultations/new') {
+            title = 'Schedule Call';
+          } else if (state.uri.path.startsWith('/consultations/')) {
+            title = 'Call';
+          } else if (state.uri.path == '/stylist/clients') {
+            title = 'Clients';
+          } else if (state.uri.path == '/stylist/clients/new') {
+            title = 'New Client';
+          } else if (state.uri.path.startsWith('/stylist/clients/')) {
+            title = 'Client';
           }
 
           // Android back handling for the whole shell. Sidebar navigation uses
@@ -1035,6 +1082,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const HrHomeScreen(),
           ),
           GoRoute(
+            path: '/hr/my-payslips',
+            builder: (context, state) => const MyPayslipsScreen(),
+          ),
+          GoRoute(
             path: '/hr/leave',
             builder: (context, state) => const HrLeaveScreen(),
           ),
@@ -1077,6 +1128,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/hr/onboarding',
             builder: (context, state) => const HrOnboardingScreen(),
+          ),
+          GoRoute(
+            path: '/hr/assets',
+            builder: (context, state) => const HrAssetsScreen(),
           ),
           GoRoute(
             path: '/hr/offboarding',
@@ -1288,6 +1343,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const MarketingDashboardScreen(),
           ),
           GoRoute(
+            path: '/marketing/eod',
+            builder: (context, state) => const MarketingEodScreen(),
+          ),
+          GoRoute(
             path: '/marketing/competitors',
             builder: (context, state) => const CompetitorsScreen(),
           ),
@@ -1399,6 +1458,62 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/trial-packages',
             builder: (context, state) => const TrialPackagesScreen(),
+          ),
+          GoRoute(
+            path: '/consultations',
+            builder: (context, state) => ConsultationsCalendarScreen(
+              // Keyed by view so ?view=week (from the list view) opens the week.
+              key: ValueKey('calendar-${state.uri.queryParameters['view'] ?? 'month'}'),
+              initialView: state.uri.queryParameters['view'] ?? 'month',
+            ),
+          ),
+          GoRoute(
+            path: '/consultations/list',
+            builder: (context, state) => const ConsultationsListScreen(),
+          ),
+          GoRoute(
+            path: '/consultations/dashboard',
+            builder: (context, state) => const ConsultationsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/consultations/new',
+            builder: (context, state) =>
+                ConsultationFormScreen(
+                  leadId: state.uri.queryParameters['leadId'],
+                  clientId: state.uri.queryParameters['clientId'],
+                  initialDay: parseDay(state.uri.queryParameters['date'] ?? ''),
+                ),
+          ),
+          // Stylist client files ('new' before ':id').
+          GoRoute(
+            path: '/stylist/clients',
+            builder: (context, state) => const StylistClientsScreen(),
+          ),
+          GoRoute(
+            path: '/stylist/clients/new',
+            builder: (context, state) =>
+                StylistClientFormScreen(returnToCaller: state.uri.queryParameters['pick'] == '1'),
+          ),
+          GoRoute(
+            path: '/stylist/clients/:id',
+            builder: (context, state) => StylistClientScreen(clientId: state.pathParameters['id'] ?? ''),
+          ),
+          GoRoute(
+            path: '/stylist/clients/:id/edit',
+            builder: (context, state) => StylistClientFormScreen(clientId: state.pathParameters['id']),
+          ),
+          GoRoute(
+            path: '/consultations/:id',
+            builder: (context, state) =>
+                ConsultationDetailScreen(consultationId: state.pathParameters['id'] ?? ''),
+          ),
+          // After-call details; ?complete=1 also marks a scheduled call completed.
+          GoRoute(
+            path: '/consultations/:id/details',
+            builder: (context, state) => AfterCallFormScreen(
+              consultationId: state.pathParameters['id'] ?? '',
+              complete: state.uri.queryParameters['complete'] == '1',
+            ),
           ),
           GoRoute(
             path: '/booking/add',

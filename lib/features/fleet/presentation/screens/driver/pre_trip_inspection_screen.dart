@@ -45,7 +45,12 @@ class _PreTripInspectionScreenState
           .firstOrNull;
 
   bool get _requiresOtp => _job?.requiresArtistOtp ?? false;
-  bool get _hasValidOtp => !_requiresOtp || _otpCtrl.text.trim().length == 4;
+  // The OTP is OPTIONAL at start (the artist is usually picked up later) —
+  // blank is fine; if something is typed it must be the full 4 digits.
+  bool get _hasValidOtp {
+    final t = _otpCtrl.text.trim();
+    return !_requiresOtp || t.isEmpty || t.length == 4;
+  }
   bool get _hasPhotos => _selectedImages.length >= _minPhotos;
   bool get _canStartTrip => _hasPhotos && _startKm != null && _hasValidOtp;
 
@@ -148,7 +153,9 @@ class _PreTripInspectionScreenState
         widget.jobId,
         photoUrls,
         startKm: startKm,
-        artistOtp: _requiresOtp ? _otpCtrl.text.trim() : null,
+        artistOtp: _requiresOtp && _otpCtrl.text.trim().isNotEmpty
+            ? _otpCtrl.text.trim()
+            : null,
       );
 
       // ✅ Refresh the jobs provider so dashboard/works screen updates
@@ -244,17 +251,23 @@ class _PreTripInspectionScreenState
                     color: Colors.white70, size: 20),
               ),
               const SizedBox(width: 4),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Pre-Trip Inspection',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800)),
-                  Text('Vehicle photo documentation',
-                      style: TextStyle(color: Colors.white60, fontSize: 12)),
-                ],
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Pre-Trip Inspection',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800)),
+                    Text('Vehicle photo documentation',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Colors.white60, fontSize: 12)),
+                  ],
+                ),
               ),
             ],
           ),
@@ -299,14 +312,19 @@ class _PreTripInspectionScreenState
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '$count / $_maxPhotos Photos',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: _hasPhotos ? const Color(0xFF2E7D32) : const Color(0xFF4A1942),
+              Flexible(
+                child: Text(
+                  '$count / $_maxPhotos Photos',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: _hasPhotos ? const Color(0xFF2E7D32) : const Color(0xFF4A1942),
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
@@ -627,7 +645,7 @@ class _PreTripInspectionScreenState
                       ),
                     ),
                     Text(
-                      'Required before starting the trip',
+                      'Optional now - required before closing the trip',
                       style: TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   ],
@@ -656,7 +674,8 @@ class _PreTripInspectionScreenState
           ),
           const SizedBox(height: 12),
           Text(
-            'Ask the lead artist or assistant for the 4-digit OTP shown on their schedule or dashboard.',
+            'If the artist is already with you, enter their 4-digit OTP now. '
+            'Otherwise leave it blank and enter it on the trip screen once you pick them up.',
             style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
           ),
           const SizedBox(height: 14),
@@ -725,16 +744,20 @@ class _PreTripInspectionScreenState
                 color: isOtpComplete ? const Color(0xFF2E7D32) : Colors.grey[600],
               ),
               const SizedBox(width: 6),
-              Text(
-                isOtpComplete
-                    ? '4-digit OTP entered'
-                    : 'Enter all 4 digits provided by the artist',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isOtpComplete ? FontWeight.w700 : FontWeight.w500,
-                  color: isOtpComplete
-                      ? const Color(0xFF2E7D32)
-                      : Colors.grey[600],
+              Expanded(
+                child: Text(
+                  isOtpComplete
+                      ? '4-digit OTP entered'
+                      : _otpCtrl.text.trim().isEmpty
+                          ? 'You can leave this blank for now'
+                          : 'Enter all 4 digits provided by the artist',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isOtpComplete ? FontWeight.w700 : FontWeight.w500,
+                    color: isOtpComplete
+                        ? const Color(0xFF2E7D32)
+                        : Colors.grey[600],
+                  ),
                 ),
               ),
             ],
@@ -764,7 +787,7 @@ class _PreTripInspectionScreenState
                   : _startKm == null
                       ? 'Enter starting km'
                       : !_hasValidOtp
-                          ? 'Enter 4-digit Artist OTP'
+                          ? 'Finish the 4-digit OTP or clear it'
                           : 'Start Trip',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),

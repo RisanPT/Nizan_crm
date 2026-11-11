@@ -48,9 +48,22 @@ import 'package:nizan_crm/services/vehicle_service.dart' as legacy_vehicles;
 // Sales / bookings / slots / reviews / notifications
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
+import 'package:nizan_crm/features/sales/presentation/screens/lead_calendar_tab.dart'
+    show calendarLeadsProvider;
+import 'package:nizan_crm/features/sales/services/sales_overview_service.dart'
+    show salesOverviewProvider;
+import 'package:nizan_crm/features/sales/services/sales_eod_service.dart'
+    show salesEodReportProvider;
+import 'package:nizan_crm/features/sales/services/enquiry_count_service.dart'
+    show enquiryVerificationProvider;
+import 'package:nizan_crm/features/dashboard/controllers/dashboard_analytics_provider.dart'
+    show salesDashboardProvider, marketingDashboardProvider;
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:nizan_crm/features/notifications/controllers/notification_providers.dart';
+
+// Consultations
+import 'package:nizan_crm/features/consultations/controllers/consultation_provider.dart';
 
 // Accounts
 import 'package:nizan_crm/features/accounts/controllers/account_report_provider.dart';
@@ -125,6 +138,15 @@ class DataRefresh {
       leadClustersProvider,
       leadReportProvider,
       leadActivitiesProvider,
+      // Everything else that counts leads — without these a newly added lead
+      // only showed up there after a full page refresh.
+      calendarLeadsProvider, // Lead Calendar tab
+      salesEodReportProvider, // Sales EOD (leads per channel, contacted, …)
+      enquiryVerificationProvider, // "saved: N" on the enquiry count card
+      salesDashboardProvider, // main Dashboard → Sales tab
+      salesOverviewProvider, // Sales → Sales Dashboard (bookings() calls leads())
+      marketingDashboardProvider, // main Dashboard → Marketing tab
+      salesReportProvider, // Finance → Sales Reports
     ]);
   }
 
@@ -153,6 +175,16 @@ class DataRefresh {
       allTrialsProvider,
       artistTrialsProvider,
       singleTrialProvider,
+    ]);
+  }
+
+  void consultations() {
+    _bump(consultationsRefreshTriggerProvider);
+    _all(_inv, [
+      consultationsProvider,
+      consultationSummaryProvider,
+      consultationProvider,
+      leadConsultationsProvider,
     ]);
   }
 

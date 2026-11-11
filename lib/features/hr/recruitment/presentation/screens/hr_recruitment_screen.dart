@@ -232,6 +232,34 @@ class _HrRecruitmentScreenState extends ConsumerState<HrRecruitmentScreen> with 
     final postsAsync = ref.watch(jobPostsProvider);
     final offersAsync = ref.watch(offersProvider);
     final rolesAsync = ref.watch(jobRolesProvider);
+    // Phones: the two header buttons go under the title instead of beside it.
+    final narrowHeader = MediaQuery.sizeOf(context).width < 700;
+    final headerActions = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        OutlinedButton.icon(
+          onPressed: () => _openCandidateDialog(context, null),
+          icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+          label: const Text('Add Candidate', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: crm.border.faded(0.8)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+        ),
+        FilledButton.icon(
+          onPressed: () => _openHiringPlanDialog(context),
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('New Hiring Plan', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: FilledButton.styleFrom(
+            backgroundColor: crm.primary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          ),
+        ),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -276,33 +304,10 @@ class _HrRecruitmentScreenState extends ConsumerState<HrRecruitmentScreen> with 
                         ],
                       ),
                     ),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        OutlinedButton.icon(
-                          onPressed: () => _openCandidateDialog(context, null),
-                          icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-                          label: const Text('Add Candidate', style: TextStyle(fontWeight: FontWeight.w700)),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: crm.border.faded(0.8)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: () => _openHiringPlanDialog(context),
-                          icon: const Icon(Icons.add_rounded, size: 18),
-                          label: const Text('New Hiring Plan', style: TextStyle(fontWeight: FontWeight.w700)),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: crm.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          ),
-                        ),
-                      ],
-                    ),
+                    if (!narrowHeader) ...[const SizedBox(width: 12), headerActions],
                   ],
                 ),
+                if (narrowHeader) ...[const SizedBox(height: 12), headerActions],
                 const SizedBox(height: 14),
                 // ── Navigation Tabs ──
                 Container(
@@ -805,20 +810,22 @@ class _PipelineKanbanTab extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Recruitment Funnel',
-                              style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary),
-                            ),
-                            Text(
-                              'Derived automatically from candidate pipeline stages · FR-1.23',
-                              style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                            ),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Recruitment Funnel',
+                                style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary),
+                              ),
+                              Text(
+                                'Derived automatically from candidate pipeline stages · FR-1.23',
+                                style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                              ),
+                            ],
+                          ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
@@ -1059,20 +1066,24 @@ class _PipelineKanbanTab extends ConsumerWidget {
                               children: [
                                 Row(
                                   children: [
-                                    Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Job Posts',
-                                          style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary),
-                                        ),
-                                        Text(
-                                          'Per approved plan · channels & status',
-                                          style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
-                                        ),
-                                      ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'Job Posts',
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 14.5, fontWeight: FontWeight.w800, color: crm.textPrimary),
+                                          ),
+                                          Text(
+                                            'Per approved plan · channels & status',
+                                            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                    const Spacer(),
+                                    const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
@@ -1147,31 +1158,53 @@ class _PipelineKanbanTab extends ConsumerWidget {
                     'PIPELINE KANBAN BOARD',
                     style: TextStyle(fontSize: 11, letterSpacing: 0.9, fontWeight: FontWeight.w700, color: crm.textSecondary),
                   ),
-                  const Spacer(),
-                  Text(
-                    'Tip: Tap on any card menu to advance stages or create offer letters',
-                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary, fontStyle: FontStyle.italic),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Tip: Tap on any card menu to advance stages or create offer letters',
+                      style: TextStyle(fontSize: 11.5, color: crm.textSecondary, fontStyle: FontStyle.italic),
+                      textAlign: TextAlign.right,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
 
               // ── Interactive Kanban Columns ──
-              SizedBox(
-                height: 520,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _kanbanColumn(context, ref, 'Applied', 'applied', byStage['applied']!, crm.textSecondary),
-                      _kanbanColumn(context, ref, 'Screening', 'screening', byStage['screening']!, const Color(0xFF3B5BA5)),
-                      _kanbanColumn(context, ref, 'Interview', 'interview', byStage['interview']!, crm.warning),
-                      _kanbanColumn(context, ref, 'Offer', 'offer', byStage['offer']!, const Color(0xFFC9A66B)),
-                      _kanbanColumn(context, ref, 'Hired', 'hired', byStage['hired']!, crm.success),
-                    ],
-                  ),
-                ),
+              // Columns stretch to share the available width (200–320px each)
+              // so all five stages fit on laptop screens; only narrower
+              // screens scroll sideways. Previously a fixed 250px width made
+              // the board wider than the page, so it scrolled and the
+              // "Applied" column ended up half hidden on the left.
+              LayoutBuilder(
+                builder: (context, box) {
+                  const gap = 14.0;
+                  final colWidth = ((box.maxWidth - gap * 4) / 5).clamp(200.0, 320.0);
+                  final cols = [
+                    _kanbanColumn(context, ref, 'Applied', 'applied', byStage['applied']!, crm.textSecondary, colWidth),
+                    _kanbanColumn(context, ref, 'Screening', 'screening', byStage['screening']!, const Color(0xFF3B5BA5), colWidth),
+                    _kanbanColumn(context, ref, 'Interview', 'interview', byStage['interview']!, crm.warning, colWidth),
+                    _kanbanColumn(context, ref, 'Offer', 'offer', byStage['offer']!, const Color(0xFFC9A66B), colWidth),
+                    _kanbanColumn(context, ref, 'Hired', 'hired', byStage['hired']!, crm.success, colWidth),
+                  ];
+                  return SizedBox(
+                    height: 520,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (var i = 0; i < cols.length; i++) ...[
+                            if (i > 0) const SizedBox(width: gap),
+                            cols[i],
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           );
@@ -1250,10 +1283,9 @@ class _PipelineKanbanTab extends ConsumerWidget {
     );
   }
 
-  Widget _kanbanColumn(BuildContext context, WidgetRef ref, String title, String stageKey, List<Candidate> items, Color accent) {
+  Widget _kanbanColumn(BuildContext context, WidgetRef ref, String title, String stageKey, List<Candidate> items, Color accent, double width) {
     return Container(
-      width: 250,
-      margin: const EdgeInsets.only(right: 14),
+      width: width,
       decoration: BoxDecoration(
         color: crm.surface,
         borderRadius: BorderRadius.circular(14),
@@ -1410,9 +1442,21 @@ class _PipelineKanbanTab extends ConsumerWidget {
               _chip(titleCase(c.source), crm.textSecondary),
               if (c.referrer.isNotEmpty) ...[
                 const SizedBox(width: 4),
-                Text('ref: ${c.referrer}', style: TextStyle(fontSize: 10.5, color: crm.textSecondary)),
-              ],
-              const Spacer(),
+                // Long referrers ("Meta & LinkedIn Ad Campaign") must shrink
+                // inside the 250px card instead of overflowing it.
+                Expanded(
+                  child: Tooltip(
+                    message: 'ref: ${c.referrer}',
+                    child: Text(
+                      'ref: ${c.referrer}',
+                      style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ] else
+                const Spacer(),
               if (c.rating > 0) ...[
                 Icon(Icons.star_rounded, size: 14, color: const Color(0xFFC9A66B)),
                 const SizedBox(width: 2),
@@ -1473,13 +1517,16 @@ class _PipelineKanbanTab extends ConsumerWidget {
                   ),
                 ),
               ],
-              const Spacer(),
-              if (c.phone.isNotEmpty)
-                Text(
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
                   c.phone,
                   style: TextStyle(fontSize: 10.5, color: crm.textSecondary),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ),
             ],
           ),
         ],
@@ -1591,12 +1638,12 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        value: _selectedDept.isEmpty ? null : _selectedDept,
-                        hint: const Text('All departments', style: TextStyle(fontSize: 12.5)),
+                        value: (depts.contains(_selectedDept) || _selectedDept.isEmpty) ? _selectedDept : '',
+                        dropdownColor: widget.crm.surface,
                         style: TextStyle(fontSize: 12.5, color: widget.crm.textPrimary),
                         items: [
-                          const DropdownMenuItem(value: '', child: Text('All departments')),
-                          ...depts.map((d) => DropdownMenuItem(value: d, child: Text(d))),
+                          DropdownMenuItem(value: '', child: Text('All departments', style: TextStyle(color: widget.crm.textPrimary))),
+                          ...depts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: TextStyle(color: widget.crm.textPrimary)))),
                         ],
                         onChanged: (v) => setState(() => _selectedDept = v ?? ''),
                       ),
@@ -1739,14 +1786,22 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
                 decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
                 child: Icon(icon, size: 16, color: color),
               ),
-              const Spacer(),
-              Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: widget.crm.textSecondary)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: widget.crm.textSecondary),
+                  textAlign: TextAlign.right,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
-          Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800, color: widget.crm.textPrimary)),
+          Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800, color: widget.crm.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
-          Text(sub, style: TextStyle(fontSize: 11, color: widget.crm.textSecondary)),
+          Text(sub, style: TextStyle(fontSize: 11, color: widget.crm.textSecondary), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -2030,11 +2085,15 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
           // Eyebrow & Badges
           Row(
             children: [
-              Text(
-                'ROLE CHARTER & JOB ANALYSIS',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: const Color(0xFFC9A66B)),
+              Expanded(
+                child: Text(
+                  'ROLE CHARTER & JOB ANALYSIS',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: const Color(0xFFC9A66B)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 decoration: BoxDecoration(color: widget.crm.success.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
@@ -2052,7 +2111,14 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
             children: [
               _chip(role.band, _bandColor(role.band)),
               const SizedBox(width: 6),
-              Text(role.dept, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: widget.crm.textPrimary)),
+              Flexible(
+                child: Text(
+                  role.dept,
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: widget.crm.textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
               const SizedBox(width: 6),
               Text('•', style: TextStyle(fontSize: 12, color: widget.crm.textSecondary)),
               const SizedBox(width: 6),
@@ -2092,9 +2158,11 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
             children: [
               Icon(Icons.explore_outlined, size: 14, color: widget.crm.primary),
               const SizedBox(width: 6),
-              Text(
-                '1. ROLE PURPOSE & CHARTERED DUTIES',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: widget.crm.textSecondary, letterSpacing: 0.6),
+              Flexible(
+                child: Text(
+                  '1. ROLE PURPOSE & CHARTERED DUTIES',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: widget.crm.textSecondary, letterSpacing: 0.6),
+                ),
               ),
             ],
           ),
@@ -2136,9 +2204,11 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
             children: [
               Icon(Icons.checklist_rounded, size: 15, color: const Color(0xFFC9A66B)),
               const SizedBox(width: 6),
-              Text(
-                '2. JOB ANALYSIS & SCREENING RUBRIC',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: widget.crm.textSecondary, letterSpacing: 0.6),
+              Flexible(
+                child: Text(
+                  '2. JOB ANALYSIS & SCREENING RUBRIC',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: widget.crm.textSecondary, letterSpacing: 0.6),
+                ),
               ),
             ],
           ),
@@ -2307,43 +2377,55 @@ class _JobPostsTabState extends ConsumerState<_JobPostsTab> {
                   border: Border.all(color: widget.crm.border.faded(0.8)),
                   boxShadow: hrCardShadow(),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        onChanged: (v) => setState(() => _search = v.trim()),
-                        decoration: InputDecoration(
-                          hintText: 'Search job title or department...',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                          isDense: true,
-                          filled: true,
-                          fillColor: widget.crm.background,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                // Wide: one row. Narrow: search on top, chips + button wrap below.
+                child: LayoutBuilder(builder: (context, box) {
+                  final search = TextField(
+                    onChanged: (v) => setState(() => _search = v.trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Search job title or department...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      isDense: true,
+                      filled: true,
+                      fillColor: widget.crm.background,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                  );
+                  final controls = Wrap(
+                    spacing: 6,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _filterChip('all', 'All (${allPosts.length})'),
+                      _filterChip('open', 'Open'),
+                      _filterChip('on_hold', 'On Hold'),
+                      _filterChip('closed', 'Closed'),
+                      OutlinedButton.icon(
+                        onPressed: () => _openWebhookDialog(context),
+                        icon: const Icon(Icons.hub_outlined, size: 16),
+                        label: const Text('Webhooks & Integrations', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: widget.crm.primary,
+                          side: BorderSide(color: widget.crm.primary.faded(0.5)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    _filterChip('all', 'All (${allPosts.length})'),
-                    const SizedBox(width: 6),
-                    _filterChip('open', 'Open'),
-                    const SizedBox(width: 6),
-                    _filterChip('on_hold', 'On Hold'),
-                    const SizedBox(width: 6),
-                    _filterChip('closed', 'Closed'),
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: () => _openWebhookDialog(context),
-                      icon: const Icon(Icons.hub_outlined, size: 16),
-                      label: const Text('Webhooks & Integrations', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: widget.crm.primary,
-                        side: BorderSide(color: widget.crm.primary.faded(0.5)),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
+                    ],
+                  );
+                  if (box.maxWidth < 900) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [search, const SizedBox(height: 10), controls],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: search),
+                      const SizedBox(width: 12),
+                      controls,
+                    ],
+                  );
+                }),
               ),
 
               const SizedBox(height: 16),
@@ -2415,6 +2497,81 @@ class _JobPostsTabState extends ConsumerState<_JobPostsTab> {
   }
 
   Widget _jobPostCard(JobPost p) {
+    // Phones: the applicant count and buttons move under the title block.
+    final narrow = MediaQuery.sizeOf(context).width < 700;
+    final info = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                p.title,
+                style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: widget.crm.textPrimary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _chip(p.status == 'open' ? 'Published' : titleCase(p.status), p.status == 'open' ? widget.crm.success : widget.crm.textSecondary),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${p.department} · ${titleCase(p.type)} · ${p.openings} opening(s)',
+          style: TextStyle(fontSize: 12, color: widget.crm.textSecondary),
+        ),
+        if (p.description.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            p.description,
+            style: TextStyle(fontSize: 12, color: widget.crm.textPrimary.faded(0.9)),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
+    final applicants = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: widget.crm.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: widget.crm.border.faded(0.8)),
+      ),
+      child: Text(
+        '${p.candidateCount} applicants',
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: widget.crm.primary),
+      ),
+    );
+    final shareBtn = FilledButton.icon(
+      onPressed: () => _openShareSocialDialog(context, p),
+      icon: const Icon(Icons.share_outlined, size: 14),
+      label: const Text('Share to LinkedIn/Meta', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+      style: FilledButton.styleFrom(
+        backgroundColor: const Color(0xFF0077B5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        minimumSize: Size.zero,
+      ),
+    );
+    final editBtn = OutlinedButton.icon(
+      onPressed: () => widget.onEditPost(p),
+      icon: const Icon(Icons.edit_outlined, size: 14),
+      label: const Text('Edit', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        minimumSize: Size.zero,
+      ),
+    );
+    final icon = Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: widget.crm.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(Icons.campaign_outlined, color: widget.crm.primary, size: 22),
+    );
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -2424,94 +2581,43 @@ class _JobPostsTabState extends ConsumerState<_JobPostsTab> {
         border: Border.all(color: widget.crm.border.faded(0.8)),
         boxShadow: hrCardShadow(),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: widget.crm.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.campaign_outlined, color: widget.crm.primary, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
+      child: narrow
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [icon, const SizedBox(width: 14), Expanded(child: info)],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [applicants, shareBtn, editBtn],
+                ),
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                icon,
+                const SizedBox(width: 14),
+                Expanded(child: info),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      p.title,
-                      style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.w800, color: widget.crm.textPrimary),
+                    applicants,
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [shareBtn, const SizedBox(width: 6), editBtn],
                     ),
-                    const SizedBox(width: 8),
-                    _chip(p.status == 'open' ? 'Published' : titleCase(p.status), p.status == 'open' ? widget.crm.success : widget.crm.textSecondary),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${p.department} · ${titleCase(p.type)} · ${p.openings} opening(s)',
-                  style: TextStyle(fontSize: 12, color: widget.crm.textSecondary),
-                ),
-                if (p.description.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    p.description,
-                    style: TextStyle(fontSize: 12, color: widget.crm.textPrimary.faded(0.9)),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: widget.crm.background,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: widget.crm.border.faded(0.8)),
-                ),
-                child: Text(
-                  '${p.candidateCount} applicants',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: widget.crm.primary),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilledButton.icon(
-                    onPressed: () => _openShareSocialDialog(context, p),
-                    icon: const Icon(Icons.share_outlined, size: 14),
-                    label: const Text('Share to LinkedIn/Meta', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF0077B5),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  OutlinedButton.icon(
-                    onPressed: () => widget.onEditPost(p),
-                    icon: const Icon(Icons.edit_outlined, size: 14),
-                    label: const Text('Edit', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }
@@ -3722,16 +3828,24 @@ class _BulkImportDialogState extends ConsumerState<_BulkImportDialog> {
                 loading: () => const LinearProgressIndicator(),
                 error: (e, _) => Text(friendlyErrorMessage(e)),
                 data: (posts) {
-                  return DropdownButtonFormField<String>(
-                    initialValue: _jobPostId,
+                  return DropdownButtonFormField<String?>(
+                    initialValue: posts.any((p) => p.id == _jobPostId) ? _jobPostId : null,
                     isExpanded: true,
+                    dropdownColor: widget.crm.surface,
+                    style: TextStyle(fontSize: 13, color: widget.crm.textPrimary),
                     decoration: const InputDecoration(
                       labelText: 'Assign to Job Opening (optional)',
                       isDense: true,
                     ),
                     items: [
-                      const DropdownMenuItem(value: null, child: Text('No specific job (General Applicant Pool)')),
-                      ...posts.map((p) => DropdownMenuItem(value: p.id, child: Text('${p.title} (${p.department})'))),
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('No specific job (General Applicant Pool)', style: TextStyle(color: widget.crm.textPrimary)),
+                      ),
+                      ...posts.map((p) => DropdownMenuItem<String?>(
+                            value: p.id,
+                            child: Text('${p.title} (${p.department})', style: TextStyle(color: widget.crm.textPrimary)),
+                          )),
                     ],
                     onChanged: (v) => setState(() => _jobPostId = v),
                   );
@@ -3744,13 +3858,15 @@ class _BulkImportDialogState extends ConsumerState<_BulkImportDialog> {
                     child: DropdownButtonFormField<String>(
                       initialValue: _source,
                       isExpanded: true,
+                      dropdownColor: widget.crm.surface,
+                      style: TextStyle(fontSize: 13, color: widget.crm.textPrimary),
                       decoration: const InputDecoration(labelText: 'Lead Source', isDense: true),
-                      items: const [
-                        DropdownMenuItem(value: 'meta', child: Text('Meta (Facebook / Instagram Ads)')),
-                        DropdownMenuItem(value: 'linkedin', child: Text('LinkedIn (Easy Apply / Ads)')),
-                        DropdownMenuItem(value: 'job_portal', child: Text('Job Portal (Indeed / Naukri)')),
-                        DropdownMenuItem(value: 'agency', child: Text('Staffing Agency')),
-                        DropdownMenuItem(value: 'website', child: Text('Direct Website')),
+                      items: [
+                        DropdownMenuItem(value: 'meta', child: Text('Meta (Facebook / Instagram Ads)', style: TextStyle(color: widget.crm.textPrimary))),
+                        DropdownMenuItem(value: 'linkedin', child: Text('LinkedIn (Easy Apply / Ads)', style: TextStyle(color: widget.crm.textPrimary))),
+                        DropdownMenuItem(value: 'job_portal', child: Text('Job Portal (Indeed / Naukri)', style: TextStyle(color: widget.crm.textPrimary))),
+                        DropdownMenuItem(value: 'agency', child: Text('Staffing Agency', style: TextStyle(color: widget.crm.textPrimary))),
+                        DropdownMenuItem(value: 'website', child: Text('Direct Website', style: TextStyle(color: widget.crm.textPrimary))),
                       ],
                       onChanged: (v) => setState(() => _source = v ?? 'meta'),
                     ),
@@ -4561,8 +4677,10 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                             key: ValueKey('hiring_plan_dept_$_dept'),
                             initialValue: depts.contains(_dept) ? _dept : depts.first,
                             isExpanded: true,
+                            dropdownColor: crm.surface,
+                            style: TextStyle(fontSize: 13, color: crm.textPrimary),
                             decoration: const InputDecoration(labelText: 'Department (Auto-linked)', border: OutlineInputBorder(), isDense: true),
-                            items: depts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13)))).toList(),
+                            items: depts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: TextStyle(fontSize: 13, color: crm.textPrimary)))).toList(),
                             onChanged: (v) => setState(() => _dept = v ?? 'Bridal Styling'),
                           ),
                         ),
@@ -4582,9 +4700,11 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                         Expanded(
                           child: DropdownButtonFormField<String>(
                             initialValue: _type,
+                            dropdownColor: crm.surface,
+                            style: TextStyle(fontSize: 13, color: crm.textPrimary),
                             decoration: const InputDecoration(labelText: 'Employment type', border: OutlineInputBorder(), isDense: true),
                             items: const ['Full-time', 'Probation', 'Contract', 'Internship', 'Part-time']
-                                .map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 13))))
+                                .map((t) => DropdownMenuItem(value: t, child: Text(t, style: TextStyle(fontSize: 13, color: crm.textPrimary))))
                                 .toList(),
                             onChanged: (v) => setState(() => _type = v ?? 'Full-time'),
                           ),
@@ -4597,6 +4717,8 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                                 ? _selectedReporting
                                 : (reportingOptions.isNotEmpty ? reportingOptions.first : null),
                             isExpanded: true,
+                            dropdownColor: crm.surface,
+                            style: TextStyle(fontSize: 13, color: crm.textPrimary),
                             decoration: const InputDecoration(
                               labelText: 'Reporting line (Hierarchy)',
                               border: OutlineInputBorder(),
@@ -5501,21 +5623,23 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
                         key: ValueKey('cand_job_post_$_selectedJobPostId'),
                         initialValue: posts.any((p) => p.id == _selectedJobPostId) ? _selectedJobPostId : null,
                         isExpanded: true,
+                        dropdownColor: crm.surface,
+                        style: TextStyle(fontSize: 13, color: crm.textPrimary),
                         decoration: const InputDecoration(
                           labelText: 'Against job post · FR-1.13',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
                         items: [
-                          const DropdownMenuItem<String?>(
+                          DropdownMenuItem<String?>(
                             value: null,
-                            child: Text('Custom / Direct Application', style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
+                            child: Text('Custom / Direct Application', style: TextStyle(fontSize: 13, fontStyle: FontStyle.italic, color: crm.textPrimary)),
                           ),
                           ...posts.map((p) => DropdownMenuItem<String?>(
                                 value: p.id,
                                 child: Text(
                                   '${p.title} (${p.department})',
-                                  style: const TextStyle(fontSize: 13),
+                                  style: TextStyle(fontSize: 13, color: crm.textPrimary),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               )),
@@ -5565,8 +5689,10 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
                               child: DropdownButtonFormField<String>(
                                 key: ValueKey('cand_source_$_source'),
                                 initialValue: _source,
+                                dropdownColor: crm.surface,
+                                style: TextStyle(fontSize: 13, color: crm.textPrimary),
                                 decoration: const InputDecoration(labelText: 'Source channel · FR-1.10', border: OutlineInputBorder(), isDense: true),
-                                items: sourceSet.map((s) => DropdownMenuItem(value: s, child: Text(titleCase(s), style: const TextStyle(fontSize: 13)))).toList(),
+                                items: sourceSet.map((s) => DropdownMenuItem(value: s, child: Text(titleCase(s), style: TextStyle(fontSize: 13, color: crm.textPrimary)))).toList(),
                                 onChanged: (v) => setState(() => _source = v ?? 'website'),
                               ),
                             ),
@@ -5575,8 +5701,10 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
                               child: DropdownButtonFormField<String>(
                                 key: ValueKey('cand_stage_$_stage'),
                                 initialValue: _stage,
+                                dropdownColor: crm.surface,
+                                style: TextStyle(fontSize: 13, color: crm.textPrimary),
                                 decoration: const InputDecoration(labelText: 'Pipeline Stage', border: OutlineInputBorder(), isDense: true),
-                                items: stageSet.map((s) => DropdownMenuItem(value: s, child: Text(titleCase(s), style: const TextStyle(fontSize: 13)))).toList(),
+                                items: stageSet.map((s) => DropdownMenuItem(value: s, child: Text(titleCase(s), style: TextStyle(fontSize: 13, color: crm.textPrimary)))).toList(),
                                 onChanged: (v) => setState(() => _stage = v ?? 'applied'),
                               ),
                             ),

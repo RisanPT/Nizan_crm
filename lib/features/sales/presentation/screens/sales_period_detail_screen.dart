@@ -105,7 +105,7 @@ class SalesPeriodDetailScreen extends ConsumerWidget {
     bool isConverted(Lead l) => l.status.toLowerCase() == 'converted';
     final converted = leads.where(isConverted).length;
     final revenue = bookings.where((b) => b.countsTowardSales).fold<double>(
-        0, (s, b) => s + (b.totalPrice - b.discountAmount));
+        0, (s, b) => s + b.totalPrice); // complete order value, no discount deducted
     final collected =
         bookings.fold<double>(0, (s, b) => s + b.advanceAmount + b.collectedAmount);
 

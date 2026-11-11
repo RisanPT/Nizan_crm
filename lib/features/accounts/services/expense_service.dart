@@ -38,6 +38,7 @@ class ExpenseService {
     required String category,
     required double amount,
     required DateTime date,
+    DateTime? eventDate,
     String notes = '',
     String receiptImage = '',
     String workType = 'bridal',
@@ -50,6 +51,7 @@ class ExpenseService {
         'workType': workType,
         'amount': amount,
         'date': date.toIso8601String(),
+        if (eventDate != null) 'eventDate': eventDate.toIso8601String(),
         'notes': notes,
         'receiptImage': receiptImage,
       };
@@ -68,6 +70,8 @@ class ExpenseService {
     String? category,
     double? amount,
     DateTime? date,
+    DateTime? eventDate,
+    bool clearEventDate = false,
     String? notes,
     String? receiptImage,
     String? workType,
@@ -79,6 +83,9 @@ class ExpenseService {
         'category': ?category,
         'amount': ?amount,
         'date': ?date?.toIso8601String(),
+        // '' clears it (e.g. a bill switched from Model Shoot to Bridal).
+        if (eventDate != null || clearEventDate)
+          'eventDate': eventDate?.toIso8601String() ?? '',
         'notes': ?notes,
         'receiptImage': ?receiptImage,
       });

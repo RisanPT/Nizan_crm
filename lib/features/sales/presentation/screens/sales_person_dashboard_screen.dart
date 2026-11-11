@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/notifications/controllers/notification_provid
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/my_target_card.dart';
+import 'package:nizan_crm/features/sales/presentation/widgets/enquiry_count_card.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/combined_targets_section.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/sales_eod_dialog.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
@@ -111,6 +112,9 @@ class SalesPersonDashboardScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const MyTargetCard(),
+                      const SizedBox(height: 16),
+                      // Manual daily enquiry count — cross-check vs saved leads.
+                      const EnquiryCountCard(),
                       const SizedBox(height: 16),
                       // Shared team goals this month (hidden when there are none).
                       CombinedTargetsSection(

@@ -40,6 +40,9 @@ _FleetJob _$FleetJobFromJson(Map<String, dynamic> json) => _FleetJob(
   tripCompletedAt: json['tripCompletedAt'] == null
       ? null
       : DateTime.parse(json['tripCompletedAt'] as String),
+  artistOtpVerifiedAt: json['artistOtpVerifiedAt'] == null
+      ? null
+      : DateTime.parse(json['artistOtpVerifiedAt'] as String),
 );
 
 Map<String, dynamic> _$FleetJobToJson(_FleetJob instance) => <String, dynamic>{
@@ -64,6 +67,7 @@ Map<String, dynamic> _$FleetJobToJson(_FleetJob instance) => <String, dynamic>{
   'endKm': instance.endKm,
   'tripStartedAt': instance.tripStartedAt?.toIso8601String(),
   'tripCompletedAt': instance.tripCompletedAt?.toIso8601String(),
+  'artistOtpVerifiedAt': instance.artistOtpVerifiedAt?.toIso8601String(),
 };
 
 _AccidentReport _$AccidentReportFromJson(

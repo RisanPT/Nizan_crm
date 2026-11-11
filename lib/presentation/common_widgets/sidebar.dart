@@ -14,6 +14,7 @@ import 'package:nizan_crm/features/sales/services/goal_service.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
+import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -43,6 +44,9 @@ class Sidebar extends ConsumerWidget {
   final bool itExpanded;
   final bool itUserCollapsed;
   final ValueChanged<bool> onItExpandToggle;
+  final bool stylistExpanded;
+  final bool stylistUserCollapsed;
+  final ValueChanged<bool> onStylistExpandToggle;
   final bool marketingExpanded;
   final bool marketingUserCollapsed;
   final ValueChanged<bool> onMarketingExpandToggle;
@@ -79,6 +83,9 @@ class Sidebar extends ConsumerWidget {
     required this.itExpanded,
     required this.itUserCollapsed,
     required this.onItExpandToggle,
+    required this.stylistExpanded,
+    required this.stylistUserCollapsed,
+    required this.onStylistExpandToggle,
     required this.marketingExpanded,
     required this.marketingUserCollapsed,
     required this.onMarketingExpandToggle,
@@ -120,6 +127,7 @@ class Sidebar extends ConsumerWidget {
         currentPath == '/reports/analyst' ||
         currentPath == '/finance-head';
     final isItRoute = currentPath.startsWith('/it/') || currentPath.startsWith('/helpdesk');
+    final isStylistRoute = currentPath.startsWith('/consultations') || currentPath.startsWith('/stylist');
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
@@ -151,6 +159,8 @@ class Sidebar extends ConsumerWidget {
     // ignore: unused_local_variable
     final effectiveItExpanded =
         !isCollapsed && (itExpanded || (isItRoute && !itUserCollapsed));
+    final effectiveStylistExpanded = !isCollapsed &&
+        (stylistExpanded || (isStylistRoute && !stylistUserCollapsed));
     final effectiveMarketingExpanded = !isCollapsed &&
         (marketingExpanded || (isMarketingRoute && !marketingUserCollapsed));
     final effectiveContentExpanded = !isCollapsed &&
@@ -480,7 +490,8 @@ class Sidebar extends ConsumerWidget {
 
                   // ── ERP SECTION ──────────────────────────────────────────────
                   if (access.canSeeServices || access.canSeeStaff ||
-                      access.canSeeSales || access.canSeeFinance || access.canSeeFleet) ...[
+                      access.canSeeSales || access.canSeeFinance || access.canSeeFleet ||
+                      access.canSeeConsultations) ...[
                     32.h,
                     _buildSectionTitle('ERP', isCollapsed: isCollapsed, theme: theme),
                     8.h,
@@ -524,6 +535,14 @@ class Sidebar extends ConsumerWidget {
                       isSelected: currentPath == '/hr/leave',
                       onTap: () => context.go('/hr/leave'),
                     ),
+                  // My payslips — every staff member's own slips.
+                  _SidebarItem(
+                    icon: Icons.receipt_long,
+                    title: 'My Payslips',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/hr/my-payslips',
+                    onTap: () => context.go('/hr/my-payslips'),
+                  ),
                   // Approvals — managers, department heads and HR.
                   if (access.isFullAccess ||
                       access.isDepartmentHead ||
@@ -602,12 +621,13 @@ class Sidebar extends ConsumerWidget {
                         title: 'Hiring & Lifecycle',
                         defaultExpanded: true,
                         hasActive: _hrSectionActive(currentPath, const [
-                          '/hr/recruitment', '/hr/onboarding', '/hr/offboarding',
+                          '/hr/recruitment', '/hr/onboarding', '/hr/offboarding', '/hr/assets',
                         ]),
                         children: [
                           _HrNavItem(icon: Icons.work_outline, title: 'Recruitment', route: '/hr/recruitment', selected: currentPath == '/hr/recruitment'),
                           _HrNavItem(icon: Icons.assignment_turned_in_outlined, title: 'Onboarding', route: '/hr/onboarding', selected: currentPath == '/hr/onboarding'),
                           _HrNavItem(icon: Icons.logout_outlined, title: 'Offboarding', route: '/hr/offboarding', selected: currentPath == '/hr/offboarding'),
+                          _HrNavItem(icon: Icons.devices_other_rounded, title: 'Employee Assets', route: '/hr/assets', selected: currentPath == '/hr/assets'),
                         ],
                       ),
                       // 2. People & Organization
@@ -668,7 +688,7 @@ class Sidebar extends ConsumerWidget {
                         children: [
                           if (access.canSeeSub('staff.evaluation'))
                             _HrNavItem(icon: Icons.star_outline, title: '5-Pillar Evaluation', route: '/hr/evaluation', selected: currentPath.startsWith('/hr/evaluation')),
-                          _HrNavItem(icon: Icons.leaderboard_outlined, title: 'Department Scoring', route: '/hr/department-scoring', selected: currentPath == '/hr/department-scoring'),
+                          if (kShowHrPreviewScreens) _HrNavItem(icon: Icons.leaderboard_outlined, title: 'Department Scoring', route: '/hr/department-scoring', selected: currentPath == '/hr/department-scoring'),
                           _HrNavItem(icon: Icons.school_outlined, title: 'Training & LMS', route: '/hr/lms', selected: currentPath == '/hr/lms'),
                         ],
                       ),
@@ -680,7 +700,7 @@ class Sidebar extends ConsumerWidget {
                         ]),
                         children: [
                           _HrNavItem(icon: Icons.campaign_outlined, title: 'Engagement', route: '/hr/engagement', selected: currentPath == '/hr/engagement'),
-                          _HrNavItem(icon: Icons.policy_outlined, title: 'Policies & Handbook', route: '/hr/policies', selected: currentPath == '/hr/policies'),
+                          if (kShowHrPreviewScreens) _HrNavItem(icon: Icons.policy_outlined, title: 'Policies & Handbook', route: '/hr/policies', selected: currentPath == '/hr/policies'),
                           _HrNavItem(icon: Icons.report_gmailerrorred_outlined, title: 'Grievances', route: '/hr/grievance', selected: currentPath == '/hr/grievance'),
                           _HrNavItem(icon: Icons.description_outlined, title: 'HR Letters', route: '/hr/letters', selected: currentPath == '/hr/letters'),
                         ],
@@ -813,6 +833,60 @@ class Sidebar extends ConsumerWidget {
                           isCollapsed: false,
                           isSelected: currentPath == '/sales/calendar',
                           onTap: () => context.go('/sales/calendar'),
+                        ),
+                      ),
+                    ],
+                  ],
+
+                  // Stylist department — consultation calls with clients.
+                  if (access.canSeeConsultations) ...[
+                    _SidebarItem(
+                      icon: Icons.face_retouching_natural_outlined,
+                      title: 'Stylist',
+                      isCollapsed: isCollapsed,
+                      isSelected: isStylistRoute,
+                      trailing: isCollapsed
+                          ? null
+                          : Icon(
+                              effectiveStylistExpanded
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              color: Colors.white.withValues(alpha: 0.7),
+                            ),
+                      onTap: () => onStylistExpandToggle(
+                          !stylistExpanded || stylistUserCollapsed),
+                    ),
+                    if (!isCollapsed && effectiveStylistExpanded) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.today_outlined,
+                          title: 'Today',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/consultations/dashboard',
+                          onTap: () => context.go('/consultations/dashboard'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.people_alt_outlined,
+                          title: 'Clients',
+                          isCollapsed: false,
+                          isSelected: currentPath.startsWith('/stylist/clients'),
+                          onTap: () => context.go('/stylist/clients'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.calendar_month_outlined,
+                          title: 'Calendar',
+                          isCollapsed: false,
+                          // Calendar covers its list view and the call pages.
+                          isSelected: currentPath.startsWith('/consultations') &&
+                              currentPath != '/consultations/dashboard',
+                          onTap: () => context.go('/consultations'),
                         ),
                       ),
                     ],
@@ -1395,6 +1469,17 @@ class Sidebar extends ConsumerWidget {
                             isCollapsed: false,
                             isSelected: currentPath == '/marketing/dashboard',
                             onTap: () => context.go('/marketing/dashboard'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.eod') || access.canManageMarketing)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.assignment_outlined,
+                            title: 'EOD & Team Log',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/eod',
+                            onTap: () => context.go('/marketing/eod'),
                           ),
                         ),
                       if (access.canSeeSub('marketing.competitors'))

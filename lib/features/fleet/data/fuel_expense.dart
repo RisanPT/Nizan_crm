@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'vehicle.dart';
 
@@ -57,8 +56,6 @@ class FuelExpense {
           ? Employee.fromJson(driverJson)
           : null,
     );
-    // TODO: remove after confirming notes — check Flutter debug console
-    debugPrint('[FuelExpense] id=${expense.id} notes="${expense.notes}" raw_notes=${json['notes']}');
     return expense;
   }
 }

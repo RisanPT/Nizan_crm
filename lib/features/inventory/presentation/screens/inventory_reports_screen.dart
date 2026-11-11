@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/inventory/data/inventory_product.dart';
 import 'package:nizan_crm/features/inventory/data/purchase.dart';
 import 'package:nizan_crm/features/inventory/data/vendor.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
+import 'package:nizan_crm/features/inventory/utils/inventory_stock_report.dart';
 
 String _compact(double v) {
   if (v >= 10000000) return '${(v / 10000000).toStringAsFixed(1)}Cr';
@@ -92,13 +93,24 @@ class InventoryReportsScreen extends ConsumerWidget {
                     title: 'Inventory Reports',
                     subtitle:
                         'Value, mix & trends · ${DateFormat('EEE, d MMM yyyy').format(now)}',
-                    trailing: IconButton(
-                      tooltip: 'Refresh',
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: crm.textSecondary,
-                      ),
-                      onPressed: refresh,
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () =>
+                              exportInventoryStockReport(context, ref),
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('Stock Report'),
+                        ),
+                        IconButton(
+                          tooltip: 'Refresh',
+                          icon: Icon(
+                            Icons.refresh_rounded,
+                            color: crm.textSecondary,
+                          ),
+                          onPressed: refresh,
+                        ),
+                      ],
                     ),
                   ),
                   16.h,

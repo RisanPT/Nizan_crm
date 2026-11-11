@@ -55,7 +55,9 @@ final salesEodServiceProvider = Provider<SalesEodService>((ref) {
 });
 
 final salesEodReportProvider =
-    FutureProvider.family<SalesEodReport, SalesEodQuery>((ref, query) async {
+    // autoDispose: closing the EOD drops the cached report, so reopening it
+    // always loads the latest numbers (e.g. an edited manual lead count).
+    FutureProvider.autoDispose.family<SalesEodReport, SalesEodQuery>((ref, query) async {
   final service = ref.watch(salesEodServiceProvider);
   return service.getEodReport(
     date: query.date,

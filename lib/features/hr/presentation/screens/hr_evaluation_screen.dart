@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
 /// HR Evaluation & Work Performance Hub — SRS §3.4 compliance.
 /// Features:
@@ -34,7 +35,7 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: kShowHrPreviewScreens ? 3 : 1, vsync: this);
   }
 
   @override
@@ -112,10 +113,10 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
                   unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   indicatorColor: const Color(0xFF601A29),
                   indicatorWeight: 3,
-                  tabs: const [
-                    Tab(text: '5-Pillar Scorecards'),
-                    Tab(text: 'Employment Level Grading (A–D)'),
-                    Tab(text: 'Department Rankings & ROE'),
+                  tabs: [
+                    const Tab(text: '5-Pillar Scorecards'),
+                    if (kShowHrPreviewScreens) const Tab(text: 'Employment Level Grading (A–D)'),
+                    if (kShowHrPreviewScreens) const Tab(text: 'Department Rankings & ROE'),
                   ],
                 ),
               ],
@@ -130,9 +131,9 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
                 // Tab 1: 5-Pillar Scorecards
                 _buildScorecardsTab(context, ref, crm, isMobile, staff, evalsAsync, period, canManage),
                 // Tab 2: Employment Level Grading (A/B/C/D)
-                _buildGradingTab(context, ref, crm, isMobile, staff, evalsAsync, period, canManage),
+                if (kShowHrPreviewScreens) _buildGradingTab(context, ref, crm, isMobile, staff, evalsAsync, period, canManage),
                 // Tab 3: Department Rankings & ROE
-                _buildRankingRoeTab(context, ref, crm, isMobile, staff, evalsAsync),
+                if (kShowHrPreviewScreens) _buildRankingRoeTab(context, ref, crm, isMobile, staff, evalsAsync),
               ],
             ),
           ),

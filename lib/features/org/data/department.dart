@@ -2,6 +2,9 @@
 // Creative divisions. Carries the delegation boundary (allowedRoleKeys) and the
 // geography scope (zone/state/region ids) for later phases.
 
+/// Weekday labels for weekly offs, indexed 0 = Sunday … 6 = Saturday.
+const kWeekdayShort = <String>['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 const kDivisions = <String>['administrative', 'creative'];
 String divisionLabel(String d) => d == 'creative' ? 'Creative' : 'Administrative';
 
@@ -61,6 +64,10 @@ class Department {
   final bool active, isSystem;
   final int memberCount;
 
+  /// Weekly days off for this department's staff (0 = Sunday … 6 = Saturday).
+  /// Leave days skip these. Sunday when the server has none stored.
+  final List<int> weeklyOffs;
+
   const Department({
     this.id = '',
     this.key = '',
@@ -75,6 +82,7 @@ class Department {
     this.active = true,
     this.isSystem = false,
     this.memberCount = 0,
+    this.weeklyOffs = const [0],
   });
 
   static List<String> _ids(dynamic v) =>
@@ -94,6 +102,9 @@ class Department {
         active: j['active'] as bool? ?? true,
         isSystem: j['isSystem'] as bool? ?? false,
         memberCount: (j['memberCount'] as num?)?.toInt() ?? 0,
+        weeklyOffs: j['weeklyOffs'] is List
+            ? (j['weeklyOffs'] as List).whereType<num>().map((e) => e.toInt()).toList()
+            : const [0],
       );
 
   Map<String, dynamic> toJson() => {
@@ -107,5 +118,6 @@ class Department {
         'stateIds': stateIds,
         'regionIds': regionIds,
         'active': active,
+        'weeklyOffs': weeklyOffs,
       };
 }

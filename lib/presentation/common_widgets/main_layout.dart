@@ -52,6 +52,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _financeUserCollapsed = false;
   bool _itExpanded = false;
   bool _itUserCollapsed = false;
+  bool _stylistExpanded = false;
+  bool _stylistUserCollapsed = false;
   bool _marketingExpanded = false;
   bool _marketingUserCollapsed = false;
   bool _contentExpanded = false;
@@ -529,6 +531,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         setState(() {
           _itExpanded = expanded;
           _itUserCollapsed = !expanded;
+        });
+      },
+      stylistExpanded: _stylistExpanded,
+      stylistUserCollapsed: _stylistUserCollapsed,
+      onStylistExpandToggle: (expanded) {
+        setState(() {
+          _stylistExpanded = expanded;
+          _stylistUserCollapsed = !expanded;
         });
       },
       marketingExpanded: _marketingExpanded,

@@ -156,4 +156,60 @@ class SalaryService {
       throw AppException(e, action: 'submit payroll to accounts');
     }
   }
+
+  /// The signed-in employee's OWN payslips (approved / paid, newest first).
+  /// Works for any login linked to an employee — no payroll permission needed.
+  Future<List<Salary>> getMySalaries() async {
+    try {
+      final response = await _dio.get('/salaries/mine');
+      final list = response.data is List ? response.data as List : const [];
+      return list
+          .whereType<Map>()
+          .map((m) => Salary.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
+    } catch (e) {
+      throw AppException(e, action: 'load your payslips');
+    }
+  }
+
+  /// Whether payroll for [month]/[year] is locked (finalised).
+  Future<bool> isMonthLocked({required int month, required int year}) async {
+    try {
+      final response = await _dio.get('/salaries/locks', queryParameters: {'year': year});
+      final list = response.data is List ? response.data as List : const [];
+      return list.any((l) => l is Map && l['month'] == month && l['year'] == year);
+    } catch (e) {
+      throw AppException(e, action: 'check payroll lock');
+    }
+  }
+
+  /// Finalise a payroll month: no more generating / editing / approving.
+  Future<String> lockMonth({required int month, required int year}) async {
+    try {
+      final response = await _dio.post('/salaries/lock', data: {'month': month, 'year': year});
+      return (response.data as Map)['message']?.toString() ?? 'Locked';
+    } catch (e) {
+      throw AppException(e, action: 'lock payroll month');
+    }
+  }
+
+  /// Reopen a locked month (admin only).
+  Future<String> unlockMonth({required int month, required int year}) async {
+    try {
+      final response = await _dio.post('/salaries/unlock', data: {'month': month, 'year': year});
+      return (response.data as Map)['message']?.toString() ?? 'Unlocked';
+    } catch (e) {
+      throw AppException(e, action: 'unlock payroll month');
+    }
+  }
 }
+
+/// The signed-in employee's own payslips (ESS).
+final mySalariesProvider = FutureProvider.autoDispose<List<Salary>>((ref) {
+  return ref.read(salaryServiceProvider).getMySalaries();
+});
+
+/// Lock state for one payroll month, keyed by (month, year).
+final payrollLockProvider = FutureProvider.autoDispose.family<bool, (int, int)>((ref, my) {
+  return ref.read(salaryServiceProvider).isMonthLocked(month: my.$1, year: my.$2);
+});

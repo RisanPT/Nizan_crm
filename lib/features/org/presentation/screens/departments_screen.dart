@@ -224,6 +224,8 @@ class DepartmentsScreen extends ConsumerWidget {
                       onTap: d.memberCount > 0 ? () => _showMembers(context, ref, d) : null),
                   _metaChip(crm, Icons.verified_user_outlined, '${d.allowedRoleKeys.length} delegable role${d.allowedRoleKeys.length == 1 ? '' : 's'}'),
                   _metaChip(crm, Icons.public, geoCount == 0 ? 'PAN-India' : '$geoCount region${geoCount == 1 ? '' : 's'}'),
+                  _metaChip(crm, Icons.weekend_outlined,
+                      d.weeklyOffs.isEmpty ? 'No weekly off' : 'Off: ${(d.weeklyOffs.toList()..sort()).map((i) => kWeekdayShort[i % 7]).join(', ')}'),
                 ]),
               ),
             ]),
@@ -288,6 +290,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
   late Set<String> _roles;
   late Set<String> _zones;
   late Set<String> _states;
+  late Set<int> _offs; // weekly offs, 0 = Sunday … 6 = Saturday
   bool _saving = false;
 
   @override
@@ -303,6 +306,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
     _roles = {...?e?.allowedRoleKeys};
     _zones = {...?e?.zoneIds};
     _states = {...?e?.stateIds};
+    _offs = {...(e?.weeklyOffs ?? const [0])};
   }
 
   @override
@@ -384,6 +388,18 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
               ]),
             ),
           ),
+          16.h,
+
+          // Weekly offs — leave days skip these for this department's staff.
+          _label(crm, 'WEEKLY OFFS (NOT CHARGED AS LEAVE)'),
+          Wrap(spacing: 6, runSpacing: 4, children: [
+            for (var i = 0; i < 7; i++)
+              FilterChip(
+                label: Text(kWeekdayShort[i]),
+                selected: _offs.contains(i),
+                onSelected: (s) => setState(() => s ? _offs.add(i) : _offs.remove(i)),
+              ),
+          ]),
           16.h,
 
           // Delegable roles (the admin-approved set the head may assign).
@@ -471,6 +487,7 @@ class _DepartmentFormState extends ConsumerState<_DepartmentForm> {
       zoneIds: _zones.toList(),
       stateIds: _states.toList(),
       active: _active,
+      weeklyOffs: (_offs.toList()..sort()),
     );
     try {
       await ref.read(departmentServiceProvider).save(dept);

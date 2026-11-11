@@ -34,9 +34,12 @@ class ReviewService {
   }
 
   /// Ensure a review exists for the booking and return its public form URL.
-  Future<String> getReviewLink(String bookingId) async {
+  /// [markSent] = staff are sending the link by hand now, so the automatic
+  /// next-day WhatsApp send skips this client.
+  Future<String> getReviewLink(String bookingId, {bool markSent = false}) async {
     try {
-      final res = await _dio.post('/reviews/for-booking/$bookingId');
+      final res = await _dio.post('/reviews/for-booking/$bookingId',
+          data: markSent ? {'markSent': true} : null);
       return (res.data['reviewUrl'] ?? '').toString();
     } catch (e) {
       throw AppException(e, action: 'get the review link');

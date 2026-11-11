@@ -30,6 +30,9 @@ abstract class FleetJob with _$FleetJob {
     double? endKm,
     DateTime? tripStartedAt,
     DateTime? tripCompletedAt,
+    // When the driver verified the artist's trip OTP (during the trip). Null
+    // = not yet verified; required before closing a trip with staff assigned.
+    DateTime? artistOtpVerifiedAt,
   }) = _FleetJob;
 
   factory FleetJob.fromJson(Map<String, dynamic> json) => _$FleetJobFromJson(json);
@@ -49,6 +52,9 @@ extension FleetJobX on FleetJob {
 
   /// Whether this trip has assigned staff/artists and therefore requires 4-digit OTP verification.
   bool get requiresArtistOtp => assignedStaff.isNotEmpty;
+
+  /// True while the trip still needs the artist OTP before it can be closed.
+  bool get artistOtpPending => requiresArtistOtp && artistOtpVerifiedAt == null;
 }
 
 /// "12,345" / "12,345.5" — odometer readings for display.

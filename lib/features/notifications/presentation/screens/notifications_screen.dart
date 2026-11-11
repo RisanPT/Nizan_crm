@@ -404,6 +404,13 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.flag_outlined, Color(0xFF7C3AED));
     case 'sales_target_team_midmonth':
       return const _TypeMeta(Icons.groups_outlined, Color(0xFF7C3AED));
+    // Stylist consultations
+    case 'consultation_assigned':
+      return const _TypeMeta(Icons.video_camera_front_outlined, Color(0xFF6366F1));
+    case 'consultation_changed':
+      return const _TypeMeta(Icons.event_repeat_outlined, Color(0xFFF59E0B));
+    case 'consultation_reminder':
+      return const _TypeMeta(Icons.alarm_on_outlined, Color(0xFF6366F1));
     // Company Reports
     case 'report_uploaded':
       return const _TypeMeta(Icons.folder_shared_outlined, Color(0xFF7C3AED));

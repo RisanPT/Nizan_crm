@@ -953,6 +953,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       var selCategory = existing?.category ?? 'food';
       var selWorkType = existing?.workType ?? 'bridal';
       var selDate = existing?.date ?? DateTime.now();
+      // Event the bill belongs to: bridal bills link the client booking (the
+      // event date comes from it); model shoots — or an artist with no
+      // assigned bookings — pick the event date directly.
+      var selBooking = existing?.booking?.id ?? '';
+      DateTime? selEventDate = existing?.eventDate;
+      bool usesBooking() =>
+          selWorkType == 'bridal' &&
+          (myBookings.isNotEmpty || selBooking.isNotEmpty);
       XFile? attachmentFile;
       bool isUploading = false;
       final formKey = GlobalKey<FormState>();
@@ -1013,12 +1021,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 ),
                               ),
                               16.w,
-                              Text(
-                                isEditing
-                                    ? 'Edit Expense'
-                                    : 'Log Artist Expense',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  fontWeight: FontWeight.w900,
+                              Expanded(
+                                child: Text(
+                                  isEditing
+                                      ? 'Edit Expense'
+                                      : 'Log Artist Expense',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
                                 ),
                               ),
                             ],
@@ -1126,6 +1138,98 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             ],
                           ),
                           16.h,
+                          if (usesBooking())
+                            Builder(builder: (_) {
+                              final b = myBookings
+                                  .where((b) => b.id == selBooking)
+                                  .firstOrNull;
+                              final label = b != null
+                                  ? '${b.customerName} · Event ${_fmtCardDate(b.serviceStart)}'
+                                  : (selBooking.isNotEmpty &&
+                                          existing?.booking != null
+                                      ? existing!.booking!.customerName
+                                      : 'Select client booking *');
+                              return InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () async {
+                                  final picked = await _showBookingSearchDialog(
+                                    context: ctx,
+                                    bookings: myBookings,
+                                    fmtDate: _fmt,
+                                    initialSelected:
+                                        selBooking.isEmpty ? null : selBooking,
+                                  );
+                                  if (picked != null) {
+                                    setState(() => selBooking = picked);
+                                  }
+                                },
+                                child: InputDecorator(
+                                  decoration: InputDecoration(
+                                    labelText: 'Client booking *',
+                                    helperText:
+                                        'The event date is taken from this booking',
+                                    prefixIcon:
+                                        const Icon(Icons.book_online_outlined),
+                                    suffixIcon:
+                                        const Icon(Icons.arrow_drop_down),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: selBooking.isNotEmpty
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: selBooking.isNotEmpty
+                                          ? null
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            })
+                          else
+                            InkWell(
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: ctx,
+                                  initialDate: selEventDate ?? selDate,
+                                  firstDate: DateTime(2020),
+                                  lastDate: DateTime(2100),
+                                );
+                                if (picked != null) {
+                                  setState(() => selEventDate = picked);
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: 'Event date *',
+                                  helperText: selWorkType == 'bridal'
+                                      ? 'No assigned bookings found — pick the event date'
+                                      : 'The day of the shoot',
+                                  prefixIcon: const Icon(Icons.event_outlined),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  selEventDate != null
+                                      ? _fmt(selEventDate!)
+                                      : 'Select event date',
+                                  style: TextStyle(
+                                    color: selEventDate != null
+                                        ? null
+                                        : Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          16.h,
                           DropdownButtonFormField<String>(
                             decoration: InputDecoration(
                               labelText: 'Category',
@@ -1190,7 +1294,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                             borderRadius: BorderRadius.circular(12),
                             child: InputDecorator(
                               decoration: InputDecoration(
-                                labelText: 'Date',
+                                labelText: 'Bill date',
                                 prefixIcon: const Icon(
                                   Icons.calendar_today_outlined,
                                 ),
@@ -1332,6 +1436,27 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         );
                                         return;
                                       }
+                                      final linkBooking = usesBooking();
+                                      if (linkBooking && selBooking.isEmpty) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Select the client booking for this bill',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (!linkBooking && selEventDate == null) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Pick the event date for this bill',
+                                            ),
+                                          ),
+                                        );
+                                        return;
+                                      }
 
                                       setState(() => isUploading = true);
                                       try {
@@ -1347,6 +1472,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               .read(expenseServiceProvider)
                                               .updateExpense(
                                                 id: existing.id,
+                                                // '' unlinks a booking when
+                                                // switched to a model shoot.
+                                                bookingId:
+                                                    linkBooking ? selBooking : '',
+                                                eventDate:
+                                                    linkBooking ? null : selEventDate,
+                                                clearEventDate: linkBooking,
                                                 category: selCategory,
                                                 amount: amt,
                                                 date: selDate,
@@ -1363,6 +1495,10 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                 employeeId: selEmployee.isNotEmpty
                                                     ? selEmployee
                                                     : myEmployeeId,
+                                                bookingId:
+                                                    linkBooking ? selBooking : null,
+                                                eventDate:
+                                                    linkBooking ? null : selEventDate,
                                                 category: selCategory,
                                                 amount: amt,
                                                 date: selDate,
@@ -1851,10 +1987,11 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     }
 
 
-    void showImageDialog(String url, {String? label}) {
+    void showImageDialog(String url, {String? label, String? subtitle}) {
       showDialog(
         context: context,
-        builder: (ctx) => _ImageViewerDialog(url: url, label: label),
+        builder: (ctx) =>
+            _ImageViewerDialog(url: url, label: label, subtitle: subtitle),
       );
     }
 
@@ -2336,9 +2473,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         note: e.notes.isNotEmpty ? e.notes : null,
                         creatorName: e.employee?.name ?? 'Unknown',
                         date: e.date,
+                        showEvent: true,
+                        eventText: _fmtEventRange(e.eventStart, e.eventEnd),
                         actions: actionsList,
                         onAttachmentTap: e.receiptImage.isNotEmpty
-                            ? () => showImageDialog(e.receiptImage, label: 'expense_bill')
+                            ? () => showImageDialog(
+                                  e.receiptImage,
+                                  label: 'expense_bill',
+                                  subtitle:
+                                      'Event: ${_fmtEventRange(e.eventStart, e.eventEnd) ?? 'not set'} · Bill date: ${_fmtCardDate(e.date)}',
+                                )
                             : null,
                       );
                     },
@@ -3232,12 +3376,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                       child: const Icon(Icons.currency_rupee, size: 10, color: Colors.white),
                                     ),
                                     6.w,
-                                    Text(
-                                      'TOTAL COLLECTED',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: crm.textSecondary,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
+                                    Flexible(
+                                      child: Text(
+                                        'TOTAL COLLECTED',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: crm.textSecondary,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3256,12 +3404,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   children: [
                                     Icon(Icons.arrow_upward, size: 10, color: crm.success),
                                     4.w,
-                                    Text(
-                                      '+12% this month',
-                                      style: TextStyle(
-                                        color: crm.success,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                    Flexible(
+                                      child: Text(
+                                        '+12% this month',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: crm.success,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3317,12 +3469,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   children: [
                                     Icon(Icons.access_time, size: 10, color: crm.warning),
                                     4.w,
-                                    Text(
-                                      'Awaiting verification',
-                                      style: TextStyle(
-                                        color: crm.warning,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                    Flexible(
+                                      child: Text(
+                                        'Awaiting verification',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: crm.warning,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3991,6 +4147,17 @@ String _fmtCardDate(DateTime d) {
   return '${d.day.toString().padLeft(2, '0')} ${m[d.month - 1]} ${d.year}';
 }
 
+/// "12 Dec 2026", or "12 – 14 Dec 2026" for a multi-day event; null if unknown.
+String? _fmtEventRange(DateTime? start, DateTime? end) {
+  if (start == null) return null;
+  if (end == null ||
+      (end.year == start.year && end.month == start.month && end.day == start.day) ||
+      end.isBefore(start)) {
+    return _fmtCardDate(start);
+  }
+  return '${_fmtCardDate(start)} – ${_fmtCardDate(end)}';
+}
+
 class _FinanceEntryCard extends StatelessWidget {
   final String title;
   final String amount;
@@ -4001,6 +4168,10 @@ class _FinanceEntryCard extends StatelessWidget {
   final DateTime date;
   final List<Widget> actions;
   final VoidCallback? onAttachmentTap;
+  /// Expense bills only: "12 Dec 2026" (or a range). When [showEvent] is true
+  /// and this is null the card says the event date is not set.
+  final String? eventText;
+  final bool showEvent;
 
   const _FinanceEntryCard({
     required this.title,
@@ -4012,6 +4183,8 @@ class _FinanceEntryCard extends StatelessWidget {
     required this.date,
     required this.actions,
     this.onAttachmentTap,
+    this.eventText,
+    this.showEvent = false,
   });
 
   @override
@@ -4081,21 +4254,65 @@ class _FinanceEntryCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         4.h,
-                        // Date shown clearly next to the client name.
-                        Row(
-                          children: [
-                            Icon(Icons.event_outlined, size: 13, color: crm.primary),
-                            4.w,
-                            Text(
-                              _fmtCardDate(date),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: crm.textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                        if (showEvent) ...[
+                          // Bills: when the work happened, then the bill date.
+                          Row(
+                            children: [
+                              Icon(Icons.event_outlined, size: 13, color: crm.primary),
+                              4.w,
+                              Flexible(
+                                child: Text(
+                                  eventText != null
+                                      ? 'Event: $eventText'
+                                      : 'Event date not set',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: eventText != null
+                                        ? crm.textPrimary
+                                        : crm.warning,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                          2.h,
+                          Row(
+                            children: [
+                              Icon(Icons.receipt_long_outlined, size: 13, color: crm.textSecondary),
+                              4.w,
+                              Flexible(
+                                child: Text(
+                                  'Bill date: ${_fmtCardDate(date)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: crm.textSecondary,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else
+                          // Date shown clearly next to the client name.
+                          Row(
+                            children: [
+                              Icon(Icons.event_outlined, size: 13, color: crm.primary),
+                              4.w,
+                              Text(
+                                _fmtCardDate(date),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: crm.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
                         if (metadata.isNotEmpty) ...[
                           2.h,
                           Text(
@@ -4155,24 +4372,31 @@ class _FinanceEntryCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.account_circle_outlined,
-                        size: 14,
-                        color: crm.textSecondary.withValues(alpha: 0.6),
-                      ),
-                      6.w,
-                      Text(
-                        creatorName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: crm.textSecondary,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 11,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.account_circle_outlined,
+                          size: 14,
+                          color: crm.textSecondary.withValues(alpha: 0.6),
                         ),
-                      ),
-                    ],
+                        6.w,
+                        Flexible(
+                          child: Text(
+                            creatorName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: crm.textSecondary,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                  8.w,
                   if (onAttachmentTap != null)
                     InkWell(
                       onTap: onAttachmentTap,
@@ -4243,8 +4467,10 @@ class _FinanceEntryCard extends StatelessWidget {
 class _ImageViewerDialog extends StatefulWidget {
   final String url;
   final String? label;
+  /// Small line under the title, e.g. "Event: 12 Dec 2026 · Bill date: …".
+  final String? subtitle;
 
-  const _ImageViewerDialog({required this.url, this.label});
+  const _ImageViewerDialog({required this.url, this.label, this.subtitle});
 
   @override
   State<_ImageViewerDialog> createState() => _ImageViewerDialogState();
@@ -4353,22 +4579,43 @@ class _ImageViewerDialogState extends State<_ImageViewerDialog> {
                       icon: Icons.close,
                       onTap: () => Navigator.pop(context),
                     ),
-                    const Spacer(),
-                    // Title
-                    Text(
-                      widget.label == 'expense_bill'
-                          ? 'Expense Bill'
-                          : widget.label == 'collection_screenshot'
-                          ? 'Collection Screenshot'
-                          : 'Image',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
+                    const SizedBox(width: 8),
+                    // Title (+ event / bill dates for expense bills)
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            widget.label == 'expense_bill'
+                                ? 'Expense Bill'
+                                : widget.label == 'collection_screenshot'
+                                ? 'Collection Screenshot'
+                                : 'Image',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          if (widget.subtitle != null)
+                            Text(
+                              widget.subtitle!,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     // Share
                     _GlassButton(
                       icon: Icons.share_rounded,

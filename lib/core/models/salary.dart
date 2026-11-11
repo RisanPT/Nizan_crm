@@ -56,6 +56,9 @@ class Salary {
   final double allowances;
   final double bonus;
   final double deductions;
+  /// Part of [deductions] that came from attendance (absence / LOP).
+  /// null on legacy slips.
+  final double? attendanceDeduction;
   final double netAmount;
   final String status; // 'draft' | 'approved_by_hr' | 'paid' | 'cancelled'
   final DateTime? paymentDate;
@@ -73,6 +76,8 @@ class Salary {
   final String? employeePhone;
   final String? employeeEmail;
   final String? employeeAvatar;
+  final String employeeCode;
+  final String designation;
   final DateTime? createdAt;
 
   const Salary({
@@ -92,6 +97,7 @@ class Salary {
     this.allowances = 0,
     this.bonus = 0,
     this.deductions = 0,
+    this.attendanceDeduction,
     required this.netAmount,
     this.status = 'approved_by_hr',
     this.paymentDate,
@@ -109,6 +115,8 @@ class Salary {
     this.employeePhone,
     this.employeeEmail,
     this.employeeAvatar,
+    this.employeeCode = '',
+    this.designation = '',
     this.createdAt,
   });
 
@@ -126,12 +134,17 @@ class Salary {
     String? phone;
     String? email;
     String? avatar;
+    String code = '';
+    String designation = '';
 
     if (emp is Map<String, dynamic>) {
       empId = emp['_id'] as String? ?? emp['id'] as String? ?? '';
       phone = emp['phone'] as String?;
       email = emp['email'] as String?;
       avatar = emp['profileImage'] as String?;
+      code = emp['employeeCode']?.toString() ?? '';
+      final desig = emp['designationId'];
+      if (desig is Map) designation = desig['name']?.toString() ?? '';
     } else if (emp is String) {
       empId = emp;
     }
@@ -153,6 +166,7 @@ class Salary {
       allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
       bonus: (json['bonus'] as num?)?.toDouble() ?? 0,
       deductions: (json['deductions'] as num?)?.toDouble() ?? 0,
+      attendanceDeduction: (json['attendanceDeduction'] as num?)?.toDouble(),
       netAmount: (json['netAmount'] as num?)?.toDouble() ?? 0,
       status: json['status'] as String? ?? 'approved_by_hr',
       paymentDate: json['paymentDate'] != null
@@ -180,6 +194,8 @@ class Salary {
       employeePhone: phone,
       employeeEmail: email,
       employeeAvatar: avatar,
+      employeeCode: code,
+      designation: designation,
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,

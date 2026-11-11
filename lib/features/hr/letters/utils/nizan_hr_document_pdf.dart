@@ -1353,3 +1353,61 @@ Future<void> previewOrDownloadNizanHrDocument({
     );
   }
 }
+
+/// Body text of the Experience & Relieving Certificate (same wording as the
+/// seeded "Experience & Relieving Certificate" letter template).
+String experienceLetterBody({
+  required String employeeName,
+  String? designation,
+  String? department,
+  DateTime? joiningDate,
+  required DateTime lastWorkingDay,
+}) {
+  final f = DateFormat('d MMMM yyyy');
+  final role = (designation ?? '').trim().isNotEmpty ? designation!.trim() : 'a team member';
+  final dept = (department ?? '').trim().isNotEmpty ? ' in the ${department!.trim()} Department' : '';
+  final from = joiningDate != null ? ' from ${f.format(joiningDate)}' : '';
+  final to = f.format(lastWorkingDay);
+  return 'TO WHOMSOEVER IT MAY CONCERN\n\n'
+      'This is to certify that $employeeName was employed with Nizan Beauty Ventures Private Limited as '
+      '$role$dept$from to $to.\n\n'
+      'During their tenure with us, $employeeName demonstrated professionalism, creative expertise, and dedication '
+      'to our studio standards. They were relieved of their duties at the close of business hours on $to '
+      'following completion of the exit handover procedures.\n\n'
+      'We appreciate their contributions to our organization and wish them all the best in their future endeavors.';
+}
+
+/// Experience & Relieving Certificate on the Nizan letterhead (house style).
+Future<Uint8List> generateExperienceLetterPdf({
+  required String employeeName,
+  String? designation,
+  String? department,
+  String? email,
+  String? phone,
+  DateTime? joiningDate,
+  required DateTime lastWorkingDay,
+  DateTime? issueDate,
+  String? body,
+  String? signatoryName,
+}) {
+  return NizanHrDocumentBuilder.build(
+    title: 'EXPERIENCE & RELIEVING CERTIFICATE',
+    date: issueDate ?? DateTime.now(),
+    recipientName: employeeName,
+    recipientDesignation: designation,
+    recipientDepartment: department,
+    recipientEmail: email,
+    recipientPhone: phone,
+    subject: 'Experience & Relieving Certificate - $employeeName',
+    body: body ??
+        experienceLetterBody(
+          employeeName: employeeName,
+          designation: designation,
+          department: department,
+          joiningDate: joiningDate,
+          lastWorkingDay: lastWorkingDay,
+        ),
+    signatoryName: (signatoryName ?? '').trim().isNotEmpty ? signatoryName : 'Authorized HR Signatory',
+    signatoryTitle: 'Human Resources & Operations',
+  );
+}

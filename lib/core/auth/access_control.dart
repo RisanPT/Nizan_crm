@@ -131,6 +131,18 @@ class Access {
   bool get canSeeCalendar => has('calendar', role.canSeeCalendar);
   bool get canSeeBookings => has('bookings', role.canSeeBookings);
   bool get canSeeTrials => has('trials', role.canSeeBookings);
+
+  // Stylist consultations. A new module with no AppRole matrix entry, so it is
+  // driven purely by the granted 'consultations' permission (admin/manager see
+  // it via the isFullAccess bypass); permission-less legacy roles don't get it.
+  bool get canSeeConsultations => has('consultations', false);
+
+  /// Consultation notes, preferences and next steps — the sensitive part of a
+  /// consultation. Server-side redaction is the real gate; this hides the UI.
+  bool get canSeeConsultationNotes => canSeeSub('consultations.notes');
+
+  /// Stylist dashboard / reports.
+  bool get canSeeConsultationReports => canSeeSub('consultations.reports');
   bool get canSeeServices => has('services', role.canSeeServices);
   bool get canSeeStaff => has('staff', role.canSeeStaff);
   bool get canSeeSales => has('sales', role.canSeeSales);

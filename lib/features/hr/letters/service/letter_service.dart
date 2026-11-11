@@ -54,9 +54,11 @@ class LetterService {
     String? templateId,
     String? body,
     String subject = '',
+    String? type,
   }) async {
     try {
       await _dio.post('/letters/generate', data: {
+        'type': ?type,
         'employeeId': employeeId,
         'templateId': ?templateId,
         'body': ?body,

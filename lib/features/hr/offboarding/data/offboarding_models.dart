@@ -18,7 +18,7 @@ String offboardingReasonLabel(String r) {
 }
 
 double _d(dynamic v) => (v as num?)?.toDouble() ?? 0;
-DateTime? _date(dynamic v) => (v == null) ? null : DateTime.tryParse(v.toString());
+DateTime? _date(dynamic v) => (v == null) ? null : DateTime.tryParse(v.toString())?.toLocal();
 
 class ClearanceItem {
   final String label;
@@ -88,3 +88,64 @@ class Offboarding {
 }
 
 const offboardingReasons = kOffboardingReasons;
+
+/// GET /api/offboarding/:id/settlement — prorated unpaid salary for the exit
+/// month (1st → last working day, calendar days). Owner rule: nothing else
+/// (no leave encashment, gratuity or recoveries).
+class OffboardingSettlement {
+  final int year;
+  final int month;
+  final int daysInMonth;
+  final int daysWorked;
+  final double baseSalary;
+  final double allowances;
+  final double proratedBase;
+  final double proratedAllowances;
+  final double amount;
+  final String lastWorkingDay; // YYYY-MM-DD
+  final bool payrollLocked;
+  final bool canCreateSlip;
+  final String? existingSlipStatus;
+  final double? existingSlipNet;
+  final List<String> warnings;
+
+  const OffboardingSettlement({
+    required this.year,
+    required this.month,
+    required this.daysInMonth,
+    required this.daysWorked,
+    required this.baseSalary,
+    required this.allowances,
+    required this.proratedBase,
+    required this.proratedAllowances,
+    required this.amount,
+    required this.lastWorkingDay,
+    this.payrollLocked = false,
+    this.canCreateSlip = false,
+    this.existingSlipStatus,
+    this.existingSlipNet,
+    this.warnings = const [],
+  });
+
+  factory OffboardingSettlement.fromJson(Map<String, dynamic> j) {
+    final slip = j['existingSlip'];
+    final slipMap = slip is Map<String, dynamic> ? slip : null;
+    return OffboardingSettlement(
+      year: (j['year'] as num?)?.toInt() ?? 0,
+      month: (j['month'] as num?)?.toInt() ?? 0,
+      daysInMonth: (j['daysInMonth'] as num?)?.toInt() ?? 0,
+      daysWorked: (j['daysWorked'] as num?)?.toInt() ?? 0,
+      baseSalary: _d(j['baseSalary']),
+      allowances: _d(j['allowances']),
+      proratedBase: _d(j['proratedBase']),
+      proratedAllowances: _d(j['proratedAllowances']),
+      amount: _d(j['amount']),
+      lastWorkingDay: j['lastWorkingDay']?.toString() ?? '',
+      payrollLocked: j['payrollLocked'] as bool? ?? false,
+      canCreateSlip: j['canCreateSlip'] as bool? ?? false,
+      existingSlipStatus: slipMap?['status'] as String?,
+      existingSlipNet: slipMap == null ? null : _d(slipMap['netAmount']),
+      warnings: ((j['warnings'] as List?) ?? const []).map((e) => e.toString()).toList(),
+    );
+  }
+}

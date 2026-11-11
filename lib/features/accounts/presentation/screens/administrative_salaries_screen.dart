@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/accounts/services/salary_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/payslip_download_button.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -283,12 +284,22 @@ class _AdministrativeSalariesScreenState
                   ),
                   16.h,
                   _buildSlipRow('Base Salary', _formatCurrency(salary.baseSalary)),
+                  _buildSlipRow('Incentives', '+ ${_formatCurrency(salary.incentives)}',
+                      color: Colors.green),
+                  _buildSlipRow('Room Rent', '+ ${_formatCurrency(salary.roomRent)}',
+                      color: Colors.green),
                   _buildSlipRow('Allowances', '+ ${_formatCurrency(salary.allowances)}',
                       color: Colors.green),
-                  _buildSlipRow('Bonus / Incentive', '+ ${_formatCurrency(salary.bonus)}',
+                  _buildSlipRow('Bonus', '+ ${_formatCurrency(salary.bonus)}',
                       color: Colors.green),
-                  _buildSlipRow('Deductions / Advances', '- ${_formatCurrency(salary.deductions)}',
-                      color: Colors.red),
+                  if ((salary.attendanceDeduction ?? 0) > 0) ...[
+                    _buildSlipRow('Attendance / Absence Deduction', '- ${_formatCurrency(salary.attendanceDeduction!.clamp(0, salary.deductions).toDouble())}',
+                        color: Colors.red),
+                    _buildSlipRow('Deductions / Advances', '- ${_formatCurrency((salary.deductions - salary.attendanceDeduction!.clamp(0, salary.deductions)).toDouble())}',
+                        color: Colors.red),
+                  ] else
+                    _buildSlipRow('Deductions / Advances', '- ${_formatCurrency(salary.deductions)}',
+                        color: Colors.red),
                   const Divider(height: 24),
                   _buildSlipRow(
                     'Net Payable Amount',
@@ -339,6 +350,7 @@ class _AdministrativeSalariesScreenState
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Close'),
             ),
+            PayslipDownloadButton(salary: salary),
           ],
         );
       },

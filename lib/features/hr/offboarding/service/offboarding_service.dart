@@ -23,12 +23,14 @@ class OffboardingService {
     required String employeeId,
     required String reason,
     DateTime? lastWorkingDay,
+    String notes = '',
   }) async {
     try {
       await _dio.post('/offboarding', data: {
         'employeeId': employeeId,
         'reason': reason,
         if (lastWorkingDay != null) 'lastWorkingDay': lastWorkingDay.toIso8601String(),
+        if (notes.trim().isNotEmpty) 'notes': notes.trim(),
       });
     } catch (e) {
       throw AppException(e, action: 'start offboarding');
@@ -42,6 +44,8 @@ class OffboardingService {
     bool? settlementPaid,
     bool? experienceLetterIssued,
     String? status,
+    String? notes,
+    bool forceComplete = false,
   }) async {
     try {
       final data = <String, dynamic>{};
@@ -50,9 +54,30 @@ class OffboardingService {
       if (settlementPaid != null) data['settlementPaid'] = settlementPaid;
       if (experienceLetterIssued != null) data['experienceLetterIssued'] = experienceLetterIssued;
       if (status != null) data['status'] = status;
+      if (notes != null) data['notes'] = notes;
+      if (forceComplete) data['forceComplete'] = true;
       await _dio.put('/offboarding/$id', data: data);
     } catch (e) {
       throw AppException(e, action: 'update offboarding');
+    }
+  }
+
+  /// Prorated final settlement for the exit month (no DB writes).
+  Future<OffboardingSettlement> getSettlement(String id) async {
+    try {
+      final res = await _dio.get('/offboarding/$id/settlement');
+      return OffboardingSettlement.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load final settlement');
+    }
+  }
+
+  /// Creates (or refreshes the draft) final salary slip for the exit month.
+  Future<void> createSettlementSlip(String id) async {
+    try {
+      await _dio.post('/offboarding/$id/settlement/slip');
+    } catch (e) {
+      throw AppException(e, action: 'create final salary slip');
     }
   }
 
@@ -70,3 +95,6 @@ final offboardingServiceProvider =
 
 final offboardingsProvider =
     FutureProvider<List<Offboarding>>((ref) => ref.watch(offboardingServiceProvider).getAll());
+
+final offboardingSettlementProvider = FutureProvider.autoDispose.family<OffboardingSettlement, String>(
+    (ref, id) => ref.watch(offboardingServiceProvider).getSettlement(id));

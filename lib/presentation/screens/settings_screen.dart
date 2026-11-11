@@ -258,6 +258,16 @@ class SettingsScreen extends HookConsumerWidget {
                                       ),
                                     ),
                                 ],
+                                // Closed field: dot + role name only; the
+                                // "N features" hint is shown in the open menu.
+                                selectedItemBuilder: (_) => [
+                                  for (final r in roles)
+                                    _RoleItem(
+                                      label: r.label,
+                                      sub: '',
+                                      color: _roleColor(r.key),
+                                    ),
+                                ],
                                 onChanged: (value) {
                                   if (value != null) {
                                     setState(() => role = value);
@@ -1512,20 +1522,24 @@ class _RoleItem extends StatelessWidget {
           margin: const EdgeInsets.only(right: 8),
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: label,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              TextSpan(
-                text: '  $sub',
-                style: const TextStyle(fontSize: 11, color: Colors.grey),
-              ),
-            ],
+        Flexible(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                if (sub.isNotEmpty)
+                  TextSpan(
+                    text: '  $sub',
+                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                  ),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

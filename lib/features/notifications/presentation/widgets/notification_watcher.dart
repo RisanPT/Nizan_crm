@@ -8,6 +8,7 @@ import '../../controllers/notification_providers.dart';
 import '../../data/app_notification.dart';
 import '../../services/web_notifier.dart';
 import '../../../../core/providers/auth_provider.dart';
+import '../../../../core/state/data_refresh.dart';
 import 'notification_toast.dart';
 
 /// Sits in the app shell and, while mounted, watches [liveNotificationsProvider]
@@ -109,6 +110,11 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
     // Keep the bell badge + inbox in sync with what we're popping.
     ref.invalidate(unreadCountProvider);
     ref.invalidate(notificationsProvider);
+    // A consultation was booked / moved / cancelled by someone else — refresh
+    // the calendar and lists so they match.
+    if (fresh.any((n) => n.type.startsWith('consultation_'))) {
+      ref.refreshData.consultations();
+    }
 
     // Only pop the newest few so a burst can't flood the screen.
     final toShow = fresh.length > 3 ? fresh.sublist(fresh.length - 3) : fresh;
@@ -155,6 +161,12 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
         return Icons.person_add_alt_1_rounded;
       case 'report_uploaded':
         return Icons.folder_shared_rounded;
+      case 'consultation_assigned':
+        return Icons.video_camera_front_rounded;
+      case 'consultation_changed':
+        return Icons.event_repeat_rounded;
+      case 'consultation_reminder':
+        return Icons.alarm_on_rounded;
       default:
         return Icons.notifications_active_rounded;
     }
