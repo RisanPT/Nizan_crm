@@ -399,7 +399,6 @@ class _AccountsCollectionsScreenState
   // ── Collections tab ───────────────────────────────────────────────────────
 
   Widget _collectionsTab(BuildContext context, CrmTheme crm) {
-    final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(financeCollectionsPageProvider(_query));
     if (async.hasValue) _last = async.value;
     final page = async.value ?? _last;

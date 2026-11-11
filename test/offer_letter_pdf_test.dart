@@ -37,7 +37,7 @@ void main() {
     }
     final outFile = File('${testOutDir.path}/test_salmanul_offer.pdf');
     await outFile.writeAsBytes(pdfBytes);
-    log('Saved test PDF to: ${outFile.path}');
+    print('Saved test PDF to: ${outFile.path}');
   });
 
   test('Generates offer letter with HRA and incentive', () async {

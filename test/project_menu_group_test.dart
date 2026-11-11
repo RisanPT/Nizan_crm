@@ -36,6 +36,7 @@ Future<GoRouter> _pump(WidgetTester tester, AuthSession session) async {
                   hrExpanded: false, hrUserCollapsed: false, onHrExpandToggle: (_) {},
                   financeExpanded: false, financeUserCollapsed: false, onFinanceExpandToggle: (_) {},
                   itExpanded: false, itUserCollapsed: false, onItExpandToggle: (_) {},
+                  stylistExpanded: false, stylistUserCollapsed: false, onStylistExpandToggle: (_) {},
                   marketingExpanded: false, marketingUserCollapsed: false, onMarketingExpandToggle: (_) {},
                   contentExpanded: false, contentUserCollapsed: false, onContentExpandToggle: (_) {},
                 ),
