@@ -109,13 +109,14 @@ class _FakeExpenseService extends ExpenseService {
     required String category,
     required double amount,
     required DateTime date,
+    DateTime? eventDate,
     String notes = '',
     String receiptImage = '',
     String workType = 'bridal',
     String meal = '',
     List<String> meals = const [],
   }) async {
-    created.add({'employeeId': employeeId, 'bookingId': bookingId, 'category': category, 'amount': amount, 'date': date, 'workType': workType, 'meal': meal, 'meals': meals});
+    created.add({'employeeId': employeeId, 'bookingId': bookingId, 'category': category, 'amount': amount, 'date': date, 'eventDate': eventDate, 'workType': workType, 'meal': meal, 'meals': meals});
     return _echo();
   }
 
@@ -126,13 +127,15 @@ class _FakeExpenseService extends ExpenseService {
     String? category,
     double? amount,
     DateTime? date,
+    DateTime? eventDate,
+    bool clearEventDate = false,
     String? notes,
     String? receiptImage,
     String? workType,
     String? meal,
     List<String>? meals,
   }) async {
-    updated.add({'id': id, 'bookingId': bookingId, 'category': category, 'amount': amount, 'date': date, 'meal': meal, 'meals': meals});
+    updated.add({'id': id, 'bookingId': bookingId, 'category': category, 'amount': amount, 'date': date, 'eventDate': eventDate, 'clearEventDate': clearEventDate, 'meal': meal, 'meals': meals});
     return _echo();
   }
 }
