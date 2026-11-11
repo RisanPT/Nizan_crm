@@ -170,14 +170,15 @@ class Access {
   bool get canSeeServices => has('services', role.canSeeServices);
   bool get canSeeStaff => has('staff', role.canSeeStaff);
   bool get canSeeSales => has('sales', role.canSeeSales);
-  bool get canSeeFinance => has('finance', role.canSeeFinance);
+  bool get canSeeFinance => isFullAccess || isCeo || has('finance', role.canSeeFinance);
   // isFullAccess bypass so a brand-new section is never invisible to admin /
   // manager before the `company_finance` key has been granted to their role.
   bool get canSeeCompanyFinance =>
-      isFullAccess || has('company_finance', role.canSeeCompanyFinance);
+      isFullAccess || isCeo || has('company_finance', role.canSeeCompanyFinance);
   bool get canSeeCompanyReports =>
-      isFullAccess || has('company_reports', role.canSeeCompanyReports);
-  bool get canSeePayables => has('payables', role.canSeePayables);
+      isFullAccess || isCeo || has('company_reports', role.canSeeCompanyReports);
+  bool get canSeePayables =>
+      isFullAccess || isCeo || has('payables', role.canSeePayables);
 
   /// Finance Head dashboard — the finance_head role, or full-access management.
   bool get canSeeFinanceHeadDashboard =>
