@@ -88,6 +88,7 @@ import 'package:nizan_crm/features/finance/controllers/sales_report_provider.dar
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart' as bank;
 import 'package:nizan_crm/features/finance/services/month_end_service.dart';
 import 'package:nizan_crm/features/finance/services/tax_filing_service.dart';
+import 'package:nizan_crm/features/ceo/services/ceo_service.dart' show ceoInboxProvider;
 
 // Fleet / HR / org / inventory
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
@@ -397,6 +398,7 @@ class DataRefresh {
         decisionsProvider,
         openDecisionsProvider,
         departmentReportProvider,
+        ceoInboxProvider,
       ]);
 
   // ── Fleet ────────────────────────────────────────────────────────────────

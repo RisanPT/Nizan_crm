@@ -14,7 +14,7 @@ class MonthEndService {
     try {
       final res = await _dio.get('/reports/month-end',
           queryParameters: {'month': month, 'year': year});
-      return MonthEndReview.fromJson(res.data as Map<String, dynamic>);
+      return MonthEndReview.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'load the month-end review');
     }
@@ -24,7 +24,7 @@ class MonthEndService {
     try {
       final res = await _dio.get('/reports/targets',
           queryParameters: {'month': month, 'year': year});
-      return MonthlyTarget.fromJson(res.data as Map<String, dynamic>);
+      return MonthlyTarget.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'load targets');
     }
@@ -33,7 +33,7 @@ class MonthEndService {
   Future<MonthlyTarget> saveTarget(MonthlyTarget target) async {
     try {
       final res = await _dio.put('/reports/targets', data: target.toJson());
-      return MonthlyTarget.fromJson(res.data as Map<String, dynamic>);
+      return MonthlyTarget.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'save targets');
     }
@@ -47,7 +47,7 @@ class MonthEndService {
         if (!openOnly && month != null) 'month': month,
         if (!openOnly && year != null) 'year': year,
       });
-      return (res.data as List).map((e) => CeoDecision.fromJson(e as Map<String, dynamic>)).toList();
+      return (res.data as List).map((e) => CeoDecision.fromJson(Map<String, dynamic>.from(e as Map))).toList();
     } catch (e) {
       throw AppException(e, action: 'load decisions');
     }
@@ -58,7 +58,7 @@ class MonthEndService {
       final res = d.id.isEmpty
           ? await _dio.post('/reports/decisions', data: d.toJson())
           : await _dio.put('/reports/decisions/${d.id}', data: d.toJson());
-      return CeoDecision.fromJson(res.data as Map<String, dynamic>);
+      return CeoDecision.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'save decision');
     }
@@ -76,7 +76,7 @@ class MonthEndService {
   Future<List<DeptInfo>> listDepartments() async {
     try {
       final res = await _dio.get('/reports/departments');
-      return (res.data as List).map((e) => DeptInfo.fromJson(e as Map<String, dynamic>)).toList();
+      return (res.data as List).map((e) => DeptInfo.fromJson(Map<String, dynamic>.from(e as Map))).toList();
     } catch (e) {
       throw AppException(e, action: 'load departments');
     }
@@ -86,7 +86,7 @@ class MonthEndService {
     try {
       final res = await _dio.get('/reports/department/$dept',
           queryParameters: {'month': month, 'year': year});
-      return DeptReport.fromJson(res.data as Map<String, dynamic>);
+      return DeptReport.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'load the report');
     }

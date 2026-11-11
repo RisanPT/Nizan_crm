@@ -1053,7 +1053,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/ceo/decisions',
-            builder: (context, state) => const CeoDecisionsScreen(),
+            builder: (context, state) => CeoDecisionsScreen(
+              initialOpenOnly: state.uri.queryParameters['open'] == 'true' || state.uri.path == '/ceo/decisions',
+            ),
           ),
           GoRoute(
             path: '/artist-head',
@@ -1753,7 +1755,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/company-finance/decisions',
-            builder: (context, state) => const CeoDecisionsScreen(),
+            builder: (context, state) => CeoDecisionsScreen(
+              initialOpenOnly: state.uri.queryParameters['open'] == 'true',
+            ),
           ),
           GoRoute(
             path: '/company-finance/glossary',

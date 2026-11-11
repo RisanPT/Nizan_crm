@@ -19,7 +19,9 @@ String _money(num v) =>
 /// (cost/hiring/CapEx/investment), strategic calls, and assigned action items
 /// with an owner, deadline and status — the accountability layer of the review.
 class CeoDecisionsScreen extends ConsumerStatefulWidget {
-  const CeoDecisionsScreen({super.key});
+  const CeoDecisionsScreen({super.key, this.initialOpenOnly});
+
+  final bool? initialOpenOnly;
 
   @override
   ConsumerState<CeoDecisionsScreen> createState() => _CeoDecisionsScreenState();
@@ -28,7 +30,7 @@ class CeoDecisionsScreen extends ConsumerStatefulWidget {
 class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
   late int _month;
   late int _year;
-  bool _openOnly = false;
+  late bool _openOnly;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
     final now = DateTime.now();
     _month = now.month;
     _year = now.year;
+    _openOnly = widget.initialOpenOnly ?? false;
   }
 
   Period get _key => (month: _month, year: _year);
