@@ -152,6 +152,7 @@ String _fromDio(DioException e, String generic) {
     case DioExceptionType.connectionTimeout:
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
+    case DioExceptionType.transformTimeout:
       return _timeoutMsg;
     case DioExceptionType.connectionError:
       return _offlineMsg;
@@ -242,6 +243,10 @@ bool isOfflineError(Object? error) {
   if (e == null) return false;
   return _kindFromText(e.toString()) != _Kind.other;
 }
+
+/// The HTTP status the server answered with (null when it never answered), so the UI
+/// can react to a specific refusal — e.g. 409 "someone else changed this".
+int? httpStatusOf(Object? error) => _statusOf(error);
 
 int? _statusOf(Object? error) {
   final e = _root(error);

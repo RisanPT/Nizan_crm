@@ -1469,6 +1469,7 @@ String _initials(String name) {
 
 String _roleLabel(String key) {
   const known = {
+    'ceo': 'CEO',
     'admin': 'Admin',
     'manager': 'Manager',
     'crm': 'CRM',
@@ -1538,6 +1539,7 @@ class _RoleBadge extends StatelessWidget {
   final String role;
 
   static const _meta = {
+    'ceo': ('CEO', Colors.brown),
     'admin': ('Admin', Colors.deepPurple),
     'manager': ('Manager', Colors.indigo),
     'crm': ('CRM', Colors.blue),
@@ -1576,6 +1578,7 @@ class _RoleBadge extends StatelessWidget {
 /// custom roles get a deterministic one derived from the key.
 Color _roleColor(String key) {
   const known = {
+    'ceo': Colors.brown,
     'admin': Colors.deepPurple,
     'manager': Colors.indigo,
     'crm': Colors.blue,

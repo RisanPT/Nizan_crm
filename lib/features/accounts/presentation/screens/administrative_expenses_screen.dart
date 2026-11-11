@@ -12,6 +12,9 @@ import 'package:nizan_crm/features/accounts/data/admin_expense.dart';
 import 'package:nizan_crm/core/providers/my_department_provider.dart';
 import 'package:nizan_crm/features/accounts/data/expense_category.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/manage_expense_categories_dialog.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/manage_expense_heads_dialog.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/project_charge_widgets.dart';
+import 'package:nizan_crm/features/it/data/project_spend.dart';
 import 'package:nizan_crm/features/accounts/services/expense_category_service.dart';
 import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_widgets.dart';
 import 'package:nizan_crm/services/employee_service.dart';
@@ -233,7 +236,17 @@ class _AdministrativeExpensesScreenState
     }
     try {
       final service = ref.read(adminExpenseServiceProvider);
-      await service.verifyAdminExpense(expense.id, status, money: money);
+      try {
+        await service.verifyAdminExpense(expense.id, status, money: money);
+      } catch (e) {
+        // Taking its project past the budget the finance head approved: only the finance head may approve it, and says why.
+        final over = OverBudgetRefusal.of(e);
+        if (over == null) rethrow;
+        if (!mounted) return;
+        final reason = await showOverBudgetDialog(context, over);
+        if (reason == null) return;
+        await service.verifyAdminExpense(expense.id, status, money: money, overBudgetReason: reason);
+      }
       ref.refreshData.expenses();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -320,6 +333,15 @@ class _AdministrativeExpensesScreenState
         ),
       );
     }
+
+    // Accounts / admin manage the expense heads (add, rename, archive, delete).
+    void openManageHeads() {
+      showDialog(context: context, builder: (_) => const ManageExpenseHeadsDialog());
+    }
+
+    // The live heads name each expense — heads Accounts added are not in the built-in list, and an
+    // archived one still names the expenses filed under it (Accounts see those through ?all=1).
+    final liveHeads = (canVerify ? ref.watch(allExpenseHeadsProvider) : ref.watch(expenseHeadsProvider)).value ?? kExpenseHeads;
 
     // Category options for the filter — the managed categories of the single
     // department in context, else the default seed set. The active filter value
@@ -409,6 +431,29 @@ class _AdministrativeExpensesScreenState
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
+                  if (canVerify) ...[
+                    const SizedBox(width: 10),
+                    OutlinedButton.icon(
+                      key: const Key('manage_heads'),
+                      onPressed: openManageHeads,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: crm.primary,
+                        side: BorderSide(color: crm.primary.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.account_tree_outlined, size: 18),
+                      label: const Text(
+                        'Heads',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                   const SizedBox(width: 10),
                   FilledButton.icon(
                     onPressed: () => _showAddEditExpenseDialog(),
@@ -466,6 +511,26 @@ class _AdministrativeExpensesScreenState
                   ),
                 ],
               ),
+              if (canVerify) ...[
+                8.h,
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    key: const Key('manage_heads_mobile'),
+                    onPressed: openManageHeads,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: crm.primary,
+                      side: BorderSide(color: crm.primary.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    icon: const Icon(Icons.account_tree_outlined, size: 18),
+                    label: const Text('Manage expense heads'),
+                  ),
+                ),
+              ],
             ],
 
             16.h,
@@ -807,7 +872,7 @@ class _AdministrativeExpensesScreenState
                                                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: crm.primary)),
                                           ),
                                         Text(
-                                          exp.headLabel,
+                                          exp.headLabelIn(liveHeads),
                                           style: TextStyle(
                                             fontSize: 12.5,
                                             color: crm.textSecondary,
@@ -863,6 +928,14 @@ class _AdministrativeExpensesScreenState
                                             Icon(Icons.sell_outlined, size: 14, color: crm.accent),
                                             4.w,
                                             Text(exp.costTag, style: TextStyle(fontSize: 12.5, color: crm.accent, fontWeight: FontWeight.w600)),
+                                          ]),
+                                        ],
+                                        if (exp.hasProject) ...[
+                                          Text('•', style: TextStyle(color: crm.textSecondary)),
+                                          Row(mainAxisSize: MainAxisSize.min, children: [
+                                            Icon(Icons.hub_outlined, size: 14, color: crm.primary),
+                                            4.w,
+                                            Text(exp.projectName, key: Key('exp_project_${exp.id}'), style: TextStyle(fontSize: 12.5, color: crm.primary, fontWeight: FontWeight.w600)),
                                           ]),
                                         ],
                                         if (exp.isRecurring) ...[
@@ -1039,6 +1112,8 @@ class _AddEditAdminExpenseDialogState
   late DateTime _selectedDate;
   String? _selectedEmployeeId;
   String? _selectedHead;
+  // The project it is charged to (optional).
+  String? _projectId;
   bool _isRecurring = false;
   String _gstType = 'none';
   bool _isSubmitting = false;
@@ -1071,6 +1146,7 @@ class _AddEditAdminExpenseDialogState
     _selectedDate = e?.date ?? DateTime.now();
     _selectedEmployeeId = e?.paidBy?.id;
     _selectedHead = (e?.expenseHead.isNotEmpty ?? false) ? e!.expenseHead : null;
+    _projectId = (e?.hasProject ?? false) ? e!.projectId : null;
     _isRecurring = e?.isRecurring ?? false;
     _gstType = e?.gstType ?? 'none';
   }
@@ -1115,12 +1191,25 @@ class _AddEditAdminExpenseDialogState
         'receiptImage': _receiptCtrl.text.trim(),
         'invoiceNumber': _invoiceCtrl.text.trim(),
         'notes': _notesCtrl.text.trim(),
+        // charged to a project (or taken off the one it was on)
+        if (_projectId != null) 'projectId': _projectId else if (widget.expense?.hasProject ?? false) 'projectId': null,
       };
 
-      if (widget.expense == null) {
-        await service.createAdminExpense(payload);
-      } else {
-        await service.updateAdminExpense(widget.expense!.id, payload);
+      Future<AdminExpense> send(Map<String, dynamic> body) =>
+          widget.expense == null ? service.createAdminExpense(body) : service.updateAdminExpense(widget.expense!.id, body);
+      AdminExpense saved;
+      try {
+        saved = await send(payload);
+      } catch (e) {
+        // Over the budget the finance head approved: Accounts is told; the finance head says why and it goes through.
+        final over = OverBudgetRefusal.of(e);
+        if (over == null) rethrow;
+        if (!mounted) return;
+        setState(() => _isSubmitting = false); // not "saving" while the question is asked
+        final reason = await showOverBudgetDialog(context, over);
+        if (reason == null || !mounted) return;
+        setState(() => _isSubmitting = true);
+        saved = await send({...payload, 'overBudgetReason': reason});
       }
 
       if (mounted) ref.refreshData.expenses();
@@ -1130,9 +1219,8 @@ class _AddEditAdminExpenseDialogState
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              widget.expense == null
-                  ? 'Expense recorded successfully'
-                  : 'Expense updated successfully',
+              '${widget.expense == null ? 'Expense recorded successfully' : 'Expense updated successfully'}'
+              '${saved.budgetWarning == null ? '' : '. ${saved.budgetWarning}'}',
             ),
           ),
         );
@@ -1336,7 +1424,13 @@ class _AddEditAdminExpenseDialogState
                   initialValue: _selectedHead,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Expense Head *'),
-                  items: _heads
+                  // An expense filed under a head that was archived since still shows it (and can keep it),
+                  // so the dropdown never holds a value that is not one of its items.
+                  items: [
+                    ..._heads,
+                    if (_selectedHead != null && _selectedHead!.isNotEmpty && !_heads.any((h) => h.code == _selectedHead))
+                      ExpenseHead(_selectedHead!, headIn(ref.read(allExpenseHeadsProvider).value ?? const [], _selectedHead)?.label ?? 'Archived head', ''),
+                  ]
                       .map((h) => DropdownMenuItem(
                             value: h.code,
                             child: Text(h.display, overflow: TextOverflow.ellipsis),
@@ -1379,6 +1473,15 @@ class _AddEditAdminExpenseDialogState
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? 'Vendor / payee is required'
                       : null,
+                ),
+                12.h,
+
+                // Charged to a project: counts against the cost its finance head approved.
+                ProjectChargeField(
+                  selectedId: _projectId,
+                  amount: double.tryParse(_amountCtrl.text.trim()) ?? 0,
+                  keepName: (widget.expense?.hasProject ?? false) ? (id: widget.expense!.projectId, name: widget.expense!.projectName) : null,
+                  onChanged: (v) => setState(() => _projectId = v),
                 ),
                 12.h,
 

@@ -720,7 +720,7 @@ class _CompleteOnboardingDialogState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _department,
+                  initialValue: _department,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Department *',
@@ -753,7 +753,7 @@ class _CompleteOnboardingDialogState
             data: (staff) {
               final activeStaff = staff.where((s) => s.id != widget.employee?.id).toList();
               return DropdownButtonFormField<String?>(
-                value: activeStaff.any((s) => s.id == _reportingManagerId)
+                initialValue: activeStaff.any((s) => s.id == _reportingManagerId)
                     ? _reportingManagerId
                     : null,
                 isExpanded: true,
@@ -778,7 +778,7 @@ class _CompleteOnboardingDialogState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _currentGrade,
+                  initialValue: _currentGrade,
                   decoration: const InputDecoration(
                     labelText: 'Grade Level',
                     prefixIcon: Icon(Icons.grade_outlined, size: 18),
@@ -795,7 +795,7 @@ class _CompleteOnboardingDialogState
               const SizedBox(width: 14),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _type,
+                  initialValue: _type,
                   decoration: const InputDecoration(
                     labelText: 'Employment Contract',
                     prefixIcon: Icon(Icons.assignment_ind_outlined, size: 18),
@@ -815,7 +815,7 @@ class _CompleteOnboardingDialogState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _employmentStatus,
+                  initialValue: _employmentStatus,
                   decoration: const InputDecoration(
                     labelText: 'Probation / Confirmation Status',
                     prefixIcon: Icon(Icons.verified_user_outlined, size: 18),
@@ -831,7 +831,7 @@ class _CompleteOnboardingDialogState
               const SizedBox(width: 14),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  value: _status,
+                  initialValue: _status,
                   decoration: const InputDecoration(
                     labelText: 'Account Status',
                     prefixIcon: Icon(Icons.toggle_on_outlined, size: 18),
@@ -927,7 +927,7 @@ class _CompleteOnboardingDialogState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DropdownButtonFormField<String>(
-            value: _salaryType,
+            initialValue: _salaryType,
             decoration: const InputDecoration(
               labelText: 'Payroll Model',
               prefixIcon: Icon(Icons.payments_outlined, size: 18),
@@ -1017,7 +1017,7 @@ class _CompleteOnboardingDialogState
               Expanded(
                 flex: 1,
                 child: DropdownButtonFormField<int>(
-                  value: _hraDay,
+                  initialValue: _hraDay,
                   decoration: const InputDecoration(
                     labelText: 'HRA Due Day',
                     prefixIcon: Icon(Icons.calendar_month_outlined, size: 18),

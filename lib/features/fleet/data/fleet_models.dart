@@ -53,14 +53,15 @@ extension FleetJobX on FleetJob {
 
 /// "12,345" / "12,345.5" — odometer readings for display.
 String formatKm(double km) {
-  final whole = km.truncate();
+  final rounded = (km * 10).round() / 10; // 99.96 → 100, not "99.10"
+  final whole = rounded.truncate();
   final digits = whole.toString();
   final buf = StringBuffer();
   for (var i = 0; i < digits.length; i++) {
     if (i > 0 && (digits.length - i) % 3 == 0) buf.write(',');
     buf.write(digits[i]);
   }
-  final frac = ((km - whole) * 10).round();
+  final frac = ((rounded - whole) * 10).round();
   return frac == 0 ? buf.toString() : '$buf.$frac';
 }
 

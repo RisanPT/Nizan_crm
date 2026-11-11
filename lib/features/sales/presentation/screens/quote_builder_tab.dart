@@ -382,6 +382,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   final _advance = TextEditingController(text: '0');
   final _notes = TextEditingController(text: _defaultNote);
   final _sheetKey = GlobalKey();
+  final _pdfSheetKey = GlobalKey();
 
   DateTime? _date;
   String _event = _events.first;
@@ -786,11 +787,19 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     return 'Quote_${q.no}${safeName.isEmpty ? '' : '_$safeName'}.pdf';
   }
 
-  /// The quote sheet as shown on screen, as a one-page PDF. Shared by
-  /// "Download PDF" and the WhatsApp (TeamN Chat) buttons.
+  /// The quote sheet as a one-page PDF. Shared by "Download PDF" and the
+  /// WhatsApp (TeamN Chat) buttons. Always captures a full-width (820px)
+  /// document sheet so that tables and columns are never cut off on mobile.
   Future<Uint8List> _quotePdfBytes() async {
-    final boundary = _sheetKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) throw StateError('The quote sheet is not on screen');
+    final renderObject = _pdfSheetKey.currentContext?.findRenderObject()
+        ?? _sheetKey.currentContext?.findRenderObject();
+    final boundary = renderObject as RenderRepaintBoundary?;
+    if (boundary == null) throw StateError('The quote sheet is not ready');
+
+    if (WidgetsBinding.instance.hasScheduledFrame) {
+      await WidgetsBinding.instance.endOfFrame;
+    }
+
     final image = await boundary.toImage(pixelRatio: 2.5);
     final bytes = (await image.toByteData(format: ui.ImageByteFormat.png))!.buffer.asUint8List();
     final doc = pw.Document();
@@ -804,7 +813,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   }
 
   Future<void> _downloadPdf(_Quote q) async {
-    if (_sheetKey.currentContext == null) return;
+    if (_sheetKey.currentContext == null && _pdfSheetKey.currentContext == null) return;
     setState(() => _busyPdf = true);
     try {
       await Printing.sharePdf(bytes: await _quotePdfBytes(), filename: _quotePdfName(q));
@@ -990,6 +999,20 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
                     ),
                   ),
                 ),
+              // Offscreen full-width (820px) quote sheet for PDF generation.
+              // Guarantees that PDFs sent on WhatsApp or downloaded on mobile
+              // have complete, un-clipped details and tables with all columns.
+              Positioned(
+                left: -99999,
+                top: 0,
+                child: SizedBox(
+                  width: 820,
+                  child: RepaintBoundary(
+                    key: _pdfSheetKey,
+                    child: _QuoteSheet(q: q, forPdf: true),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -2048,22 +2071,25 @@ class _PriceListDialogState extends State<_PriceListDialog> {
 // ─────────────────────────────────────────────────────────────────────────
 class _QuoteSheet extends StatelessWidget {
   final _Quote q;
-  const _QuoteSheet({required this.q});
+  final bool forPdf;
+  const _QuoteSheet({required this.q, this.forPdf = false});
 
   @override
   Widget build(BuildContext context) {
     final display = GoogleFonts.italiana();
     return LayoutBuilder(builder: (context, c) {
-      final narrow = c.maxWidth < 600;
+      final narrow = forPdf ? false : c.maxWidth < 600;
       return Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: const Color(0xFFFFFDFA),
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: const [
-            BoxShadow(color: Color(0x0F3C141E), blurRadius: 2, offset: Offset(0, 1)),
-            BoxShadow(color: Color(0x143C141E), blurRadius: 32, offset: Offset(0, 12)),
-          ],
+          borderRadius: forPdf ? BorderRadius.zero : BorderRadius.circular(14),
+          boxShadow: forPdf
+              ? null
+              : const [
+                  BoxShadow(color: Color(0x0F3C141E), blurRadius: 2, offset: Offset(0, 1)),
+                  BoxShadow(color: Color(0x143C141E), blurRadius: 32, offset: Offset(0, 12)),
+                ],
         ),
         child: DefaultTextStyle(
           style: GoogleFonts.archivo(fontSize: 14, height: 1.5, color: _sFg),
@@ -2093,7 +2119,7 @@ class _QuoteSheet extends StatelessWidget {
                       )
                     else ...[
                       _title(display, 'Bridal Makeup Packages', 'Choose the experience that suits your style'),
-                      _cards(display, c.maxWidth < 760),
+                      _cards(display, forPdf ? false : c.maxWidth < 760),
                     ],
                     if (_featureRows().isNotEmpty) ...[
                       const SizedBox(height: 28),
@@ -2409,7 +2435,7 @@ class _QuoteSheet extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(border: Border.all(color: _sLine), borderRadius: BorderRadius.circular(12)),
       child: LayoutBuilder(builder: (context, c) {
-        if (c.maxWidth >= minWidth) return table;
+        if (forPdf || c.maxWidth >= minWidth) return table;
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(width: minWidth, child: table),

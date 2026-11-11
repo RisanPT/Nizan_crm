@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
+import 'package:intl/intl.dart';
+import 'package:nizan_crm/core/models/crm_user.dart';
 import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/features/fleet/data/driver_login.dart';
 import 'package:nizan_crm/core/models/service_region.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
@@ -11,6 +14,7 @@ import 'package:nizan_crm/services/region_service.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/driver_login_widgets.dart';
 import 'package:nizan_crm/presentation/screens/staff_details_screen.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
@@ -27,6 +31,13 @@ class FleetDriversScreen extends HookConsumerWidget {
     const pageSize = 20;
     final asyncEmployees = ref.watch(employeesProvider);
     final asyncRegions = ref.watch(regionsProvider);
+    // Each driver's app login (and, for a temporary one, when it ends).
+    final loginUsers = <String, CrmUser>{
+      for (final u in ref.watch(crmUsersProvider).value ?? const <CrmUser>[])
+        if (u.role == 'driver' && u.employeeId.isNotEmpty) u.employeeId: u,
+    };
+    final now = DateTime.now();
+    DriverLogin loginOf(Employee e) => DriverLogin.of(loginUsers[e.id], now);
 
     Future<void> openDriverDialog([Employee? driver]) async {
       final messenger = ScaffoldMessenger.of(context);
@@ -53,6 +64,10 @@ class FleetDriversScreen extends HookConsumerWidget {
         status = 'active';
       }
       var regionId = driver?.regionId ?? '';
+      // An outsourced driver's login is usually temporary: it ends on a date, so the fleet
+      // manager doesn't have to remember to switch it off. In-house drivers keep a permanent one.
+      var temporaryLogin = type == 'outsource';
+      var loginUntil = loginEndAfter(7);
 
       await showDialog(
         context: context,
@@ -89,11 +104,11 @@ class FleetDriversScreen extends HookConsumerWidget {
                         keyboardType: TextInputType.emailAddress,
                         decoration: InputDecoration(
                           labelText: createLogin
-                              ? 'Login email (required)'
+                              ? 'Login email (optional if they have a phone)'
                               : 'Email (Optional)',
                           prefixIcon: const Icon(Icons.email_outlined),
                           helperText: createLogin
-                              ? 'The driver signs in with this email'
+                              ? 'No email? Leave blank — they sign in with their mobile number'
                               : null,
                         ),
                       ),
@@ -115,7 +130,13 @@ class FleetDriversScreen extends HookConsumerWidget {
                                 ),
                               ],
                               onChanged: (value) {
-                                if (value != null) setState(() => type = value);
+                                if (value == null) return;
+                                setState(() {
+                                  type = value;
+                                  if (driver == null) {
+                                    temporaryLogin = value == 'outsource';
+                                  }
+                                });
                               },
                               decoration: const InputDecoration(
                                 labelText: 'Type',
@@ -169,7 +190,12 @@ class FleetDriversScreen extends HookConsumerWidget {
                         onChanged: (value) {
                           if (value != null) setState(() => status = value);
                         },
-                        decoration: const InputDecoration(labelText: 'Status'),
+                        decoration: InputDecoration(
+                          labelText: 'Status',
+                          helperText: status == 'inactive'
+                              ? "An inactive driver can't sign in to the app"
+                              : null,
+                        ),
                       ),
                       16.h,
                       // ── App login access ─────────────────────────────
@@ -179,7 +205,10 @@ class FleetDriversScreen extends HookConsumerWidget {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: crmColors.border),
                         ),
-                        child: Column(
+                        // Material so the switch rows paint their ink on it, not under the tinted box.
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: Column(
                           children: [
                             SwitchListTile(
                               value: createLogin,
@@ -209,11 +238,42 @@ class FleetDriversScreen extends HookConsumerWidget {
                                     labelText: 'Login password (min 6 chars)',
                                     prefixIcon: Icon(Icons.lock_outline),
                                     helperText:
-                                        'Driver signs in with the email above',
+                                        'Driver signs in with the email above, or their mobile number',
                                   ),
                                 ),
                               ),
+                            if (createLogin)
+                              SwitchListTile(
+                                value: temporaryLogin,
+                                onChanged: savingDriver
+                                    ? null
+                                    : (v) => setState(() => temporaryLogin = v),
+                                title: const Text('Temporary login',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600)),
+                                subtitle: Text(
+                                    temporaryLogin
+                                        ? 'Stops working after ${DateFormat('d MMM yyyy').format(loginUntil)}'
+                                        : 'Works until you switch it off',
+                                    style: TextStyle(
+                                        fontSize: 11.5,
+                                        color: crmColors.textSecondary)),
+                                contentPadding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                            if (createLogin && temporaryLogin)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                                child: LoginEndPicker(
+                                  value: loginUntil,
+                                  onChanged: (d) =>
+                                      setState(() => loginUntil = d),
+                                ),
+                              ),
                           ],
+                        ),
                         ),
                       ),
                     ],
@@ -238,11 +298,23 @@ class FleetDriversScreen extends HookConsumerWidget {
                             );
                             return;
                           }
-                          if (createLogin && email.isEmpty) {
+                          final loginId = loginIdFor(
+                              email: email, phone: phoneCtrl.text);
+                          if (createLogin && loginId == null) {
                             ScaffoldMessenger.of(dialogContext).showSnackBar(
                               const SnackBar(
                                   content: Text(
-                                      'Add a login email — the driver signs in with it.')),
+                                      'Add a login email, or a mobile number if they have no email — the driver signs in with it.')),
+                            );
+                            return;
+                          }
+                          if (createLogin &&
+                              email.isNotEmpty &&
+                              !isLoginId(email)) {
+                            ScaffoldMessenger.of(dialogContext).showSnackBar(
+                              const SnackBar(
+                                  content: Text(
+                                      'That email does not look right. Fix it, or clear it to use the mobile number.')),
                             );
                             return;
                           }
@@ -281,8 +353,12 @@ class FleetDriversScreen extends HookConsumerWidget {
                                     .grantDriverLogin(
                                       name: nameCtrl.text.trim(),
                                       email: email,
+                                      phone: phoneCtrl.text.trim(),
                                       password: password,
                                       employeeId: emp.id,
+                                      expiresOn: temporaryLogin
+                                          ? loginDayParam(loginUntil)
+                                          : null,
                                     );
                               } catch (e) {
                                 loginError = friendlyErrorMessage(e);
@@ -313,7 +389,8 @@ class FleetDriversScreen extends HookConsumerWidget {
                               messenger.showSnackBar(
                                 SnackBar(
                                   content: Text(createLogin
-                                      ? 'Driver added with login access.'
+                                      ? 'Driver saved. They sign in with ${loginId ?? email}'
+                                          '${temporaryLogin ? ', until ${DateFormat('d MMM').format(loginUntil)}' : ''}.'
                                       : 'Driver saved.'),
                                 ),
                               );
@@ -397,6 +474,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                             context,
                             ref,
                             drivers[index],
+                            login: loginOf(drivers[index]),
                             onEdit: () => openDriverDialog(drivers[index]),
                           ),
                         ),
@@ -557,6 +635,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                       context,
                       ref,
                       drivers[index],
+                      login: loginOf(drivers[index]),
                       onEdit: () => openDriverDialog(drivers[index]),
                     );
                   },
@@ -568,7 +647,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                   crossAxisCount: 3,
                   mainAxisSpacing: 16,
                   crossAxisSpacing: 16,
-                  mainAxisExtent: 190,
+                  mainAxisExtent: 220,
                 ),
                 itemCount: drivers.length,
                 itemBuilder: (context, index) {
@@ -576,6 +655,7 @@ class FleetDriversScreen extends HookConsumerWidget {
                     context,
                     ref,
                     drivers[index],
+                    login: loginOf(drivers[index]),
                     onEdit: () => openDriverDialog(drivers[index]),
                   );
                 },
@@ -623,6 +703,7 @@ class FleetDriversScreen extends HookConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     Employee employee, {
+    required DriverLogin login,
     required VoidCallback onEdit,
   }) {
     final theme = Theme.of(context);
@@ -743,6 +824,10 @@ class FleetDriversScreen extends HookConsumerWidget {
                     onSelected: (value) async {
                       if (value == 'edit') {
                         onEdit();
+                      } else if (value == 'renew') {
+                        await showRenewLoginDialog(context, ref, employee, login);
+                      } else if (value == 'end') {
+                        await endLoginNow(context, ref, employee);
                       } else if (value == 'delete') {
                         final confirm = await showDialog<bool>(
                           context: context,
@@ -797,6 +882,33 @@ class FleetDriversScreen extends HookConsumerWidget {
                           ],
                         ),
                       ),
+                      // Renewing a login of an inactive driver would only be undone by
+                      // their status — set the driver Active (Edit) to reopen it.
+                      if (login.hasLogin && isActive)
+                        PopupMenuItem(
+                          value: 'renew',
+                          child: Row(
+                            children: [
+                              const Icon(Icons.event_repeat_rounded, size: 16),
+                              const SizedBox(width: 8),
+                              Text(login.canSignIn
+                                  ? 'Change end date'
+                                  : 'Renew login'),
+                            ],
+                          ),
+                        ),
+                      if (login.canSignIn)
+                        PopupMenuItem(
+                          value: 'end',
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock_clock_outlined,
+                                  size: 16, color: crmColors.destructive),
+                              const SizedBox(width: 8),
+                              const Text('End login now'),
+                            ],
+                          ),
+                        ),
                       PopupMenuItem(
                         value: 'delete',
                         child: Row(
@@ -863,6 +975,31 @@ class FleetDriversScreen extends HookConsumerWidget {
                 ),
                 6.h,
               ],
+              Row(
+                children: [
+                  Icon(
+                    login.canSignIn
+                        ? Icons.key_rounded
+                        : Icons.key_off_outlined,
+                    size: 14,
+                    color: loginColor(crmColors, login),
+                  ),
+                  6.w,
+                  Expanded(
+                    child: Text(
+                      login.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: loginColor(crmColors, login),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              6.h,
               Row(
                 children: [
                   Icon(

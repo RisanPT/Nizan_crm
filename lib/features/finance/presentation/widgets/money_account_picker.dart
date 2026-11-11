@@ -13,12 +13,19 @@ class MoneyChoice {
   final String moneyAccountId;
   final String paymentMode;
   final String paymentRef;
-  const MoneyChoice({required this.moneyAccountId, required this.paymentMode, this.paymentRef = ''});
+  final DateTime? verifiedAt;
+  const MoneyChoice({
+    required this.moneyAccountId,
+    required this.paymentMode,
+    this.paymentRef = '',
+    this.verifiedAt,
+  });
 
   Map<String, dynamic> toJson() => {
         'moneyAccountId': moneyAccountId,
         'paymentMode': paymentMode,
         'paymentRef': paymentRef,
+        if (verifiedAt != null) 'verifiedAt': verifiedAt!.toIso8601String(),
       };
 }
 
@@ -81,6 +88,7 @@ Future<MoneyChoice?> showMoneyAccountPicker(
   required bool moneyIn,
   required List<PayModeOption> modes,
   String initialMode = '',
+  DateTime? initialDate,
   String approveLabel = 'Approve',
 }) {
   return showDialog<MoneyChoice>(
@@ -91,6 +99,7 @@ Future<MoneyChoice?> showMoneyAccountPicker(
       moneyIn: moneyIn,
       modes: modes,
       initialMode: initialMode,
+      initialDate: initialDate,
       approveLabel: approveLabel,
     ),
   );
@@ -103,6 +112,7 @@ class _MoneyAccountDialog extends ConsumerStatefulWidget {
     required this.moneyIn,
     required this.modes,
     required this.initialMode,
+    this.initialDate,
     required this.approveLabel,
   });
 
@@ -111,6 +121,7 @@ class _MoneyAccountDialog extends ConsumerStatefulWidget {
   final bool moneyIn;
   final List<PayModeOption> modes;
   final String initialMode;
+  final DateTime? initialDate;
   final String approveLabel;
 
   @override
@@ -119,6 +130,7 @@ class _MoneyAccountDialog extends ConsumerStatefulWidget {
 
 class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
   late String _mode;
+  late DateTime _approvedDate;
   String? _accountId;
   final _ref = TextEditingController();
 
@@ -128,6 +140,7 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
     _mode = widget.modes.any((m) => m.value == widget.initialMode)
         ? widget.initialMode
         : widget.modes.first.value;
+    _approvedDate = widget.initialDate ?? DateTime.now();
   }
 
   @override
@@ -183,6 +196,35 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
                   Text(
                     widget.moneyIn ? '$money received — where did it land?' : '$money paid — which account paid it?',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: crm.textPrimary),
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Approved date', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _approvedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setState(() => _approvedDate = picked);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      child: Text(
+                        DateFormat('dd MMM yyyy').format(_approvedDate),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: crm.textPrimary),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Text('Payment mode', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
@@ -281,6 +323,7 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
                       moneyAccountId: hasAccounts ? _accountId! : '',
                       paymentMode: _mode,
                       paymentRef: _ref.text.trim(),
+                      verifiedAt: _approvedDate,
                     ),
                   );
                 },

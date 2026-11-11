@@ -109,6 +109,79 @@ class OutstandingSummary {
   }
 }
 
+/// One day of the period: money in and out, and how many entries made it.
+class DayPoint {
+  final DateTime date;
+  final double income;
+  final double expense;
+  final int incomeCount;
+  final int expenseCount;
+
+  const DayPoint({
+    required this.date,
+    required this.income,
+    required this.expense,
+    this.incomeCount = 0,
+    this.expenseCount = 0,
+  });
+
+  factory DayPoint.fromJson(Map<String, dynamic> j) {
+    final parts = (j['date'] as String? ?? '').split('-').map(int.tryParse).toList();
+    final ok = parts.length == 3 && !parts.contains(null);
+    return DayPoint(
+      date: ok ? DateTime(parts[0]!, parts[1]!, parts[2]!) : DateTime.fromMillisecondsSinceEpoch(0),
+      income: _d(j['income']),
+      expense: _d(j['expense']),
+      incomeCount: (j['incomeCount'] as num?)?.toInt() ?? 0,
+      expenseCount: (j['expenseCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// The earlier period this one is compared with ("+12% vs last month"), as the server worked it out: only the
+/// days that have happened count, so a month in progress is not set against a whole month.
+/// [currentIncome] / [currentExpense] / [currentNet] are THIS period up to today — what the percentages come from.
+class PeriodComparison {
+  final String from;
+  final String to;
+
+  /// 'month' (same days of the previous month) | 'fy' (same dates a year earlier) | 'preceding' (the stretch just before).
+  final String mode;
+  final int days;
+  final double income;
+  final double expense;
+  final double net;
+  final double currentIncome;
+  final double currentExpense;
+  final double currentNet;
+
+  const PeriodComparison({
+    required this.from,
+    required this.to,
+    required this.mode,
+    required this.days,
+    required this.income,
+    required this.expense,
+    required this.net,
+    required this.currentIncome,
+    required this.currentExpense,
+    required this.currentNet,
+  });
+
+  factory PeriodComparison.fromJson(Map<String, dynamic> j) => PeriodComparison(
+        from: j['from'] as String? ?? '',
+        to: j['to'] as String? ?? '',
+        mode: j['mode'] as String? ?? 'preceding',
+        days: (j['days'] as num?)?.toInt() ?? 0,
+        income: _d(j['income']),
+        expense: _d(j['expense']),
+        net: _d(j['net']),
+        currentIncome: _d(j['currentIncome']),
+        currentExpense: _d(j['currentExpense']),
+        currentNet: _d(j['currentNet']),
+      );
+}
+
 class AccountsDashboardSummary {
   final String from;
   final String to;
@@ -127,6 +200,12 @@ class AccountsDashboardSummary {
   final double bankTotal;
   final double cashTotal;
 
+  /// One point per day of the period (the trend chart and the sparklines).
+  final List<DayPoint> series;
+
+  /// How the period compares with the one before it; null when there is nothing to compare with.
+  final PeriodComparison? previous;
+
   const AccountsDashboardSummary({
     required this.from,
     required this.to,
@@ -139,6 +218,8 @@ class AccountsDashboardSummary {
     this.cashBankTotal = 0,
     this.bankTotal = 0,
     this.cashTotal = 0,
+    this.series = const [],
+    this.previous,
   });
 
   factory AccountsDashboardSummary.fromJson(Map<String, dynamic> j) =>
@@ -154,5 +235,11 @@ class AccountsDashboardSummary {
         cashBankTotal: _d((j['cashBank'] as Map?)?['total']),
         bankTotal: _d((j['cashBank'] as Map?)?['bank']),
         cashTotal: _d((j['cashBank'] as Map?)?['cash']),
+        series: ((j['series'] as List?) ?? const [])
+            .map((e) => DayPoint.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        previous: j['previous'] is Map<String, dynamic>
+            ? PeriodComparison.fromJson(j['previous'] as Map<String, dynamic>)
+            : null,
       );
 }

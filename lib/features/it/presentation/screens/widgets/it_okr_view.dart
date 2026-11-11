@@ -7,18 +7,30 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/okr_notifier.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_check_in.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_editor_dialog.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/it_okr_timeline.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_filters.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_scorecard_view.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_timeline_detail.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/okr_tree_view.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
+/// The ways to look at the objectives. Timeline / tree / scorecard share one filter; the table keeps
+/// its own search and column filters (it is the one for editing in bulk).
+enum OkrViewMode { timeline, tree, scorecard, table }
+
 class ITOkrView extends ConsumerStatefulWidget {
+  /// The project whose objectives these are; null = every objective the caller may see
+  /// (the company view, where company, department and project objectives line up).
   final String? projectId;
   final String projectName;
 
-  const ITOkrView({
-    super.key,
-    required this.projectId,
-    this.projectName = 'Research & Development',
-  });
+  /// The company view only: the departments an objective can be scoped to. Given, the editor
+  /// shows its "Scope" picker (company-wide or a department) for new objectives.
+  final List<String>? planningDepartments;
+
+  const ITOkrView({super.key, required this.projectId, this.projectName = 'Research & Development', this.planningDepartments});
 
   @override
   ConsumerState<ITOkrView> createState() => _ITOkrViewState();
@@ -26,6 +38,8 @@ class ITOkrView extends ConsumerStatefulWidget {
 
 class _ITOkrViewState extends ConsumerState<ITOkrView> {
   final Set<String> _expandedIds = {};
+  OkrViewMode _viewMode = OkrViewMode.timeline;
+  OkrFilter _okrFilter = const OkrFilter();
   String _searchQuery = '';
   OKRStatus? _statusFilter;
   bool? _completedFilter;
@@ -41,13 +55,43 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
     }
   }
 
-  Future<void> _deleteOkr(String id) async {
+  /// Asks first, and says what happens to the objectives that contribute to this one
+  /// (they move up a level; nothing under it is deleted but its own key results).
+  Future<void> _deleteOkr(OKRModel item) async {
+    final all = ref.read(projectOKRsNotifierProvider(widget.projectId)).value ?? const <OKRModel>[];
+    final below = all.where((o) => o.parentObjectiveId == item.id).length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Delete "${item.objective}"?'),
+        content: Text(
+          'Its ${item.keyResults.length} key result${item.keyResults.length == 1 ? '' : 's'} will be deleted too.'
+          '${below > 0 ? ' The $below objective${below == 1 ? '' : 's'} that contribute${below == 1 ? 's' : ''} to it will move up one level.' : ''}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
     try {
-      await ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).deleteOKR(id);
+      final moved = await ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).deleteOKR(item.id);
+      if (mounted && moved > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$moved objective${moved == 1 ? '' : 's'} moved up one level')));
+      }
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
     }
   }
+
+  /// A check-in on ONE key result (its own request, so it never undoes someone else's).
+  Future<void> _updateKeyResult(OKRModel item, KeyResultItem kr) =>
+      showKeyResultCheckIn(context, ref, projectId: widget.projectId, okr: item, kr: kr);
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +103,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
       backgroundColor: crm.background,
       body: asyncOkrs.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => AppErrorView(
-          error: e,
-          onRetry: () => ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).refresh(),
-        ),
+        error: (e, _) => AppErrorView(error: e, onRetry: () => ref.read(projectOKRsNotifierProvider(widget.projectId).notifier).refresh()),
         data: (allOkrs) {
           // Filter OKRs
           var filtered = allOkrs.where((item) {
@@ -85,8 +126,8 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
             return true;
           }).toList();
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -98,37 +139,34 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                     Expanded(
                       child: Text(
                         "OKR's & KR's for ${widget.projectName}",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: crm.textPrimary,
-                        ),
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: crm.textPrimary),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 14),
 
-                // Table Title and Action Bar
-                Row(
-                  children: [
-                    const Text('🎯', style: TextStyle(fontSize: 16)),
-                    const SizedBox(width: 6),
-                    Text(
-                      "OKR's Table",
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: crm.textPrimary),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline, size: 18),
-                      tooltip: 'Add Objective',
-                      onPressed: () => _openEditor(),
-                    ),
-                    const Spacer(),
-
-                    // Search Box
-                    SizedBox(
-                      width: 180,
+                // View switcher, add, search
+                LayoutBuilder(
+                  builder: (context, c) {
+                    final compact = c.maxWidth < 720;
+                    final modes = SegmentedButton<OkrViewMode>(
+                      showSelectedIcon: false,
+                      style: const ButtonStyle(visualDensity: VisualDensity.compact, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      segments: [
+                        for (final m in OkrViewMode.values)
+                          ButtonSegment(
+                            value: m,
+                            icon: Icon(_modeIcon(m), size: 15),
+                            tooltip: _modeName(m),
+                            // icons only on a narrow screen: four labels do not fit
+                            label: compact ? null : Text(_modeName(m), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                          ),
+                      ],
+                      selected: {_viewMode},
+                      onSelectionChanged: (s) => setState(() => _viewMode = s.first),
+                    );
+                    final search = SizedBox(
                       height: 34,
                       child: TextField(
                         decoration: InputDecoration(
@@ -139,11 +177,8 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                         ),
                         onChanged: (v) => setState(() => _searchQuery = v.trim()),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-
-                    // + New Button
-                    FilledButton.icon(
+                    );
+                    final newButton = FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: crm.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -152,117 +187,154 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       onPressed: () => _openEditor(),
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('New', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-                    ),
-                  ],
+                    );
+                    if (compact) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Align(alignment: Alignment.centerLeft, child: modes),
+                              ),
+                              const SizedBox(width: 8),
+                              newButton,
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          search,
+                        ],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        modes,
+                        const SizedBox(width: 8),
+                        IconButton(icon: const Icon(Icons.add_circle_outline, size: 18), tooltip: 'Add Objective', onPressed: () => _openEditor()),
+                        const Spacer(),
+                        SizedBox(width: 180, child: search),
+                        const SizedBox(width: 10),
+                        newButton,
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
 
-                // Filter Buttons Row (Matching Notion / Screenshot Style)
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip(
-                        crm: crm,
-                        label: 'Objective',
-                        icon: '📌',
-                        isActive: _searchQuery.isNotEmpty,
-                        onTap: () {},
-                      ),
-                      const SizedBox(width: 8),
-                      _buildStatusFilterMenu(crm),
-                      const SizedBox(width: 8),
-                      _buildStartDateFilterChip(crm),
-                      const SizedBox(width: 8),
-                      _buildCompletedFilterChip(crm),
-                      if (_searchQuery.isNotEmpty ||
-                          _statusFilter != null ||
-                          _completedFilter != null ||
-                          _startDateFilter != null) ...[
-                        const SizedBox(width: 10),
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _searchQuery = '';
-                              _statusFilter = null;
-                              _completedFilter = null;
-                              _startDateFilter = null;
-                            });
-                          },
-                          child: const Text('Reset filters', style: TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                // Main Dense Interactive OKR Table
-                Container(
-                  decoration: BoxDecoration(
-                    color: crm.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: crm.border),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: IntrinsicWidth(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Table Header Row
-                            _buildTableHeader(crm),
-                            Divider(height: 1, color: crm.border),
-
-                            // Table Data Rows
-                            if (filtered.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(40),
-                                child: Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.track_changes_outlined, size: 40, color: crm.textSecondary.withValues(alpha: 0.4)),
-                                      const SizedBox(height: 8),
-                                      Text('No OKRs matching criteria', style: TextStyle(color: crm.textSecondary)),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else
-                              for (int i = 0; i < filtered.length; i++)
-                                _buildTableRow(crm, filtered[i], i + 1, employees),
-
-                            // Bottom '+ New row' Action
-                            InkWell(
-                              onTap: () => _openEditor(),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                decoration: BoxDecoration(
-                                  border: Border(top: BorderSide(color: crm.border)),
-                                ),
+                // Main Content: Table or Timeline
+                Expanded(
+                  child: _viewMode != OkrViewMode.table
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: crm.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: crm.border),
+                            ),
+                            child: _board(filtered),
+                          ),
+                        )
+                      : SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Filter Buttons Row (Matching Notion / Screenshot Style)
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
                                 child: Row(
                                   children: [
-                                    Icon(Icons.add, size: 16, color: crm.textSecondary),
+                                    _buildFilterChip(crm: crm, label: 'Objective', icon: '📌', isActive: _searchQuery.isNotEmpty, onTap: () {}),
                                     const SizedBox(width: 8),
-                                    Text(
-                                      'New row',
-                                      style: TextStyle(
-                                        fontSize: 12.5,
-                                        color: crm.textSecondary,
-                                        fontWeight: FontWeight.w600,
+                                    _buildStatusFilterMenu(crm),
+                                    const SizedBox(width: 8),
+                                    _buildStartDateFilterChip(crm),
+                                    const SizedBox(width: 8),
+                                    _buildCompletedFilterChip(crm),
+                                    if (_searchQuery.isNotEmpty || _statusFilter != null || _completedFilter != null || _startDateFilter != null) ...[
+                                      const SizedBox(width: 10),
+                                      TextButton(
+                                        onPressed: () {
+                                          setState(() {
+                                            _searchQuery = '';
+                                            _statusFilter = null;
+                                            _completedFilter = null;
+                                            _startDateFilter = null;
+                                          });
+                                        },
+                                        child: const Text('Reset filters', style: TextStyle(fontSize: 12)),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 14),
+
+                              // Main Dense Interactive OKR Table
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: crm.surface,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: crm.border),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: IntrinsicWidth(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [
+                                          // Table Header Row
+                                          _buildTableHeader(crm),
+                                          Divider(height: 1, color: crm.border),
+
+                                          // Table Data Rows
+                                          if (filtered.isEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.all(40),
+                                              child: Center(
+                                                child: Column(
+                                                  children: [
+                                                    Icon(Icons.track_changes_outlined, size: 40, color: crm.textSecondary.withValues(alpha: 0.4)),
+                                                    const SizedBox(height: 8),
+                                                    Text('No OKRs matching criteria', style: TextStyle(color: crm.textSecondary)),
+                                                  ],
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            for (int i = 0; i < filtered.length; i++) _buildTableRow(crm, filtered[i], i + 1, employees),
+
+                                          // Bottom '+ New row' Action
+                                          InkWell(
+                                            onTap: () => _openEditor(),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                              decoration: BoxDecoration(
+                                                border: Border(top: BorderSide(color: crm.border)),
+                                              ),
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.add, size: 16, color: crm.textSecondary),
+                                                  const SizedBox(width: 8),
+                                                  Text(
+                                                    'New row',
+                                                    style: TextStyle(fontSize: 12.5, color: crm.textSecondary, fontWeight: FontWeight.w600),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -272,13 +344,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
     );
   }
 
-  Widget _buildFilterChip({
-    required CrmTheme crm,
-    required String label,
-    required String icon,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildFilterChip({required CrmTheme crm, required String label, required String icon, required bool isActive, required VoidCallback onTap}) {
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -321,7 +387,11 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
             value: s,
             child: Row(
               children: [
-                Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: s.color)),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: s.color),
+                ),
                 const SizedBox(width: 8),
                 Text(s.label),
               ],
@@ -387,22 +457,104 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
 
   Widget _buildTableHeader(CrmTheme crm) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.02)),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       child: Row(
         children: [
-          const SizedBox(width: 32, child: Text('#', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700))),
-          const SizedBox(width: 240, child: Row(children: [Text('📌', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Objective', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 140, child: Row(children: [Text('👤', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Project Head', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 120, child: Row(children: [Text('📅', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Starting Date', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 130, child: Row(children: [Text('📌', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 120, child: Row(children: [Text('🚦', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Priority', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 120, child: Row(children: [Text('⌛', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Deadline', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 140, child: Row(children: [Text('📎', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Documents', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 110, child: Row(children: [Text('📈', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text('Progress', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
-          const SizedBox(width: 220, child: Row(children: [Text('🎯', style: TextStyle(fontSize: 11)), SizedBox(width: 5), Text("KR's", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))])),
+          const SizedBox(
+            width: 32,
+            child: Text('#', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(
+            width: 240,
+            child: Row(
+              children: [
+                Text('📌', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Objective', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 140,
+            child: Row(
+              children: [
+                Text('👤', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Project Head', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 120,
+            child: Row(
+              children: [
+                Text('📅', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Starting Date', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 130,
+            child: Row(
+              children: [
+                Text('📌', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Status', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 120,
+            child: Row(
+              children: [
+                Text('🚦', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Priority', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 120,
+            child: Row(
+              children: [
+                Text('⌛', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Deadline', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 140,
+            child: Row(
+              children: [
+                Text('📎', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Documents', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 110,
+            child: Row(
+              children: [
+                Text('📈', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text('Progress', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
+          const SizedBox(
+            width: 220,
+            child: Row(
+              children: [
+                Text('🎯', style: TextStyle(fontSize: 11)),
+                SizedBox(width: 5),
+                Text("KR's", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ],
+            ),
+          ),
           const SizedBox(width: 40),
         ],
       ),
@@ -446,11 +598,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                         },
                         child: Padding(
                           padding: const EdgeInsets.only(right: 6),
-                          child: Icon(
-                            isExpanded ? Icons.arrow_drop_down : Icons.arrow_right,
-                            size: 18,
-                            color: crm.textSecondary,
-                          ),
+                          child: Icon(isExpanded ? Icons.arrow_drop_down : Icons.arrow_right, size: 18, color: crm.textSecondary),
                         ),
                       )
                     else
@@ -460,11 +608,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                         onTap: () => _openEditor(existing: item),
                         child: Text(
                           item.objective,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: crm.textPrimary,
-                          ),
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: crm.textPrimary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -478,22 +622,13 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 width: 140,
                 child: PopupMenuButton<dynamic>(
                   onSelected: (e) {
-                    _updateOkr(
-                      item.id,
-                      {'projectHeadId': e.id, 'projectHeadName': e.name},
-                    );
+                    _updateOkr(item.id, {'projectHeadId': e.id, 'projectHeadName': e.name});
                   },
                   itemBuilder: (ctx) => [
                     for (final emp in employees)
                       PopupMenuItem(
                         value: emp,
-                        child: Row(
-                          children: [
-                            const Icon(Icons.person_outline, size: 16),
-                            const SizedBox(width: 8),
-                            Text(emp.name),
-                          ],
-                        ),
+                        child: Row(children: [const Icon(Icons.person_outline, size: 16), const SizedBox(width: 8), Text(emp.name)]),
                       ),
                   ],
                   child: Row(
@@ -527,24 +662,23 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       lastDate: DateTime(2035),
                       builder: (ctx, child) => Theme(
                         data: Theme.of(ctx).copyWith(
-                          colorScheme: ColorScheme.light(primary: crm.primary, onPrimary: Colors.white, onSurface: crm.textPrimary, surface: crm.surface),
+                          colorScheme: ColorScheme.light(
+                            primary: crm.primary,
+                            onPrimary: Colors.white,
+                            onSurface: crm.textPrimary,
+                            surface: crm.surface,
+                          ),
                         ),
                         child: child!,
                       ),
                     );
                     if (d != null) {
-                      _updateOkr(
-                        item.id,
-                        {'startDate': d.toIso8601String()},
-                      );
+                      _updateOkr(item.id, {'startDate': d.toIso8601String()});
                     }
                   },
                   child: Text(
                     item.startDate != null ? DateFormat('dd/MM/yyyy').format(item.startDate!) : 'Set date',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: item.startDate != null ? crm.textPrimary : crm.textSecondary.withValues(alpha: 0.6),
-                    ),
+                    style: TextStyle(fontSize: 11.5, color: item.startDate != null ? crm.textPrimary : crm.textSecondary.withValues(alpha: 0.6)),
                   ),
                 ),
               ),
@@ -555,10 +689,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 child: PopupMenuButton<OKRStatus>(
                   initialValue: item.status,
                   onSelected: (st) {
-                    _updateOkr(
-                      item.id,
-                      {'status': st.slug},
-                    );
+                    _updateOkr(item.id, {'status': st.slug});
                   },
                   itemBuilder: (ctx) => [
                     for (final s in OKRStatus.values)
@@ -566,7 +697,11 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                         value: s,
                         child: Row(
                           children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: s.color)),
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(shape: BoxShape.circle, color: s.color),
+                            ),
                             const SizedBox(width: 8),
                             Text(s.label),
                           ],
@@ -577,10 +712,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                     alignment: Alignment.centerLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: item.status.bgColor,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      decoration: BoxDecoration(color: item.status.bgColor, borderRadius: BorderRadius.circular(6)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -603,10 +735,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                 child: PopupMenuButton<OKRPriority>(
                   initialValue: item.priority,
                   onSelected: (pr) {
-                    _updateOkr(
-                      item.id,
-                      {'priority': pr.slug},
-                    );
+                    _updateOkr(item.id, {'priority': pr.slug});
                   },
                   itemBuilder: (ctx) => [
                     for (final p in OKRPriority.values)
@@ -625,10 +754,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                     alignment: Alignment.centerLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: item.priority.color.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      decoration: BoxDecoration(color: item.priority.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -659,24 +785,23 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       lastDate: DateTime(2035),
                       builder: (ctx, child) => Theme(
                         data: Theme.of(ctx).copyWith(
-                          colorScheme: ColorScheme.light(primary: crm.primary, onPrimary: Colors.white, onSurface: crm.textPrimary, surface: crm.surface),
+                          colorScheme: ColorScheme.light(
+                            primary: crm.primary,
+                            onPrimary: Colors.white,
+                            onSurface: crm.textPrimary,
+                            surface: crm.surface,
+                          ),
                         ),
                         child: child!,
                       ),
                     );
                     if (d != null) {
-                      _updateOkr(
-                        item.id,
-                        {'deadline': d.toIso8601String()},
-                      );
+                      _updateOkr(item.id, {'deadline': d.toIso8601String()});
                     }
                   },
                   child: Text(
                     item.deadline != null ? DateFormat('dd/MM/yyyy').format(item.deadline!) : 'Set date',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: item.deadline != null ? crm.textPrimary : crm.textSecondary.withValues(alpha: 0.6),
-                    ),
+                    style: TextStyle(fontSize: 11.5, color: item.deadline != null ? crm.textPrimary : crm.textSecondary.withValues(alpha: 0.6)),
                   ),
                 ),
               ),
@@ -700,10 +825,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
+                                    decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(5)),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -723,30 +845,31 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       ),
               ),
 
-              // Progress
+              // Progress (worked out from the key results when there are any)
               SizedBox(
                 width: 110,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: item.progress / 100,
-                          minHeight: 5,
-                          backgroundColor: crm.background,
-                          valueColor: AlwaysStoppedAnimation(
-                            item.progress >= 100 ? const Color(0xFF10B981) : crm.primary,
+                child: Tooltip(
+                  message: hasKeyResults ? 'Worked out from the key results' : 'Set on the objective',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: item.progress / 100,
+                            minHeight: 5,
+                            backgroundColor: crm.background,
+                            valueColor: AlwaysStoppedAnimation(item.progress >= 100 ? const Color(0xFF10B981) : crm.primary),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${item.progress}%',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.textPrimary),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        '${item.progress}%',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.textPrimary),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -786,12 +909,15 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                     if (v == 'edit') {
                       _openEditor(existing: item);
                     } else if (v == 'delete') {
-                      _deleteOkr(item.id);
+                      _deleteOkr(item);
                     }
                   },
                   itemBuilder: (ctx) => const [
                     PopupMenuItem(value: 'edit', child: Text('Edit Objective')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text('Delete', style: TextStyle(color: Colors.red)),
+                    ),
                   ],
                   child: Icon(Icons.more_vert, size: 16, color: crm.textSecondary),
                 ),
@@ -819,10 +945,17 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                   ),
                   const Spacer(),
                   Text(
-                    kr.metric.isNotEmpty ? kr.metric : '${kr.currentValue} / ${kr.targetValue} ${kr.unit}',
+                    '${kr.currentValue == kr.currentValue.roundToDouble() ? kr.currentValue.toStringAsFixed(0) : kr.currentValue} / ${kr.targetValue == kr.targetValue.roundToDouble() ? kr.targetValue.toStringAsFixed(0) : kr.targetValue} ${kr.unit}'
+                    '${kr.completed ? '  ✓ done' : '  (${(kr.attainment * 100).round()}%)'}',
                     style: TextStyle(fontSize: 11, color: crm.textSecondary),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                    onPressed: () => _updateKeyResult(item, kr),
+                    child: const Text('Update', style: TextStyle(fontSize: 11.5)),
+                  ),
+                  const SizedBox(width: 8),
                 ],
               ),
             ),
@@ -830,12 +963,76 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
     );
   }
 
-  void _openEditor({OKRModel? existing}) {
+  static IconData _modeIcon(OkrViewMode m) => switch (m) {
+    OkrViewMode.timeline => Icons.timeline_outlined,
+    OkrViewMode.tree => Icons.account_tree_outlined,
+    OkrViewMode.scorecard => Icons.leaderboard_outlined,
+    OkrViewMode.table => Icons.table_rows_outlined,
+  };
+
+  static String _modeName(OkrViewMode m) => switch (m) {
+    OkrViewMode.timeline => 'Timeline',
+    OkrViewMode.tree => 'Tree',
+    OkrViewMode.scorecard => 'Scorecard',
+    OkrViewMode.table => 'Table',
+  };
+
+  /// What the detail sheet offers on any of the board views (timeline, tree, scorecard).
+  OkrDetailActions get _actions => OkrDetailActions(
+    onEdit: (o) => _openEditor(existing: o),
+    onCheckIn: (o, kr) => _updateKeyResult(o, kr),
+    onAddChild: (parent) => _openEditor(parentObjectiveId: parent.id),
+    // in the company view a new objective is company / department level, which cannot feed a project's
+    canAddUnder: (o) => widget.projectId != null || o.effectiveLevel != 'project',
+    onDelete: _deleteOkr,
+  );
+
+  Widget _board(List<OKRModel> okrs) => switch (_viewMode) {
+    OkrViewMode.tree => OkrTreeView(
+      okrs: okrs,
+      actions: _actions,
+      onAddOkr: () => _openEditor(),
+      filter: _okrFilter,
+      onFilterChanged: (f) => setState(() => _okrFilter = f),
+    ),
+    OkrViewMode.scorecard => OkrScorecardView(
+      okrs: okrs,
+      actions: _actions,
+      onAddOkr: () => _openEditor(),
+      filter: _okrFilter,
+      onFilterChanged: (f) => setState(() => _okrFilter = f),
+    ),
+    _ => ITOkrTimeline(
+      okrs: okrs,
+      groupByProject: true,
+      onEditOkr: (o) => _openEditor(existing: o),
+      onCheckInKeyResult: (o, kr) => _updateKeyResult(o, kr),
+      onAddOkr: () => _openEditor(),
+      onAddChild: (parent) => _openEditor(parentObjectiveId: parent.id),
+      canAddUnder: (o) => widget.projectId != null || o.effectiveLevel != 'project',
+      onChangeDates: _changeDates,
+      onDelete: _deleteOkr,
+      filter: _okrFilter,
+      onFilterChanged: (f) => setState(() => _okrFilter = f),
+    ),
+  };
+
+  /// A bar was dragged on the timeline. Sent with the version the screen showed, so a change made
+  /// by someone else in the meantime is refused (and the bar springs back) instead of overwritten.
+  Future<void> _changeDates(OKRModel o, DateTime start, DateTime end) => _updateOkr(o.id, {
+    'startDate': start.toIso8601String(),
+    'deadline': end.toIso8601String(),
+    if (o.updatedAt != null) 'expectedUpdatedAt': o.updatedAt!.toUtc().toIso8601String(),
+  });
+
+  void _openEditor({OKRModel? existing, String? parentObjectiveId}) {
     showOKREditorDialog(
       context,
       ref,
       projectId: widget.projectId,
       existing: existing,
+      parentObjectiveId: parentObjectiveId,
+      planningDepartments: widget.planningDepartments,
     );
   }
 }

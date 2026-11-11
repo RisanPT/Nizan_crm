@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
+import 'package:nizan_crm/features/fleet/data/fuel_expense_page.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
@@ -18,6 +19,33 @@ class FuelExpenseService {
           .toList();
     } catch (e) {
       throw AppException(e, action: 'load fuel expenses');
+    }
+  }
+
+  /// ACCOUNTS: one filtered, sorted page, with totals for the whole filtered set
+  /// and each expense's day works (client, artist, share) + km check. The fleet
+  /// screens use [getFuelExpenses] and never get artist details.
+  Future<FuelExpensePage> getFuelExpensePage(FuelExpenseQuery query) async {
+    try {
+      final response = await _dio.get('/fuel-expenses', queryParameters: query.toParams());
+      return FuelExpensePage.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load fuel expenses');
+    }
+  }
+
+  /// ACCOUNTS: every expense matching [query] (the server caps it), for the export.
+  Future<FuelExpenseExport> exportFuelExpenses(FuelExpenseQuery query) async {
+    try {
+      final response = await _dio.get('/fuel-expenses', queryParameters: query.toParams(export: true));
+      final data = response.data as Map<String, dynamic>;
+      return FuelExpenseExport(
+        [for (final e in (data['items'] as List? ?? const [])) FuelExpense.fromJson((e as Map).cast<String, dynamic>())],
+        (data['totalItems'] as num?)?.toInt() ?? 0,
+        data['truncated'] == true,
+      );
+    } catch (e) {
+      throw AppException(e, action: 'export fuel expenses');
     }
   }
 
@@ -52,9 +80,13 @@ class FuelExpenseService {
     required String station,
     required String notes,
     String billImage = '',
+    // The work this expense was for. Leave both alone to keep an existing link;
+    // [clearWork] turns it into a whole-day expense (shared across the day's works).
+    String? bookingId,
+    bool clearWork = false,
   }) async {
     try {
-      final payload = {
+      final payload = <String, dynamic>{
         'vehicleId': vehicleId,
         'driverId': (driverId?.trim().isEmpty ?? true) ? null : driverId,
         'category': category,
@@ -66,6 +98,11 @@ class FuelExpenseService {
         'station': station,
         'notes': notes,
         'billImage': billImage,
+        ...(clearWork
+            ? {'bookingId': null}
+            : bookingId != null
+                ? {'bookingId': bookingId}
+                : const <String, dynamic>{}),
       };
 
       final response = id != null && id.isNotEmpty

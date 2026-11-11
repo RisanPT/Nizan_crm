@@ -97,3 +97,9 @@ final expenseHeadsProvider = FutureProvider<List<ExpenseHead>>((ref) async {
     return kExpenseHeads;
   }
 });
+
+/// Every expense head — archived ones too, with how many expenses use each — for Accounts / admin
+/// (managing the heads, and naming old expenses whose head was archived since).
+final allExpenseHeadsProvider = FutureProvider<List<ExpenseHead>>((ref) async {
+  return ref.watch(adminExpenseServiceProvider).getExpenseHeads(all: true);
+});

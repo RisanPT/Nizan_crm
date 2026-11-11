@@ -309,6 +309,11 @@ class _ArtistProfileScreenState extends ConsumerState<ArtistProfileScreen> {
                       ? 'Make Outsource'
                       : 'Make In-house'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () => context.push('/calendar?artistId=${a.id}'),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: const Text('View in Calendar'),
+                ),
                 if (_saving)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 8),

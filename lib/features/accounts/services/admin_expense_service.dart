@@ -116,10 +116,11 @@ class AdminExpenseService {
     }
   }
 
-  /// Expense heads = expense ledgers in the Chart of Accounts.
-  Future<List<ExpenseHead>> getExpenseHeads() async {
+  /// Expense heads = expense ledgers in the Chart of Accounts. [all] (Accounts / admin, for managing
+  /// them) also brings the archived ones and how many expenses use each.
+  Future<List<ExpenseHead>> getExpenseHeads({bool all = false}) async {
     try {
-      final res = await _dio.get('/admin-expenses/heads');
+      final res = await _dio.get('/admin-expenses/heads', queryParameters: {if (all) 'all': '1'});
       return ((res.data as List?) ?? const [])
           .map((e) => ExpenseHead.fromJson((e as Map).cast<String, dynamic>()))
           .toList();
@@ -128,12 +129,72 @@ class AdminExpenseService {
     }
   }
 
+  /// Adds a head (an expense ledger). A blank [code] is made from the name.
+  Future<ExpenseHead> createExpenseHead({
+    required String name,
+    String group = '',
+    String code = '',
+    bool jobLinked = false,
+    bool recurring = false,
+    bool foreign = false,
+  }) async {
+    try {
+      final res = await _dio.post('/admin-expenses/heads', data: {
+        'name': name,
+        'group': group,
+        'code': code,
+        'jobLinked': jobLinked,
+        'recurring': recurring,
+        'foreign': foreign,
+      });
+      return ExpenseHead.fromJson((res.data as Map).cast<String, dynamic>());
+    } catch (e) {
+      throw AppException(e, action: 'add expense head');
+    }
+  }
+
+  /// Changes only what is sent: name, group, code (only while unused), the flags, or [active] (archive / restore).
+  Future<ExpenseHead> updateExpenseHead(
+    String id, {
+    String? name,
+    String? group,
+    String? code,
+    bool? jobLinked,
+    bool? recurring,
+    bool? foreign,
+    bool? active,
+  }) async {
+    try {
+      final res = await _dio.put('/admin-expenses/heads/$id', data: {
+        'name': ?name,
+        'group': ?group,
+        'code': ?code,
+        'jobLinked': ?jobLinked,
+        'recurring': ?recurring,
+        'foreign': ?foreign,
+        if (active != null) 'status': active ? 'active' : 'archived',
+      });
+      return ExpenseHead.fromJson((res.data as Map).cast<String, dynamic>());
+    } catch (e) {
+      throw AppException(e, action: 'update expense head');
+    }
+  }
+
+  Future<void> deleteExpenseHead(String id) async {
+    try {
+      await _dio.delete('/admin-expenses/heads/$id');
+    } catch (e) {
+      throw AppException(e, action: 'delete expense head');
+    }
+  }
+
   /// [money] = which bank / cash account paid it (approval popup).
-  Future<AdminExpense> verifyAdminExpense(String id, String status, {MoneyChoice? money}) async {
+  /// [overBudgetReason]: why it is approved although it takes its project past the approved budget (finance head / admin).
+  Future<AdminExpense> verifyAdminExpense(String id, String status, {MoneyChoice? money, String? overBudgetReason}) async {
     try {
       final response = await _dio.put(
         '/admin-expenses/$id/verify',
-        data: {'status': status, ...?money?.toJson()},
+        data: {'status': status, ...?money?.toJson(), 'overBudgetReason': ?overBudgetReason},
       );
       return AdminExpense.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {

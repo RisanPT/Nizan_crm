@@ -30,7 +30,14 @@ void main() async {
 ///    placeholder instead of Flutter's grey/red error box.
 void _installGlobalErrorHandlers() {
   FlutterError.onError = (details) {
-    FlutterError.presentError(details);
+    try {
+      FlutterError.presentError(details);
+    } catch (_) {
+      // In web debug mode, widget_inspector's debugTransformDebugCreator can
+      // throw a DDC TypeError after repeated hot restarts. Log cleanly instead.
+      debugPrint('Flutter error: ${details.exceptionAsString()}');
+      return;
+    }
     debugPrint('Unhandled Flutter error: ${details.exceptionAsString()}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {

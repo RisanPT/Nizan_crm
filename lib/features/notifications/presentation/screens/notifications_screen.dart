@@ -422,6 +422,27 @@ _TypeMeta _typeMeta(String type) {
     // Inventory
     case 'low_stock':
       return const _TypeMeta(Icons.inventory_2_outlined, Color(0xFFEA580C));
+    // Monthly objectives and the CEO's daily line
+    case 'monthly_objectives_set':
+      return const _TypeMeta(Icons.flag_outlined, Color(0xFF7C3AED));
+    case 'monthly_objectives_close':
+      return const _TypeMeta(Icons.task_alt_outlined, Color(0xFFB45309));
+    case 'monthly_objective_ready':
+      return const _TypeMeta(Icons.check_circle_outline, Color(0xFF15803D));
+    case 'ceo_digest':
+      return const _TypeMeta(Icons.gavel_outlined, Color(0xFF601A29));
+    // A project's estimated cost: waiting for the finance head / decided
+    case 'project_cost_request':
+      return const _TypeMeta(Icons.payments_outlined, Color(0xFFB45309));
+    case 'project_cost_decision':
+      return const _TypeMeta(Icons.verified_outlined, Color(0xFF15803D));
+    // A project asking HR for more people / what HR did / a head asked to let someone go
+    case 'manpower_request':
+      return const _TypeMeta(Icons.group_add_outlined, Color(0xFFB45309));
+    case 'manpower_update':
+      return const _TypeMeta(Icons.groups_outlined, Color(0xFF1D4ED8));
+    case 'manpower_release':
+      return const _TypeMeta(Icons.how_to_reg_outlined, Color(0xFFB45309));
     default:
       return const _TypeMeta(Icons.notifications_outlined, Color(0xFF6B7280));
   }
@@ -436,3 +457,13 @@ String _relativeTime(DateTime t) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return '${t.day} ${months[t.month - 1]}';
 }
+
+/// The icon and colour a notification of [type] wears — for other screens that list a few of them
+/// (the project dashboard), so they look the same as here.
+({IconData icon, Color color}) notificationLook(String type) {
+  final m = _typeMeta(type);
+  return (icon: m.icon, color: m.color);
+}
+
+/// "Just now", "5m ago", "2d ago", "3 Nov".
+String notificationAgo(DateTime t) => _relativeTime(t);

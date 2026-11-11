@@ -5,6 +5,10 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/models/list_page_params.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle_categories.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle_efficiency.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/vehicle_efficiency_sheet.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/vehicle_profile_fields.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
@@ -33,6 +37,10 @@ class FleetVehiclesScreen extends HookConsumerWidget {
     // Full (un-paginated) list — used for mobile list + KPI stat counts.
     final asyncAllVehicles = ref.watch(vehiclesProvider);
     final asyncEmployees = ref.watch(employeesProvider);
+    // Each card's mileage chip. Quietly absent if it can't be loaded (e.g. a role
+    // without access to the efficiency figures).
+    final fleetEfficiency = ref.watch(fleetEfficiencyProvider).value;
+    VehicleEfficiency? efficiencyOf(Vehicle v) => fleetEfficiency?.forVehicle(v.id);
 
     Future<void> openVehicleDialog([Vehicle? vehicle]) async {
       final nameCtrl = TextEditingController(text: vehicle?.name ?? '');
@@ -58,6 +66,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
       if (!['in_house', 'rented'].contains(ownershipType)) {
         ownershipType = 'in_house';
       }
+      final profile = VehicleProfileForm(vehicle);
 
       await showDialog(
         context: context,
@@ -185,6 +194,12 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                         ),
                       ),
                       16.h,
+                      VehicleProfileFields(
+                        form: profile,
+                        fuelType: fuelType,
+                        onChanged: () => setState(() {}),
+                      ),
+                      16.h,
                       DropdownButtonFormField<String>(
                         isExpanded: true,
                         initialValue: hasSelectedDriver ? driverId : '',
@@ -252,6 +267,12 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                 ),
                 ElevatedButton(
                   onPressed: () async {
+                    final problem = profile.validate();
+                    if (problem != null) {
+                      ScaffoldMessenger.of(dialogContext)
+                          .showSnackBar(SnackBar(content: Text(problem)));
+                      return;
+                    }
                     try {
                     await ref.read(vehicleServiceProvider).saveVehicle(
                           id: vehicle?.id,
@@ -264,8 +285,13 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                           notes: notesCtrl.text.trim(),
                           driverId: driverId,
                           ownershipType: ownershipType,
+                          category: profile.category,
+                          seats: profile.seatsValue,
+                          ratedMileage: profile.ratedMileageValue,
+                          tankCapacity: profile.tankCapacityValue,
                         );
                     ref.refreshData.vehicles();
+                    ref.invalidate(fleetEfficiencyProvider);
                     if (dialogContext.mounted) {
                       Navigator.of(dialogContext).pop();
                     }
@@ -283,6 +309,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
           );
         },
       );
+      profile.dispose();
     }
 
     Color statusColor(String status, CrmTheme colors) {
@@ -467,6 +494,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                               onSelected: (val) {
                                 if (val == 'edit') {
                                   openVehicleDialog(v);
+                                } else if (val == 'efficiency') {
+                                  showVehicleEfficiencySheet(context, v);
                                 } else if (val == 'delete') {
                                   deleteVehicle(v);
                                 }
@@ -478,6 +507,14 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                     Icon(Icons.edit, size: 16),
                                     SizedBox(width: 8),
                                     Text('Edit')
+                                  ]),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'efficiency',
+                                  child: Row(children: [
+                                    Icon(Icons.local_gas_station_outlined, size: 16),
+                                    SizedBox(width: 8),
+                                    Text('Fuel efficiency')
                                   ]),
                                 ),
                                 PopupMenuItem(
@@ -524,6 +561,14 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                 isRented ? crmColors.warning : crmColors.primary),
                             8.w,
                             _tag(v.fuelType.toUpperCase(), crmColors.textSecondary),
+                            if (v.category.isNotEmpty) ...[
+                              8.w,
+                              _tag(vehicleCategoryShortLabel(v.category).toUpperCase(), crmColors.primary),
+                            ],
+                            if (efficiencyOf(v)?.actual != null) ...[
+                              8.w,
+                              VehicleEfficiencyChip(efficiency: efficiencyOf(v)),
+                            ],
                             const Spacer(),
                             statusPill(v, accent),
                           ],
@@ -799,6 +844,8 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                         onSelected: (val) async {
                                           if (val == 'edit') {
                                             openVehicleDialog(v);
+                                          } else if (val == 'efficiency') {
+                                            showVehicleEfficiencySheet(context, v);
                                           } else if (val == 'delete') {
                                             final confirm = await showDialog<bool>(
                                               context: context,
@@ -827,6 +874,7 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                         },
                                         itemBuilder: (ctx) => [
                                           const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 16), SizedBox(width: 8), Text('Edit')])),
+                                          const PopupMenuItem(value: 'efficiency', child: Row(children: [Icon(Icons.local_gas_station_outlined, size: 16), SizedBox(width: 8), Text('Fuel efficiency')])),
                                           PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 16, color: crmColors.destructive), SizedBox(width: 8), Text('Delete', style: TextStyle(color: crmColors.destructive))])),
                                         ],
                                       ),
@@ -858,6 +906,10 @@ class FleetVehiclesScreen extends HookConsumerWidget {
                                         children: [
                                           _tag(isRented ? 'RENTED' : 'IN-HOUSE', isRented ? crmColors.warning : crmColors.primary),
                                           _tag(v.fuelType.toUpperCase(), crmColors.textSecondary),
+                                          if (v.category.isNotEmpty)
+                                            _tag(vehicleCategoryShortLabel(v.category).toUpperCase(), crmColors.primary),
+                                          if (efficiencyOf(v)?.actual != null)
+                                            VehicleEfficiencyChip(efficiency: efficiencyOf(v)),
                                         ],
                                       ),
                                       // Status Dropdown Toggle

@@ -9,8 +9,10 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/services/upload_service.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
+import 'package:nizan_crm/features/it/domain/okr_pace.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/okr_notifier.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/features/it/services/okr_service.dart';
 
 Future<bool?> showOKREditorDialog(
   BuildContext context,
@@ -53,12 +55,7 @@ class _OKREditorForm extends HookConsumerWidget {
   final String? parentObjectiveId;
   final List<String>? planningDepartments;
 
-  const _OKREditorForm({
-    this.projectId,
-    this.existing,
-    this.parentObjectiveId,
-    this.planningDepartments,
-  });
+  const _OKREditorForm({this.projectId, this.existing, this.parentObjectiveId, this.planningDepartments});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,6 +70,20 @@ class _OKREditorForm extends HookConsumerWidget {
     final status = useState<OKRStatus>(existing?.status ?? OKRStatus.inProgress);
     final priority = useState<OKRPriority>(existing?.priority ?? OKRPriority.high);
     final progress = useState<int>(existing?.progress ?? 0);
+    // Which objective this one contributes to (an OKR tree: company → department → project).
+    final parentId = useState<String?>(existing?.parentObjectiveId ?? parentObjectiveId);
+    // The company / department scope picker is for NEW planning objectives; an existing project
+    // objective keeps its project.
+    final planningMode = planningDepartments != null && existing?.effectiveLevel != 'project';
+    // What it can contribute to: its own project's objectives, plus the company and department ones
+    // (company → department → project).
+    final inProject = ref.watch(projectOKRsProvider(projectId)).value ?? const <OKRModel>[];
+    final planning = ref.watch(planningOkrsProvider).value ?? const <OKRModel>[];
+    final siblings = <OKRModel>[
+      ...{
+        for (final o in [...inProject, ...planning]) o.id: o,
+      }.values,
+    ];
     final projectHeadId = useState<String?>(existing?.projectHeadId);
     final projectHeadName = useState<String>(existing?.projectHeadName ?? '');
 
@@ -80,17 +91,10 @@ class _OKREditorForm extends HookConsumerWidget {
     final deadline = useState<DateTime?>(existing?.deadline);
 
     // Planning scope (company-wide vs a department) — dashboard mode only.
-    final planningMode = planningDepartments != null;
-    final scope = useState<String>(
-      (existing?.department.isNotEmpty ?? false) ? existing!.department : _companyScopeValue,
-    );
+    final scope = useState<String>((existing?.department.isNotEmpty ?? false) ? existing!.department : _companyScopeValue);
 
-    final keyResults = useState<List<KeyResultItem>>(
-      existing?.keyResults ?? const [],
-    );
-    final documents = useState<List<OKRDocument>>(
-      existing?.documents ?? const [],
-    );
+    final keyResults = useState<List<KeyResultItem>>(existing?.keyResults ?? const []);
+    final documents = useState<List<OKRDocument>>(existing?.documents ?? const []);
 
     final isSaving = useState<bool>(false);
     final isUploading = useState<bool>(false);
@@ -110,15 +114,19 @@ class _OKREditorForm extends HookConsumerWidget {
           'description': descCtrl.text.trim(),
           'status': status.value.slug,
           'priority': priority.value.slug,
-          'progress': progress.value,
+          // with key results the server works progress out from them
+          if (keyResults.value.isEmpty) 'progress': progress.value,
           'projectHeadId': projectHeadId.value,
           'projectHeadName': projectHeadName.value,
           'startDate': startDate.value?.toIso8601String(),
           'deadline': deadline.value?.toIso8601String(),
           'keyResults': keyResults.value.map((e) => e.toJson()).toList(),
           'documents': documents.value.map((e) => e.toJson()).toList(),
-          if (parentObjectiveId != null) 'parentObjectiveId': parentObjectiveId,
+          if (isEdit || parentId.value != null) 'parentObjectiveId': parentId.value,
           if (planningMode) 'department': scope.value,
+          if (planningMode) 'level': scope.value == _companyScopeValue ? 'company' : 'department',
+          // refuse to overwrite someone else's save made while this was open
+          if (isEdit && existing!.updatedAt != null) 'expectedUpdatedAt': existing!.updatedAt!.toUtc().toIso8601String(),
         };
 
         final notifier = ref.read(projectOKRsNotifierProvider(projectId).notifier);
@@ -130,9 +138,7 @@ class _OKREditorForm extends HookConsumerWidget {
 
         if (context.mounted) {
           Navigator.of(context).pop(true);
-          messenger.showSnackBar(
-            SnackBar(content: Text(isEdit ? 'Objective updated' : 'Objective created')),
-          );
+          messenger.showSnackBar(SnackBar(content: Text(isEdit ? 'Objective updated' : 'Objective created')));
         }
       } catch (e) {
         isSaving.value = false;
@@ -145,14 +151,7 @@ class _OKREditorForm extends HookConsumerWidget {
     void addKeyResult() {
       final text = krInputCtrl.text.trim();
       if (text.isEmpty) return;
-      keyResults.value = [
-        ...keyResults.value,
-        KeyResultItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: text,
-          metric: text,
-        ),
-      ];
+      keyResults.value = [...keyResults.value, KeyResultItem(id: DateTime.now().millisecondsSinceEpoch.toString(), title: text, metric: text)];
       krInputCtrl.clear();
     }
 
@@ -161,13 +160,7 @@ class _OKREditorForm extends HookConsumerWidget {
         color: crm.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: crm.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 28,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.16), blurRadius: 28, offset: const Offset(0, 10))],
       ),
       padding: const EdgeInsets.all(22),
       child: SingleChildScrollView(
@@ -180,10 +173,7 @@ class _OKREditorForm extends HookConsumerWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: crm.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                  decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
                   child: const Text('🎯', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(width: 12),
@@ -193,24 +183,13 @@ class _OKREditorForm extends HookConsumerWidget {
                     children: [
                       Text(
                         isEdit ? 'Edit Objective & KR' : 'New Objective & Key Result',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                          color: crm.textPrimary,
-                        ),
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: crm.textPrimary),
                       ),
-                      Text(
-                        'Set measurable targets and track project outcomes',
-                        style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                      ),
+                      Text('Set measurable targets and track project outcomes', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                     ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.of(context).pop(),
-                  tooltip: 'Close',
-                ),
+                IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.of(context).pop(), tooltip: 'Close'),
               ],
             ),
             const SizedBox(height: 16),
@@ -232,9 +211,7 @@ class _OKREditorForm extends HookConsumerWidget {
             // Scope (Company Planning Dashboard only): company-wide or a department.
             if (planningMode) ...[
               DropdownButtonFormField<String>(
-                initialValue: [_companyScopeValue, ...planningDepartments!].contains(scope.value)
-                    ? scope.value
-                    : _companyScopeValue,
+                initialValue: [_companyScopeValue, ...planningDepartments!].contains(scope.value) ? scope.value : _companyScopeValue,
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Scope',
@@ -252,6 +229,44 @@ class _OKREditorForm extends HookConsumerWidget {
               ),
               const SizedBox(height: 12),
             ],
+
+            // Which objective this one feeds into
+            Builder(
+              builder: (_) {
+                // not itself, and not anything beneath it (that would make a loop)
+                final below = <String>{if (existing != null) existing!.id};
+                for (var grew = true; grew;) {
+                  grew = false;
+                  for (final o in siblings) {
+                    if (o.parentObjectiveId != null && below.contains(o.parentObjectiveId) && below.add(o.id)) grew = true;
+                  }
+                }
+                // only something at the same level or above it (a department objective does not feed a project's)
+                final myLevel =
+                    existing?.effectiveLevel ?? (planningMode ? (scope.value == _companyScopeValue ? 'company' : 'department') : 'project');
+                final options = siblings.where((o) => !below.contains(o.id) && okrLevelRank(o) <= okrLevelOrder(myLevel)).toList();
+                return DropdownButtonFormField<String?>(
+                  initialValue: options.any((o) => o.id == parentId.value) ? parentId.value : null,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Contributes to',
+                    prefixIcon: const Icon(Icons.account_tree_outlined, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                  items: [
+                    const DropdownMenuItem<String?>(value: null, child: Text('Nothing (top-level objective)')),
+                    for (final o in options)
+                      DropdownMenuItem<String?>(
+                        value: o.id,
+                        child: Text(o.objective, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => parentId.value = v,
+                );
+              },
+            ),
+            const SizedBox(height: 12),
 
             // Project Head / Assignee
             EmployeePickerField(
@@ -358,9 +373,7 @@ class _OKREditorForm extends HookConsumerWidget {
                     },
                     icon: const Icon(Icons.calendar_today_outlined, size: 16),
                     label: Text(
-                      startDate.value == null
-                          ? 'Starting Date'
-                          : 'Start: ${DateFormat('dd/MM/yyyy').format(startDate.value!)}',
+                      startDate.value == null ? 'Starting Date' : 'Start: ${DateFormat('dd/MM/yyyy').format(startDate.value!)}',
                       style: const TextStyle(fontSize: 12),
                     ),
                     style: OutlinedButton.styleFrom(
@@ -394,9 +407,7 @@ class _OKREditorForm extends HookConsumerWidget {
                     },
                     icon: const Icon(Icons.event_outlined, size: 16),
                     label: Text(
-                      deadline.value == null
-                          ? 'Deadline'
-                          : 'Due: ${DateFormat('dd/MM/yyyy').format(deadline.value!)}',
+                      deadline.value == null ? 'Deadline' : 'Due: ${DateFormat('dd/MM/yyyy').format(deadline.value!)}',
                       style: const TextStyle(fontSize: 12),
                     ),
                     style: OutlinedButton.styleFrom(
@@ -409,34 +420,51 @@ class _OKREditorForm extends HookConsumerWidget {
             ),
             const SizedBox(height: 16),
 
-            // Progress Slider
-            Row(
-              children: [
-                const Text('Progress:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: crm.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
+            // Progress: typed only when there are no key results; otherwise they decide it.
+            if (keyResults.value.isNotEmpty)
+              Row(
+                children: [
+                  const Text('Progress:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      '${OKRModel.progressOf(keyResults.value)}%',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: crm.primary, fontSize: 12),
+                    ),
                   ),
-                  child: Text(
-                    '${progress.value}%',
-                    style: TextStyle(fontWeight: FontWeight.w800, color: crm.primary, fontSize: 12),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text('worked out from the key results below', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                   ),
-                ),
-                Expanded(
-                  child: Slider(
-                    value: progress.value.toDouble(),
-                    min: 0,
-                    max: 100,
-                    divisions: 100,
-                    activeColor: crm.primary,
-                    onChanged: (v) => progress.value = v.round(),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  const Text('Progress:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      '${progress.value}%',
+                      style: TextStyle(fontWeight: FontWeight.w800, color: crm.primary, fontSize: 12),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                  Expanded(
+                    child: Slider(
+                      value: progress.value.toDouble(),
+                      min: 0,
+                      max: 100,
+                      divisions: 100,
+                      activeColor: crm.primary,
+                      onChanged: (v) => progress.value = v.round(),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 12),
 
             // Key Results Section
@@ -520,10 +548,7 @@ class _OKREditorForm extends HookConsumerWidget {
                           isUploading.value = true;
                           try {
                             final url = await ref.read(uploadServiceProvider).uploadImage(file);
-                            documents.value = [
-                              ...documents.value,
-                              OKRDocument(name: file.name.isNotEmpty ? file.name : 'Attachment', url: url),
-                            ];
+                            documents.value = [...documents.value, OKRDocument(name: file.name.isNotEmpty ? file.name : 'Attachment', url: url)];
                           } catch (e) {
                             messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                           } finally {
@@ -534,9 +559,7 @@ class _OKREditorForm extends HookConsumerWidget {
                       ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.attach_file, size: 16),
                   label: Text(isUploading.value ? 'Uploading…' : 'Attach Document / PDF'),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
+                  style: OutlinedButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                 ),
               ],
             ),
@@ -591,15 +614,8 @@ class _OKREditorForm extends HookConsumerWidget {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
                 child: isSaving.value
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : Text(
-                        isEdit ? 'Save Changes' : 'Create Objective',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                      ),
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(isEdit ? 'Save Changes' : 'Create Objective', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
               ),
             ),
           ],

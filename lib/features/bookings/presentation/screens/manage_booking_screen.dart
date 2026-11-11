@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/fleet_availability_widgets.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
 import 'package:nizan_crm/core/utils/phone_utils.dart';
@@ -1307,15 +1308,19 @@ class ManageBookingScreen extends HookConsumerWidget {
         final updatedBooking = buildCurrentBookingSnapshot();
         Booking? savedBooking;
         try {
-          savedBooking = await ref
-              .read(bookingProvider.notifier)
-              .updateBooking(updatedBooking);
+          savedBooking = await updateBookingConfirmingFleet(
+            context,
+            ref,
+            updatedBooking,
+          );
         } catch (error) {
           if (context.mounted) {
             showErrorSnackBar(context, error);
           }
           return;
         }
+        // null: a driver was already committed and the person chose not to assign anyway
+        if (savedBooking == null) return;
         if (!context.mounted) return;
         try {
           await showPrintDialog(savedBooking);
@@ -2089,13 +2094,19 @@ class ManageBookingScreen extends HookConsumerWidget {
 
                             Booking? savedBooking;
                             try {
-                              savedBooking = await ref
-                                  .read(bookingProvider.notifier)
-                                  .updateBooking(updatedBooking);
+                              savedBooking = await updateBookingConfirmingFleet(
+                                context,
+                                ref,
+                                updatedBooking,
+                              );
                             } catch (error) {
                               if (context.mounted) {
                                 showErrorSnackBar(context, error);
                               }
+                              return;
+                            }
+                            // null: a driver was already committed and the person chose not to assign anyway
+                            if (savedBooking == null) {
                               return;
                             }
 

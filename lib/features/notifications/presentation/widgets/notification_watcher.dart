@@ -155,6 +155,24 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
         return Icons.person_add_alt_1_rounded;
       case 'report_uploaded':
         return Icons.folder_shared_rounded;
+      case 'monthly_objectives_set':
+        return Icons.flag_rounded;
+      case 'monthly_objectives_close':
+        return Icons.task_alt_rounded;
+      case 'monthly_objective_ready':
+        return Icons.check_circle_rounded;
+      case 'ceo_digest':
+        return Icons.gavel_rounded;
+      case 'project_cost_request':
+        return Icons.payments_rounded;
+      case 'project_cost_decision':
+        return Icons.verified_rounded;
+      case 'manpower_request':
+        return Icons.group_add_rounded;
+      case 'manpower_update':
+        return Icons.groups_rounded;
+      case 'manpower_release':
+        return Icons.how_to_reg_rounded;
       default:
         return Icons.notifications_active_rounded;
     }

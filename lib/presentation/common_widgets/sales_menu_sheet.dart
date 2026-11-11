@@ -62,6 +62,7 @@ List<_Group> _groupsFor(Access access) {
     ]),
     _Group('More', [
       const _Item('Notifications', Icons.notifications_none_rounded, '/notifications'),
+      const _Item('Monthly Objectives', Icons.flag_outlined, '/monthly-objectives'),
       if (access.canSeeCompanyReports)
         const _Item('Company Reports', Icons.folder_shared_outlined, '/company-reports'),
       if (access.canSeePlanning)

@@ -7,6 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/next_work_provider.dart';
+import 'package:nizan_crm/features/bookings/data/next_work_hint.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/next_work_strip.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../features/accounts/controllers/collection_controller.dart';
 import '../../core/theme/crm_theme.dart';
@@ -990,7 +993,7 @@ class _TrialCollectSheetState extends ConsumerState<_TrialCollectSheet> {
   }
 }
 
-class _BookingCardStack extends HookWidget {
+class _BookingCardStack extends HookConsumerWidget {
   final List<Booking> bookings;
   final BookingPageSummary summary;
   final bool isCompletedTab;
@@ -1012,7 +1015,7 @@ class _BookingCardStack extends HookWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final expandedIndex = useState<int?>(null);
     final now = DateTime.now();
@@ -1102,6 +1105,13 @@ class _BookingCardStack extends HookWidget {
         )
         .toList();
 
+    // With several works in a day, each card says which one is next and how far it is.
+    // A failure (or a slow map service) just leaves the strip out — never the list.
+    final hints = ref
+        .watch(nextWorkHintsProvider(nextWorkKey([...todayBookings, ...upcomingBookings].map((b) => b.id))))
+        .value;
+    NextWorkHint? hintFor(Booking b) => hints?.byBooking[b.id];
+
     return Column(
       children: [
         _SummaryStrip(summary: summary, total: totalItems),
@@ -1137,6 +1147,8 @@ class _BookingCardStack extends HookWidget {
                           : e.value.id.hashCode;
                     },
                     isToday: true,
+                    nextHint: hintFor(e.value),
+                    distanceReady: hints?.distanceReady ?? true,
                   ),
                 ),
                 20.h,
@@ -1161,6 +1173,8 @@ class _BookingCardStack extends HookWidget {
                           : e.value.id.hashCode;
                     },
                     isToday: false,
+                    nextHint: hintFor(e.value),
+                    distanceReady: hints?.distanceReady ?? true,
                   ),
                 ),
                 20.h,
@@ -1434,6 +1448,10 @@ class _AnimatedWorkCard extends ConsumerWidget {
   final bool isToday;
   final bool isPast;
 
+  /// Where this work falls in the artist's day and the road to the next one.
+  final NextWorkHint? nextHint;
+  final bool distanceReady;
+
   const _AnimatedWorkCard({
     required this.booking,
     required this.index,
@@ -1441,6 +1459,8 @@ class _AnimatedWorkCard extends ConsumerWidget {
     required this.onTap,
     required this.isToday,
     this.isPast = false,
+    this.nextHint,
+    this.distanceReady = true,
   });
 
   @override
@@ -1455,9 +1475,10 @@ class _AnimatedWorkCard extends ConsumerWidget {
     // Get the logged in artist's employeeId to only show their assigned works
     final authSession = ref.watch(authSessionProvider);
     final employeeId = authSession?.employeeId ?? '';
+    final allStaff = booking.allAssignedStaff;
 
     // My assigned works for this booking
-    final myWorks = booking.assignedStaff
+    final myWorks = allStaff
         .where((s) => (employeeId.isEmpty || s.employeeId == employeeId) && s.works.isNotEmpty)
         .expand((s) => s.works)
         .toSet()
@@ -1621,6 +1642,39 @@ class _AnimatedWorkCard extends ConsumerWidget {
                                               fontSize: 9,
                                               fontWeight: FontWeight.w700,
                                               color: Colors.orange,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (allStaff.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 7,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.groups_2_rounded,
+                                            size: 11,
+                                            color: Color(0xFF6366F1),
+                                          ),
+                                          4.w,
+                                          Text(
+                                            'TEAM: ${allStaff.length}',
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                              color: Color(0xFF6366F1),
                                             ),
                                           ),
                                         ],
@@ -1867,6 +1921,16 @@ class _AnimatedWorkCard extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  // ── Next work (only on a day with several works) ──
+                  if (nextHint != null && nextHint!.isMultiWorkDay) ...[
+                    10.h,
+                    NextWorkStrip(
+                      hint: nextHint!,
+                      distanceReady: distanceReady,
+                      dayLabel: isToday ? 'today' : 'on ${_fmt(booking.serviceStart)}',
+                      onOpenMap: (url) => _openMapUrl(url, context),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -1903,6 +1967,9 @@ class _ExpandedDetails extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final isPostponed = booking.status.toLowerCase() == 'postponed';
+    final authSession = ref.watch(authSessionProvider);
+    final employeeId = authSession?.employeeId ?? '';
+    final team = booking.allAssignedStaff;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2093,6 +2160,19 @@ class _ExpandedDetails extends ConsumerWidget {
                   spacing: 8,
                   runSpacing: 6,
                   children: myWorks.map((w) => _WorkTag(text: w)).toList(),
+                ),
+                16.h,
+              ],
+
+              // Assigned Team
+              if (team.isNotEmpty) ...[
+                _DetailLabel('Assigned Team (${team.length})'),
+                8.h,
+                _AssignedTeamSection(
+                  assignedStaff: team,
+                  currentEmployeeId: employeeId,
+                  onCall: (phone) => _makePhoneCall(phone, context),
+                  onWhatsApp: (phone) => _openWhatsApp(phone, context),
                 ),
                 16.h,
               ],
@@ -3370,6 +3450,251 @@ class _WorkTag extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _AssignedTeamSection extends StatelessWidget {
+  final List<BookingAssignment> assignedStaff;
+  final String currentEmployeeId;
+  final ValueChanged<String> onCall;
+  final ValueChanged<String> onWhatsApp;
+
+  const _AssignedTeamSection({
+    required this.assignedStaff,
+    required this.currentEmployeeId,
+    required this.onCall,
+    required this.onWhatsApp,
+  });
+
+  Color _roleColor(String roleType) {
+    switch (roleType.toLowerCase()) {
+      case 'lead':
+        return const Color(0xFFD97706); // Amber / Gold
+      case 'artist':
+        return const Color(0xFF6366F1); // Indigo
+      case 'assistant':
+        return const Color(0xFF0D9488); // Teal
+      case 'driver':
+        return const Color(0xFF16A34A); // Green
+      default:
+        return const Color(0xFF8B5CF6); // Purple
+    }
+  }
+
+  String _roleLabel(BookingAssignment a) {
+    if (a.role.trim().isNotEmpty) return a.role.trim();
+    if (a.roleType.trim().isNotEmpty) {
+      final rt = a.roleType.trim().toLowerCase();
+      if (rt == 'lead') return 'Lead Artist';
+      if (rt == 'artist') return 'Artist';
+      if (rt == 'assistant') return 'Assistant';
+      if (rt == 'driver') return 'Driver';
+      return rt.toUpperCase();
+    }
+    return 'Team Member';
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+
+    return Column(
+      children: assignedStaff.map((member) {
+        final isMe = currentEmployeeId.isNotEmpty && member.employeeId == currentEmployeeId;
+        final roleColor = _roleColor(member.roleType);
+        final roleLabel = _roleLabel(member);
+        final phone = member.phone.trim();
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: isMe
+                ? roleColor.withValues(alpha: 0.05)
+                : crm.background,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isMe
+                  ? roleColor.withValues(alpha: 0.3)
+                  : crm.border,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  // Avatar
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: roleColor.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: roleColor.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _initials(member.artistName),
+                      style: TextStyle(
+                        color: roleColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  10.w,
+                  // Name + Role Badge
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.artistName,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: crm.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (isMe) ...[
+                              6.w,
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'YOU',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF16A34A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        3.h,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: roleColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            roleLabel.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: roleColor,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Contact actions
+                  if (phone.isNotEmpty && !isMe) ...[
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => onCall(phone),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: crm.primary.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.call_rounded,
+                            size: 14,
+                            color: crm.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    6.w,
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => onWhatsApp(phone),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF25D366).withValues(alpha: 0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.chat_outlined,
+                            size: 14,
+                            color: Color(0xFF25D366),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              // Member's specific works/tasks
+              if (member.works.isNotEmpty) ...[
+                8.h,
+                Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: member.works.map((w) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: roleColor.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        w,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: roleColor,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 }
 
 class _PayCard extends StatelessWidget {

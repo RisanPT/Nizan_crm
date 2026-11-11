@@ -188,6 +188,9 @@ const List<AppFeature> kAppFeatures = [
       Icons.insights_outlined),
   AppFeature('settings', 'Settings', 'Users, roles and configuration',
       Icons.settings_outlined),
+  // Mirrors the backend `ceo` key: the CEO home (decisions inbox + company at a glance). View-and-decide only.
+  AppFeature('ceo', 'CEO Overview', 'Decisions inbox and the company at a glance',
+      Icons.space_dashboard_outlined),
 ];
 
 AppFeature? featureForKey(String key) {

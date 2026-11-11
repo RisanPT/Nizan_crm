@@ -29,9 +29,14 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 class CalendarScreen extends HookConsumerWidget {
-  const CalendarScreen({super.key, this.initialFocusDate});
+  const CalendarScreen({
+    super.key,
+    this.initialFocusDate,
+    this.initialArtistId,
+  });
 
   final DateTime? initialFocusDate;
+  final String? initialArtistId;
 
   // Maps service names to colors for the calendar blocks
   static const _serviceColors = {
@@ -749,7 +754,9 @@ class CalendarScreen extends HookConsumerWidget {
     final role = session != null
         ? AppRole.fromString(session.role)
         : AppRole.artist;
-    final isArtist = role == AppRole.artist;
+    final isArtistHead =
+        (session?.artistHead ?? false) || role == AppRole.artistHead;
+    final isSoloArtist = role == AppRole.artist && !isArtistHead;
     final artistEmployeeId = session?.employeeId;
 
     // All bookings from provider
@@ -764,7 +771,9 @@ class CalendarScreen extends HookConsumerWidget {
             .where(
               (employee) =>
                   employee.status.toLowerCase() == 'active' &&
-                  employee.artistRole.toLowerCase() == 'artist',
+                  (employee.isArtist ||
+                      employee.artistRole.toLowerCase().contains('artist') ||
+                      employee.designation.toLowerCase().contains('artist')),
             )
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name));
@@ -781,7 +790,7 @@ class CalendarScreen extends HookConsumerWidget {
     final monthFocus = useState<DateTime>(DateTime(now.year, now.month, 1));
     final viewMode = useState<String>('Month');
     final selectedArtistFilter = useState<String>(
-      isArtist ? (artistEmployeeId ?? 'all') : 'all',
+      initialArtistId ?? (isSoloArtist ? (artistEmployeeId ?? 'all') : 'all'),
     );
 
     // Geographic filters (zone → state → region → district).
@@ -945,16 +954,25 @@ class CalendarScreen extends HookConsumerWidget {
       final filter = selectedArtistFilter.value;
       if (filter == 'all') return true;
       if (filter == 'unassigned') {
-        return !booking.assignedStaff.any(
+        final hasDirect = booking.assignedStaff.any(
           (assignment) => assignment.artistName.trim().isNotEmpty,
         );
+        final hasItem = booking.bookingItems.any(
+          (item) => item.assignedStaff.any(
+            (assignment) => assignment.artistName.trim().isNotEmpty,
+          ),
+        );
+        return !hasDirect && !hasItem;
       }
-      return booking.assignedStaff.any(
-        (assignment) =>
-            (assignment.roleType.toLowerCase() == 'artist' ||
-                assignment.roleType.toLowerCase() == 'lead') &&
-            assignment.employeeId == filter,
+      final matchesDirect = booking.assignedStaff.any(
+        (assignment) => assignment.employeeId == filter,
       );
+      final matchesItem = booking.bookingItems.any(
+        (item) => item.assignedStaff.any(
+          (assignment) => assignment.employeeId == filter,
+        ),
+      );
+      return matchesDirect || matchesItem;
     }).toList();
 
     // ── Monthly works report ─────────────────────────────────────────────
@@ -1153,7 +1171,7 @@ class CalendarScreen extends HookConsumerWidget {
       },
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        floatingActionButton: (isMobile && !isArtist)
+        floatingActionButton: (isMobile && !isSoloArtist)
             ? FloatingActionButton(
                 onPressed: () => showAddBookingModeChooser(context),
                 backgroundColor: crmColors.primary,
@@ -1218,7 +1236,7 @@ class CalendarScreen extends HookConsumerWidget {
                       ),
                     ),
                   ),
-                  if (!isArtist) ...[
+                  if (!isSoloArtist) ...[
                     12.w,
                     ElevatedButton.icon(
                       onPressed: () => showAddBookingModeChooser(context),
@@ -1347,10 +1365,10 @@ class CalendarScreen extends HookConsumerWidget {
                                         crmColors,
                                         activeArtists,
                                         selectedArtistFilter,
-                                        isArtist,
+                                        isSoloArtist,
                                       ),
                                     ),
-                                    if (!isArtist) ...[
+                                    if (!isSoloArtist) ...[
                                       8.w,
                                       _geoFilterButton(
                                         context,
@@ -1448,9 +1466,9 @@ class CalendarScreen extends HookConsumerWidget {
                                       crmColors,
                                       activeArtists,
                                       selectedArtistFilter,
-                                      isArtist,
+                                      isSoloArtist,
                                     ),
-                                    if (!isArtist) ...[
+                                    if (!isSoloArtist) ...[
                                       12.w,
                                       _geoFilterButton(
                                         context,
@@ -1495,7 +1513,7 @@ class CalendarScreen extends HookConsumerWidget {
                     ),
                     // Month KPIs (follow the artist / location filters).
                     // Money figures are management-only, so artists skip them.
-                    if (!isArtist)
+                    if (!isSoloArtist)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: MonthKpiStrip(
@@ -1570,7 +1588,7 @@ class CalendarScreen extends HookConsumerWidget {
                                   _mobileDay(
                                     context,
                                     crmColors,
-                                    isArtist,
+                                    isSoloArtist,
                                     [
                                       ...filteredCalendarBookings.where(
                                         (b) => b.isOnDate(selectedDay),
@@ -1600,7 +1618,7 @@ class CalendarScreen extends HookConsumerWidget {
   Widget _mobileDay(
     BuildContext context,
     CrmTheme crmColors,
-    bool isArtist,
+    bool isSoloArtist,
     List<Booking> bookings,
     DateTime day,
   ) {
@@ -1619,7 +1637,7 @@ class CalendarScreen extends HookConsumerWidget {
                 'No bookings for this day',
                 style: TextStyle(color: crmColors.textSecondary, fontSize: 14),
               ),
-              if (!isArtist) ...[
+              if (!isSoloArtist) ...[
                 12.h,
                 ElevatedButton.icon(
                   onPressed: () => showAddBookingModeChooser(context),
@@ -2122,9 +2140,9 @@ class CalendarScreen extends HookConsumerWidget {
     CrmTheme crmColors,
     List<Employee> activeArtists,
     ValueNotifier<String> selectedArtistFilter,
-    bool isArtist,
+    bool isSoloArtist,
   ) {
-    if (isArtist) {
+    if (isSoloArtist) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
@@ -3483,7 +3501,8 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
       );
     }
 
-    final artists = b.assignedStaff
+    final teamStaff = b.allAssignedStaff;
+    final artists = teamStaff
         .where((a) => a.artistName.trim().isNotEmpty)
         .map((a) => a.artistName.trim())
         .toSet()
@@ -3530,6 +3549,96 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final r in rows) _workDetailRow(crm, r.$1, r.$2, r.$3),
+        if (teamStaff.isNotEmpty) ...[
+          12.h,
+          Text(
+            'ASSIGNED TEAM (${teamStaff.length})',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: crm.textSecondary,
+              letterSpacing: 0.8,
+            ),
+          ),
+          8.h,
+          for (final member in teamStaff)
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: crm.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: crm.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    member.roleType.toLowerCase() == 'lead'
+                        ? Icons.star_rounded
+                        : member.roleType.toLowerCase() == 'driver'
+                            ? Icons.directions_car_rounded
+                            : Icons.person_outline,
+                    size: 16,
+                    color: member.roleType.toLowerCase() == 'lead'
+                        ? const Color(0xFFD97706)
+                        : member.roleType.toLowerCase() == 'driver'
+                            ? const Color(0xFF16A34A)
+                            : crm.primary,
+                  ),
+                  8.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          member.artistName,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                        if (member.role.isNotEmpty || member.roleType.isNotEmpty)
+                          Text(
+                            member.role.isNotEmpty
+                                ? member.role
+                                : member.roleType.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: crm.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (member.works.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        member.works.join(', '),
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: crm.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  if (member.phone.trim().isNotEmpty)
+                    InkWell(
+                      onTap: () {
+                        final uri = Uri.tryParse('tel:${member.phone.trim().replaceAll(RegExp(r'\s+'), '')}');
+                        if (uri != null) launchUrl(uri);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.call_rounded, size: 14, color: crm.primary),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
         // Reference looks uploaded by CRM — read-only for the artist.
         if (b.referenceImages.isNotEmpty) ...[
           10.h,

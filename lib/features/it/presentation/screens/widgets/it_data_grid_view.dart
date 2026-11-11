@@ -6,6 +6,9 @@ import 'package:pluto_grid/pluto_grid.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/it/data/project.dart';
+import 'package:nizan_crm/features/it/domain/task_rights.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_detail_sheet.dart';
@@ -16,12 +19,7 @@ class ITDataGridView extends ConsumerStatefulWidget {
   final List<ITTaskModel> allTasks;
   final String? projectId;
 
-  const ITDataGridView({
-    super.key,
-    required this.tasks,
-    required this.allTasks,
-    this.projectId,
-  });
+  const ITDataGridView({super.key, required this.tasks, required this.allTasks, this.projectId});
 
   @override
   ConsumerState<ITDataGridView> createState() => _ITDataGridViewState();
@@ -30,6 +28,23 @@ class ITDataGridView extends ConsumerStatefulWidget {
 class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
   PlutoGridStateManager? _stateManager;
   final Set<String> _selectedTaskIds = {};
+  Project? _project;
+  String _me = '';
+
+  bool get _isItProject =>
+      ((_project ?? ref.read(projectByIdProvider(widget.projectId ?? '')))?.targetDepartment ?? 'it').toLowerCase().trim() == 'it';
+
+  TaskRights _rightsOf(String taskId) {
+    final t = widget.allTasks.where((x) => x.id == taskId).firstOrNull;
+    return t == null ? TaskRights.all : taskRightsFor(_project, t, myEmployeeId: _me);
+  }
+
+  /// A cell is read-only for a row the person may not [plan] (title, dates, assignee…) or,
+  /// for progress cells, may not report on. The server refuses the same edits.
+  bool Function(PlutoRow, PlutoCell) _readOnlyUnless({required bool plan}) => (row, cell) {
+    final r = _rightsOf(row.cells['id']!.value.toString());
+    return plan ? !r.plan : !r.progress;
+  };
 
   @override
   void didUpdateWidget(covariant ITDataGridView oldWidget) {
@@ -55,9 +70,12 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
   }
 
   List<PlutoColumn> _buildColumns(CrmTheme crm, List<Employee> employees) {
+    final project = ref.read(projectByIdProvider(widget.projectId ?? ''));
+    final isItProject = (project?.targetDepartment ?? 'it').toLowerCase().trim() == 'it';
+
     return [
       PlutoColumn(
-        title: 'KEY',
+        title: isItProject ? 'KEY' : 'TASK #',
         field: 'key',
         type: PlutoColumnType.text(),
         width: 100,
@@ -72,82 +90,84 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
               alignment: Alignment.centerLeft,
               child: Text(
                 key,
-                style: TextStyle(
-                  color: crm.primary,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: crm.primary, fontWeight: FontWeight.w800, fontSize: 12),
               ),
             ),
           );
         },
       ),
-      PlutoColumn(
-        title: 'TYPE',
-        field: 'type',
-        type: PlutoColumnType.select(ITTicketType.values.map((e) => e.label).toList()),
-        width: 125,
-        renderer: (renderContext) {
-          final t = ITTicketType.fromString(renderContext.cell.value.toString());
-          return Container(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: t.color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(t.icon, size: 13, color: t.color),
-                const SizedBox(width: 5),
-                Text(
-                  t.label,
-                  style: TextStyle(color: t.color, fontSize: 11, fontWeight: FontWeight.w700),
+      if (isItProject)
+        PlutoColumn(
+          title: 'TYPE',
+          field: 'type',
+          checkReadOnly: _readOnlyUnless(plan: true),
+          type: PlutoColumnType.select(ITTicketType.values.map((e) => e.label).toList()),
+          width: 125,
+          renderer: (renderContext) {
+            final t = ITTicketType.fromString(renderContext.cell.value.toString());
+            return Container(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(color: t.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(t.icon, size: 13, color: t.color),
+                    const SizedBox(width: 5),
+                    Text(
+                      t.label,
+                      style: TextStyle(color: t.color, fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                  ],
                 ),
-              ]),
-            ),
-          );
-        },
-      ),
+              ),
+            );
+          },
+        ),
       PlutoColumn(
         title: 'SUMMARY',
         field: 'title',
+        checkReadOnly: _readOnlyUnless(plan: true),
         type: PlutoColumnType.text(),
         width: 260,
         renderer: (renderContext) {
           final taskId = renderContext.row.cells['id']!.value.toString();
           final title = renderContext.cell.value.toString();
           final isBlocked = renderContext.row.cells['isBlocked']!.value == true;
-          return Row(children: [
-            if (isBlocked)
-              const Padding(
-                padding: EdgeInsets.only(right: 6),
-                child: Tooltip(
-                  message: 'Blocked by predecessor task',
-                  child: Icon(Icons.lock_clock, size: 15, color: Colors.amber),
-                ),
-              ),
-            Expanded(
-              child: InkWell(
-                onTap: () => _openDetail(taskId),
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: crm.textPrimary,
+          return Row(
+            children: [
+              if (isBlocked)
+                const Padding(
+                  padding: EdgeInsets.only(right: 6),
+                  child: Tooltip(
+                    message: 'Blocked by predecessor task',
+                    child: Icon(Icons.lock_clock, size: 15, color: Colors.amber),
                   ),
-                  overflow: TextOverflow.ellipsis,
+                ),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _openDetail(taskId),
+                  child: Text(
+                    title,
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.textPrimary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
-            ),
-          ]);
+            ],
+          );
         },
       ),
       PlutoColumn(
         title: 'STATUS',
         field: 'status',
-        type: PlutoColumnType.select(ITTaskStatus.values.map((e) => e.label).toList()),
+        checkReadOnly: _readOnlyUnless(plan: false),
+        type: PlutoColumnType.select(
+          isItProject
+              ? ITTaskStatus.values.map((e) => e.label).toList()
+              : const ['Backlog', 'To Do', 'In Progress', 'In Review', 'Completed', 'Done'],
+        ),
         width: 140,
         renderer: (renderContext) {
           final st = ITTaskStatus.fromString(renderContext.cell.value.toString());
@@ -155,29 +175,30 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
             alignment: Alignment.centerLeft,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: st.color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(6),
+              decoration: BoxDecoration(color: st.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: st.color),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    st.labelFor(isIt: isItProject),
+                    style: TextStyle(color: st.color, fontSize: 11, fontWeight: FontWeight.w700),
+                  ),
+                ],
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: st.color),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  st.label,
-                  style: TextStyle(color: st.color, fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              ]),
             ),
           );
         },
       ),
       PlutoColumn(
-        title: 'SEVERITY',
+        title: isItProject ? 'SEVERITY' : 'PRIORITY',
         field: 'severity',
+        checkReadOnly: _readOnlyUnless(plan: true),
         type: PlutoColumnType.select(ITSeverity.values.map((e) => e.label).toList()),
         width: 125,
         renderer: (renderContext) {
@@ -186,65 +207,94 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
             alignment: Alignment.centerLeft,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
-              decoration: BoxDecoration(
-                color: sv.color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(6),
-              ),
+              decoration: BoxDecoration(color: sv.color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
               child: Text(
-                sv.label,
+                isItProject ? sv.label : sv.label.replaceAll(RegExp(r'^P\d\s*-\s*'), ''),
                 style: TextStyle(color: sv.color, fontSize: 11, fontWeight: FontWeight.w700),
               ),
             ),
           );
         },
       ),
-      PlutoColumn(
-        title: 'SUB-TEAM',
-        field: 'subTeam',
-        type: PlutoColumnType.select(ITSubTeam.values.map((e) => e.label).toList()),
-        width: 120,
-        renderer: (renderContext) {
-          final tm = ITSubTeam.fromString(renderContext.cell.value.toString());
-          return Container(
-            alignment: Alignment.centerLeft,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(tm.icon, size: 14, color: tm.color),
-              const SizedBox(width: 5),
-              Text(
-                tm.label,
-                style: TextStyle(color: tm.color, fontSize: 11.5, fontWeight: FontWeight.w600),
+      if (isItProject)
+        PlutoColumn(
+          title: 'SUB-TEAM',
+          field: 'subTeam',
+          checkReadOnly: _readOnlyUnless(plan: true),
+          type: PlutoColumnType.select(ITSubTeam.values.map((e) => e.label).toList()),
+          width: 120,
+          renderer: (renderContext) {
+            final tm = ITSubTeam.fromString(renderContext.cell.value.toString());
+            return Container(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(tm.icon, size: 14, color: tm.color),
+                  const SizedBox(width: 5),
+                  Text(
+                    tm.label,
+                    style: TextStyle(color: tm.color, fontSize: 11.5, fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
-            ]),
-          );
-        },
-      ),
+            );
+          },
+        )
+      else
+        PlutoColumn(
+          title: 'DEPARTMENT',
+          field: 'department',
+          type: PlutoColumnType.text(),
+          enableEditingMode: false,
+          width: 135,
+          renderer: (renderContext) {
+            final dept = renderContext.cell.value.toString();
+            return Container(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: crm.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: crm.primary.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  dept.isEmpty ? 'General' : dept,
+                  style: TextStyle(color: crm.primary, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
+            );
+          },
+        ),
       PlutoColumn(
         title: 'ASSIGNEE',
         field: 'assignee',
-        type: PlutoColumnType.select([
-          'Unassigned',
-          for (final e in employees) e.name,
-        ]),
+        checkReadOnly: _readOnlyUnless(plan: true),
+        type: PlutoColumnType.select(['Unassigned', for (final e in employees) e.name]),
         width: 140,
         renderer: (renderContext) {
           final name = renderContext.cell.value.toString();
           return Container(
             alignment: Alignment.centerLeft,
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.account_circle_outlined, size: 16, color: crm.textSecondary),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  name.isEmpty ? 'Unassigned' : name,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: name.isEmpty ? crm.textSecondary : crm.textPrimary,
-                    fontWeight: name.isEmpty ? FontWeight.normal : FontWeight.w600,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.account_circle_outlined, size: 16, color: crm.textSecondary),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    name.isEmpty ? 'Unassigned' : name,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: name.isEmpty ? crm.textSecondary : crm.textPrimary,
+                      fontWeight: name.isEmpty ? FontWeight.normal : FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ]),
+              ],
+            ),
           );
         },
       ),
@@ -267,11 +317,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.calendar_today_outlined,
-                    size: 13,
-                    color: hasDate ? crm.primary : crm.textSecondary.withValues(alpha: 0.6),
-                  ),
+                  Icon(Icons.calendar_today_outlined, size: 13, color: hasDate ? crm.primary : crm.textSecondary.withValues(alpha: 0.6)),
                   const SizedBox(width: 6),
                   Text(
                     hasDate ? dateStr : 'Set date',
@@ -306,11 +352,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.event_outlined,
-                    size: 13,
-                    color: hasDate ? const Color(0xFFE11D48) : crm.textSecondary.withValues(alpha: 0.6),
-                  ),
+                  Icon(Icons.event_outlined, size: 13, color: hasDate ? const Color(0xFFE11D48) : crm.textSecondary.withValues(alpha: 0.6)),
                   const SizedBox(width: 6),
                   Text(
                     hasDate ? dateStr : 'Set date',
@@ -329,18 +371,21 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
       PlutoColumn(
         title: 'EST. (HRS)',
         field: 'estimatedHours',
+        checkReadOnly: _readOnlyUnless(plan: true),
         type: PlutoColumnType.number(format: '#,###.0'),
         width: 100,
       ),
       PlutoColumn(
         title: 'ACT. (HRS)',
         field: 'actualHours',
+        checkReadOnly: _readOnlyUnless(plan: false),
         type: PlutoColumnType.number(format: '#,###.0'),
         width: 100,
       ),
       PlutoColumn(
         title: 'PROGRESS',
         field: 'percentComplete',
+        checkReadOnly: _readOnlyUnless(plan: false),
         type: PlutoColumnType.number(format: '##0%'),
         width: 105,
         renderer: (renderContext) {
@@ -348,26 +393,26 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
           return Container(
             alignment: Alignment.center,
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: pct / 100,
-                    minHeight: 6,
-                    backgroundColor: crm.background,
-                    valueColor: AlwaysStoppedAnimation(
-                      pct >= 100 ? const Color(0xFF10B981) : crm.primary,
+            child: Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: pct / 100,
+                      minHeight: 6,
+                      backgroundColor: crm.background,
+                      valueColor: AlwaysStoppedAnimation(pct >= 100 ? const Color(0xFF10B981) : crm.primary),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '$pct%',
-                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: crm.textSecondary),
-              ),
-            ]),
+                const SizedBox(width: 6),
+                Text(
+                  '$pct%',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: crm.textSecondary),
+                ),
+              ],
+            ),
           );
         },
       ),
@@ -382,9 +427,10 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
           'key': PlutoCell(value: t.ticketKey),
           'type': PlutoCell(value: t.ticketType.label),
           'title': PlutoCell(value: t.title),
-          'status': PlutoCell(value: t.status.label),
+          'status': PlutoCell(value: t.status.labelFor(isIt: _isItProject)),
           'severity': PlutoCell(value: t.severity.label),
           'subTeam': PlutoCell(value: t.subTeam.label),
+          'department': PlutoCell(value: t.departmentName.isEmpty ? 'General' : t.departmentName),
           'assignee': PlutoCell(value: t.assigneeName.isEmpty ? 'Unassigned' : t.assigneeName),
           'startDate': PlutoCell(value: t.startDate != null ? DateFormat('yyyy-MM-dd').format(t.startDate!) : ''),
           'dueDate': PlutoCell(value: t.dueDate != null ? DateFormat('yyyy-MM-dd').format(t.dueDate!) : ''),
@@ -407,12 +453,11 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
     });
   }
 
-  Future<void> _pickDate(
-    PlutoColumnRendererContext renderContext,
-    String taskId,
-    String field,
-    String currentVal,
-  ) async {
+  Future<void> _pickDate(PlutoColumnRendererContext renderContext, String taskId, String field, String currentVal) async {
+    if (!_rightsOf(taskId).plan) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('The project manager sets the dates on this ticket.')));
+      return;
+    }
     final crm = context.crmColors;
     final parsedCurrent = DateTime.tryParse(currentVal);
     final initial = parsedCurrent ?? DateTime.now();
@@ -425,12 +470,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: crm.primary,
-              onPrimary: Colors.white,
-              onSurface: crm.textPrimary,
-              surface: crm.surface,
-            ),
+            colorScheme: ColorScheme.light(primary: crm.primary, onPrimary: Colors.white, onSurface: crm.textPrimary, surface: crm.surface),
           ),
           child: child!,
         );
@@ -475,6 +515,9 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
     } else if (field == 'status') {
       final st = ITTaskStatus.fromString(val.toString());
       updates['status'] = st.slug;
+      if (st == ITTaskStatus.closed || st == ITTaskStatus.deployed) {
+        updates['percentComplete'] = 100;
+      }
     } else if (field == 'severity') {
       final sv = ITSeverity.fromString(val.toString());
       updates['severity'] = sv.slug;
@@ -504,7 +547,11 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
     } else if (field == 'actualHours') {
       updates['actualHours'] = (val as num?)?.toDouble() ?? 0;
     } else if (field == 'percentComplete') {
-      updates['percentComplete'] = (val as num?)?.toInt() ?? 0;
+      final pct = (val as num?)?.toInt() ?? 0;
+      updates['percentComplete'] = pct;
+      if (pct >= 100) {
+        updates['status'] = _isItProject ? ITTaskStatus.deployed.slug : ITTaskStatus.closed.slug;
+      }
     }
 
     if (updates.isNotEmpty) {
@@ -539,6 +586,13 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final employees = ref.watch(projectEmployeesProvider(widget.projectId));
+    _project = ref.watch(projectByIdProvider(widget.projectId ?? ''));
+    _me = ref.watch(authSessionProvider)?.employeeId ?? '';
+    // A bulk action is offered only when every selected ticket allows it.
+    final selectedRights = _selectedTaskIds.map(_rightsOf).toList();
+    final canStatus = selectedRights.every((r) => r.progress);
+    final canAssign = selectedRights.every((r) => r.plan);
+    final canDelete = selectedRights.every((r) => r.delete);
 
     return Stack(
       children: [
@@ -571,12 +625,7 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
               oddRowColor: crm.background.withValues(alpha: 0.5),
               gridBorderColor: crm.border,
               borderColor: crm.border,
-              columnTextStyle: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: crm.textSecondary,
-                letterSpacing: 0.3,
-              ),
+              columnTextStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: crm.textSecondary, letterSpacing: 0.3),
               cellTextStyle: TextStyle(fontSize: 12.5, color: crm.textPrimary),
               rowHeight: 38,
               columnHeight: 36,
@@ -598,101 +647,106 @@ class _ITDataGridViewState extends ConsumerState<ITDataGridView> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF0F172A),
                   borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6))],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: crm.primary, borderRadius: BorderRadius.circular(14)),
+                      child: Text(
+                        '${_selectedTaskIds.length} Selected',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    PopupMenuButton<ITTaskStatus>(
+                      enabled: canStatus,
+                      tooltip: canStatus ? 'Change Status' : 'You can only change the status of tickets that are yours',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.autorenew, color: Colors.white, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Status',
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      onSelected: (st) => _runBulk(() => getITTasksNotifier(ref, widget.projectId).bulkUpdateStatus(_selectedTaskIds.toList(), st)),
+                      itemBuilder: (_) => [
+                        for (final st in ITTaskStatus.values)
+                          PopupMenuItem(
+                            value: st,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(shape: BoxShape.circle, color: st.color),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(st.label),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 14),
+                    PopupMenuButton<Employee>(
+                      enabled: canAssign,
+                      tooltip: canAssign ? 'Assign Team Member' : 'Only the project manager or a department lead assigns tickets',
+                      child: Row(
+                        children: const [
+                          Icon(Icons.person_add_outlined, color: Colors.white, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Assign',
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                      onSelected: (emp) => _runBulk(() => getITTasksNotifier(ref, widget.projectId).bulkReassign(_selectedTaskIds.toList(), emp.id)),
+                      itemBuilder: (_) => [for (final emp in employees) PopupMenuItem(value: emp, child: Text(emp.name))],
+                    ),
+                    const SizedBox(width: 14),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+                      tooltip: canDelete ? 'Delete Selected' : 'Only the project manager or a department lead deletes tickets',
+                      onPressed: !canDelete
+                          ? null
+                          : () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (c) => AlertDialog(
+                                  title: const Text('Delete Selected Tasks?'),
+                                  content: Text('Are you sure you want to delete ${_selectedTaskIds.length} tasks?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                    FilledButton(
+                                      onPressed: () => Navigator.pop(c, true),
+                                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                                      child: const Text('Delete All'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (ok == true && mounted) {
+                                await _runBulk(() => getITTasksNotifier(ref, widget.projectId).bulkDelete(_selectedTaskIds.toList()));
+                              }
+                            },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70, size: 18),
+                      tooltip: 'Deselect all',
+                      onPressed: () {
+                        _uncheckAllRows();
+                        setState(() => _selectedTaskIds.clear());
+                      },
                     ),
                   ],
                 ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: crm.primary,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Text(
-                      '${_selectedTaskIds.length} Selected',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  PopupMenuButton<ITTaskStatus>(
-                    tooltip: 'Change Status',
-                    child: Row(children: const [
-                      Icon(Icons.autorenew, color: Colors.white, size: 16),
-                      SizedBox(width: 6),
-                      Text('Status', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                    ]),
-                    onSelected: (st) => _runBulk(
-                      () => getITTasksNotifier(ref, widget.projectId).bulkUpdateStatus(_selectedTaskIds.toList(), st),
-                    ),
-                    itemBuilder: (_) => [
-                      for (final st in ITTaskStatus.values)
-                        PopupMenuItem(
-                          value: st,
-                          child: Row(children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: st.color)),
-                            const SizedBox(width: 8),
-                            Text(st.label),
-                          ]),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  PopupMenuButton<Employee>(
-                    tooltip: 'Assign Team Member',
-                    child: Row(children: const [
-                      Icon(Icons.person_add_outlined, color: Colors.white, size: 16),
-                      SizedBox(width: 6),
-                      Text('Assign', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                    ]),
-                    onSelected: (emp) => _runBulk(
-                      () => getITTasksNotifier(ref, widget.projectId).bulkReassign(_selectedTaskIds.toList(), emp.id),
-                    ),
-                    itemBuilder: (_) => [
-                      for (final emp in employees)
-                        PopupMenuItem(value: emp, child: Text(emp.name)),
-                    ],
-                  ),
-                  const SizedBox(width: 14),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                    tooltip: 'Delete Selected',
-                    onPressed: () async {
-                      final ok = await showDialog<bool>(
-                        context: context,
-                        builder: (c) => AlertDialog(
-                          title: const Text('Delete Selected Tasks?'),
-                          content: Text('Are you sure you want to delete ${_selectedTaskIds.length} tasks?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                            FilledButton(
-                              onPressed: () => Navigator.pop(c, true),
-                              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                              child: const Text('Delete All'),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (ok == true && mounted) {
-                        await _runBulk(
-                          () => getITTasksNotifier(ref, widget.projectId).bulkDelete(_selectedTaskIds.toList()),
-                        );
-                      }
-                    },
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70, size: 18),
-                    tooltip: 'Deselect all',
-                    onPressed: () {
-                      _uncheckAllRows();
-                      setState(() => _selectedTaskIds.clear());
-                    },
-                  ),
-                ]),
               ),
             ),
           ),

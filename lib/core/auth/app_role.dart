@@ -6,6 +6,7 @@ enum AppRole {
   sales,
   artist,
   artistHead,
+  ceo,
   accounts,
   fleetManager,
   driver,
@@ -33,6 +34,8 @@ enum AppRole {
       case 'artisthead':
       case 'regional_artist_head':
         return AppRole.artistHead;
+      case 'ceo':
+        return AppRole.ceo;
       case 'accounts':
       case 'accounts_manager':
       case 'accounts_executive':
@@ -148,6 +151,8 @@ enum AppRole {
         return '/';
       case AppRole.artistHead:
         return '/artist-head';
+      case AppRole.ceo:
+        return '/ceo'; // what needs a decision, and how the company is doing
       case AppRole.sales:
         return '/sales/home'; // My Dashboard: target, follow-ups, quick actions
       case AppRole.crm:

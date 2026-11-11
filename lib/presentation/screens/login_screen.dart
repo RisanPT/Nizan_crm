@@ -5,6 +5,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../core/error/errors.dart';
+import 'package:nizan_crm/features/fleet/data/driver_login.dart' show isLoginId;
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -330,16 +331,15 @@ class _LoginCard extends StatelessWidget {
               keyboardType: TextInputType.emailAddress,
               autofillHints: const [AutofillHints.username],
               decoration: const InputDecoration(
-                labelText: 'Email Address',
+                // Staff sign in with their email; a driver who has none (an outsourced driver)
+                // with their mobile number.
+                labelText: 'Email or mobile number',
                 prefixIcon: Icon(Icons.mail_outline),
               ),
               validator: (value) {
-                final email = value?.trim() ?? '';
-                if (email.isEmpty) return 'Email is required';
-                final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                if (!emailRegex.hasMatch(email)) {
-                  return 'Enter a valid email';
-                }
+                final id = value?.trim() ?? '';
+                if (id.isEmpty) return 'Email or mobile number is required';
+                if (!isLoginId(id)) return 'Enter a valid email or mobile number';
                 return null;
               },
             ),

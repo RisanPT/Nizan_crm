@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/features/fleet/data/day_sheet.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/features/fleet/data/km_report.dart';
 import 'package:nizan_crm/features/fleet/services/fleet_service.dart';
@@ -46,4 +47,18 @@ typedef FleetDateRange = ({DateTime from, DateTime to});
 final kmReportProvider =
     FutureProvider.autoDispose.family<KmReport, FleetDateRange>((ref, range) {
   return ref.watch(fleetServiceProvider).getKmReport(from: range.from, to: range.to);
+});
+
+/// What the Day Sheet shows: [driverId] null = the signed-in driver's own day.
+/// [refresh] > 0 recalculates the route on the server (each tap is a new key).
+typedef DaySheetQuery = ({String? driverId, String day, int refresh});
+
+/// Plain FutureProvider.family (not codegen) — no build_runner run needed.
+final daySheetProvider =
+    FutureProvider.autoDispose.family<DaySheet, DaySheetQuery>((ref, q) {
+  return ref.watch(fleetServiceProvider).getDaySheet(
+        driverId: q.driverId,
+        day: DateTime.parse(q.day),
+        refresh: q.refresh > 0,
+      );
 });

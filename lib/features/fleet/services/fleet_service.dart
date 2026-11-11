@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
+import 'package:nizan_crm/features/fleet/data/day_sheet.dart';
 import 'package:nizan_crm/features/fleet/data/km_report.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
@@ -209,6 +210,29 @@ class FleetService {
       return KmReport.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'load km report');
+    }
+  }
+
+  /// A driver's day: works, planned route + km, odometer comparison and the
+  /// expenses under each work. [driverId] null = the signed-in driver's own day;
+  /// a manager passes the driver. [refresh] recalculates the route (manager only).
+  Future<DaySheet> getDaySheet({
+    String? driverId,
+    required DateTime day,
+    bool refresh = false,
+  }) async {
+    final date =
+        '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+    try {
+      final response = driverId == null
+          ? await _dio.get('/fleet/driver/day-sheet', queryParameters: {'date': date})
+          : await _dio.get(
+              '/fleet/manager/day-sheet',
+              queryParameters: {'driverId': driverId, 'date': date, if (refresh) 'refresh': '1'},
+            );
+      return DaySheet.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load the day sheet');
     }
   }
 

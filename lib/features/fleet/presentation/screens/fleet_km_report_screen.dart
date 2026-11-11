@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
@@ -91,6 +92,12 @@ class _FleetKmReportScreenState extends ConsumerState<FleetKmReportScreen> {
               icon: Icon(Icons.refresh_rounded, color: crm.textSecondary),
             ),
             const SizedBox(width: 4),
+            OutlinedButton.icon(
+              onPressed: () => context.go('/fleet/gps-check'),
+              icon: const Icon(Icons.satellite_alt_rounded, size: 18),
+              label: Text(isMobile ? 'GPS' : 'Check with GPS'),
+            ),
+            const SizedBox(width: 8),
             FilledButton.tonalIcon(
               onPressed: async.value == null || async.value!.tripList.isEmpty
                   ? null

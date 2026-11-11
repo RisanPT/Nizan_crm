@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
+import 'package:nizan_crm/features/accounts/data/finance_list.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 
 class CollectionService {
@@ -35,6 +36,27 @@ class CollectionService {
           .toList();
     } catch (e) {
       throw AppException(e, action: 'load collections');
+    }
+  }
+
+  /// ACCOUNTS: one filtered, sorted page of collections with totals for the whole
+  /// filtered set (the server does the filtering and paging).
+  Future<FinancePage<ArtistCollection>> getCollectionPage(FinanceQuery query) async {
+    try {
+      final response = await _dio.get('/collections', queryParameters: query.toParams());
+      return FinancePage.fromJson(response.data as Map<String, dynamic>, ArtistCollection.fromJson);
+    } catch (e) {
+      throw AppException(e, action: 'load collections');
+    }
+  }
+
+  /// Every collection matching [query] (the server caps it), for the export.
+  Future<FinanceExport<ArtistCollection>> exportCollections(FinanceQuery query) async {
+    try {
+      final response = await _dio.get('/collections', queryParameters: query.toParams(export: true));
+      return FinanceExport.fromJson(response.data as Map<String, dynamic>, ArtistCollection.fromJson);
+    } catch (e) {
+      throw AppException(e, action: 'export collections');
     }
   }
 

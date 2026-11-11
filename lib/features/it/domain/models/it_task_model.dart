@@ -158,6 +158,19 @@ enum ITTaskStatus {
         ITTaskStatus.closed => 'Closed',
       };
 
+  String labelFor({bool isIt = false}) {
+    if (isIt) return label;
+    return switch (this) {
+      ITTaskStatus.backlog => 'Backlog',
+      ITTaskStatus.todo => 'To Do',
+      ITTaskStatus.inProgress => 'In Progress',
+      ITTaskStatus.codeReview => 'In Review',
+      ITTaskStatus.qaTesting => 'Verification',
+      ITTaskStatus.deployed => 'Completed',
+      ITTaskStatus.closed => 'Done',
+    };
+  }
+
   String get slug => switch (this) {
         ITTaskStatus.backlog => 'backlog',
         ITTaskStatus.todo => 'todo',
@@ -286,6 +299,9 @@ class ITTaskModel {
   final List<ITActivityLog> activityLogs;
   final DateTime? completedAt;
   final DateTime? createdAt;
+  /// The department that owns this task on a cross-department project ('' = the
+  /// project's owning department).
+  final String departmentName;
 
   const ITTaskModel({
     required this.id,
@@ -311,6 +327,7 @@ class ITTaskModel {
     this.activityLogs = const [],
     this.completedAt,
     this.createdAt,
+    this.departmentName = '',
   });
 
   /// Readable ticket key like IT-042
@@ -403,6 +420,7 @@ class ITTaskModel {
       activityLogs: logs,
       completedAt: _parseDate(j['completedAt']),
       createdAt: _parseDate(j['createdAt']),
+      departmentName: (j['departmentName'] ?? '').toString(),
     );
   }
 
@@ -425,6 +443,7 @@ class ITTaskModel {
         'actualHours': actualHours,
         'percentComplete': percentComplete,
         'order': order,
+        'departmentName': departmentName,
         'predecessorIds': predecessorIds,
         'subtasks': subtasks.map((s) => s.toJson()).toList(),
         'activityLogs': activityLogs.map((l) => l.toJson()).toList(),
@@ -454,6 +473,7 @@ class ITTaskModel {
     List<ITActivityLog>? activityLogs,
     DateTime? completedAt,
     DateTime? createdAt,
+    String? departmentName,
   }) {
     return ITTaskModel(
       id: id ?? this.id,
@@ -479,6 +499,7 @@ class ITTaskModel {
       activityLogs: activityLogs ?? this.activityLogs,
       completedAt: completedAt ?? this.completedAt,
       createdAt: createdAt ?? this.createdAt,
+      departmentName: departmentName ?? this.departmentName,
     );
   }
 

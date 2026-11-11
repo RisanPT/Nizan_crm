@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle_efficiency.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 class VehicleService {
@@ -49,6 +50,12 @@ class VehicleService {
     required String notes,
     String? driverId,
     required String ownershipType,
+    // Profile + fuel-efficiency details. Left out of the request when null, so
+    // callers that don't know them (e.g. a status change) never overwrite them.
+    String? category,
+    int? seats,
+    double? ratedMileage,
+    double? tankCapacity,
   }) async {
     try {
       final payload = {
@@ -61,6 +68,10 @@ class VehicleService {
         'notes': notes,
         'driverId': (driverId?.trim().isEmpty ?? true) ? null : driverId,
         'ownershipType': ownershipType,
+        'category': ?category,
+        'seats': ?seats,
+        'ratedMileage': ?ratedMileage,
+        'tankCapacity': ?tankCapacity,
       };
 
       final response = id != null && id.isNotEmpty
@@ -70,6 +81,26 @@ class VehicleService {
       return Vehicle.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'save vehicle');
+    }
+  }
+
+  /// One vehicle's fuel efficiency (actual vs rated, cost per km, range, trend).
+  Future<VehicleEfficiency> getVehicleEfficiency(String id) async {
+    try {
+      final response = await _dio.get('/vehicles/$id/efficiency');
+      return VehicleEfficiency.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load fuel efficiency');
+    }
+  }
+
+  /// Every vehicle's efficiency headline, worst performers first.
+  Future<FleetEfficiency> getFleetEfficiency() async {
+    try {
+      final response = await _dio.get('/vehicles/efficiency');
+      return FleetEfficiency.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load fuel efficiency');
     }
   }
 

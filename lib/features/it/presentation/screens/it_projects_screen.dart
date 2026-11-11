@@ -454,6 +454,8 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
     String status = existing?.status ?? 'planning';
     String priority = existing?.priority ?? 'medium';
     String phase = existing?.phase ?? 'discovery';
+    // New projects: the manager plans the work. An older project keeps what it had.
+    String editMode = existing?.editMode ?? 'managed';
     final messenger = ScaffoldMessenger.of(context);
     final isEdit = existing != null;
 
@@ -518,6 +520,27 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                     }).toList(),
                   ),
                 const SizedBox(height: 12),
+                Text('Who can change the plan', style: TextStyle(fontSize: 12.5, color: context.crmColors.textSecondary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: 'managed', label: Text('Manager decides'), icon: Icon(Icons.admin_panel_settings_outlined, size: 16)),
+                    ButtonSegment(value: 'open', label: Text('Everyone edits'), icon: Icon(Icons.group_outlined, size: 16)),
+                  ],
+                  selected: {editMode},
+                  onSelectionChanged: (v) => setSheet(() => editMode = v.first),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    editMode == 'managed'
+                        ? 'The manager adds and plans the tickets. Everyone else updates how their own are going.'
+                        : 'Anyone on the project can add and change any ticket.',
+                    style: TextStyle(fontSize: 11.5, color: context.crmColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(children: [
                   Expanded(child: _dd('Status', status, const ['planning', 'active', 'on-hold', 'completed', 'cancelled'], (v) => setSheet(() => status = v))),
                   const SizedBox(width: 10),
@@ -550,6 +573,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                                 'status': status,
                                 'priority': priority,
                                 'phase': phase,
+                                'editMode': editMode,
                                 'targetDepartment': 'it',
                               }, id: existing?.id);
                               if (ctx.mounted) Navigator.pop(ctx, true);

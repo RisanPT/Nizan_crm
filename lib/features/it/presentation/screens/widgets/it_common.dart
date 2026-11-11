@@ -76,11 +76,16 @@ List<WbsNode> flattenWbs(List<WbsNode> forest) {
 
 /// Rolled-up completion for a node: leaves use their own [ITTask.percentComplete];
 /// groups average across all their leaf descendants (equal weight).
+/// If a node itself or any leaf is marked completed (status closed/deployed or percent >= 100),
+/// it counts as 100%.
 int rolledUpPercent(WbsNode node) {
+  if (node.task.isCompleted || node.task.percentComplete >= 100) return 100;
   if (node.children.isEmpty) return node.task.percentComplete.clamp(0, 100);
   final leaves = <int>[];
   void collect(WbsNode n) {
-    if (n.children.isEmpty) {
+    if (n.task.isCompleted || n.task.percentComplete >= 100) {
+      leaves.add(100);
+    } else if (n.children.isEmpty) {
       leaves.add(n.task.percentComplete.clamp(0, 100));
     } else {
       for (final c in n.children) {
@@ -115,18 +120,18 @@ int rolledUpPercent(WbsNode node) {
 // ── Colors & small UI helpers ─────────────────────────────────────────────────
 
 Color itTaskStatusColor(String s) => switch (s) {
-      'in-progress' => Colors.blue.shade600,
-      'review' => Colors.amber.shade700,
-      'completed' => const Color(0xFF2E8B57),
-      _ => Colors.blueGrey,
-    };
+  'in-progress' => Colors.blue.shade600,
+  'review' => Colors.amber.shade700,
+  'completed' => const Color(0xFF2E8B57),
+  _ => Colors.blueGrey,
+};
 
 Color itCategoryColor(String c) => switch (c) {
-      'bug' => Colors.red.shade600,
-      'maintenance' => Colors.amber.shade700,
-      'research' => Colors.purple,
-      _ => Colors.blue.shade600, // feature
-    };
+  'bug' => Colors.red.shade600,
+  'maintenance' => Colors.amber.shade700,
+  'research' => Colors.purple,
+  _ => Colors.blue.shade600, // feature
+};
 
 /// Distinct color per phase index (cycles), for the Gantt bars / WBS accents.
 const List<Color> kPhasePalette = [
@@ -164,7 +169,10 @@ int? durationDays(ITTask t) {
 }
 
 Widget itTag(String label, Color color) => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700)),
-    );
+  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+  decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(7)),
+  child: Text(
+    label,
+    style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700),
+  ),
+);

@@ -19,6 +19,8 @@ const _sections = <_FleetSection>[
   _FleetSection('Accidents', Icons.warning_amber_rounded, '/fleet/accidents'),
   _FleetSection('Completed Works', Icons.task_alt_rounded, '/fleet/completed-works'),
   _FleetSection('Km Report', Icons.speed_rounded, '/fleet/km-report'),
+  _FleetSection('Day Sheet', Icons.route_outlined, '/fleet/day-sheet'),
+  _FleetSection('GPS Km Check', Icons.satellite_alt_rounded, '/fleet/gps-check'),
   _FleetSection('Service Reminders', Icons.build_circle_outlined, '/fleet/service-reminders'),
 ];
 

@@ -9,6 +9,11 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart'
     show FleetDateRange;
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
+import 'package:nizan_crm/features/fleet/controllers/fuel_price_controller.dart';
+import 'package:nizan_crm/features/fleet/data/fuel_price.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/fuel_price_manager.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/fuel_rate_widgets.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fuel_expense.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
@@ -226,6 +231,20 @@ class _FuelExpensesScreenState extends ConsumerState<FuelExpensesScreen> {
             ],
           ),
         ),
+        // The fuel prices bills are checked against, and fill-ins use.
+        if (canEditFuelPrices(ref.read(authSessionProvider)?.role)) ...[
+          IconButton(
+            key: const Key('fuelPricesButton'),
+            tooltip: 'Fuel prices',
+            onPressed: () => showFuelPriceManager(context),
+            icon: const Icon(Icons.local_gas_station_outlined),
+            style: IconButton.styleFrom(
+              foregroundColor: crm.accent,
+              backgroundColor: crm.accent.withValues(alpha: 0.10),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         IconButton(
           tooltip: 'Export shown expenses',
           onPressed: shown.isEmpty ? null : () => _export(shown),
@@ -842,6 +861,8 @@ String _details(FuelExpense e) => [
       if (e.station.isNotEmpty) e.station,
       if (e.category != 'outsource_salary' && (e.driver?.name ?? '').isNotEmpty)
         e.driver!.name,
+      // The work the driver tied it to (none = a whole-day expense).
+      if (e.workLabel.isNotEmpty) 'Work ${e.workLabel}',
     ].join(' · ');
 
 class _RowMenu extends StatelessWidget {
@@ -986,6 +1007,7 @@ class _ExpenseRow extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontSize: 11.5, color: crm.textSecondary)),
+                          RateCheckLine(check: e.rateCheck, flaggedOnly: true),
                         ],
                       ),
                     ),
@@ -1101,6 +1123,7 @@ class _ExpenseCard extends StatelessWidget {
                                 fontStyle: FontStyle.italic,
                                 color: crm.textSecondary)),
                       ),
+                    RateCheckLine(check: e.rateCheck, flaggedOnly: true),
                   ],
                 ),
               ),
@@ -1158,6 +1181,27 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
 
   bool get _isSalary => _vehiclelessCategories.contains(_category);
 
+  // The amount is filled in from litres × the price of the day, until someone types their own.
+  final _amountFill = AmountFillIn();
+
+  /// The vehicle chosen (null = none yet).
+  Vehicle? get _vehicle => widget.vehicles.where((v) => v.id == _vehicleId).firstOrNull;
+  String get _priceDay => DateFormat('yyyy-MM-dd').format(_date);
+
+  void _fillAmount() {
+    final fuel = fuelPriceTypeOf(_vehicle?.fuelType);
+    final prices = ref.read(fuelPricesProvider).value;
+    final litres = double.tryParse(_liters.text.trim()) ?? 0;
+    final suggested = (_category == 'fuel' && fuel != null && prices != null) ? prices.suggestAmount(fuel, _priceDay, litres) : null;
+    _amountFill.apply(_amount, suggested);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _liters.addListener(_fillAmount);
+  }
+
   @override
   void dispose() {
     for (final c in [_odometer, _liters, _amount, _station, _notes]) {
@@ -1211,6 +1255,8 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
     final isMobile = ResponsiveBuilder.isMobile(context);
     final hasVehicle = widget.vehicles.any((v) => v.id == _vehicleId);
     final hasDriver = widget.drivers.any((d) => d.id == _driverId);
+    // The prices may arrive after the litres were typed: fill in then too.
+    ref.listen(fuelPricesProvider, (_, _) => _fillAmount());
 
     Widget label(String t) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -1255,7 +1301,10 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
                           color: _category == c.key ? Colors.white : null,
                           fontWeight: FontWeight.w600),
                       selectedColor: c.color,
-                      onSelected: (_) => setState(() => _category = c.key),
+                      onSelected: (_) {
+                        setState(() => _category = c.key);
+                        _fillAmount();
+                      },
                     ),
                 ],
               ),
@@ -1292,7 +1341,10 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
                           firstDate: DateTime(2020),
                           lastDate: DateTime.now().add(const Duration(days: 1)),
                         );
-                        if (picked != null) setState(() => _date = picked);
+                        if (picked != null) {
+                          setState(() => _date = picked);
+                          _fillAmount();
+                        }
                       },
                       child: InputDecorator(
                         decoration: const InputDecoration(
@@ -1337,10 +1389,13 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
                             overflow: TextOverflow.ellipsis),
                       ),
                   ],
-                  onChanged: (v) => setState(() {
-                    _vehicleId = v ?? '';
-                    _vehicleMissing = false;
-                  }),
+                  onChanged: (v) {
+                    setState(() {
+                      _vehicleId = v ?? '';
+                      _vehicleMissing = false;
+                    });
+                    _fillAmount();
+                  },
                   decoration: InputDecoration(
                     labelText: 'Vehicle',
                     prefixIcon: const Icon(Icons.directions_car_outlined),
@@ -1387,6 +1442,13 @@ class _ExpenseFormState extends ConsumerState<_ExpenseForm> {
                       ),
                     ),
                   ],
+                ),
+                FuelRateHint(
+                  vehicleFuelType: _vehicle?.fuelType,
+                  day: _priceDay,
+                  liters: _liters,
+                  amount: _amount,
+                  fillsIn: true,
                 ),
               ],
               const SizedBox(height: 18),

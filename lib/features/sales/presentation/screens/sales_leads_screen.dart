@@ -17,6 +17,10 @@ import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/lead_cluster_popup.dart';
 import 'package:nizan_crm/features/sales/utils/lead_conversion.dart';
+import 'package:nizan_crm/features/sales/utils/lead_pincode.dart';
+import 'package:nizan_crm/core/models/district.dart';
+import 'package:nizan_crm/core/widgets/pincode_field.dart';
+import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/features/marketing/services/campaign_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
@@ -35,6 +39,7 @@ class _ParsedLead {
   final String source;
   final String leadType;
   final String remarks;
+  final String pincode;
   final DateTime? enquiryDate;
 
   const _ParsedLead({
@@ -44,6 +49,7 @@ class _ParsedLead {
     this.source = '',
     this.leadType = '',
     this.remarks = '',
+    this.pincode = '',
     this.enquiryDate,
   });
 }
@@ -55,6 +61,7 @@ _ParsedLead _parseClipboardText(String raw) {
   String source = '';
   String leadType = '';
   String remarks = '';
+  String pincode = '';
   DateTime? enquiryDate;
 
   final lines = raw.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
@@ -88,8 +95,12 @@ _ParsedLead _parseClipboardText(String raw) {
         name = value;
       } else if (_matchKey(key, ['phone', 'mobile', 'number', 'contact', 'whatsapp', 'ph'])) {
         phone = value.replaceAll(RegExp(r'\s'), '');
+      } else if (isPincodeLabel(key)) {
+        pincode = pincodeIn(value) ?? pincode;
       } else if (_matchKey(key, ['location', 'place', 'venue', 'address', 'area', 'city'])) {
         location = value;
+        // an address often ends with its pincode
+        if (pincode.isEmpty) pincode = pincodeIn(value) ?? '';
       } else if (_matchKey(key, ['source', 'via', 'referred', 'from', 'channel'])) {
         source = value;
       } else if (_matchKey(key, ['type', 'lead type', 'category', 'event type', 'service'])) {
@@ -120,6 +131,7 @@ _ParsedLead _parseClipboardText(String raw) {
     source: source,
     leadType: leadType,
     remarks: remarks,
+    pincode: pincode,
     enquiryDate: enquiryDate,
   );
 }
@@ -1060,6 +1072,15 @@ class _LeadForm extends HookConsumerWidget {
     // Marketing campaign this lead is attributed to (drives campaign ROI).
     final selectedCampaignId = useState<String?>(initialLead?.campaignId);
     final locationCtrl  = useTextEditingController(text: initialLead?.location ?? '');
+    // Where the event is, as the lead knows it: an optional pincode and district. A lead linked to
+    // a booking takes its address and geography from that booking, so they are not edited here.
+    final linkedToBooking = initialLead?.bookingId != null;
+    final pincodeCtrl   = useTextEditingController(text: initialLead?.pincode ?? '');
+    final districtId    = useState<String?>((initialLead?.districtId ?? '').isEmpty ? null : initialLead!.districtId);
+    // True while the district shown was filled in from the pincode, so changing the pincode takes it
+    // back — a district the user picked themselves is never touched.
+    final districtAuto  = useState(false);
+    final asyncDistricts = ref.watch(districtsProvider);
     final leadTypeCtrl  = useTextEditingController(text: initialLead?.leadType ?? 'Individual');
     // Event Type replaces Lead Type. Default to a valid option so the dropdown
     // never gets an unknown value.
@@ -1109,6 +1130,7 @@ class _LeadForm extends HookConsumerWidget {
         if (parsed.name.isNotEmpty)     nameCtrl.text     = parsed.name;
         if (parsed.phone.isNotEmpty)    phoneCtrl.text    = parsed.phone;
         if (parsed.location.isNotEmpty) locationCtrl.text = parsed.location;
+        if (parsed.pincode.isNotEmpty && !linkedToBooking) pincodeCtrl.text = parsed.pincode;
         if (parsed.source.isNotEmpty) {
           final matched = coerceLeadSource(parsed.source);
           selectedSource.value = matched;
@@ -1139,6 +1161,17 @@ class _LeadForm extends HookConsumerWidget {
         );
         return;
       }
+      // A pincode that was typed or changed must be 6 digits (an older lead's untouched value is left alone).
+      final typedPin = pincodeCtrl.text.trim();
+      if (!linkedToBooking &&
+          typedPin.isNotEmpty &&
+          typedPin != (initialLead?.pincode ?? '') &&
+          !RegExp(r'^[1-9]\d{5}$').hasMatch(typedPin)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a 6-digit pincode, or leave it empty.')),
+        );
+        return;
+      }
       isSaving.value = true;
       try {
         final dio = ref.read(dioProvider);
@@ -1159,6 +1192,14 @@ class _LeadForm extends HookConsumerWidget {
               initialLead?.campaignId != null)
             'campaignCleared': true,
           'location': locationCtrl.text,
+          // Geography is sent only when it changed (an older lead's untouched value stays as it is),
+          // and never for a lead that belongs to a booking. The server works out the region.
+          if (!linkedToBooking &&
+              (pincodeCtrl.text.trim() != (initialLead?.pincode ?? '') ||
+                  (districtId.value ?? '') != (initialLead?.districtId ?? ''))) ...{
+            'pincode': pincodeCtrl.text.trim(),
+            'districtId': districtId.value,
+          },
           'leadType': leadTypeCtrl.text,
           'eventType': eventType.value,
           'alternateNumber': normalizePhone(alternateCtrl.text),
@@ -1192,6 +1233,9 @@ class _LeadForm extends HookConsumerWidget {
           nameCtrl.clear();
           phoneCtrl.clear();
           locationCtrl.clear();
+          pincodeCtrl.clear();
+          districtId.value = null;
+          districtAuto.value = false;
           alternateCtrl.clear();
           remarksCtrl.clear();
           customSourceCtrl.clear();
@@ -1499,6 +1543,88 @@ class _LeadForm extends HookConsumerWidget {
         ),
         desktopWidth: 180,
       ),
+
+      // Pincode (optional) — says where it is, and fills in the district when it is in our list.
+      if (!linkedToBooking)
+        responsiveField(
+          PincodeField(
+            controller: pincodeCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Pincode',
+              prefixIcon: Icon(Icons.pin_drop_outlined),
+            ),
+            // an older lead may hold free text from before; it then only says so
+            strict: !isEditing || RegExp(r'^([1-9]\d{5})?$').hasMatch(initialLead?.pincode ?? ''),
+            onResolved: (place) {
+              final d = place?.district;
+              if (place == null) {
+                // the pincode changed or was cleared: take back a district we filled in
+                if (districtAuto.value) {
+                  districtId.value = null;
+                  districtAuto.value = false;
+                }
+              } else if (place.inOurList && d != null && districtId.value == null) {
+                districtId.value = d.id;
+                districtAuto.value = true;
+              }
+            },
+            // a pincode only the map could place is a suggestion — one tap to accept it
+            actionBuilder: (context, place) {
+              final d = place.district;
+              final known = (asyncDistricts.value ?? const <District>[]).any((x) => x.id == d?.id);
+              if (place.inOurList || d == null || !known || districtId.value == d.id) return null;
+              return TextButton(
+                key: const Key('leadUseSuggestedDistrict'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () {
+                  districtId.value = d.id;
+                  districtAuto.value = true;
+                },
+                child: Text('Use ${d.name}'),
+              );
+            },
+          ),
+          desktopWidth: 180,
+        ),
+
+      // District (optional)
+      if (!linkedToBooking)
+        responsiveField(
+          () {
+            final districts = (asyncDistricts.value ?? const <District>[]).where((d) => d.isActive).toList();
+            final current = districtId.value;
+            final known = current == null || districts.any((d) => d.id == current);
+            return DropdownButtonFormField<String?>(
+              // the value is read once, so a district filled in from the pincode needs a fresh box
+              key: ValueKey('lead-district-$current-${districts.length}'),
+              initialValue: current,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'District',
+                prefixIcon: Icon(Icons.map_outlined),
+              ),
+              items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Not set')),
+                // a district since switched off still shows on the lead that has it
+                if (!known) DropdownMenuItem<String?>(value: current, child: Text(initialLead?.district.isNotEmpty == true ? initialLead!.district : 'Current district')),
+                for (final d in districts)
+                  DropdownMenuItem<String?>(
+                    value: d.id,
+                    child: Text(d.regionName.isEmpty ? d.name : '${d.name} (${d.regionName})', overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (v) {
+                districtId.value = v;
+                districtAuto.value = false; // their choice now
+              },
+            );
+          }(),
+          desktopWidth: 180,
+        ),
 
       // Event Type (replaces Lead Type)
       responsiveField(
@@ -2278,6 +2404,16 @@ class _LeadCardState extends State<_LeadCard> {
                   const SizedBox(height: 6),
                   _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
                   const SizedBox(height: 6),
+                  if (lead.pincode.isNotEmpty || lead.district.isNotEmpty) ...[
+                    _InfoRow(
+                      icon: Icons.pin_drop_outlined,
+                      label: 'Area',
+                      value: [lead.pincode, lead.district, if (lead.region.isNotEmpty && lead.region != lead.district) lead.region]
+                          .where((x) => x.isNotEmpty)
+                          .join(' · '),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
                   // Two separate dates once converted: the event itself (from
                   // the booking) and the day the booking was made.
                   _InfoRow(

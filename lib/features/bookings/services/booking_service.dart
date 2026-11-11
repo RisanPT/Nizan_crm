@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/data/next_work_hint.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
 part 'booking_service.g.dart';
@@ -88,6 +89,18 @@ class BookingService {
     }
   }
 
+  /// For each of the signed-in artist's works in [bookingIds]: where it falls in their
+  /// day and the road to the next work. An artist's own works only (the server checks).
+  Future<NextWorkHints> getNextWorkHints(List<String> bookingIds) async {
+    if (bookingIds.isEmpty) return NextWorkHints.empty;
+    try {
+      final response = await _dio.get('/bookings/next-work', queryParameters: {'ids': bookingIds.join(',')});
+      return NextWorkHints.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'load the route between works');
+    }
+  }
+
   Future<Booking> getBookingById(String id) async {
     try {
       final response = await _dio.get('/bookings/$id');
@@ -111,11 +124,14 @@ class BookingService {
     }
   }
 
-  Future<Booking> updateBooking(Booking booking) async {
+  /// [confirmFleetConflict]: the person has agreed to put a driver / vehicle on a work they are
+  /// already committed to (the server otherwise answers 409 FLEET_CONFLICT for that).
+  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false}) async {
     try {
       final response = await _dio.put(
         '/bookings/${booking.id}',
         data: booking.toJson(),
+        options: confirmFleetConflict ? Options(headers: {'X-Confirm-Fleet-Conflict': '1'}) : null,
       );
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {

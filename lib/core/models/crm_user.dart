@@ -4,6 +4,8 @@ class CrmUser {
   final String email;
   final String role;
   final bool active;
+  /// A TEMPORARY login (an outsourced driver…) stops working at the end of this moment; null = permanent.
+  final DateTime? accessExpiresAt;
   final bool inventoryAccess;
   /// Artist who also runs the studio inventory (workspace-switcher dual role).
   final bool inventoryManage;
@@ -30,6 +32,7 @@ class CrmUser {
     required this.email,
     required this.role,
     required this.active,
+    this.accessExpiresAt,
     this.inventoryAccess = false,
     this.inventoryManage = false,
     this.employeeId = '',
@@ -54,6 +57,7 @@ class CrmUser {
       email: json['email'] as String? ?? '',
       role: json['role'] as String? ?? 'manager',
       active: json['active'] as bool? ?? true,
+      accessExpiresAt: _parseDate(json['accessExpiresAt']),
       inventoryAccess: json['inventoryAccess'] as bool? ?? false,
       inventoryManage: json['inventoryManage'] as bool? ?? false,
       employeeId: json['employeeId'] as String? ?? '',
@@ -78,6 +82,7 @@ class CrmUser {
     String? email,
     String? role,
     bool? active,
+    DateTime? accessExpiresAt,
     bool? inventoryAccess,
     bool? inventoryManage,
     String? employeeId,
@@ -100,6 +105,7 @@ class CrmUser {
       email: email ?? this.email,
       role: role ?? this.role,
       active: active ?? this.active,
+      accessExpiresAt: accessExpiresAt ?? this.accessExpiresAt,
       inventoryAccess: inventoryAccess ?? this.inventoryAccess,
       inventoryManage: inventoryManage ?? this.inventoryManage,
       employeeId: employeeId ?? this.employeeId,

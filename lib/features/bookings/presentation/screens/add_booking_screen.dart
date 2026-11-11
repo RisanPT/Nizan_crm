@@ -20,6 +20,7 @@ import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/widgets/hq_distance_line.dart';
+import 'package:nizan_crm/core/widgets/pincode_field.dart';
 
 // New Booking — redesigned (Oct 2026).
 //
@@ -585,12 +586,30 @@ class AddBookingScreen extends HookConsumerWidget {
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? 'Required' : null,
               ),
-              TextFormField(
+              PincodeField(
                 controller: pincodeCtrl,
-                keyboardType: TextInputType.number,
                 decoration: _deco('Pincode', crm),
-                validator: (v) =>
-                    (v == null || v.trim().isEmpty) ? 'Required' : null,
+                required: true,
+                // The pincode says which district it is; pricing follows the district, so the
+                // booking can be priced for it in one tap (never changed on its own).
+                actionBuilder: (context, place) {
+                  final d = place.district;
+                  if (d == null || districtById(d.id) == null) return null;
+                  if (allLines.isEmpty || allLines.every((l) => l.districtId == d.id)) return null;
+                  return TextButton(
+                    key: const Key('pincodeUseDistrict'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => setDays([
+                      for (final day in days.value)
+                        day.copyWith(lines: [for (final l in day.lines) l.copyWith(districtId: d.id)]),
+                    ]),
+                    child: Text('Use ${d.name} pricing for all packages'),
+                  );
+                },
               ),
             ],
           ),

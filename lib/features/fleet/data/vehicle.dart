@@ -12,6 +12,19 @@ class Vehicle {
   final String ownershipType;
   final Employee? driver;
 
+  /// sedan / xl / mpv … ('' = not set) — see vehicle_categories.dart.
+  final String category;
+
+  /// Passengers it takes besides the driver (0 = not recorded).
+  final int seats;
+
+  /// Manufacturer / expected figure: km per litre (km/kg for CNG, km/kWh for
+  /// electric). 0 = not recorded.
+  final double ratedMileage;
+
+  /// Litres (kg / kWh) the tank takes when full. 0 = not recorded.
+  final double tankCapacity;
+
   const Vehicle({
     required this.id,
     required this.name,
@@ -23,6 +36,10 @@ class Vehicle {
     required this.notes,
     this.ownershipType = 'in_house',
     this.driver,
+    this.category = '',
+    this.seats = 0,
+    this.ratedMileage = 0,
+    this.tankCapacity = 0,
   });
 
   factory Vehicle.fromJson(Map<String, dynamic> json) {
@@ -41,6 +58,10 @@ class Vehicle {
       driver: driverJson is Map<String, dynamic>
           ? Employee.fromJson(driverJson)
           : null,
+      category: json['category'] as String? ?? '',
+      seats: (json['seats'] as num?)?.toInt() ?? 0,
+      ratedMileage: (json['ratedMileage'] as num?)?.toDouble() ?? 0,
+      tankCapacity: (json['tankCapacity'] as num?)?.toDouble() ?? 0,
     );
   }
 }

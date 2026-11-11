@@ -29,6 +29,16 @@ import '../../core/models/trial.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
+import 'package:nizan_crm/features/accounts/data/finance_list.dart';
+import 'package:nizan_crm/features/accounts/data/food_allowance.dart' show TeamAmount;
+import 'package:nizan_crm/features/accounts/presentation/widgets/finance_list_widgets.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/list_common.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/meal_placement.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_day_timeline.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/expense_allocation_line.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/food_allowance_manager.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/work_costs_tab.dart';
+import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 
 
 class ArtistFinanceScreen extends HookConsumerWidget {
@@ -126,7 +136,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final theme = Theme.of(context);
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
-    final tabCtrl = useTabController(initialLength: 2);
 
     // ── Role + identity ──────────────────────────────────────────────────────
     final session = ref.watch(authSessionProvider);
@@ -134,6 +143,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final myEmployeeId = session?.employeeId ?? '';
     final canVerify = role.canVerifyFinance;
     final isScopedToOwn = role.isScopedToOwnEntries;
+    // Accounts also gets "Work costs": what each work cost, with the artists' food placed under it.
+    final tabCtrl = useTabController(initialLength: canVerify ? 3 : 2);
     final asyncBookings = ref.watch(bookingProvider);
     final asyncTrials = ref.watch(allTrialsProvider);
 
@@ -161,92 +172,106 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       return t.assignedStaff.any((s) => s.employeeId == myEmployeeId);
     }).toList();
 
-    // ── Data providers (scoped or global) ───────────────────────────────────
+    // ── What is being looked at ──────────────────────────────────────────────
+    // The period is shared; each tab keeps its OWN filters, search, sort and page
+    // (a payment mode means nothing to expenses, a category nothing to collections).
+    // Filtering, sorting and paging all happen on the SERVER, so the totals and the
+    // page counts are right however many entries there are. An artist only ever gets
+    // their own entries — the server scopes them.
     final asyncEmployees = ref.watch(employeesProvider);
-    final asyncCollections = isScopedToOwn && myEmployeeId.isNotEmpty
-        ? ref.watch(artistCollectionsProvider(myEmployeeId))
-        : ref.watch(collectionsProvider);
-    final asyncExpenses = isScopedToOwn && myEmployeeId.isNotEmpty
-        ? ref.watch(artistExpensesProvider(myEmployeeId))
-        : ref.watch(expensesProvider);
-    // ── Filter States ────────────────────────────────────────────────────────
-    final filterStatuses = useState<Set<String>>({'pending', 'verified', 'rejected'});
-    final filterPaymentModes = useState<Set<String>>({'cash', 'bank_transfer', 'upi', 'other', 'split'});
-    final filterCategories = useState<Set<String>>({'food', 'travel', 'stay', 'materials', 'fuel', 'other'});
-    final filterFromDate = useState<DateTime?>(null);
-    final filterToDate = useState<DateTime?>(null);
-    final filterMinAmount = useState<double?>(null);
-    final filterMaxAmount = useState<double?>(null);
-    // Artist filter — null means all artists
-    final filterArtistId = useState<String?>(null);
-    // Month filter — null means all months; value = DateTime(year, month)
-    final filterMonth = useState<DateTime?>(null);
-    // Pagination for Collections tab
-    final collectionPage = useState<int>(0);
-    const collPageSize = 12;
-    // Free-text search (client name / notes / service). '' = no search.
-    final searchCtrl = useTextEditingController();
-    final searchQuery = useState('');
+    final period = useState(FinancePeriod.month);
+    final month = useState(FinancePeriodBar.thisMonth());
+    final range = useState<DateTimeRange?>(null);
 
-    final collectionItems =
-        asyncCollections.value ?? const <ArtistCollection>[];
-    final expenseItems = asyncExpenses.value ?? const <ArtistExpense>[];
-
-    final q = searchQuery.value.trim().toLowerCase();
-
-    // Filtered lists
-    final filteredCollections = collectionItems.where((c) {
-      if (!filterStatuses.value.contains(c.status)) return false;
-      if (!filterPaymentModes.value.contains(c.paymentMode)) return false;
-      final dateOnly = DateTime(c.date.year, c.date.month, c.date.day);
-      if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
-      if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
-      if (filterMinAmount.value != null && c.amount < filterMinAmount.value!) return false;
-      if (filterMaxAmount.value != null && c.amount > filterMaxAmount.value!) return false;
-      // Artist filter
-      if (filterArtistId.value != null && c.employee?.id != filterArtistId.value) return false;
-      // Month filter
-      if (filterMonth.value != null) {
-        if (c.date.year != filterMonth.value!.year || c.date.month != filterMonth.value!.month) return false;
+    FinanceQuery inPeriod(FinanceQuery q, FinancePeriod p, DateTime m, DateTimeRange? r) {
+      String d(DateTime x) => '${x.year}-${x.month.toString().padLeft(2, '0')}-${x.day.toString().padLeft(2, '0')}';
+      switch (p) {
+        case FinancePeriod.all:
+          return q.refiltered(from: null, to: null);
+        case FinancePeriod.range:
+          return q.refiltered(from: r == null ? null : d(r.start), to: r == null ? null : d(r.end));
+        case FinancePeriod.month:
+          final (from, to) = FinanceQuery.monthBounds(m);
+          return q.refiltered(from: from, to: to);
       }
-      if (q.isNotEmpty) {
-        final hay = '${c.booking?.customerName ?? ''} ${c.trial?.clientName ?? ''} '
-                '${c.booking?.service ?? ''} ${c.notes} ${c.employee?.name ?? ''}'
-            .toLowerCase();
-        if (!hay.contains(q)) return false;
-      }
-      return true;
-    }).toList();
+    }
 
-    final filteredExpenses = expenseItems.where((e) {
-      if (!filterStatuses.value.contains(e.status)) return false;
-      if (!filterCategories.value.contains(e.category)) return false;
-      final dateOnly = DateTime(e.date.year, e.date.month, e.date.day);
-      if (filterFromDate.value != null && dateOnly.isBefore(filterFromDate.value!)) return false;
-      if (filterToDate.value != null && dateOnly.isAfter(filterToDate.value!)) return false;
-      if (filterMinAmount.value != null && e.amount < filterMinAmount.value!) return false;
-      if (filterMaxAmount.value != null && e.amount > filterMaxAmount.value!) return false;
-      if (q.isNotEmpty) {
-        final hay = '${e.booking?.customerName ?? ''} ${e.category} ${e.notes} '
-                '${e.employee?.name ?? ''}'
-            .toLowerCase();
-        if (!hay.contains(q)) return false;
-      }
-      return true;
-    }).toList();
+    final collectionQuery = useState<FinanceQuery>(inPeriod(const FinanceQuery(), period.value, month.value, range.value));
+    final expenseQuery = useState<FinanceQuery>(inPeriod(const FinanceQuery(withWorks: true), period.value, month.value, range.value));
 
-    final totalCollected = filteredCollections.fold(
-      0.0,
-      (sum, item) => sum + item.amount,
-    );
-    // Split by what the spend was for, so the two streams can be read
-    // independently rather than as one lump.
-    final bridalExpenseTotal = filteredExpenses
-        .where((e) => e.workType != 'model_shoot')
-        .fold(0.0, (sum, item) => sum + item.amount);
-    final modelShootExpenseTotal = filteredExpenses
-        .where((e) => e.workType == 'model_shoot')
-        .fold(0.0, (sum, item) => sum + item.amount);
+    void setPeriod(FinancePeriod p, {DateTime? newMonth, DateTimeRange? newRange}) {
+      final m = newMonth == null ? month.value : DateTime(newMonth.year, newMonth.month);
+      final r = newRange ?? range.value;
+      period.value = p;
+      month.value = m;
+      range.value = r;
+      collectionQuery.value = inPeriod(collectionQuery.value, p, m, r);
+      expenseQuery.value = inPeriod(expenseQuery.value, p, m, r);
+    }
+
+    final asyncCollections = ref.watch(financeCollectionsPageProvider(collectionQuery.value));
+    final asyncExpenses = ref.watch(financeExpensesPageProvider(expenseQuery.value));
+    // The last page that loaded stays on screen while the next one is fetched.
+    final lastCollections = useRef<FinancePage<ArtistCollection>?>(null);
+    final lastExpenses = useRef<FinancePage<ArtistExpense>?>(null);
+    if (asyncCollections.hasValue) lastCollections.value = asyncCollections.value;
+    if (asyncExpenses.hasValue) lastExpenses.value = asyncExpenses.value;
+    final collectionData = asyncCollections.value ?? lastCollections.value;
+    final expenseData = asyncExpenses.value ?? lastExpenses.value;
+
+    // Approving / deleting the only entry on the last page leaves that page empty:
+    // step back to the last page that still exists.
+    void clampPage(FinancePage<dynamic>? d, ValueNotifier<FinanceQuery> q) {
+      if (d != null && d.page == q.value.page && d.page > d.totalPages && d.totalPages >= 1) {
+        Future.microtask(() => q.value = q.value.copyWith(page: d.totalPages));
+      }
+    }
+
+    useEffect(() {
+      clampPage(collectionData, collectionQuery);
+      return null;
+    }, [collectionData]);
+    useEffect(() {
+      clampPage(expenseData, expenseQuery);
+      return null;
+    }, [expenseData]);
+
+    final collSummary = collectionData?.summary;
+    final expSummary = expenseData?.summary;
+    // "Collected" is what Accounts has verified — pending and rejected never count.
+    final totalCollected = collSummary?.status('verified').amount ?? 0.0;
+    final verifiedCount = collSummary?.status('verified').count ?? 0;
+    final pendingCollections = collSummary?.status('pending').count ?? 0;
+    final pendingExpenses = expSummary?.status('pending').count ?? 0;
+    final pendingCount = pendingCollections + pendingExpenses;
+    // Split by what the spend was for, so the two streams can be read independently.
+    double workTotal(String type) =>
+        expSummary?.byWorkType.where((w) => w.key == type).fold<double>(0, (a, w) => a + w.amount) ?? 0.0;
+    final bridalExpenseTotal = workTotal('bridal');
+    final modelShootExpenseTotal = workTotal('model_shoot');
+    final periodText = switch (period.value) {
+      FinancePeriod.all => 'All time',
+      FinancePeriod.range => 'Custom range',
+      FinancePeriod.month => '${_getMonthName(month.value.month)} ${month.value.year}',
+    };
+
+    List<NameOption> artistOptionsFor(String? selected) => <NameOption>[
+          for (final e in asyncEmployees.value ?? const <Employee>[])
+            if ((e.isActive && e.isArtist) || e.id == selected) (id: e.id, name: e.name),
+        ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    Future<void> openFilters(FinanceKind kind) async {
+      final isColl = kind == FinanceKind.collection;
+      final holder = isColl ? collectionQuery : expenseQuery;
+      final next = await showFinanceFilters(
+        context,
+        kind: kind,
+        current: holder.value,
+        // An artist sees only their own, so there is nobody to pick.
+        artists: isScopedToOwn ? null : artistOptionsFor(holder.value.employeeId),
+      );
+      if (next != null) holder.value = next;
+    }
 
     // ── Split Payment Prompt Dialog ─────────────────────────────────────────
     Future<bool?> showSplitPaymentDialog(BuildContext ctx) {
@@ -952,7 +977,21 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           : (isScopedToOwn ? myEmployeeId : '');
       var selCategory = existing?.category ?? 'food';
       var selWorkType = existing?.workType ?? 'bridal';
-      var selDate = existing?.date ?? DateTime.now();
+      final startedAt = existing?.date.toLocal() ?? DateTime.now();
+      var selDate = startedAt;
+      // Food is filed under a MEAL (or several, on one bill) and its time, so Accounts can put it
+      // under the work it was eaten for. A new entry starts at the meal it most likely is.
+      var selMeals = <String>{
+        if (existing != null) ...existing.effectiveMeals else guessMeal(startedAt),
+      };
+      var selTime = TimeOfDay.fromDateTime(startedAt);
+      var timeTouched = false;
+      // The work the artist chose for it (null = let the app pick by time).
+      String? pinnedBookingId = existing?.booking?.id;
+      // The amount the app worked out for the team (heads × the allowance per head) and put in the
+      // field. While the field still holds exactly that (or is empty) a change of work/meal/time
+      // re-fills it; anything the artist types or picks is theirs and is never overwritten.
+      var autoAmountText = '';
       XFile? attachmentFile;
       bool isUploading = false;
       final formKey = GlobalKey<FormState>();
@@ -1143,9 +1182,124 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   ),
                                 )
                                 .toList(),
-                            onChanged: (v) =>
-                                setState(() => selCategory = v ?? 'other'),
+                            onChanged: (v) => setState(() {
+                              selCategory = v ?? 'other';
+                              if (selCategory == 'food' && selMeals.isEmpty) {
+                                selMeals = {guessMeal(DateTime(selDate.year, selDate.month, selDate.day, selTime.hour, selTime.minute))};
+                              }
+                            }),
                           ),
+                          if (selCategory == 'food' && selWorkType == 'bridal') ...[
+                            16.h,
+                            Text(
+                              'WHICH MEAL(S)?',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                                color: crm.textSecondary,
+                              ),
+                            ),
+                            8.h,
+                            // One bill can cover several meals (a long day on the road): pick every
+                            // meal it was for.
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final m in kMeals)
+                                  FilterChip(
+                                    key: Key('meal_${m.$1}'),
+                                    avatar: Icon(m.$3, size: 16),
+                                    label: Text(m.$2),
+                                    selected: selMeals.contains(m.$1),
+                                    onSelected: (on) => setState(() {
+                                      if (on) {
+                                        selMeals = {...selMeals, m.$1};
+                                      } else {
+                                        selMeals = {...selMeals}..remove(m.$1);
+                                      }
+                                      // Untouched time that doesn't suit the meals → the earliest
+                                      // chosen meal's usual time.
+                                      final now = DateTime(selDate.year, selDate.month, selDate.day, selTime.hour, selTime.minute);
+                                      final first = orderMeals(selMeals).firstOrNull;
+                                      if (!timeTouched && first != null && !selMeals.contains(guessMeal(now))) {
+                                        selTime = switch (first) {
+                                          'breakfast' => const TimeOfDay(hour: 8, minute: 0),
+                                          'lunch' => const TimeOfDay(hour: 13, minute: 30),
+                                          'snacks' => const TimeOfDay(hour: 16, minute: 30),
+                                          _ => const TimeOfDay(hour: 20, minute: 30),
+                                        };
+                                      }
+                                    }),
+                                  ),
+                              ],
+                            ),
+                            if (selMeals.length > 1)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  'One bill for ${mealsLabel(selMeals).toLowerCase()}. Enter the total below.',
+                                  key: const Key('mealsOneBill'),
+                                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                                ),
+                              ),
+                            12.h,
+                            InkWell(
+                              key: const Key('mealTime'),
+                              onTap: () async {
+                                final picked = await showTimePicker(context: ctx, initialTime: selTime);
+                                if (picked != null) {
+                                  setState(() {
+                                    selTime = picked;
+                                    timeTouched = true;
+                                  });
+                                }
+                              },
+                              borderRadius: BorderRadius.circular(12),
+                              child: InputDecorator(
+                                decoration: InputDecoration(
+                                  labelText: selMeals.length > 1 ? 'Time of the bill' : 'Time of the meal',
+                                  prefixIcon: const Icon(Icons.access_time_rounded),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: Text(selTime.format(ctx)),
+                              ),
+                            ),
+                            if (selMeals.isNotEmpty && (isScopedToOwn || selEmployee.isNotEmpty)) ...[
+                              12.h,
+                              MealPlacementCard(
+                                at: DateTime(selDate.year, selDate.month, selDate.day, selTime.hour, selTime.minute),
+                                meals: orderMeals(selMeals),
+                                employeeId: isScopedToOwn ? null : selEmployee,
+                                pinnedBookingId: pinnedBookingId,
+                                onPin: (id) => setState(() => pinnedBookingId = id),
+                                // the team's limit is checked against what is typed, as it is typed
+                                amount: double.tryParse(amountCtrl.text.trim()),
+                                excludeExpenseId: existing?.id,
+                                // a new entry gets the team's amount filled in; an edit keeps its own
+                                onAutoAmount: isEditing
+                                    ? null
+                                    : (suggested) {
+                                        final cur = amountCtrl.text.trim();
+                                        if (cur.isNotEmpty && cur != autoAmountText) return;
+                                        final text = suggested == null ? '' : TeamAmount.fieldText(suggested);
+                                        if (text == cur) {
+                                          autoAmountText = text;
+                                          return;
+                                        }
+                                        setState(() {
+                                          amountCtrl.text = text;
+                                          autoAmountText = text;
+                                        });
+                                      },
+                                onUseAmount: (v) => setState(() {
+                                  amountCtrl.text = TeamAmount.fieldText(v);
+                                  autoAmountText = '';
+                                }),
+                              ),
+                            ],
+                          ],
                           16.h,
                           TextFormField(
                             controller: amountCtrl,
@@ -1320,9 +1474,25 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         return;
                                       }
 
+                                      final isMealEntry = selCategory == 'food' && selWorkType == 'bridal';
+                                      if (isMealEntry && selMeals.isEmpty) {
+                                        ScaffoldMessenger.of(ctx).showSnackBar(
+                                          const SnackBar(content: Text('Pick which meal(s) this was')),
+                                        );
+                                        return;
+                                      }
+                                      final covered = mealFields(isMealEntry ? selMeals : const <String>{});
+                                      // Food carries the TIME of the meal; anything else keeps its date.
+                                      final when = isMealEntry
+                                          ? DateTime(selDate.year, selDate.month, selDate.day, selTime.hour, selTime.minute)
+                                          : selDate;
+
                                       final amt =
                                           double.tryParse(amountCtrl.text) ?? 0;
-                                      if (amt > 100 && attachmentFile == null) {
+                                      if (amt > 100 &&
+                                          attachmentFile == null &&
+                                          (existing == null || existing.receiptImage.isEmpty) &&
+                                          !canVerify) {
                                         ScaffoldMessenger.of(ctx).showSnackBar(
                                           const SnackBar(
                                             content: Text(
@@ -1342,22 +1512,28 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                               .uploadImage(attachmentFile!);
                                         }
 
+                                        final ArtistExpense saved;
                                         if (isEditing) {
-                                          await ref
+                                          saved = await ref
                                               .read(expenseServiceProvider)
                                               .updateExpense(
                                                 id: existing.id,
                                                 category: selCategory,
                                                 amount: amt,
-                                                date: selDate,
+                                                date: when,
                                                 notes: notesCtrl.text.trim(),
                                                 workType: selWorkType,
+                                                meal: covered.meal,
+                                                meals: covered.meals,
+                                                // '' takes a chosen work back off, so the
+                                                // time rule decides again.
+                                                bookingId: isMealEntry ? (pinnedBookingId ?? '') : null,
                                                 // Keep the old receipt unless
                                                 // a new one was attached.
                                                 receiptImage: uploadedUrl,
                                               );
                                         } else {
-                                          await ref
+                                          saved = await ref
                                               .read(expenseServiceProvider)
                                               .createExpense(
                                                 employeeId: selEmployee.isNotEmpty
@@ -1365,14 +1541,34 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                                     : myEmployeeId,
                                                 category: selCategory,
                                                 amount: amt,
-                                                date: selDate,
+                                                date: when,
                                                 notes: notesCtrl.text.trim(),
                                                 workType: selWorkType,
+                                                meal: covered.meal,
+                                                meals: covered.meals,
+                                                bookingId: isMealEntry ? pinnedBookingId : null,
                                                 receiptImage: uploadedUrl ?? '',
                                               );
                                         }
                                         ref.refreshData.expenses();
                                         if (ctx.mounted) Navigator.pop(ctx);
+                                        // Saved — and if the team is over its limit for this meal, say so
+                                        // (Accounts is told too).
+                                        final limit = saved.limitCheck;
+                                        if (limit != null && limit.isOver && context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              key: const Key('teamLimitSnack'),
+                                              duration: const Duration(seconds: 8),
+                                              backgroundColor: crm.destructive,
+                                              behavior: SnackBarBehavior.floating,
+                                              content: Text(
+                                                'Saved — the team limit for ${(limit.meals.length > 1 ? mealsLabel(limit.meals) : mealLabel(limit.meal)).toLowerCase()} is exceeded by ${TeamLimitBanner.rupees(limit.over)} '
+                                                '(${TeamLimitBanner.limitText(limit)}; the team has logged ${TeamLimitBanner.rupees(limit.total)}).',
+                                              ),
+                                            ),
+                                          );
+                                        }
                                       } catch (e) {
                                         if (ctx.mounted) {
                                           setState(() => isUploading = false);
@@ -1768,8 +1964,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       required String action,
       double amount = 0,
       String mode = '',
+      DateTime? initialDate,
     }) async {
-      // Approving asks where the money moved (mode + bank / cash account).
+      // Approving asks where the money moved (mode + bank / cash account + approved date).
       MoneyChoice? money;
       if (action == 'verified') {
         money = await showMoneyAccountPicker(
@@ -1779,6 +1976,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           moneyIn: isCollection,
           modes: kCollectionPayModes,
           initialMode: mode,
+          initialDate: initialDate ?? DateTime.now(),
         );
         if (money == null) return; // cancelled
       }
@@ -1858,76 +2056,195 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
-    // Reusable search box, shown at the top of both tabs (works even when the
-    // filtered result is empty, so a search can always be cleared).
-    Widget searchSliver(String hint) => SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: TextField(
-              controller: searchCtrl,
-              onChanged: (v) => searchQuery.value = v,
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: hint,
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: searchQuery.value.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          searchCtrl.clear();
-                          searchQuery.value = '';
-                        },
+    // Everything above the list on one tab: the loading bar, the extra cards, the
+    // search / filters / sort / page-size row, the status chips, the active-filter
+    // chips, the tap-to-filter breakdown and the "Showing 1–20 of 134" line.
+    List<Widget> controlSlivers({
+      required FinanceKind kind,
+      required ValueNotifier<FinanceQuery> holder,
+      required FinancePage<dynamic> data,
+      required bool loading,
+      required Object? error,
+      required VoidCallback retry,
+      Widget? cards,
+    }) {
+      final isColl = kind == FinanceKind.collection;
+      final q = holder.value;
+      final summary = data.summary;
+      final padH = isMobile ? 16.0 : 0.0;
+      Widget box(Widget child, [double top = 0]) => SliverToBoxAdapter(
+            child: Padding(padding: EdgeInsets.fromLTRB(padH, top, padH, 0), child: child),
+          );
+      void set(FinanceQuery next) => holder.value = next;
+      void clearAll() => set(FinanceQuery(from: q.from, to: q.to, sort: q.sort, limit: q.limit, withWorks: q.withWorks));
+      final artists = isScopedToOwn ? const <NameOption>[] : artistOptionsFor(q.employeeId);
+      void toggle(Set<String> current, String key, FinanceQuery Function(Set<String>) apply) {
+        final next = {...current};
+        next.contains(key) ? next.remove(key) : next.add(key);
+        set(apply(next));
+      }
+
+      return [
+        if (loading) box(const LinearProgressIndicator(minHeight: 3), 8),
+        // The page that failed to load is not silently replaced by the old one.
+        if (error != null && !loading) box(FinanceLoadError(error: error, onRetry: retry), 10),
+        if (cards != null) box(cards, 12),
+        box(
+          FinanceToolbar(
+            search: q.search,
+            onSearch: (t) => set(q.refiltered(search: t)),
+            hint: isMobile
+                ? 'Search client, artist, notes…'
+                : (isColl
+                    ? 'Search client, artist, service, booking no., notes or amount'
+                    : 'Search client, artist, category, booking no., notes or amount'),
+            advancedCount: q.advancedCount,
+            onFilters: () => openFilters(kind),
+            sort: q.sort,
+            onSort: (v) => set(q.refiltered(sort: v)),
+            limit: q.limit,
+            onLimit: (n) => set(q.refiltered(limit: n)),
+          ),
+          12,
+        ),
+        box(
+          FinanceStatusChips(summary: summary, selected: q.statuses, onChanged: (st) => set(q.refiltered(statuses: st))),
+          10,
+        ),
+        if (q.isFiltered)
+          box(
+            FinanceActiveChips(
+              query: q,
+              kind: kind,
+              artistName: artists.where((a) => a.id == q.employeeId).map((a) => a.name).firstOrNull,
+              onChanged: set,
+              onClearAll: clearAll,
+            ),
+            10,
+          ),
+        if (summary != null && summary.shownCount > 0)
+          box(
+            Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                // Its own page-storage key: the tab's scroll view stores a scroll offset under
+                // the tab's key, and a tile sharing that slot would read it back as its state.
+                key: PageStorageKey<String>(isColl ? 'collectionBreakdownTile' : 'expenseBreakdownTile'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 4),
+                expandedAlignment: Alignment.centerLeft,
+                expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+                initiallyExpanded: !isMobile,
+                title: Text('Breakdown', style: TextStyle(fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                children: [
+                  FinanceBreakdown(groups: [
+                    if (isColl)
+                      BreakdownGroup(
+                        title: 'By payment mode',
+                        rows: summary.byMode,
+                        keyPrefix: 'mode',
+                        labels: kCollectionModeLabels,
+                        isOn: (r) => q.paymentModes.contains(r.key),
+                        onTap: (r) => toggle(q.paymentModes, r.key, (n) => q.refiltered(paymentModes: n)),
+                      )
+                    else ...[
+                      BreakdownGroup(
+                        title: 'By category',
+                        rows: summary.byCategory,
+                        keyPrefix: 'category',
+                        labels: kArtistExpenseCategoryLabels,
+                        isOn: (r) => q.categories.contains(r.key),
+                        onTap: (r) => toggle(q.categories, r.key, (n) => q.refiltered(categories: n)),
                       ),
-                isDense: true,
-                filled: true,
-                fillColor: crm.surface,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: crm.border),
-                ),
+                      BreakdownGroup(
+                        title: 'By work type',
+                        rows: summary.byWorkType,
+                        keyPrefix: 'work',
+                        labels: kWorkTypeLabels,
+                        isOn: (r) => q.workType == r.key,
+                        onTap: (r) => set(q.refiltered(workType: q.workType == r.key ? null : r.key)),
+                      ),
+                    ],
+                    // An artist only ever sees their own, so there is nothing to compare.
+                    if (!isScopedToOwn)
+                      BreakdownGroup(
+                        title: 'By artist',
+                        rows: summary.byArtist,
+                        keyPrefix: 'artist',
+                        isOn: (r) => q.employeeId == r.key,
+                        onTap: (r) => set(q.refiltered(employeeId: q.employeeId == r.key ? null : r.key)),
+                      ),
+                  ]),
+                ],
               ),
             ),
+            12,
+          ),
+        box(
+          Text(
+            financeTotalText(
+              total: data.totalItems,
+              amount: summary?.shownAmount,
+              noun: isColl ? 'collections' : 'expenses',
+            ),
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.textSecondary),
+          ),
+          12,
+        ),
+      ];
+    }
+
+    Widget pager(FinancePage<dynamic> data, ValueNotifier<FinanceQuery> holder) => Padding(
+          padding: EdgeInsets.fromLTRB(isMobile ? 16 : 0, 8, isMobile ? 16 : 0, 24),
+          child: PaginatedFooter(
+            page: data.page,
+            limit: data.limit,
+            totalPages: data.totalPages,
+            totalItems: data.totalItems,
+            currentItemCount: data.items.length,
+            onPrevious: data.page > 1 ? () => holder.value = holder.value.copyWith(page: data.page - 1) : null,
+            onNext: data.page < data.totalPages ? () => holder.value = holder.value.copyWith(page: data.page + 1) : null,
           ),
         );
 
-    Widget collectionsTab(List<ArtistCollection> items) {
-      final sortedItems = [...items]..sort((a, b) => b.date.compareTo(a.date));
-      final totalPages = sortedItems.isEmpty ? 1 : (sortedItems.length / collPageSize).ceil();
-      final curPage = collectionPage.value.clamp(0, totalPages - 1);
-      final pageStart = curPage * collPageSize;
-      final pageEnd = (pageStart + collPageSize).clamp(0, sortedItems.length);
-      final pageItems = sortedItems.isEmpty ? const <ArtistCollection>[] : sortedItems.sublist(pageStart, pageEnd);
-
-      if (items.isEmpty) {
-        return Builder(
-          builder: (context) {
-            return CustomScrollView(
-              key: const PageStorageKey<String>('collections'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverOverlapInjector(
-                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+    Widget emptyList({
+      required IconData icon,
+      required String noun,
+      required String unfilteredHint,
+      required ValueNotifier<FinanceQuery> holder,
+    }) {
+      final q = holder.value;
+      final filtered = q.isFiltered;
+      final title = filtered
+          ? 'No matching $noun'
+          : switch (period.value) {
+              FinancePeriod.all => 'No $noun logged yet',
+              FinancePeriod.range => 'No $noun in this date range',
+              FinancePeriod.month => 'No $noun in $periodText',
+            };
+      return SliverPadding(
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
+        sliver: SliverToBoxAdapter(
+          child: Column(
+            children: [
+              _FinanceEmptyState(
+                icon: icon,
+                title: title,
+                subtitle: filtered ? 'Try a different search or clear the filters.' : unfilteredHint,
+              ),
+              if (filtered)
+                TextButton(
+                  onPressed: () => holder.value = FinanceQuery(from: q.from, to: q.to, sort: q.sort, limit: q.limit, withWorks: q.withWorks),
+                  child: const Text('Clear filters'),
                 ),
-                searchSliver('Search by client, service or note…'),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  sliver: SliverToBoxAdapter(
-                    child: _FinanceEmptyState(
-                      icon: Icons.account_balance_wallet_outlined,
-                      title: q.isEmpty ? 'No collections logged yet' : 'No matching collections',
-                      subtitle: q.isEmpty
-                          ? 'Start by recording the first amount collected from a client.'
-                          : 'Try a different search or clear the filters.',
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-        );
-      }
+            ],
+          ),
+        ),
+      );
+    }
 
+    Widget collectionsTab(FinancePage<ArtistCollection> data) {
+      final pageItems = data.items;
       return Builder(
         builder: (context) {
           return CustomScrollView(
@@ -1937,11 +2254,26 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               SliverOverlapInjector(
                 handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
-              searchSliver('Search by client, service or note…'),
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
+              ...controlSlivers(
+                kind: FinanceKind.collection,
+                holder: collectionQuery,
+                data: data,
+                loading: asyncCollections.isLoading,
+                error: asyncCollections.hasError ? asyncCollections.error : null,
+                retry: () => ref.invalidate(financeCollectionsPageProvider),
+              ),
+              if (pageItems.isEmpty)
+                emptyList(
+                  icon: Icons.account_balance_wallet_outlined,
+                  noun: 'collections',
+                  unfilteredHint: 'Record a collection with the button at the top, or look at another period.',
+                  holder: collectionQuery,
+                )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
                     (context, i) {
                       final c = pageItems[i];
                       final metadataStr = [
@@ -1962,6 +2294,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               action: 'verified',
                               amount: c.amount,
                               mode: c.paymentMode,
+                              initialDate: c.date,
                             ),
                             style: IconButton.styleFrom(
                               foregroundColor: crm.success,
@@ -1997,8 +2330,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       }
                       // An artist can correct their own pending collection
                       // until Accounts verifies/rejects it — same rule as
-                      // expenses. After that it is locked.
-                      if (isScopedToOwn && c.status == 'pending') {
+                      // expenses. Accounts and Admins can edit collections anytime.
+                      if ((isScopedToOwn && c.status == 'pending') || canVerify) {
                         actionsList.add(
                           IconButton(
                             tooltip: 'Edit this collection',
@@ -2102,6 +2435,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         note: c.notes.isNotEmpty ? c.notes : null,
                         creatorName: c.employee?.name ?? 'Unknown',
                         date: c.date,
+                        verifiedAt: c.verifiedAt,
                         actions: actionsList,
                         onAttachmentTap: (c.attachmentUrl != null && c.attachmentUrl!.isNotEmpty)
                             ? () => showImageDialog(c.attachmentUrl!, label: 'collection_screenshot')
@@ -2109,77 +2443,18 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       );
                     },
                     childCount: pageItems.length,
-                  ),
-                ),
-              ),
-              // ── Pagination bar ──────────────────────────────────────────────
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    isMobile ? 16 : 0, 4, isMobile ? 16 : 0, 24,
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        '${sortedItems.length} total  •  Page ${curPage + 1} / $totalPages',
-                        style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        onPressed: curPage > 0
-                            ? () => collectionPage.value = curPage - 1
-                            : null,
-                        tooltip: 'Previous page',
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: curPage < totalPages - 1
-                            ? () => collectionPage.value = curPage + 1
-                            : null,
-                        tooltip: 'Next page',
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          );
-        }
-      );
-    }
-
-    Widget expensesTab(List<ArtistExpense> items) {
-      if (items.isEmpty) {
-        return Builder(
-          builder: (context) {
-            return CustomScrollView(
-              key: const PageStorageKey<String>('expenses'),
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
-                SliverOverlapInjector(
-                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-                ),
-                searchSliver('Search by client, category or note…'),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  sliver: SliverToBoxAdapter(
-                    child: _FinanceEmptyState(
-                      icon: Icons.receipt_long_outlined,
-                      title: q.isEmpty ? 'No expenses logged yet' : 'No matching expenses',
-                      subtitle: q.isEmpty
-                          ? 'Receipts and travel costs logged here will appear for review.'
-                          : 'Try a different search or clear the filters.',
                     ),
                   ),
                 ),
-              ],
-            );
-          }
-        );
-      }
+              SliverToBoxAdapter(child: pager(data, collectionQuery)),
+            ],
+          );
+        },
+      );
+    }
 
-      final sortedItems = [...items]..sort((a, b) => b.date.compareTo(a.date));
+    Widget expensesTab(FinancePage<ArtistExpense> data) {
+      final sortedItems = data.items;
       return Builder(
         builder: (context) {
           return CustomScrollView(
@@ -2189,41 +2464,68 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               SliverOverlapInjector(
                 handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
               ),
-              searchSliver('Search by client, category or note…'),
-              // Bridal vs model-shoot spend at a glance.
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(
-                      isMobile ? 16 : 0, 12, isMobile ? 16 : 0, 0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _workTypeTotalCard(
-                          crm,
-                          'Bridal Work',
-                          _currency(bridalExpenseTotal),
-                          Icons.diamond_outlined,
-                          crm.primary,
+              ...controlSlivers(
+                kind: FinanceKind.expense,
+                holder: expenseQuery,
+                data: data,
+                loading: asyncExpenses.isLoading,
+                error: asyncExpenses.hasError ? asyncExpenses.error : null,
+                retry: () => ref.invalidate(financeExpensesPageProvider),
+                // Bridal vs model-shoot spend at a glance — over the whole filtered set.
+                cards: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Accounts sets how much may be spent on each meal per head.
+                    if (canVerify) ...[
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: OutlinedButton.icon(
+                          key: const Key('foodAllowanceButton'),
+                          onPressed: () => showFoodAllowanceManager(context),
+                          icon: const Icon(Icons.restaurant_menu_outlined, size: 18),
+                          label: const Text('Food allowance per head'),
                         ),
                       ),
-                      12.w,
-                      Expanded(
-                        child: _workTypeTotalCard(
-                          crm,
-                          'Model Shoot',
-                          _currency(modelShootExpenseTotal),
-                          Icons.camera_alt_outlined,
-                          crm.accent,
-                        ),
-                      ),
+                      10.h,
                     ],
-                  ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _workTypeTotalCard(
+                            crm,
+                            'Bridal Work',
+                            _currency(bridalExpenseTotal),
+                            Icons.diamond_outlined,
+                            crm.primary,
+                          ),
+                        ),
+                        12.w,
+                        Expanded(
+                          child: _workTypeTotalCard(
+                            crm,
+                            'Model Shoot',
+                            _currency(modelShootExpenseTotal),
+                            Icons.camera_alt_outlined,
+                            crm.accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
+              if (sortedItems.isEmpty)
+                emptyList(
+                  icon: Icons.receipt_long_outlined,
+                  noun: 'expenses',
+                  unfilteredHint: 'Receipts and travel costs logged here will appear for review.',
+                  holder: expenseQuery,
+                )
+              else
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 0, vertical: 12),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
                     (context, i) {
                       final e = sortedItems[i];
                       final catLabel = _expenseCategories
@@ -2254,6 +2556,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               action: 'verified',
                               amount: e.amount,
                               mode: 'upi',
+                              initialDate: e.date,
                             ),
                             style: IconButton.styleFrom(
                               foregroundColor: crm.success,
@@ -2288,8 +2591,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         actionsList.add(8.w);
                       }
                       // An artist can correct their own entry until Accounts
-                      // verifies or rejects it; after that it is locked.
-                      if (isScopedToOwn && e.status == 'pending') {
+                      // verifies or rejects it. Accounts and Admins can manage and edit expenses anytime.
+                      if ((isScopedToOwn && e.status == 'pending') || canVerify) {
                         actionsList.add(
                           IconButton(
                             tooltip: 'Edit this expense',
@@ -2336,19 +2639,35 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         note: e.notes.isNotEmpty ? e.notes : null,
                         creatorName: e.employee?.name ?? 'Unknown',
                         date: e.date,
+                        verifiedAt: e.verifiedAt,
                         actions: actionsList,
                         onAttachmentTap: e.receiptImage.isNotEmpty
                             ? () => showImageDialog(e.receiptImage, label: 'expense_bill')
                             : null,
+                        // A food expense: which work it was eaten for, by the time of the meal.
+                        extra: e.allocation == null
+                            ? null
+                            : ExpenseAllocationLine(
+                                expense: e,
+                                onDay: e.employee == null
+                                    ? null
+                                    : () => showArtistDayTimeline(
+                                          context,
+                                          employeeId: e.employee!.id,
+                                          day: istDay(e.date),
+                                          artistName: e.employee!.name,
+                                        ),
+                              ),
                       );
                     },
                     childCount: sortedItems.length,
+                    ),
                   ),
                 ),
-              ),
+              SliverToBoxAdapter(child: pager(data, expenseQuery)),
             ],
           );
-        }
+        },
       );
     }
 
@@ -2358,386 +2677,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           content: Text(message),
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-
-    void openFilterBottomSheet() {
-      // ── Temp state lives here, OUTSIDE the builder, so it survives rebuilds ──
-      final tempStatuses = Set<String>.from(filterStatuses.value);
-      String? tempArtistId = filterArtistId.value;
-      DateTime? tempFilterMonth = filterMonth.value;
-      final tempPaymentModes = Set<String>.from(filterPaymentModes.value);
-      final tempCategories = Set<String>.from(filterCategories.value);
-      DateTime? tempFromDate = filterFromDate.value;
-      DateTime? tempToDate = filterToDate.value;
-      final minAmountCtrl = TextEditingController(
-        text: filterMinAmount.value != null ? filterMinAmount.value!.toStringAsFixed(0) : '',
-      );
-      final maxAmountCtrl = TextEditingController(
-        text: filterMaxAmount.value != null ? filterMaxAmount.value!.toStringAsFixed(0) : '',
-      );
-
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) {
-            return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom,
-              ),
-              decoration: BoxDecoration(
-                color: theme.scaffoldBackgroundColor,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(
-                          child: Container(
-                            width: 40,
-                            height: 5,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                        ),
-                        24.h,
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Filter Transactions',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: crm.textPrimary,
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => Navigator.pop(ctx),
-                            ),
-                          ],
-                        ),
-                        16.h,
-                        // ── Artist Filter ──────────────────────────────────────
-                        if (!isScopedToOwn) ...[
-                          Text(
-                            'ARTIST',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: crm.textSecondary,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          8.h,
-                          DropdownButtonFormField<String?>(
-                            decoration: InputDecoration(
-                              labelText: 'Artist',
-                              prefixIcon: const Icon(Icons.person_outline),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                            initialValue: tempArtistId,
-                            items: [
-                              const DropdownMenuItem<String?>(value: null, child: Text('All Artists')),
-                              ...(asyncEmployees.value ?? [])
-                                  .where((e) => e.isActive && e.isArtist)
-                                  .map<DropdownMenuItem<String?>>(
-                                    (e) => DropdownMenuItem<String?>(value: e.id, child: Text(e.name)),
-                                  ),
-                            ],
-                            onChanged: (v) => setState(() => tempArtistId = v),
-                          ),
-                          16.h,
-                        ],
-                        // ── Month Filter ───────────────────────────────────────
-                        Text(
-                          'MONTH',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        _MonthFilterPicker(
-                          selectedMonth: tempFilterMonth,
-                          onChanged: (m) => setState(() => tempFilterMonth = m),
-                        ),
-                        16.h,
-                        Text(
-                          'STATUS',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        ...[
-                          ('pending', 'Pending Verification'),
-                          ('verified', 'Approved'),
-                          ('rejected', 'Rejected'),
-                        ].map((item) {
-                          final isChecked = tempStatuses.contains(item.$1);
-                          return CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(item.$2, style: TextStyle(fontSize: 13, color: crm.textPrimary)),
-                            value: isChecked,
-                            activeColor: crm.primary,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  tempStatuses.add(item.$1);
-                                } else {
-                                  tempStatuses.remove(item.$1);
-                                }
-                              });
-                            },
-                          );
-                        }),
-                        16.h,
-                        Text(
-                          'DATE RANGE',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        Row(
-                          children: [
-                            Expanded(
-                              child: InkWell(
-                                onTap: () async {
-                                  final picked = await showDatePicker(
-                                    context: ctx,
-                                    initialDate: tempFromDate ?? DateTime.now(),
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked != null) {
-                                    setState(() => tempFromDate = picked);
-                                  }
-                                },
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: 'From Date',
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  child: Text(
-                                    tempFromDate != null ? _fmt(tempFromDate!) : 'Select',
-                                    style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            12.w,
-                            Expanded(
-                              child: InkWell(
-                                onTap: () async {
-                                  final picked = await showDatePicker(
-                                    context: ctx,
-                                    initialDate: tempToDate ?? DateTime.now(),
-                                    firstDate: DateTime(2020),
-                                    lastDate: DateTime(2100),
-                                  );
-                                  if (picked != null) {
-                                    setState(() => tempToDate = picked);
-                                  }
-                                },
-                                child: InputDecorator(
-                                  decoration: InputDecoration(
-                                    labelText: 'To Date',
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  child: Text(
-                                    tempToDate != null ? _fmt(tempToDate!) : 'Select',
-                                    style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        16.h,
-                        Text(
-                          'AMOUNT RANGE',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: minAmountCtrl,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: 'Min Amount',
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                              ),
-                            ),
-                            12.w,
-                            Expanded(
-                              child: TextFormField(
-                                controller: maxAmountCtrl,
-                                keyboardType: TextInputType.number,
-                                decoration: InputDecoration(
-                                  labelText: 'Max Amount',
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                style: TextStyle(fontSize: 12, color: crm.textPrimary),
-                              ),
-                            ),
-                          ],
-                        ),
-                        16.h,
-                        Text(
-                          'PAYMENT METHOD',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        ...[
-                          ('cash', 'Cash'),
-                          ('bank_transfer', 'Bank Transfer'),
-                          ('upi', 'UPI'),
-                          ('other', 'Other'),
-                          ('split', 'Split Payment'),
-                        ].map((item) {
-                          final isChecked = tempPaymentModes.contains(item.$1);
-                          return CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(item.$2, style: TextStyle(fontSize: 13, color: crm.textPrimary)),
-                            value: isChecked,
-                            activeColor: crm.primary,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  tempPaymentModes.add(item.$1);
-                                } else {
-                                  tempPaymentModes.remove(item.$1);
-                                }
-                              });
-                            },
-                          );
-                        }),
-                        16.h,
-                        Text(
-                          'EXPENSE CATEGORY',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: crm.textSecondary,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        8.h,
-                        ..._expenseCategories.map((item) {
-                          final isChecked = tempCategories.contains(item.$1);
-                          return CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(item.$2, style: TextStyle(fontSize: 13, color: crm.textPrimary)),
-                            value: isChecked,
-                            activeColor: crm.primary,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  tempCategories.add(item.$1);
-                                } else {
-                                  tempCategories.remove(item.$1);
-                                }
-                              });
-                            },
-                          );
-                        }),
-                        24.h,
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {
-                                  filterStatuses.value = {'pending', 'verified', 'rejected'};
-                                  filterPaymentModes.value = {'cash', 'bank_transfer', 'upi', 'other', 'split'};
-                                  filterCategories.value = {'food', 'travel', 'stay', 'materials', 'fuel', 'other'};
-                                  filterFromDate.value = null;
-                                  filterToDate.value = null;
-                                  filterMinAmount.value = null;
-                                  filterMaxAmount.value = null;
-                                  filterArtistId.value = null;
-                                  filterMonth.value = null;
-                                  collectionPage.value = 0;
-                                  Navigator.pop(ctx);
-                                  showToast('✓ Filters Reset');
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                ),
-                                child: const Text('RESET'),
-                              ),
-                            ),
-                            12.w,
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () {
-                                  filterStatuses.value = tempStatuses;
-                                  filterPaymentModes.value = tempPaymentModes;
-                                  filterCategories.value = tempCategories;
-                                  filterFromDate.value = tempFromDate;
-                                  filterToDate.value = tempToDate;
-                                  filterMinAmount.value = double.tryParse(minAmountCtrl.text);
-                                  filterMaxAmount.value = double.tryParse(maxAmountCtrl.text);
-                                  filterArtistId.value = tempArtistId;
-                                  filterMonth.value = tempFilterMonth;
-                                  collectionPage.value = 0;
-                                  Navigator.pop(ctx);
-                                  showToast('✓ Filters Applied Successfully');
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 14),
-                                  backgroundColor: crm.primary,
-                                ),
-                                child: const Text('APPLY FILTERS'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
         ),
       );
     }
@@ -3084,9 +3023,6 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
-    final pendingCount = filteredCollections.where((c) => c.status == 'pending').length +
-        filteredExpenses.where((e) => e.status == 'pending').length;
-
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -3232,12 +3168,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                       child: const Icon(Icons.currency_rupee, size: 10, color: Colors.white),
                                     ),
                                     6.w,
-                                    Text(
-                                      'TOTAL COLLECTED',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: crm.textSecondary,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
+                                    Flexible(
+                                      child: Text(
+                                        'TOTAL COLLECTED',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: crm.textSecondary,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3254,14 +3194,18 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                 6.h,
                                 Row(
                                   children: [
-                                    Icon(Icons.arrow_upward, size: 10, color: crm.success),
+                                    Icon(Icons.verified_outlined, size: 10, color: crm.success),
                                     4.w,
-                                    Text(
-                                      '+12% this month',
-                                      style: TextStyle(
-                                        color: crm.success,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                    Flexible(
+                                      child: Text(
+                                        '$verifiedCount verified · $periodText',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: crm.success,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3293,12 +3237,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                       child: const Icon(Icons.hourglass_empty, size: 10, color: Colors.white),
                                     ),
                                     6.w,
-                                    Text(
-                                      'PENDING',
-                                      style: theme.textTheme.labelSmall?.copyWith(
-                                        color: crm.textSecondary,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
+                                    Flexible(
+                                      child: Text(
+                                        'PENDING',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.textTheme.labelSmall?.copyWith(
+                                          color: crm.textSecondary,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3317,12 +3265,16 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   children: [
                                     Icon(Icons.access_time, size: 10, color: crm.warning),
                                     4.w,
-                                    Text(
-                                      'Awaiting verification',
-                                      style: TextStyle(
-                                        color: crm.warning,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                    Flexible(
+                                      child: Text(
+                                        '$pendingCollections collections · $pendingExpenses expenses',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: crm.warning,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -3332,6 +3284,15 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ),
                         ),
                       ],
+                    ),
+                    12.h,
+                    FinancePeriodBar(
+                      period: period.value,
+                      month: month.value,
+                      range: range.value,
+                      onMonth: (m) => setPeriod(FinancePeriod.month, newMonth: m),
+                      onRange: (r) => setPeriod(FinancePeriod.range, newRange: r),
+                      onAll: () => setPeriod(FinancePeriod.all),
                     ),
                     12.h,
                   ]),
@@ -3354,6 +3315,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           child: TabBar(
                             controller: tabCtrl,
                             isScrollable: true,
+                            // snug padding so all three tabs fit a 390px phone beside the PDF button
+                            tabAlignment: TabAlignment.start,
+                            labelPadding: const EdgeInsets.symmetric(horizontal: 10),
                             indicatorSize: TabBarIndicatorSize.label,
                             indicator: UnderlineTabIndicator(
                               borderSide: BorderSide(color: crm.primary, width: 2),
@@ -3367,29 +3331,17 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                               fontSize: 13,
                               letterSpacing: 0.5,
                             ),
-                            tabs: const [
-                              Tab(text: 'COLLECTIONS'),
-                              Tab(text: 'EXPENSES'),
+                            tabs: [
+                              const Tab(text: 'COLLECTIONS'),
+                              const Tab(text: 'EXPENSES'),
+                              // short enough to fit a phone beside the other two
+                              if (canVerify) const Tab(text: 'BY WORK'),
                             ],
                           ),
                         ),
                       ),
                       Row(
                         children: [
-                          IconButton(
-                            icon: Icon(Icons.tune_outlined, color: crm.textSecondary, size: 20),
-                            onPressed: openFilterBottomSheet,
-                            style: IconButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                side: BorderSide(color: crm.border),
-                              ),
-                              padding: const EdgeInsets.all(8),
-                              minimumSize: const Size(36, 36),
-                            ),
-                            tooltip: 'Filter Transactions',
-                          ),
-                          8.w,
                           IconButton(
                             icon: Icon(Icons.picture_as_pdf_outlined, color: crm.textSecondary, size: 20),
                             onPressed: openReportDialog,
@@ -3413,30 +3365,38 @@ class ArtistFinanceScreen extends HookConsumerWidget {
             ),
           ];
         },
-        body: TabBarView(
-          controller: tabCtrl,
-          children: [
-            asyncCollections.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => AppErrorView(
-                error: e,
-                onRetry: () => isScopedToOwn && myEmployeeId.isNotEmpty
-                    ? ref.invalidate(artistCollectionsProvider(myEmployeeId))
-                    : ref.invalidate(collectionsProvider),
-              ),
-              data: (_) => collectionsTab(filteredCollections),
-            ),
-            asyncExpenses.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => AppErrorView(
-                error: e,
-                onRetry: () => isScopedToOwn && myEmployeeId.isNotEmpty
-                    ? ref.invalidate(artistExpensesProvider(myEmployeeId))
-                    : ref.invalidate(expensesProvider),
-              ),
-              data: (_) => expensesTab(filteredExpenses),
-            ),
-          ],
+        body: ScrollConfiguration(
+          behavior: const _TabPageScrollBehavior(),
+          child: TabBarView(
+            controller: tabCtrl,
+            children: [
+              if (collectionData != null)
+                collectionsTab(collectionData)
+              else if (asyncCollections.hasError)
+                AppErrorView(
+                  error: asyncCollections.error!,
+                  onRetry: () => ref.invalidate(financeCollectionsPageProvider),
+                )
+              else
+                const Center(child: CircularProgressIndicator()),
+              if (expenseData != null)
+                expensesTab(expenseData)
+              else if (asyncExpenses.hasError)
+                AppErrorView(
+                  error: asyncExpenses.error!,
+                  onRetry: () => ref.invalidate(financeExpensesPageProvider),
+                )
+              else
+                const Center(child: CircularProgressIndicator()),
+              if (canVerify)
+                WorkCostsTab(
+                  from: expenseQuery.value.from,
+                  to: expenseQuery.value.to,
+                  artists: artistOptionsFor(null),
+                  inNestedScrollView: true,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -3825,62 +3785,26 @@ Future<String?> _showBookingSearchDialog({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Month filter picker widget
-// ─────────────────────────────────────────────────────────────────────────────
-class _MonthFilterPicker extends StatelessWidget {
-  final DateTime? selectedMonth;
-  final void Function(DateTime?) onChanged;
-  const _MonthFilterPicker({required this.selectedMonth, required this.onChanged});
-
-  static const _months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
+/// The tab pages of a [NestedScrollView] all use its one inner scroll controller, so while two
+/// pages are on screen (a swipe, a tab change) that controller has two positions. A desktop
+/// scrollbar you can drag asserts on the next mouse-wheel event then ("attached to more than one
+/// ScrollPosition"), so the pages get a display-only thumb instead.
+class _TabPageScrollBehavior extends MaterialScrollBehavior {
+  const _TabPageScrollBehavior();
 
   @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final years = [now.year - 1, now.year];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            // "All" chip
-            ChoiceChip(
-              label: const Text('All', style: TextStyle(fontSize: 12)),
-              selected: selectedMonth == null,
-              onSelected: (_) => onChanged(null),
-              selectedColor: const Color(0xFF6C3483).withValues(alpha: 0.15),
-              checkmarkColor: const Color(0xFF6C3483),
-            ),
-            for (final yr in years)
-              for (var m = 1; m <= 12; m++) ...[
-                if (yr == now.year && m > now.month) const SizedBox.shrink()
-                else Builder(builder: (ctx) {
-                  final dt = DateTime(yr, m);
-                  final sel = selectedMonth != null &&
-                      selectedMonth!.year == yr &&
-                      selectedMonth!.month == m;
-                  return ChoiceChip(
-                    label: Text('${_months[m - 1]} $yr',
-                        style: const TextStyle(fontSize: 11)),
-                    selected: sel,
-                    onSelected: (_) => onChanged(dt),
-                    selectedColor: const Color(0xFF6C3483).withValues(alpha: 0.15),
-                    checkmarkColor: const Color(0xFF6C3483),
-                    visualDensity: VisualDensity.compact,
-                  );
-                }),
-              ],
-          ],
-        ),
-      ],
-    );
+  Widget buildScrollbar(BuildContext context, Widget child, ScrollableDetails details) {
+    if (axisDirectionToAxis(details.direction) == Axis.horizontal) return child;
+    switch (getPlatform(context)) {
+      case TargetPlatform.android:
+      case TargetPlatform.fuchsia:
+      case TargetPlatform.iOS:
+        return child;
+      case TargetPlatform.linux:
+      case TargetPlatform.macOS:
+      case TargetPlatform.windows:
+        return Scrollbar(controller: details.controller, interactive: false, child: child);
+    }
   }
 }
 
@@ -3999,8 +3923,12 @@ class _FinanceEntryCard extends StatelessWidget {
   final String? note;
   final String creatorName;
   final DateTime date;
+  final DateTime? verifiedAt;
   final List<Widget> actions;
   final VoidCallback? onAttachmentTap;
+
+  /// Something shown under the note — a food expense's allocation to a work.
+  final Widget? extra;
 
   const _FinanceEntryCard({
     required this.title,
@@ -4010,8 +3938,10 @@ class _FinanceEntryCard extends StatelessWidget {
     this.note,
     required this.creatorName,
     required this.date,
+    this.verifiedAt,
     required this.actions,
     this.onAttachmentTap,
+    this.extra,
   });
 
   @override
@@ -4094,6 +4024,24 @@ class _FinanceEntryCard extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
+                            if (verifiedAt != null && (status == 'verified' || status == 'approved')) ...[
+                              6.w,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: crm.success.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'Approved: ${_fmtCardDate(verifiedAt!.toLocal())}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: crm.success,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                         if (metadata.isNotEmpty) ...[
@@ -4149,6 +4097,7 @@ class _FinanceEntryCard extends StatelessWidget {
                   ),
                 ),
               ],
+              if (extra != null) ...[8.h, extra!],
               12.h,
               Divider(height: 1, color: crm.border.faded(0.5)),
               12.h,

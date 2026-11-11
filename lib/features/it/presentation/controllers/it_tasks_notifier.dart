@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/features/it/domain/gantt_auto_scheduler.dart';
 import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
+import 'package:nizan_crm/features/it/domain/task_tree.dart';
 import 'package:nizan_crm/features/it/domain/repositories/it_task_repository.dart';
 import 'package:nizan_crm/features/it/data/repositories/it_task_repository_impl.dart';
 
@@ -20,11 +22,13 @@ enum GanttZoomScale {
 enum GanttSwimlaneMode {
   bySubTeam,
   byProject,
+  byDepartment,
   flatWbs;
 
   String get label => switch (this) {
         GanttSwimlaneMode.bySubTeam => 'By Sub-Team',
         GanttSwimlaneMode.byProject => 'By Project',
+        GanttSwimlaneMode.byDepartment => 'By Department',
         GanttSwimlaneMode.flatWbs => 'Work Breakdown (WBS)',
       };
 }
@@ -151,12 +155,16 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
 
     final oldTask = current[index];
     final updatedList = List<ITTaskModel>.from(current);
+    final payload = Map<String, dynamic>.from(updates);
 
     var mod = oldTask;
     if (updates.containsKey('status')) {
       mod = mod.copyWith(status: ITTaskStatus.fromString(updates['status']));
       if (mod.status == ITTaskStatus.closed || mod.status == ITTaskStatus.deployed) {
         mod = mod.copyWith(percentComplete: 100);
+        if (!payload.containsKey('percentComplete')) {
+          payload['percentComplete'] = 100;
+        }
       }
     }
     if (updates.containsKey('severity')) {
@@ -168,6 +176,9 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     if (updates.containsKey('subTeam')) {
       mod = mod.copyWith(subTeam: ITSubTeam.fromString(updates['subTeam']));
     }
+    if (updates.containsKey('order')) {
+      mod = mod.copyWith(order: (updates['order'] as num).toInt());
+    }
     if (updates.containsKey('startDate')) {
       mod = mod.copyWith(startDate: DateTime.tryParse(updates['startDate'].toString()));
     }
@@ -175,7 +186,12 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
       mod = mod.copyWith(dueDate: DateTime.tryParse((updates['dueDate'] ?? updates['deadline']).toString()));
     }
     if (updates.containsKey('percentComplete')) {
-      mod = mod.copyWith(percentComplete: (updates['percentComplete'] as num).toInt());
+      final pct = (updates['percentComplete'] as num).toInt();
+      mod = mod.copyWith(percentComplete: pct);
+      if (pct >= 100 && !payload.containsKey('status')) {
+        payload['status'] = 'closed';
+        mod = mod.copyWith(status: ITTaskStatus.closed);
+      }
     }
 
     updatedList[index] = mod;
@@ -183,7 +199,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
 
     try {
       final repo = ref.read(itTaskRepositoryProvider);
-      final saved = await repo.updateTask(taskId, updates);
+      final saved = await repo.updateTask(taskId, payload);
       final refreshed = List<ITTaskModel>.from(state.value ?? updatedList);
       final rIdx = refreshed.indexWhere((t) => t.id == taskId);
       if (rIdx != -1) {
@@ -210,22 +226,35 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     final index = current.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
 
-    final oldTask = current[index];
-    final updatedList = List<ITTaskModel>.from(current);
-    updatedList[index] = oldTask.copyWith(startDate: newStart, dueDate: newDue);
+    final rippleUpdates = GanttAutoScheduler.rippleShift(
+      allTasks: current,
+      changedTaskId: taskId,
+      newStartDate: newStart,
+      newDueDate: newDue,
+    );
+
+    final updatedList = current.map((t) {
+      final shifted = rippleUpdates[t.id];
+      if (shifted != null) {
+        return t.copyWith(startDate: shifted.start, dueDate: shifted.due);
+      }
+      return t;
+    }).toList();
+
     state = AsyncValue.data(updatedList);
 
     try {
       final repo = ref.read(itTaskRepositoryProvider);
-      await repo.shiftTaskSchedule(
-        taskId: taskId,
-        newStartDate: newStart,
-        newDueDate: newDue,
-      );
+      for (final entry in rippleUpdates.entries) {
+        await repo.shiftTaskSchedule(
+          taskId: entry.key,
+          newStartDate: entry.value.start,
+          newDueDate: entry.value.due,
+        );
+      }
       _syncOtherTaskViews(ref, fromAll: true);
     } catch (e) {
-      updatedList[index] = oldTask;
-      state = AsyncValue.data(updatedList);
+      state = AsyncValue.data(current);
       rethrow;
     }
   }
@@ -235,10 +264,15 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     final current = state.value;
     if (current == null || taskIds.isEmpty) return;
 
+    final updates = <String, dynamic>{'status': status.slug};
+    if (status == ITTaskStatus.closed || status == ITTaskStatus.deployed) {
+      updates['percentComplete'] = 100;
+    }
+
     final repo = ref.read(itTaskRepositoryProvider);
     final updated = await repo.bulkUpdateTasks(
       taskIds: taskIds,
-      updates: {'status': status.slug},
+      updates: updates,
     );
 
     final map = {for (final t in updated) t.id: t};
@@ -275,6 +309,7 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
       for (final id in taskIds) {
         await repo.deleteTask(id);
         deleted.add(id);
+        deleted.addAll(descendantIds(current, id)); // the server deletes what hangs under it too
       }
     } finally {
       // Drop whatever was actually deleted, even if a later delete failed, so
@@ -365,7 +400,9 @@ class ITAllTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements IIT
     await repo.deleteTask(taskId);
     final current = state.value;
     if (current != null) {
-      state = AsyncValue.data(current.where((t) => t.id != taskId).toList());
+      // a phase goes with everything under it (the server deletes the whole branch), so drop those rows too
+      final gone = {taskId, ...descendantIds(current, taskId)};
+      state = AsyncValue.data(current.where((t) => !gone.contains(t.id)).toList());
     }
     _syncOtherTaskViews(ref, fromAll: true);
   }
@@ -401,12 +438,16 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
 
     final oldTask = current[index];
     final updatedList = List<ITTaskModel>.from(current);
+    final payload = Map<String, dynamic>.from(updates);
 
     var mod = oldTask;
     if (updates.containsKey('status')) {
       mod = mod.copyWith(status: ITTaskStatus.fromString(updates['status']));
       if (mod.status == ITTaskStatus.closed || mod.status == ITTaskStatus.deployed) {
         mod = mod.copyWith(percentComplete: 100);
+        if (!payload.containsKey('percentComplete')) {
+          payload['percentComplete'] = 100;
+        }
       }
     }
     if (updates.containsKey('severity')) {
@@ -418,6 +459,9 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     if (updates.containsKey('subTeam')) {
       mod = mod.copyWith(subTeam: ITSubTeam.fromString(updates['subTeam']));
     }
+    if (updates.containsKey('order')) {
+      mod = mod.copyWith(order: (updates['order'] as num).toInt());
+    }
     if (updates.containsKey('startDate')) {
       mod = mod.copyWith(startDate: DateTime.tryParse(updates['startDate'].toString()));
     }
@@ -425,7 +469,12 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
       mod = mod.copyWith(dueDate: DateTime.tryParse((updates['dueDate'] ?? updates['deadline']).toString()));
     }
     if (updates.containsKey('percentComplete')) {
-      mod = mod.copyWith(percentComplete: (updates['percentComplete'] as num).toInt());
+      final pct = (updates['percentComplete'] as num).toInt();
+      mod = mod.copyWith(percentComplete: pct);
+      if (pct >= 100 && !payload.containsKey('status')) {
+        payload['status'] = 'closed';
+        mod = mod.copyWith(status: ITTaskStatus.closed);
+      }
     }
 
     updatedList[index] = mod;
@@ -433,7 +482,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
 
     try {
       final repo = ref.read(itTaskRepositoryProvider);
-      final saved = await repo.updateTask(taskId, updates);
+      final saved = await repo.updateTask(taskId, payload);
       final refreshed = List<ITTaskModel>.from(state.value ?? updatedList);
       final rIdx = refreshed.indexWhere((t) => t.id == taskId);
       if (rIdx != -1) {
@@ -460,22 +509,35 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     final index = current.indexWhere((t) => t.id == taskId);
     if (index == -1) return;
 
-    final oldTask = current[index];
-    final updatedList = List<ITTaskModel>.from(current);
-    updatedList[index] = oldTask.copyWith(startDate: newStart, dueDate: newDue);
+    final rippleUpdates = GanttAutoScheduler.rippleShift(
+      allTasks: current,
+      changedTaskId: taskId,
+      newStartDate: newStart,
+      newDueDate: newDue,
+    );
+
+    final updatedList = current.map((t) {
+      final shifted = rippleUpdates[t.id];
+      if (shifted != null) {
+        return t.copyWith(startDate: shifted.start, dueDate: shifted.due);
+      }
+      return t;
+    }).toList();
+
     state = AsyncValue.data(updatedList);
 
     try {
       final repo = ref.read(itTaskRepositoryProvider);
-      await repo.shiftTaskSchedule(
-        taskId: taskId,
-        newStartDate: newStart,
-        newDueDate: newDue,
-      );
+      for (final entry in rippleUpdates.entries) {
+        await repo.shiftTaskSchedule(
+          taskId: entry.key,
+          newStartDate: entry.value.start,
+          newDueDate: entry.value.due,
+        );
+      }
       _syncOtherTaskViews(ref, fromAll: false);
     } catch (e) {
-      updatedList[index] = oldTask;
-      state = AsyncValue.data(updatedList);
+      state = AsyncValue.data(current);
       rethrow;
     }
   }
@@ -485,10 +547,15 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     final current = state.value;
     if (current == null || taskIds.isEmpty) return;
 
+    final updates = <String, dynamic>{'status': status.slug};
+    if (status == ITTaskStatus.closed || status == ITTaskStatus.deployed) {
+      updates['percentComplete'] = 100;
+    }
+
     final repo = ref.read(itTaskRepositoryProvider);
     final updated = await repo.bulkUpdateTasks(
       taskIds: taskIds,
-      updates: {'status': status.slug},
+      updates: updates,
     );
 
     final map = {for (final t in updated) t.id: t};
@@ -525,6 +592,7 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
       for (final id in taskIds) {
         await repo.deleteTask(id);
         deleted.add(id);
+        deleted.addAll(descendantIds(current, id)); // the server deletes what hangs under it too
       }
     } finally {
       // Drop whatever was actually deleted, even if a later delete failed, so
@@ -615,7 +683,9 @@ class ITProjectTasksNotifier extends AsyncNotifier<List<ITTaskModel>> implements
     await repo.deleteTask(taskId);
     final current = state.value;
     if (current != null) {
-      state = AsyncValue.data(current.where((t) => t.id != taskId).toList());
+      // a phase goes with everything under it (the server deletes the whole branch), so drop those rows too
+      final gone = {taskId, ...descendantIds(current, taskId)};
+      state = AsyncValue.data(current.where((t) => !gone.contains(t.id)).toList());
     }
     _syncOtherTaskViews(ref, fromAll: false);
   }

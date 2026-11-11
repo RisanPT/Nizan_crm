@@ -1,3 +1,6 @@
+/// An id that may arrive as a plain string or as a populated { _id } object.
+String _idOf(Object? v) => v is Map ? '${v['_id'] ?? ''}' : '${v ?? ''}';
+
 class Lead {
   final String id;
   final String name;
@@ -39,9 +42,13 @@ class Lead {
   /// Set when a booking exists for this lead's phone number.
   final String? bookingId;
 
-  /// Geography copied from the booking once the lead converts.
+  /// Geography: from the lead form (optional pincode / district) and copied from the booking
+  /// once the lead converts. [districtId] / [regionId] are server-derived and consistent with
+  /// the names; empty when the lead has no district.
   final String address;
   final String pincode;
+  final String districtId;
+  final String regionId;
   final String district;
   final String region;
   final String reason;
@@ -79,6 +86,8 @@ class Lead {
     this.bookingId,
     this.address = '',
     this.pincode = '',
+    this.districtId = '',
+    this.regionId = '',
     this.district = '',
     this.region = '',
     required this.reason,
@@ -139,6 +148,8 @@ class Lead {
           : json['bookingId'] as String?,
       address: json['address'] as String? ?? '',
       pincode: json['pincode'] as String? ?? '',
+      districtId: _idOf(json['districtId']),
+      regionId: _idOf(json['regionId']),
       district: json['district'] as String? ?? '',
       region: json['region'] as String? ?? '',
       reason: json['reason'] as String? ?? '',
@@ -202,6 +213,11 @@ class Lead {
     String? assignedTo,
     String? status,
     String? priority,
+    String? pincode,
+    String? districtId,
+    String? regionId,
+    String? district,
+    String? region,
     String? reason,
     String? remarks,
     String? competitorName,
@@ -233,6 +249,12 @@ class Lead {
       createdByName: createdByName,
       status: status ?? this.status,
       priority: priority ?? this.priority,
+      address: address,
+      pincode: pincode ?? this.pincode,
+      districtId: districtId ?? this.districtId,
+      regionId: regionId ?? this.regionId,
+      district: district ?? this.district,
+      region: region ?? this.region,
       reason: reason ?? this.reason,
       remarks: remarks ?? this.remarks,
       competitorName: competitorName ?? this.competitorName,

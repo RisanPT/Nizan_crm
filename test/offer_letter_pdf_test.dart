@@ -1,3 +1,4 @@
+import 'dart:developer';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nizan_crm/features/hr/letters/utils/nizan_hr_document_pdf.dart';
@@ -35,7 +36,7 @@ void main() {
     }
     final outFile = File('${testOutDir.path}/test_salmanul_offer.pdf');
     await outFile.writeAsBytes(pdfBytes);
-    print('Saved test PDF to: ${outFile.path}');
+    log('Saved test PDF to: ${outFile.path}');
   });
 
   test('Generates offer letter with HRA and incentive', () async {

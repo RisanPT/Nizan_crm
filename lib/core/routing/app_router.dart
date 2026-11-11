@@ -101,6 +101,7 @@ import 'package:nizan_crm/features/accounts/presentation/screens/cash_transactio
 import 'package:nizan_crm/features/accounts/presentation/screens/operations_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/administrative_dashboard_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_fleet_expenses_screen.dart';
+import 'package:nizan_crm/features/accounts/presentation/screens/work_profit_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_reports_screen.dart';
 import 'package:nizan_crm/features/accounts/presentation/screens/accounts_bills_screen.dart';
 import 'package:nizan_crm/features/inventory/presentation/screens/inventory_dashboard_screen.dart';
@@ -120,6 +121,7 @@ import 'package:nizan_crm/features/finance/presentation/screens/reports_center_s
 import 'package:nizan_crm/features/finance/presentation/screens/sales_report_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/month_end_review_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/monthly_planning_screen.dart';
+import 'package:nizan_crm/features/ceo/presentation/screens/ceo_home_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/ceo_decisions_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/financial_glossary_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/department_report_screen.dart';
@@ -135,9 +137,13 @@ import 'package:nizan_crm/features/app_clients/presentation/app_client_detail_pa
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_project_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/company_projects_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/project_tabs.dart' show projectTabIndex;
 import 'package:nizan_crm/features/it/presentation/screens/it_roadmap_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_my_tasks_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/helpdesk_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/monthly_objectives_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/manpower_screen.dart';
+import 'package:nizan_crm/features/it/presentation/screens/project_budgets_screen.dart';
 import 'package:nizan_crm/features/backup/presentation/screens/backup_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/ticket_detail_screen.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_tickets_dashboard_screen.dart';
@@ -168,7 +174,9 @@ import 'package:nizan_crm/features/fleet/presentation/screens/driver/driver_add_
 
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_accidents_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_completed_works_screen.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_gps_check_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_km_report_screen.dart';
+import 'package:nizan_crm/features/fleet/presentation/screens/fleet_day_sheet_screen.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_service_reminders_screen.dart';
 import '../../features/trials/presentation/screens/trials_screen.dart';
 import '../../features/trials/presentation/screens/trials_calendar_screen.dart';
@@ -216,6 +224,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/accounts/bills')) return 'payables.bills';
   if (path == '/accounts/artist-collections') return 'payables.collections';
   if (path == '/accounts/fleet-expenses') return 'payables.fleet_expenses';
+  if (path == '/accounts/work-profit') return 'payables.dashboard';
   if (path == '/accounts/admin-expenses') return 'payables.admin_expenses';
   if (path == '/accounts/transactions') return 'payables.transactions';
   if (path == '/accounts/subscriptions') return 'payables.subscriptions';
@@ -271,6 +280,10 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/fleet/accidents')) return 'fleet.accidents';
   if (path.startsWith('/fleet/completed-works')) return 'fleet.completed';
   if (path.startsWith('/fleet/km-report')) return 'fleet.km_report';
+  // The day sheet is the per-day drill-down of the km report, so it shares its permission.
+  if (path.startsWith('/fleet/day-sheet')) return 'fleet.km_report';
+  // The GPS check is the km report checked against the tracker, so it shares its permission.
+  if (path.startsWith('/fleet/gps-check')) return 'fleet.km_report';
   if (path.startsWith('/fleet/service-reminders')) return 'fleet.reminders';
   // Marketing
   if (path.startsWith('/marketing/competitors')) return 'marketing.competitors';
@@ -313,13 +326,43 @@ String? subKeyForPath(String path) {
   return null;
 }
 
+/// The only screens the CEO login opens. The permission matrix is too generous for this role: one sub-key such as
+/// `staff.evaluation` makes its WHOLE module look visible, which would open HR files and compensation. (The server refuses the
+/// pay and bank data anyway — backend utils/ceoAccess.js; this keeps the screens from opening at all.)
+const _ceoScreens = [
+  '/ceo',
+  '/projects',
+  '/monthly-objectives',
+  '/accounts/dashboard',
+  '/accounts/work-profit',
+  '/company-finance/month-end',
+  '/company-finance/decisions',
+  '/company-finance/planning',
+  '/company-finance/department',
+  '/company-finance/sales/summary',
+  '/company-finance/sales/by-package',
+  '/company-finance/sales/by-salesperson',
+  '/marketing/insights',
+  '/hr/analytics',
+  '/hr/evaluation',
+  '/hr/department-scoring',
+  '/reports',
+  '/reviews',
+  '/notifications',
+  '/profile',
+];
+
+bool _ceoMayOpen(String path) => _ceoScreens.any((p) => path == p || path.startsWith('$p/'));
+
 bool isRouteAllowed(String path, Access access,
     {bool inventoryAccess = false, bool inventoryManage = false}) {
   final role = access.role;
   if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
+  if (access.isCeo && !_ceoMayOpen(path)) return false;
   if (path.startsWith('/artist-head')) {
     return access.canSeeArtistHead;
   }
+  if (path.startsWith('/ceo')) return access.canSeeCeoHome;
   if (path.startsWith('/client')) return access.canSeeClients;
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
@@ -453,9 +496,19 @@ bool isRouteAllowed(String path, Access access,
   if (path.startsWith('/app-clients')) {
     return access.canSeeAppClients;
   }
+  if (path == '/it/my-tasks' || path == '/my-tasks') {
+    return access.canSeePlanning || access.canSeeIt;
+  }
   if (path.startsWith('/it/')) return access.canSeeIt;
-  if (path.startsWith('/projects')) return access.canSeePlanning; // company-wide projects (department-scoped server-side)
+  if (path.startsWith('/projects') || path == '/my-tasks') return access.canSeePlanning; // company-wide projects (department-scoped server-side)
   if (path.startsWith('/helpdesk')) return true; // every department can raise/track tickets
+  // Every team member opens their own month; the server shows each person only their department's objectives and what is assigned to them.
+  if (path == '/monthly-objectives' || path.startsWith('/monthly-objectives/')) return true;
+  // Finance's list of project costs waiting for approval: the server says who may open it (Finance) and who may decide (the finance head).
+  if (path == '/project-budgets') return true;
+  // Projects asking HR for people: HR sees every request, a department head the ones to answer, and whoever asked their own —
+  // the server scopes the list, so the screen is open to everyone signed in (notifications link here).
+  if (path == '/manpower') return true;
   if (path.startsWith('/backup')) return true; // screen self-scopes; backend enforces per-target access
   // Checked before '/finance', which it would otherwise match as a prefix.
   if (path.startsWith('/finance-head')) return access.canSeeFinanceHeadDashboard;
@@ -541,8 +594,9 @@ String landingRouteFor(Access access,
     '/finance',
     '/company-reports',
     '/company-finance', '/company-finance/assets',
+    '/ceo',
     '/accounts/dashboard', '/accounts/invoices', '/accounts/bills',
-    '/accounts/artist-collections', '/accounts/fleet-expenses',
+    '/accounts/artist-collections', '/accounts/fleet-expenses', '/accounts/work-profit',
     '/accounts/admin-expenses', '/accounts/transactions', '/accounts/subscriptions',
     '/accounts/admin-salaries', '/accounts/operations-salaries',
     '/accounts/attendance-payroll', '/accounts/sales-returns', '/accounts/hra',
@@ -731,12 +785,22 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Company Reports';
           } else if (state.uri.path == '/projects') {
             title = 'Company Projects';
+          } else if (state.uri.path == '/monthly-objectives') {
+            title = 'Monthly Objectives';
+          } else if (state.uri.path == '/project-budgets') {
+            title = 'Project budgets';
+          } else if (state.uri.path == '/manpower') {
+            title = 'Manpower';
           } else if (state.uri.path == '/company-finance') {
             title = 'Finance Dashboard';
           } else if (state.uri.path == '/company-finance/month-end') {
             title = 'Month-End Review';
           } else if (state.uri.path == '/company-finance/planning') {
             title = 'Monthly Planning';
+          } else if (state.uri.path == '/ceo') {
+            title = 'Overview';
+          } else if (state.uri.path == '/ceo/decisions') {
+            title = 'Decisions';
           } else if (state.uri.path == '/company-finance/decisions') {
             title = 'CEO Decisions';
           } else if (state.uri.path == '/company-finance/glossary') {
@@ -801,6 +865,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Completed Works';
           } else if (state.uri.path == '/fleet/km-report') {
             title = 'Km Report';
+          } else if (state.uri.path == '/fleet/day-sheet') {
+            title = 'Day Sheet';
+          } else if (state.uri.path == '/fleet/gps-check') {
+            title = 'GPS Km Check';
+          } else if (state.uri.path == '/driver/day') {
+            title = 'My Day';
           } else if (state.uri.path == '/fleet/service-reminders') {
             title = 'Service Reminders';
           } else if (state.uri.path == '/driver/jobs') {
@@ -843,6 +913,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Bills & Payables';
           } else if (state.uri.path == '/accounts/fleet-expenses') {
             title = 'Fleet Expenses';
+          } else if (state.uri.path == '/accounts/work-profit') {
+            title = 'Work Profit';
           } else if (state.uri.path == '/accounts/admin-expenses') {
             title = 'Administrative Expenses';
           } else if (state.uri.path == '/accounts/transactions') {
@@ -877,7 +949,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Content Calendar';
           } else if (state.uri.path == '/it/roadmap') {
             title = 'Roadmap';
-          } else if (state.uri.path == '/it/my-tasks') {
+          } else if (state.uri.path == '/it/my-tasks' || state.uri.path == '/my-tasks') {
             title = 'My Tasks';
           } else if (state.uri.path == '/backup') {
             title = 'Backup Data';
@@ -929,6 +1001,14 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const DashboardScreen(),
           ),
           GoRoute(
+            path: '/ceo',
+            builder: (context, state) => const CeoHomeScreen(),
+          ),
+          GoRoute(
+            path: '/ceo/decisions',
+            builder: (context, state) => const CeoDecisionsScreen(),
+          ),
+          GoRoute(
             path: '/artist-head',
             builder: (context, state) => const ArtistHeadDashboardScreen(),
           ),
@@ -961,6 +1041,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
               initialFocusDate: _parseCalendarFocusDate(
                 state.uri.queryParameters['date'],
               ),
+              initialArtistId: state.uri.queryParameters['artistId'],
             ),
           ),
           GoRoute(
@@ -1230,6 +1311,19 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const FleetKmReportScreen(),
           ),
           GoRoute(
+            path: '/fleet/gps-check',
+            builder: (context, state) => const FleetGpsCheckScreen(),
+          ),
+          GoRoute(
+            path: '/fleet/day-sheet',
+            // ?driverId=…&date=YYYY-MM-DD opens straight on that driver's day
+            // (the link from Accounts' fleet expenses).
+            builder: (context, state) => FleetDaySheetScreen(
+              initialDriverId: state.uri.queryParameters['driverId'],
+              initialDay: DateTime.tryParse(state.uri.queryParameters['date'] ?? ''),
+            ),
+          ),
+          GoRoute(
             path: '/fleet/service-reminders',
             builder: (context, state) => const FleetServiceRemindersScreen(),
           ),
@@ -1261,6 +1355,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             path: '/accounts/fleet-expenses',
             builder: (context, state) =>
                 const AccountsFleetExpensesScreen(),
+          ),
+          GoRoute(
+            path: '/accounts/work-profit',
+            builder: (context, state) => const WorkProfitScreen(),
           ),
           GoRoute(
             path: '/accounts/admin-expenses',
@@ -1454,18 +1552,9 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/it/projects/:id',
             builder: (context, state) {
-              final tabParam = state.uri.queryParameters['tab'];
-              int initialIndex = 0;
-              if (tabParam == 'okr' || tabParam == '4') {
-                initialIndex = 4;
-              } else if (tabParam == 'docs' || tabParam == 'srs') {
-                initialIndex = 5;
-              } else if (tabParam != null) {
-                initialIndex = int.tryParse(tabParam) ?? 0;
-              }
               return ITProjectScreen(
                 projectId: state.pathParameters['id'] ?? '',
-                initialIndex: initialIndex,
+                initialIndex: projectTabIndex(state.uri.queryParameters['tab']),
                 backRoute: '/it/projects',
               );
             },
@@ -1473,23 +1562,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           // Company-wide Projects (Planning) — same Project system, top-level.
           GoRoute(
             path: '/projects',
-            builder: (context, state) => const CompanyProjectsScreen(),
+            // ?mode=monthly opens Monthly objectives (the reminder notifications link there)
+            builder: (context, state) => CompanyProjectsScreen(initialMode: state.uri.queryParameters['mode']),
           ),
           GoRoute(
             path: '/projects/:id',
             builder: (context, state) {
-              final tabParam = state.uri.queryParameters['tab'];
-              int initialIndex = 0;
-              if (tabParam == 'okr' || tabParam == '4') {
-                initialIndex = 4;
-              } else if (tabParam == 'docs' || tabParam == 'srs') {
-                initialIndex = 5;
-              } else if (tabParam != null) {
-                initialIndex = int.tryParse(tabParam) ?? 0;
-              }
               return ITProjectScreen(
                 projectId: state.pathParameters['id'] ?? '',
-                initialIndex: initialIndex,
+                initialIndex: projectTabIndex(state.uri.queryParameters['tab']),
                 backRoute: '/projects',
               );
             },
@@ -1503,8 +1584,24 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ITMyTasksScreen(),
           ),
           GoRoute(
+            path: '/my-tasks',
+            builder: (context, state) => const ITMyTasksScreen(),
+          ),
+          GoRoute(
             path: '/it/tickets',
             builder: (context, state) => const ITTicketsDashboardScreen(),
+          ),
+          GoRoute(
+            path: '/monthly-objectives',
+            builder: (context, state) => const MonthlyObjectivesScreen(),
+          ),
+          GoRoute(
+            path: '/project-budgets',
+            builder: (context, state) => const ProjectBudgetsScreen(),
+          ),
+          GoRoute(
+            path: '/manpower',
+            builder: (context, state) => const ManpowerScreen(),
           ),
           GoRoute(
             path: '/helpdesk',
@@ -1700,6 +1797,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/driver/works',
             builder: (context, state) => const DriverWorksScreen(),
+          ),
+          GoRoute(
+            path: '/driver/day',
+            builder: (context, state) => const FleetDaySheetScreen(driverMode: true),
           ),
           GoRoute(
             path: '/driver/inspection/:id',

@@ -1,10 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:csv/csv.dart' show CsvDecoder;
-// `excel` re-exports Flutter's TextSpan (used by TextCellValue), so we get
-// TextSpan + toPlainText() from here without a separate Flutter import.
-import 'package:excel/excel.dart';
+import 'package:nizan_crm/core/utils/spreadsheet_reader.dart';
 
 /// Columns the importer understands. `name` is the only required one; the rest
 /// are optional and fall back to product defaults. Header matching is
@@ -85,27 +81,17 @@ String? _fieldForHeader(String header) {
 /// Never throws for content problems — surfaces them as [warnings] instead.
 /// Names of the non-empty sheets in an .xlsx (empty for CSV). Lets the caller
 /// offer a sheet picker for multi-sheet workbooks.
-List<String> inventoryImportSheets(Uint8List bytes) {
-  try {
-    final excel = Excel.decodeBytes(bytes);
-    return [
-      for (final e in excel.tables.entries)
-        if ((e.value.maxRows) > 0) e.key,
-    ];
-  } catch (_) {
-    return const [];
-  }
-}
+List<String> inventoryImportSheets(Uint8List bytes) =>
+    spreadsheetSheetNames(bytes);
 
 InventoryImportResult parseInventoryImport(
   Uint8List bytes,
   String filename, {
   String? sheetName,
 }) {
-  final lower = filename.toLowerCase();
   List<List<dynamic>> rows;
   try {
-    rows = lower.endsWith('.csv') ? _readCsv(bytes) : _readXlsx(bytes, sheetName);
+    rows = readSpreadsheetRows(bytes, filename, sheetName: sheetName);
   } catch (e) {
     return InventoryImportResult(
       items: const [],
@@ -219,40 +205,6 @@ InventoryImportResult parseInventoryImport(
     totalRows: dataRows,
     skipped: skipped,
   );
-}
-
-List<List<dynamic>> _readCsv(Uint8List bytes) {
-  final text = utf8.decode(bytes, allowMalformed: true).replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-  return const CsvDecoder(parseHeaders: false, dynamicTyping: true).convert(text);
-}
-
-List<List<dynamic>> _readXlsx(Uint8List bytes, [String? sheetName]) {
-  final excel = Excel.decodeBytes(bytes);
-  if (excel.tables.isEmpty) return const [];
-  final sheet = (sheetName != null && excel.tables.containsKey(sheetName))
-      ? excel.tables[sheetName]!
-      : excel.tables.values.firstWhere(
-          (s) => s.maxRows > 0,
-          orElse: () => excel.tables.values.first,
-        );
-  return sheet.rows.map((r) => r.map(_cellRaw).toList()).toList();
-}
-
-/// Convert one Excel cell into a plain Dart value (String / num / bool / DateTime).
-dynamic _cellRaw(Data? cell) {
-  final v = cell?.value;
-  if (v == null) return null;
-  return switch (v) {
-    // excel's own TextSpan.toString() concatenates its text (+ any rich runs).
-    TextCellValue() => v.value.toString(),
-    IntCellValue() => v.value,
-    DoubleCellValue() => v.value,
-    BoolCellValue() => v.value,
-    DateCellValue() => v.asDateTimeLocal(),
-    DateTimeCellValue() => v.asDateTimeLocal(),
-    TimeCellValue() => v.toString(),
-    FormulaCellValue() => v.formula,
-  };
 }
 
 String _asStr(dynamic v) =>

@@ -61,7 +61,10 @@ class ProjectOKRsNotifier extends AsyncNotifier<List<OKRModel>> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncValue.loading();
+    // Only show a spinner when there is nothing on screen yet. After a save, a check-in or a dragged
+    // bar the list stays as it is until the new one arrives — flashing to a spinner would tear down
+    // a timeline and lose its scroll position, zoom, collapsed rows and open detail.
+    if (!state.hasValue) state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final service = ref.read(okrServiceProvider);
       return service.getOKRs(projectId: projectId);
@@ -112,11 +115,20 @@ class ProjectOKRsNotifier extends AsyncNotifier<List<OKRModel>> {
     }
   }
 
-  Future<void> deleteOKR(String id) async {
+  /// Returns how many sub-objectives moved up a level.
+  Future<int> deleteOKR(String id) async {
     final service = ref.read(okrServiceProvider);
-    await service.deleteOKR(id);
+    final moved = await service.deleteOKR(id);
     ref.refreshData.okrs();
     await refresh();
+    return moved;
+  }
+
+  Future<OKRModel> updateKeyResult(String okrId, String krId, Map<String, dynamic> patch) async {
+    final saved = await ref.read(okrServiceProvider).updateKeyResult(okrId, krId, patch);
+    ref.refreshData.okrs();
+    await refresh();
+    return saved;
   }
 }
 

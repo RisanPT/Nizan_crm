@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/models/list_page_params.dart';
 import '../core/models/paginated_list_response.dart';
 import '../core/models/pincode.dart';
+import '../core/models/pincode_lookup.dart';
 import '../providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 
@@ -12,6 +13,12 @@ final pincodeServiceProvider = Provider<PincodeService>((ref) {
 
 final pincodesProvider = FutureProvider<List<Pincode>>((ref) async {
   return ref.watch(pincodeServiceProvider).getPincodes(activeOnly: true);
+});
+
+/// Where one 6-digit pincode is (district → region → state → zone). Kept only while something
+/// is showing it.
+final pincodeLookupProvider = FutureProvider.autoDispose.family<PincodeLookup, String>((ref, code) {
+  return ref.watch(pincodeServiceProvider).lookup(code);
 });
 
 final paginatedPincodesProvider = FutureProvider.family<
@@ -26,6 +33,16 @@ class PincodeService {
   final Dio _dio;
 
   PincodeService(this._dio);
+
+  /// Where [code] is — answered from our pincode list, else from the map (see PincodeLookup.source).
+  Future<PincodeLookup> lookup(String code) async {
+    try {
+      final response = await _dio.get('/pincodes/lookup/${Uri.encodeComponent(code.trim())}');
+      return PincodeLookup.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'check the pincode');
+    }
+  }
 
   Future<List<Pincode>> getPincodes({
     bool activeOnly = false,

@@ -128,7 +128,8 @@ class Access {
 
   bool get canSeeDashboard => has('dashboard', role.canSeeDashboard);
   bool get canSeeClients => has('clients', role.canSeeClients);
-  bool get canSeeCalendar => has('calendar', role.canSeeCalendar);
+  bool get canSeeCalendar =>
+      isFullAccess || canSeeArtistHead || has('calendar', role.canSeeCalendar);
   bool get canSeeBookings => has('bookings', role.canSeeBookings);
   bool get canSeeTrials => has('trials', role.canSeeBookings);
   bool get canSeeServices => has('services', role.canSeeServices);
@@ -162,9 +163,17 @@ class Access {
   bool get canSeeArtistHead =>
       role == AppRole.artistHead || artistHead;
 
+  /// The CEO login: sees the whole company and changes nothing but its decisions (the server enforces it —
+  /// backend middleware/ceoGuard.js). This flag only tidies the screens: it never grants anything.
+  bool get isCeo => role == AppRole.ceo;
+
+  /// The CEO home (decisions inbox + company at a glance): the CEO, or full-access management who want to see what the CEO sees.
+  bool get canSeeCeoHome => isFullAccess || isCeo || has('ceo', false);
+
   /// Client reviews & chat — accessible to CRM, Sales, Accounts, and full-access management.
   bool get canSeeClientReviews =>
       isFullAccess ||
+      isCeo || // read-only: the server refuses every write
       role == AppRole.crm ||
       role == AppRole.accounts ||
       canSeeSales;

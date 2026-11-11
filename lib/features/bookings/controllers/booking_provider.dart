@@ -290,7 +290,7 @@ class BookingNotifier extends _$BookingNotifier {
     }
   }
 
-  Future<Booking> updateBooking(Booking booking) async {
+  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false}) async {
     final service = ref.read(bookingServiceProvider);
     final previousState = state;
     final currentBookings = state.value ?? [];
@@ -308,7 +308,7 @@ class BookingNotifier extends _$BookingNotifier {
       // transient reviewUrl (returned when a booking is saved as completed),
       // which we merge onto the local booking so the completion WhatsApp
       // message can carry the review link.
-      final serverBooking = await service.updateBooking(booking);
+      final serverBooking = await service.updateBooking(booking, confirmFleetConflict: confirmFleetConflict);
       final merged = booking.copyWith(reviewUrl: serverBooking.reviewUrl);
       if (ref.mounted) {
         // Re-apply local booking to make sure state is consistent

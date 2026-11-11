@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/rupees.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 
 /// One controlled administrative expense head (ledger) from the Accounts
@@ -12,6 +13,18 @@ class ExpenseHead {
   final bool recurring;
   final bool foreign;
 
+  /// Only on heads read from the server (the built-in list has no ids).
+  final String id;
+
+  /// false = archived: hidden from the expense form, kept on the expenses that used it.
+  final bool active;
+
+  /// A built-in head: it can be renamed and archived, never deleted, and its code never changes.
+  final bool system;
+
+  /// How many expenses are filed under it (only when the manager list is asked for).
+  final int used;
+
   const ExpenseHead(
     this.code,
     this.label,
@@ -19,6 +32,10 @@ class ExpenseHead {
     this.jobLinked = false,
     this.recurring = false,
     this.foreign = false,
+    this.id = '',
+    this.active = true,
+    this.system = false,
+    this.used = 0,
   });
 
   String get display => '$code · $label';
@@ -31,6 +48,10 @@ class ExpenseHead {
         jobLinked: j['jobLinked'] == true,
         recurring: j['recurring'] == true,
         foreign: j['foreign'] == true,
+        id: j['id']?.toString() ?? '',
+        active: j['status']?.toString() != 'archived',
+        system: j['system'] == true,
+        used: (j['used'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -101,6 +122,14 @@ class AdminExpense {
   final String? createdByName;
   final DateTime createdAt;
 
+  /// The project it is charged to (optional), and why it was approved although it took the project over its budget.
+  final String projectId;
+  final String projectName;
+  final String overBudgetReason;
+
+  /// Said when it was filed: it takes the project over its approved budget, so only the finance head can approve it.
+  final String? budgetWarning;
+
   const AdminExpense({
     required this.id,
     required this.title,
@@ -126,16 +155,24 @@ class AdminExpense {
     this.notes = '',
     this.createdByName,
     required this.createdAt,
+    this.projectId = '',
+    this.projectName = '',
+    this.overBudgetReason = '',
+    this.budgetWarning,
   });
 
   bool get isApproved => status == 'approved';
   bool get isPending => status == 'pending';
   bool get isRejected => status == 'rejected';
+  bool get hasProject => projectId.isNotEmpty;
 
   ExpenseHead? get head => expenseHeadByCode(expenseHead);
 
   /// Prefer the controlled head label; fall back to the legacy category label.
   String get headLabel => head?.label ?? categoryLabel;
+
+  /// The same, reading the live heads first — heads Accounts added are not in the built-in list.
+  String headLabelIn(List<ExpenseHead> heads) => headIn(heads, expenseHead)?.label ?? categoryLabel;
 
   String get categoryLabel {
     switch (category) {
@@ -224,6 +261,13 @@ class AdminExpense {
           ? createdByJson['name'] as String?
           : null,
       createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      projectId: (json['projectId'] is Map ? (json['projectId'] as Map)['_id'] : json['projectId'])?.toString() ?? '',
+      projectName: json['projectName'] as String? ?? '',
+      overBudgetReason: json['overBudgetReason'] as String? ?? '',
+      budgetWarning: json['warning'] is Map
+          ? 'It takes ${json['projectName'] ?? 'the project'} to ${rupees((json['warning']['after'] as num?)?.toDouble() ?? 0)} of its approved '
+              '${rupees((json['warning']['limit'] as num?)?.toDouble() ?? 0)}. Only the finance head can approve it.'
+          : null,
     );
   }
 

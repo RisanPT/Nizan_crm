@@ -77,6 +77,24 @@ enum OKRPriority {
   }
 }
 
+/// One report on a key result: what it stood at, who said so, and when. The server writes
+/// these (the app never sends them); the timeline plots them.
+class KeyResultCheckIn {
+  final double value;
+  final bool completed;
+  final DateTime at;
+  final String by;
+
+  const KeyResultCheckIn({required this.value, this.completed = false, required this.at, this.by = ''});
+
+  factory KeyResultCheckIn.fromJson(Map<String, dynamic> json) => KeyResultCheckIn(
+        value: (json['value'] as num?)?.toDouble() ?? 0,
+        completed: json['completed'] == true,
+        at: DateTime.tryParse(json['at']?.toString() ?? '')?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0),
+        by: json['by']?.toString() ?? '',
+      );
+}
+
 class KeyResultItem {
   final String id;
   final String title;
@@ -85,6 +103,8 @@ class KeyResultItem {
   final double currentValue;
   final String unit;
   final bool completed;
+  /// Oldest first. Empty for a key result nobody has reported on yet (or one older than the log).
+  final List<KeyResultCheckIn> checkIns;
 
   const KeyResultItem({
     required this.id,
@@ -94,7 +114,19 @@ class KeyResultItem {
     this.currentValue = 0,
     this.unit = '%',
     this.completed = false,
+    this.checkIns = const [],
   });
+
+  /// When it was last reported on (null if never).
+  DateTime? get lastCheckInAt => checkIns.isEmpty ? null : checkIns.map((c) => c.at).reduce((a, b) => a.isAfter(b) ? a : b);
+
+  /// How far this key result has got, 0..1 — the same rule the server uses to work out
+  /// the objective's progress (done = 100%, else current / target, capped).
+  double get attainment {
+    if (completed) return 1;
+    if (targetValue <= 0) return 0;
+    return (currentValue / targetValue).clamp(0.0, 1.0);
+  }
 
   factory KeyResultItem.fromJson(Map<String, dynamic> json) {
     return KeyResultItem(
@@ -105,9 +137,14 @@ class KeyResultItem {
       currentValue: (json['currentValue'] as num?)?.toDouble() ?? 0,
       unit: json['unit']?.toString() ?? '%',
       completed: json['completed'] == true,
+      checkIns: [
+        for (final c in (json['checkIns'] as List?) ?? const [])
+          if (c is Map) KeyResultCheckIn.fromJson(Map<String, dynamic>.from(c)),
+      ]..sort((a, b) => a.at.compareTo(b.at)),
     );
   }
 
+  // The check-in log is not sent back: the server keeps it.
   Map<String, dynamic> toJson() => {
         'id': id,
         'title': title,
@@ -126,6 +163,7 @@ class KeyResultItem {
     double? currentValue,
     String? unit,
     bool? completed,
+    List<KeyResultCheckIn>? checkIns,
   }) {
     return KeyResultItem(
       id: id ?? this.id,
@@ -135,6 +173,7 @@ class KeyResultItem {
       currentValue: currentValue ?? this.currentValue,
       unit: unit ?? this.unit,
       completed: completed ?? this.completed,
+      checkIns: checkIns ?? this.checkIns,
     );
   }
 }
@@ -165,10 +204,33 @@ class OKRDocument {
       };
 }
 
+/// What the signed-in person may do to one objective — decided by the server, so the app
+/// only has to hide what would be refused.
+class OKRAccess {
+  final bool canManage; // edit it, move its dates, add under it, delete it
+  final bool canCheckIn; // report on its key results
+
+  const OKRAccess({this.canManage = false, this.canCheckIn = false});
+
+  /// Before the server says otherwise (an older server, an objective built by hand): nothing
+  /// is hidden — the server still refuses what is not allowed.
+  static const unrestricted = OKRAccess(canManage: true, canCheckIn: true);
+
+  factory OKRAccess.fromJson(Map<String, dynamic>? json) => json == null
+      ? unrestricted
+      : OKRAccess(canManage: json['canManage'] == true, canCheckIn: json['canCheckIn'] == true);
+}
+
 class OKRModel {
   final String id;
   final String? projectId;
+  final String projectName;
+  /// The department that owns the project (for a project objective), when the server says.
+  final String projectDepartment;
   final String department;
+  /// company | department | project — spelled out by the server (it used to be guessed
+  /// from the department text).
+  final String level;
   final String objective;
   final String description;
   final String? projectHeadId;
@@ -184,11 +246,36 @@ class OKRModel {
   final int order;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final OKRAccess access;
+
+  /// company | department | project. The server spells it out; an objective saved before
+  /// that is read the old way (a project's; else company-wide by a blank / 'Company' /
+  /// R&D department; else a department's).
+  String get effectiveLevel {
+    if (level.isNotEmpty) return level;
+    if (projectId != null && projectId!.isNotEmpty) return 'project';
+    final d = department.trim().toLowerCase();
+    return d.isEmpty || d == 'company' || d == 'research-and-development' ? 'company' : 'department';
+  }
+
+  /// With key results, progress is worked out from them by the server — the objective's
+  /// own number is only typed when it has none.
+  bool get progressFromKeyResults => keyResults.isNotEmpty;
+
+  /// The progress these key results add up to (percent), as the server works it out.
+  static int progressOf(List<KeyResultItem> keyResults, {int manual = 0}) {
+    if (keyResults.isEmpty) return manual;
+    final avg = keyResults.map((k) => k.attainment).reduce((a, b) => a + b) / keyResults.length;
+    return (avg * 100).round();
+  }
 
   const OKRModel({
     required this.id,
     this.projectId,
+    this.projectName = '',
+    this.projectDepartment = '',
     this.department = 'research-and-development',
+    this.level = '',
     required this.objective,
     this.description = '',
     this.projectHeadId,
@@ -204,13 +291,21 @@ class OKRModel {
     this.order = 0,
     this.createdAt,
     this.updatedAt,
+    this.access = OKRAccess.unrestricted,
   });
 
   factory OKRModel.fromJson(Map<String, dynamic> json) {
     return OKRModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       projectId: json['projectId'] is Map ? json['projectId']['_id']?.toString() : json['projectId']?.toString(),
+      projectName: json['projectId'] is Map
+          ? (json['projectId']['name']?.toString() ?? '')
+          : (json['projectName']?.toString() ?? ''),
+      projectDepartment: json['projectId'] is Map
+          ? (json['projectId']['targetDepartment']?.toString() ?? '')
+          : (json['projectDepartment']?.toString() ?? ''),
       department: json['department']?.toString() ?? 'research-and-development',
+      level: json['level']?.toString() ?? '',
       objective: json['objective']?.toString() ?? '',
       description: json['description']?.toString() ?? '',
       projectHeadId: json['projectHeadId'] is Map
@@ -236,6 +331,7 @@ class OKRModel {
       order: (json['order'] as num?)?.toInt() ?? 0,
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString())?.toLocal() : null,
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'].toString())?.toLocal() : null,
+      access: OKRAccess.fromJson(json['access'] is Map ? Map<String, dynamic>.from(json['access'] as Map) : null),
     );
   }
 
@@ -243,6 +339,7 @@ class OKRModel {
         'id': id,
         'projectId': projectId,
         'department': department,
+        if (level.isNotEmpty) 'level': level,
         'objective': objective,
         'description': description,
         'projectHeadId': projectHeadId,
@@ -261,7 +358,10 @@ class OKRModel {
   OKRModel copyWith({
     String? id,
     String? projectId,
+    String? projectName,
+    String? projectDepartment,
     String? department,
+    String? level,
     String? objective,
     String? description,
     String? projectHeadId,
@@ -279,7 +379,10 @@ class OKRModel {
     return OKRModel(
       id: id ?? this.id,
       projectId: projectId ?? this.projectId,
+      projectName: projectName ?? this.projectName,
+      projectDepartment: projectDepartment ?? this.projectDepartment,
       department: department ?? this.department,
+      level: level ?? this.level,
       objective: objective ?? this.objective,
       description: description ?? this.description,
       projectHeadId: projectHeadId ?? this.projectHeadId,
@@ -295,6 +398,7 @@ class OKRModel {
       order: order ?? this.order,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      access: access,
     );
   }
 }

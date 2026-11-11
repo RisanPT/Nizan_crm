@@ -95,6 +95,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/driver/works')) return 1;
       if (location.startsWith('/driver/expenses')) return 2;
       if (location == '/profile') return 3;
+    } else if (role == AppRole.ceo) {
+      if (location == '/ceo') return 0;
+      if (location == '/ceo/decisions') return 1;
+      if (location.startsWith('/accounts') || location.startsWith('/company-finance')) return 2;
+      if (location == '/') return 3;
+      // Everything else is in the drawer (the hamburger), which holds the CEO's whole menu.
     } else if (role == AppRole.accounts) {
       if (location == '/accounts/dashboard') return 0;
       if (location.startsWith('/finance')) return 1;
@@ -164,6 +170,13 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 1: context.go('/driver/works'); break;
         case 2: context.go('/driver/expenses'); break;
         case 3: context.go('/profile'); break;
+      }
+    } else if (role == AppRole.ceo) {
+      switch (index) {
+        case 0: context.go('/ceo'); break;
+        case 1: context.go('/ceo/decisions'); break;
+        case 2: context.go('/accounts/dashboard'); break;
+        case 3: context.go('/'); break;
       }
     } else if (role == AppRole.accounts) {
       switch (index) {
@@ -364,6 +377,29 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                             label: 'Profile',
                           ),
                         ]
+                      : role == AppRole.ceo
+                          ? const [
+                              NavigationDestination(
+                                icon: Icon(Icons.space_dashboard_outlined),
+                                selectedIcon: Icon(Icons.space_dashboard),
+                                label: 'Overview',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.gavel_outlined),
+                                selectedIcon: Icon(Icons.gavel),
+                                label: 'Decisions',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.account_balance_wallet_outlined),
+                                selectedIcon: Icon(Icons.account_balance_wallet),
+                                label: 'Money',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.trending_up_outlined),
+                                selectedIcon: Icon(Icons.trending_up),
+                                label: 'Sales',
+                              ),
+                            ]
                       : role == AppRole.accounts
                           ? const [
                               NavigationDestination(

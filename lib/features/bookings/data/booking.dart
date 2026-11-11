@@ -765,6 +765,83 @@ class Booking {
     return _numericBookingId(id);
   }
 
+  /// All unique assigned team members across the booking and its sub-items,
+  /// with merged works and fallback driver inclusion if assigned.
+  List<BookingAssignment> get allAssignedStaff {
+    final merged = <BookingAssignment>[];
+    final seen = <String>{};
+
+    void addAssignment(BookingAssignment a) {
+      final name = a.artistName.trim();
+      if (name.isEmpty) return;
+      final key = a.employeeId.trim().isNotEmpty
+          ? a.employeeId.trim()
+          : '${name.toLowerCase()}::${a.roleType.trim().toLowerCase()}';
+      if (key.isEmpty) return;
+
+      if (seen.contains(key)) {
+        // Merge works if already in list
+        final idx = merged.indexWhere((e) =>
+            (e.employeeId.isNotEmpty && e.employeeId == a.employeeId) ||
+            (e.artistName.trim().toLowerCase() == name.toLowerCase()));
+        if (idx != -1 && a.works.isNotEmpty) {
+          final existing = merged[idx];
+          final combinedWorks = {...existing.works, ...a.works}.toList();
+          merged[idx] = BookingAssignment(
+            employeeId: existing.employeeId,
+            artistName: existing.artistName,
+            role: existing.role.isNotEmpty ? existing.role : a.role,
+            specialization: existing.specialization.isNotEmpty
+                ? existing.specialization
+                : a.specialization,
+            works: combinedWorks,
+            phone: existing.phone.isNotEmpty ? existing.phone : a.phone,
+            type: existing.type.isNotEmpty ? existing.type : a.type,
+            roleType: existing.roleType.isNotEmpty ? existing.roleType : a.roleType,
+          );
+        }
+        return;
+      }
+
+      seen.add(key);
+      merged.add(a);
+    }
+
+    for (final a in assignedStaff) {
+      addAssignment(a);
+    }
+    for (final item in bookingItems) {
+      for (final a in item.assignedStaff) {
+        addAssignment(a);
+      }
+    }
+
+    // Include driver if assigned and not already in list
+    if (driverName.trim().isNotEmpty) {
+      final driverNameClean = driverName.trim();
+      final hasDriver = merged.any((a) =>
+          a.roleType.toLowerCase() == 'driver' ||
+          a.artistName.trim().toLowerCase() == driverNameClean.toLowerCase() ||
+          (driverId.isNotEmpty && a.employeeId == driverId));
+      if (!hasDriver) {
+        merged.add(
+          BookingAssignment(
+            employeeId: driverId,
+            artistName: driverNameClean,
+            role: 'Driver',
+            specialization: 'Fleet',
+            works: const ['Fleet & Transport'],
+            phone: '',
+            type: 'fleet',
+            roleType: 'driver',
+          ),
+        );
+      }
+    }
+
+    return merged;
+  }
+
   List<BookingDisplayEntry> get displayEntries {
     final fallbackDates = selectedDates.isNotEmpty
         ? selectedDates

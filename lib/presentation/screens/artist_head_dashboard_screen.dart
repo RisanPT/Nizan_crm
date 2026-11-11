@@ -143,6 +143,7 @@ class ArtistHeadDashboardScreen extends ConsumerWidget {
       backgroundColor: crm.background,
       body: RefreshIndicator(
         onRefresh: () async {
+          ref.invalidate(bookingProvider);
           ref.invalidate(leadsProvider);
           ref.invalidate(employeesProvider);
           ref.invalidate(salariesProvider);
@@ -169,6 +170,12 @@ class ArtistHeadDashboardScreen extends ConsumerWidget {
                           style: TextStyle(color: crm.textSecondary)),
                     ],
                   ),
+                ),
+                8.wgap,
+                FilledButton.tonalIcon(
+                  onPressed: () => context.push('/calendar'),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: Text(isMobile ? 'Calendar' : 'Works Calendar'),
                 ),
                 8.wgap,
                 FilledButton.tonalIcon(

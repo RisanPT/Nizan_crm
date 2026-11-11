@@ -103,6 +103,7 @@ class Sidebar extends ConsumerWidget {
         currentPath == '/accounts/artist-collections' ||
         currentPath == '/accounts/artist-payouts' ||
         currentPath == '/accounts/fleet-expenses' ||
+        currentPath == '/accounts/work-profit' ||
         currentPath == '/accounts/operations-salaries';
     // Administrative (Expenses / Subscriptions / Salaries) live under Accounts.
     final isAdministrativeRoute = currentPath == '/accounts/administrative-dashboard' ||
@@ -152,6 +153,57 @@ class Sidebar extends ConsumerWidget {
     final effectiveContentExpanded = !isCollapsed &&
         (contentExpanded || (isContentRoute && !contentUserCollapsed));
     final width = isCollapsed ? 80.0 : 250.0;
+
+    // PROJECTS — everything to do with running projects, together: the portfolio and My Tasks (Company Projects
+    // permission), each department's Monthly Objectives (every team member — the server scopes it, so it is not behind the
+    // Company Projects permission), the finance head's Project budgets and HR's Manpower requests (the server decides who may
+    // see and do what). [core] is false for menus that have no portfolio of their own, [header] false to sit under a heading
+    // the menu already has. The CEO only looks at objectives: budgets and manpower are not his screens.
+    List<Widget> projectGroup({bool core = true, bool header = true}) => [
+      if (header) _buildSectionTitle('PROJECTS', isCollapsed: isCollapsed, theme: theme),
+      if (core && access.canSeePlanning) ...[
+        _SidebarItem(
+          icon: Icons.hub_outlined,
+          title: 'Company Projects',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/projects' || currentPath.startsWith('/projects/'),
+          onTap: () => context.go('/projects'),
+        ),
+        _SidebarItem(
+          icon: Icons.assignment_ind_outlined,
+          title: 'My Tasks',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/my-tasks' || currentPath == '/it/my-tasks',
+          onTap: () => context.go('/my-tasks'),
+        ),
+      ],
+      _SidebarItem(
+        icon: Icons.flag_outlined,
+        title: 'Monthly Objectives',
+        isCollapsed: isCollapsed,
+        isSelected: currentPath.startsWith('/monthly-objectives'),
+        onTap: () => context.go('/monthly-objectives'),
+      ),
+      // project costs waiting for the finance head
+      if (!access.isCeo && (access.isFullAccess || access.roleKey == 'finance_head' || access.roleKey == 'accounts'))
+        _SidebarItem(
+          icon: Icons.payments_outlined,
+          title: 'Project budgets',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/project-budgets'),
+          onTap: () => context.go('/project-budgets'),
+        ),
+      // projects asking HR for more people: HR (staff access) covers them, a department head answers the ones that borrow
+      // their people, a project manager follows theirs
+      if (!access.isCeo && (access.isFullAccess || access.isDepartmentHead || access.canSeeStaff))
+        _SidebarItem(
+          icon: Icons.groups_2_outlined,
+          title: 'Manpower',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/manpower'),
+          onTap: () => context.go('/manpower'),
+        ),
+    ];
 
     return Container(
       width: width,
@@ -207,6 +259,14 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/works',
                     onTap: () => context.go('/works'),
                   ),
+                  if (access.canSeeCalendar)
+                    _SidebarItem(
+                      icon: Icons.calendar_month,
+                      title: 'Calendar',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/calendar',
+                      onTap: () => context.go('/calendar'),
+                    ),
                   _SidebarItem(
                     icon: Icons.account_balance_wallet_outlined,
                     title: 'Finance & Claims',
@@ -249,6 +309,7 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/inventory/kits'),
                     ),
                   ],
+                  ...projectGroup(core: false),
                 ] else if (role == AppRole.inventoryManager) ...[
                   // ── INVENTORY MANAGER VIEW ────────────────────────────────
                   _SidebarItem(
@@ -345,6 +406,117 @@ class Sidebar extends ConsumerWidget {
                         onTap: () => context.go('/trials'),
                       ),
                   ],
+                  ...projectGroup(core: false),
+                ] else if (role == AppRole.ceo) ...[
+                  // ── CEO VIEW ──────────────────────────────────────────────
+                  // Everything here is read-only (the server refuses writes) except the decisions.
+                  _SidebarItem(
+                    icon: Icons.space_dashboard_outlined,
+                    title: 'Overview',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/ceo',
+                    onTap: () => context.go('/ceo'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.gavel_rounded,
+                    title: 'Decisions',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/ceo/decisions',
+                    onTap: () => context.go('/ceo/decisions'),
+                  ),
+                  8.h,
+                  _buildSectionTitle('MONEY', isCollapsed: isCollapsed, theme: theme),
+                  4.h,
+                  _SidebarItem(
+                    icon: Icons.account_balance_wallet_outlined,
+                    title: 'Accounts',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/accounts/dashboard',
+                    onTap: () => context.go('/accounts/dashboard'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.show_chart_rounded,
+                    title: 'Profit per work',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/accounts/work-profit',
+                    onTap: () => context.go('/accounts/work-profit'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.fact_check_outlined,
+                    title: 'Month-end review',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/company-finance/month-end',
+                    onTap: () => context.go('/company-finance/month-end'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.apartment_outlined,
+                    title: 'Department reviews',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath.startsWith('/company-finance/department'),
+                    onTap: () => context.go('/company-finance/department/sales'),
+                  ),
+                  if (access.canSeeCEOReport)
+                    _SidebarItem(
+                      icon: Icons.summarize_outlined,
+                      title: 'CEO report',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/reports'),
+                      onTap: () => context.go('/reports/analyst'),
+                    ),
+                  8.h,
+                  _buildSectionTitle('SALES & CUSTOMERS', isCollapsed: isCollapsed, theme: theme),
+                  4.h,
+                  if (access.canSeeDashboard)
+                    _SidebarItem(
+                      icon: Icons.dashboard_outlined,
+                      title: 'Sales dashboard',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/',
+                      onTap: () => context.go('/'),
+                    ),
+                  if (access.canSeeSub('marketing.insights'))
+                    _SidebarItem(
+                      icon: Icons.insights_outlined,
+                      title: 'Marketing insights',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/marketing/insights',
+                      onTap: () => context.go('/marketing/insights'),
+                    ),
+                  _SidebarItem(
+                    icon: Icons.reviews_outlined,
+                    title: 'Client reviews',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/reviews',
+                    onTap: () => context.go('/reviews'),
+                  ),
+                  8.h,
+                  _buildSectionTitle('PEOPLE & STRATEGY', isCollapsed: isCollapsed, theme: theme),
+                  4.h,
+                  if (access.canSeeSub('hr_analytics'))
+                    _SidebarItem(
+                      icon: Icons.groups_2_outlined,
+                      title: 'Team snapshot',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/analytics',
+                      onTap: () => context.go('/hr/analytics'),
+                    ),
+                  if (access.canSeeSub('staff.evaluation'))
+                    _SidebarItem(
+                      icon: Icons.stars_outlined,
+                      title: 'Team scores',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/evaluation',
+                      onTap: () => context.go('/hr/evaluation'),
+                    ),
+                  if (access.canSeePlanning)
+                    _SidebarItem(
+                      icon: Icons.layers_outlined,
+                      title: 'Company projects',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/projects'),
+                      onTap: () => context.go('/projects'),
+                    ),
+                  ...projectGroup(core: false, header: false),
                 ] else if (role == AppRole.driver) ...[
                   // ── DRIVER VIEW ───────────────────────────────────────────
                   _SidebarItem(
@@ -362,12 +534,20 @@ class Sidebar extends ConsumerWidget {
                     onTap: () => context.go('/driver/works'),
                   ),
                   _SidebarItem(
+                    icon: Icons.route_outlined,
+                    title: 'My Day',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/driver/day',
+                    onTap: () => context.go('/driver/day'),
+                  ),
+                  _SidebarItem(
                     icon: Icons.receipt_long_outlined,
                     title: 'Add Expense',
                     isCollapsed: isCollapsed,
                     isSelected: currentPath == '/driver/expenses',
                     onTap: () => context.go('/driver/expenses'),
                   ),
+                  ...projectGroup(core: false),
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
                   // ── CRM SECTION ──────────────────────────────────────────────
@@ -1020,6 +1200,17 @@ class Sidebar extends ConsumerWidget {
                               onTap: () => context.go('/accounts/operations-dashboard'),
                             ),
                           ),
+                        if (access.canSeeSub('payables.dashboard'))
+                          Padding(
+                            padding: const EdgeInsets.only(left: 32),
+                            child: _SidebarItem(
+                              icon: Icons.query_stats_outlined,
+                              title: 'Work Profit',
+                              isCollapsed: false,
+                              isSelected: currentPath == '/accounts/work-profit',
+                              onTap: () => context.go('/accounts/work-profit'),
+                            ),
+                          ),
                         if (access.canSeeFinance)
                           Padding(
                             padding: const EdgeInsets.only(left: 32),
@@ -1585,6 +1776,28 @@ class Sidebar extends ConsumerWidget {
                             onTap: () => context.go('/fleet/km-report'),
                           ),
                         ),
+                      if (access.canSeeSub('fleet.km_report'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.route_outlined,
+                            title: 'Day Sheet',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/day-sheet',
+                            onTap: () => context.go('/fleet/day-sheet'),
+                          ),
+                        ),
+                      if (access.canSeeSub('fleet.km_report'))
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
+                            icon: Icons.satellite_alt_rounded,
+                            title: 'GPS Km Check',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/fleet/gps-check',
+                            onTap: () => context.go('/fleet/gps-check'),
+                          ),
+                        ),
                       if (access.canSeeSub('fleet.reminders'))
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
@@ -1598,14 +1811,7 @@ class Sidebar extends ConsumerWidget {
                         ),
                     ],
                   ],
-                  if (access.canSeePlanning)
-                    _SidebarItem(
-                      icon: Icons.hub_outlined,
-                      title: 'Company Projects',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/projects' || currentPath.startsWith('/projects/'),
-                      onTap: () => context.go('/projects'),
-                    ),
+                  ...projectGroup(),
                   if (access.canSeeCompanyReports)
                     _SidebarItem(
                       icon: Icons.folder_shared_outlined,

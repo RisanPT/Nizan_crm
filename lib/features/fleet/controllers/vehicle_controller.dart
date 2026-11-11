@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/models/list_page_params.dart';
 import 'package:nizan_crm/core/models/paginated_list_response.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
+import 'package:nizan_crm/features/fleet/data/vehicle_efficiency.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/features/fleet/services/vehicle_service.dart';
 
@@ -23,3 +24,15 @@ final paginatedVehiclesProvider =
             limit: params.limit,
           );
     });
+
+/// Fuel efficiency of one vehicle. Auto-disposed so reopening the sheet after
+/// new fuel entries always shows fresh figures.
+final vehicleEfficiencyProvider =
+    FutureProvider.autoDispose.family<VehicleEfficiency, String>((ref, vehicleId) {
+  return ref.watch(vehicleServiceProvider).getVehicleEfficiency(vehicleId);
+});
+
+/// Every vehicle's efficiency headline — feeds the chip on each vehicle card.
+final fleetEfficiencyProvider = FutureProvider.autoDispose<FleetEfficiency>((ref) {
+  return ref.watch(vehicleServiceProvider).getFleetEfficiency();
+});

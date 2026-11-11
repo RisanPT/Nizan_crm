@@ -110,102 +110,107 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
       minChildSize: 0.4,
       maxChildSize: 0.92,
       expand: false,
-      builder: (ctx, scrollCtrl) => Container(
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+      // A Material (not a coloured Container) so the ListTile rows paint their
+      // selected tint and tap ink on it rather than underneath an opaque box.
+      builder: (ctx, scrollCtrl) => Material(
+        color: crm.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
         ),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 10),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: crm.border, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
-              child: Row(children: [
-                Icon(Icons.groups_outlined, color: crm.primary, size: 20),
-                const SizedBox(width: 8),
-                Expanded(child: Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
-                Text('${results.length}', style: TextStyle(color: crm.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
-                IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
-              ]),
-            ),
-            // Search
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                onChanged: (v) => setState(() => _query = v),
-                decoration: InputDecoration(
-                  hintText: 'Search by name, role or department…',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _query.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () => setState(() { _searchCtrl.clear(); _query = ''; }),
-                        ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: crm.background,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border)),
-                ),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: crm.border, borderRadius: BorderRadius.circular(2))),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+                child: Row(children: [
+                  Icon(Icons.groups_outlined, color: crm.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(widget.title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+                  Text('${results.length}', style: TextStyle(color: crm.textSecondary, fontSize: 13, fontWeight: FontWeight.w600)),
+                  IconButton(onPressed: () => Navigator.pop(ctx), icon: const Icon(Icons.close)),
+                ]),
               ),
-            ),
-            // Filter chips — by department, or by role/category when the list
-            // has no departments. Only shown when there's more than one group.
-            if (groups.length > 1)
-              SizedBox(
-                height: 44,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  children: [
-                    _deptChip(crm, 'All', _dept.isEmpty, () => setState(() => _dept = '')),
-                    for (final g in groups) _deptChip(crm, g, _dept == g, () => setState(() => _dept = g)),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 4),
-            Divider(height: 1, color: crm.border),
-            // Results
-            Expanded(
-              child: results.isEmpty
-                  ? Center(child: Text('No matching employees.', style: TextStyle(color: crm.textSecondary)))
-                  : ListView.builder(
-                      controller: scrollCtrl,
-                      itemCount: results.length,
-                      itemBuilder: (ctx, i) {
-                        final e = results[i];
-                        final isSel = e.id == widget.selectedId;
-                        final subtitle = [
-                          if (_descriptor(e).isNotEmpty) _descriptor(e),
-                          if ((e.department ?? '').trim().isNotEmpty) e.department!.trim(),
-                        ].join(' · ');
-                        return ListTile(
-                          dense: true,
-                          leading: CircleAvatar(
-                            radius: 18,
-                            backgroundColor: crm.primary.withValues(alpha: 0.12),
-                            child: Text(
-                              e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
-                              style: TextStyle(color: crm.primary, fontWeight: FontWeight.w700),
-                            ),
+              // Search
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchCtrl,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  onChanged: (v) => setState(() => _query = v),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name, role or department…',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() { _searchCtrl.clear(); _query = ''; }),
                           ),
-                          title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                          subtitle: subtitle.isEmpty ? null : Text(subtitle, style: TextStyle(color: crm.textSecondary, fontSize: 12)),
-                          trailing: isSel ? Icon(Icons.check_circle, color: crm.primary) : null,
-                          selected: isSel,
-                          selectedTileColor: crm.primary.withValues(alpha: 0.06),
-                          onTap: () => Navigator.pop(ctx, e),
-                        );
-                      },
-                    ),
-            ),
-          ],
+                    isDense: true,
+                    filled: true,
+                    fillColor: crm.background,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: crm.border)),
+                  ),
+                ),
+              ),
+              // Filter chips — by department, or by role/category when the list
+              // has no departments. Only shown when there's more than one group.
+              if (groups.length > 1)
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                    children: [
+                      _deptChip(crm, 'All', _dept.isEmpty, () => setState(() => _dept = '')),
+                      for (final g in groups) _deptChip(crm, g, _dept == g, () => setState(() => _dept = g)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Divider(height: 1, color: crm.border),
+              // Results
+              Expanded(
+                child: results.isEmpty
+                    ? Center(child: Text('No matching employees.', style: TextStyle(color: crm.textSecondary)))
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        itemCount: results.length,
+                        itemBuilder: (ctx, i) {
+                          final e = results[i];
+                          final isSel = e.id == widget.selectedId;
+                          final subtitle = [
+                            if (_descriptor(e).isNotEmpty) _descriptor(e),
+                            if ((e.department ?? '').trim().isNotEmpty) e.department!.trim(),
+                          ].join(' · ');
+                          return ListTile(
+                            dense: true,
+                            leading: CircleAvatar(
+                              radius: 18,
+                              backgroundColor: crm.primary.withValues(alpha: 0.12),
+                              child: Text(
+                                e.name.isNotEmpty ? e.name[0].toUpperCase() : '?',
+                                style: TextStyle(color: crm.primary, fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            title: Text(e.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: subtitle.isEmpty ? null : Text(subtitle, style: TextStyle(color: crm.textSecondary, fontSize: 12)),
+                            trailing: isSel ? Icon(Icons.check_circle, color: crm.primary) : null,
+                            selected: isSel,
+                            selectedTileColor: crm.primary.withValues(alpha: 0.06),
+                            onTap: () => Navigator.pop(ctx, e),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -239,6 +244,9 @@ class EmployeePickerField extends StatelessWidget {
   final bool allowUnassign;
   final ValueChanged<Employee?> onChanged; // null → unassigned (only if allowUnassign)
 
+  /// Restyles the field (borders, label placement) to sit among other fields; gets the usual decoration, returns the one to use.
+  final InputDecoration Function(InputDecoration base)? decorate;
+
   const EmployeePickerField({
     super.key,
     required this.employees,
@@ -248,7 +256,24 @@ class EmployeePickerField extends StatelessWidget {
     this.label = 'Assign to',
     this.icon = Icons.person_outline,
     this.allowUnassign = true,
+    this.decorate,
   });
+
+  InputDecoration _decoration(bool hasSelection) {
+    final base = InputDecoration(
+      labelText: label,
+      isDense: true,
+      prefixIcon: Icon(icon, size: 18),
+      suffixIcon: (allowUnassign && hasSelection)
+          ? IconButton(
+              tooltip: 'Clear',
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => onChanged(null),
+            )
+          : const Icon(Icons.search, size: 18),
+    );
+    return decorate == null ? base : decorate!(base);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -268,18 +293,7 @@ class EmployeePickerField extends StatelessWidget {
         if (picked != null) onChanged(picked);
       },
       child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          prefixIcon: Icon(icon, size: 18),
-          suffixIcon: (allowUnassign && hasSelection)
-              ? IconButton(
-                  tooltip: 'Clear',
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () => onChanged(null),
-                )
-              : const Icon(Icons.search, size: 18),
-        ),
+        decoration: _decoration(hasSelection),
         child: Text(
           display,
           maxLines: 1,

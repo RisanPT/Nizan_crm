@@ -12,10 +12,10 @@ final projectOKRsProvider = FutureProvider.family<List<OKRModel>, String?>((ref,
   return service.getOKRs(projectId: projectId);
 });
 
-/// Planning OKRs (company + department level, not tied to any project) — powers
+/// Planning & Project OKRs viewable by the current user — powers
 /// the Company Planning Dashboard.
 final planningOkrsProvider = FutureProvider<List<OKRModel>>((ref) async {
-  return ref.watch(okrServiceProvider).getOKRs(companyScope: true);
+  return ref.watch(okrServiceProvider).getOKRs();
 });
 
 class OKRService {
@@ -86,9 +86,26 @@ class OKRService {
     }
   }
 
-  Future<void> deleteOKR(String id) async {
+  /// Reports on ONE key result without rewriting the objective, so two people updating
+  /// different key results never undo each other. [patch] is `{currentValue, completed}`
+  /// for anyone who may report progress; `{title, metric, targetValue, unit}` only for
+  /// those who manage the objective.
+  Future<OKRModel> updateKeyResult(String okrId, String krId, Map<String, dynamic> patch) async {
     try {
-      await _dio.delete('/okrs/$id');
+      final res = await _dio.patch('/okrs/$okrId/key-results/$krId', data: patch);
+      return OKRModel.fromJson(Map<String, dynamic>.from(res.data as Map));
+    } catch (e) {
+      throw AppException(e, action: 'update the key result');
+    }
+  }
+
+  /// Deletes the objective; the ones that contributed to it move up a level. Returns how
+  /// many moved.
+  Future<int> deleteOKR(String id) async {
+    try {
+      final res = await _dio.delete('/okrs/$id');
+      final data = res.data;
+      return data is Map ? (data['reparented'] as num?)?.toInt() ?? 0 : 0;
     } catch (e) {
       throw AppException(e, action: 'delete the OKR');
     }

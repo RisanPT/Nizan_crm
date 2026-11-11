@@ -165,21 +165,48 @@ class UserService {
 
   /// Create or refresh a driver's login (upsert by email). Works for a new
   /// driver and for an existing driver whose email is already registered.
+  ///
+  /// [expiresOn] ('YYYY-MM-DD', valid through the end of that day) makes it a TEMPORARY
+  /// login — for an outsourced driver; without it the login is permanent. A driver with no
+  /// email can sign in with their mobile number: leave [email] empty and pass [phone].
   Future<void> grantDriverLogin({
     required String name,
     required String email,
     required String password,
     String? employeeId,
+    String? phone,
+    String? expiresOn,
   }) async {
     try {
       await _dio.post('/auth/users/driver-login', data: {
         'name': name,
         'email': email,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
         'password': password,
         if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
+        'expiresOn': ?expiresOn,
       });
     } catch (e) {
       throw AppException(e, action: 'grant login access');
+    }
+  }
+
+  /// Renew, shorten, end or switch off an existing driver login without touching its
+  /// password. [expiresOn] a day = valid through it; [permanent] = no end date;
+  /// [active] false = off now, true = back on.
+  Future<void> setDriverLoginAccess({
+    required String employeeId,
+    String? expiresOn,
+    bool permanent = false,
+    bool? active,
+  }) async {
+    try {
+      await _dio.put('/auth/users/driver-login/$employeeId', data: {
+        if (permanent) 'expiresOn': null else 'expiresOn': ?expiresOn,
+        'active': ?active,
+      });
+    } catch (e) {
+      throw AppException(e, action: 'change login access');
     }
   }
 

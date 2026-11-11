@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../core/network/connectivity.dart';
+import '../core/network/dio_web_config.dart';
 import '../core/providers/auth_provider.dart';
 
 part 'dio_provider.g.dart';
@@ -28,6 +29,8 @@ Dio dio(Ref ref) {
   // Lets the offline banner probe the server (`GET /api`, unauthenticated).
   final connectivity = ref.read(connectivityProvider.notifier);
   connectivity.ping = () => dio.get<dynamic>('');
+
+  configureDioWeb(dio);
 
   dio.interceptors.add(
     InterceptorsWrapper(

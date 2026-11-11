@@ -6,7 +6,7 @@ import 'package:nizan_crm/features/dashboard/presentation/widgets/dashboard_peri
 import 'package:nizan_crm/features/dashboard/presentation/widgets/dashboard_widgets.dart';
 
 /// Roles allowed to see the dashboard's Finance tab (mirrors the server).
-const kFinanceDashboardRoles = {'admin', 'manager', 'accounts', 'finance_head'};
+const kFinanceDashboardRoles = {'admin', 'manager', 'accounts', 'finance_head', 'ceo'}; // the CEO reads it; the server refuses their writes
 
 const _kAdvance = Color(0xFF1BAF7A); // kSeries slot 3 (aqua)
 const _kDue = Color(0xFFEDA100); // kSeries slot 4 (yellow)

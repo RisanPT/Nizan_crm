@@ -47,6 +47,8 @@ import 'package:nizan_crm/services/vehicle_service.dart' as legacy_vehicles;
 
 // Sales / bookings / slots / reviews / notifications
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+import 'package:nizan_crm/features/bookings/controllers/next_work_provider.dart';
+import 'package:nizan_crm/features/accounts/controllers/food_allowance_controller.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
@@ -57,12 +59,12 @@ import 'package:nizan_crm/features/accounts/controllers/account_report_provider.
 import 'package:nizan_crm/features/accounts/controllers/admin_expense_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/budget_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/collection_controller.dart';
-import 'package:nizan_crm/features/accounts/controllers/collection_filters_provider.dart';
 import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/hra_provider.dart';
 import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/controllers/sales_return_provider.dart';
 import 'package:nizan_crm/features/accounts/controllers/subscription_controller.dart';
+import 'package:nizan_crm/features/accounts/controllers/work_profit_controller.dart';
 import 'package:nizan_crm/features/accounts/services/artist_payout_service.dart';
 import 'package:nizan_crm/features/accounts/services/expense_category_service.dart';
 
@@ -77,6 +79,8 @@ import 'package:nizan_crm/features/finance/services/tax_filing_service.dart';
 // Fleet / HR / org / inventory
 import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/controllers/fuel_expense_controller.dart';
+import 'package:nizan_crm/features/fleet/controllers/fleet_availability_controller.dart';
+import 'package:nizan_crm/features/fleet/controllers/fuel_price_controller.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart' as fleet_vehicles;
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
@@ -138,8 +142,10 @@ class DataRefresh {
       paginatedBookingsProvider,
       singleBookingProvider,
       artistAssignedWorksProvider,
+      nextWorkHintsProvider, // the road from one of an artist's works to the next
       bookingCalendarProvider,
       salesReportProvider,
+      workProfitPageProvider, // a booking's price / discount / team / date decide its profit
     ]);
     customers();
     slots();
@@ -241,7 +247,7 @@ class DataRefresh {
     _all(_inv, [
       collectionsProvider,
       artistCollectionsProvider,
-      filteredCollectionsProvider,
+      financeCollectionsPageProvider,
     ]);
     financeReports();
     bookings(); // payment status / balances shown on bookings & invoices
@@ -251,6 +257,12 @@ class DataRefresh {
     _all(_inv, [
       expensesProvider,
       artistExpensesProvider,
+      financeExpensesPageProvider,
+      workCostsPageProvider, // cost per work
+      workProfitPageProvider, // profit per work
+      foodAllowanceRulesProvider, // the allowance per head each work is checked against
+      mealPreviewProvider, // the allowance hint while adding a meal
+      artistDayProvider, // an artist's day timeline
       adminExpensesProvider,
       adminExpenseStatsProvider,
       currentBudgetProvider, // budget usage
@@ -259,6 +271,9 @@ class DataRefresh {
   }
 
   void expenseCategories() => _inv(expenseCategoriesProvider);
+
+  /// The expense heads (the form's dropdown + the manager), and the expenses that name them.
+  void expenseHeads() => _all(_inv, [expenseHeadsProvider, allExpenseHeadsProvider, adminExpensesProvider]);
 
   void salaries() {
     _all(_inv, [
@@ -270,7 +285,7 @@ class DataRefresh {
   }
 
   void payouts() {
-    _all(_inv, [artistPayoutsProvider, artistPayoutsForEmployeeProvider]);
+    _all(_inv, [artistPayoutsProvider, artistPayoutsForEmployeeProvider, workProfitPageProvider]);
     financeReports();
   }
 
@@ -363,11 +378,13 @@ class DataRefresh {
       ]);
 
   void fuelExpenses() {
-    _all(_inv, [fuelExpensesProvider, paginatedFuelExpensesProvider]);
+    _all(_inv, [fuelExpensesProvider, accountsFuelExpensePageProvider, paginatedFuelExpensesProvider, fuelPricesProvider, workProfitPageProvider]);
     financeReports();
   }
 
   void fleetJobs() => _all(_inv, [
+        bookingAvailabilityProvider, // who is free for a booking
+        fleetBoardProvider, // the fleet board for a day
         driverJobsProvider,
         managerCompletedWorksProvider,
         managerAccidentsProvider,

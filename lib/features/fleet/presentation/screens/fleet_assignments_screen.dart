@@ -13,6 +13,11 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/presentation/screens/fleet_mobile_ui.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/vehicle_capacity_hint.dart';
+import 'package:nizan_crm/features/fleet/controllers/fleet_availability_controller.dart';
+import 'package:nizan_crm/features/fleet/data/fleet_availability.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/fleet_availability_widgets.dart';
+import 'package:nizan_crm/features/fleet/presentation/widgets/fleet_board.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 
@@ -127,7 +132,9 @@ class _FleetAssignmentsScreenState
         travelTime: _timeCtrl.text.trim(),
       );
 
-      await ref.read(bookingProvider.notifier).updateBooking(updatedBooking);
+      // A driver / vehicle already on another work then (or unavailable) is confirmed first.
+      final saved = await updateBookingConfirmingFleet(context, ref, updatedBooking);
+      if (saved == null) return; // chose not to assign anyway
       // The notifier refreshes booking views; driver/manager job lists are
       // built from the same bookings.
       ref.refreshData.fleetJobs();
@@ -283,6 +290,12 @@ class _FleetAssignmentsScreenState
                       ],
                     ),
                   ),
+                  OutlinedButton.icon(
+                    key: const Key('whoIsFreeButton'),
+                    onPressed: () => showFleetBoard(context, day: activeBooking?.serviceStart),
+                    icon: const Icon(Icons.event_available_outlined, size: 18),
+                    label: const Text('Who is free'),
+                  ),
                 ],
               ),
               20.h,
@@ -291,7 +304,15 @@ class _FleetAssignmentsScreenState
             // Responsive Search & Filters
             if (isMobile) ...[
               // ── Title ─────────────────────────────────────────────────────
-              const FleetMobileHeader(title: 'Assignments'),
+              FleetMobileHeader(
+                title: 'Assignments',
+                trailing: IconButton(
+                  key: const Key('whoIsFreeButton'),
+                  tooltip: 'Who is free',
+                  onPressed: () => showFleetBoard(context, day: activeBooking?.serviceStart),
+                  icon: const Icon(Icons.event_available_outlined),
+                ),
+              ),
               14.h,
 
               // ── Search + filter menu + month toggle ──────────────────────
@@ -942,11 +963,31 @@ class _FleetAssignmentsScreenState
     );
   }
 
+  /// The assignment form, marked with who is free for this booking's days.
   Widget _buildAssignmentForm(
     BuildContext context,
     Booking booking,
     List<Employee> drivers,
     List<Vehicle> vehicles,
+  ) {
+    return Consumer(
+      builder: (context, ref, _) => _assignmentFormBody(
+        context,
+        booking,
+        drivers,
+        vehicles,
+        // a failure only means no marks on the pickers
+        ref.watch(bookingAvailabilityProvider(booking.id)).value,
+      ),
+    );
+  }
+
+  Widget _assignmentFormBody(
+    BuildContext context,
+    Booking booking,
+    List<Employee> drivers,
+    List<Vehicle> vehicles,
+    BookingAvailability? availability,
   ) {
     final crmColors = context.crmColors;
 
@@ -1116,9 +1157,15 @@ class _FleetAssignmentsScreenState
               child: Text('Unassigned'),
             ),
             ...safeDrivers.map((d) {
+              final a = availability?.driver(d.id);
               return DropdownMenuItem(
                 value: d.id,
-                child: Text(d.name),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(d.name, overflow: TextOverflow.ellipsis)),
+                    if (a != null) AvailabilityPill(status: a.status),
+                  ],
+                ),
               );
             }),
           ],
@@ -1128,6 +1175,7 @@ class _FleetAssignmentsScreenState
             });
           },
         ),
+        AvailabilityNote(resource: availability?.driver(safeDriverId)),
         16.h,
 
         // Vehicle selection dropdown
@@ -1146,10 +1194,19 @@ class _FleetAssignmentsScreenState
             ),
             ...safeVehicles.map((v) {
               final isRented = v.ownershipType == 'rented';
+              final a = availability?.vehicle(v.id);
               return DropdownMenuItem(
                 value: v.id,
-                child: Text(
-                  '${v.name} • ${v.registrationNumber} [${isRented ? "RENT" : "OWN"}]',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${v.name} • ${v.registrationNumber} [${isRented ? "RENT" : "OWN"}]${vehicleCapacityLabel(v)}',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (a != null) AvailabilityPill(status: a.status),
+                  ],
                 ),
               );
             }),
@@ -1159,6 +1216,12 @@ class _FleetAssignmentsScreenState
               _selectedVehicleId = (val == '') ? null : val;
             });
           },
+        ),
+        AvailabilityNote(resource: availability?.vehicle(safeVehicleId)),
+        // Does the team fit? (sedan/taxi · XL · MPV …)
+        VehicleCapacityHint(
+          people: teamSizeOf(booking.assignedStaff),
+          vehicle: safeVehicleId == null ? null : uniqueVehicles[safeVehicleId],
         ),
         16.h,
 
