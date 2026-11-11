@@ -117,6 +117,9 @@ class EodMetricCell {
 /// Team Daily Ledger Row (Screenshot 1)
 class SalesEodLedgerRow {
   final String userId;
+  /// The shared team manual-count row (one per manual-count day).
+  final bool isTeamCount;
+  final int otherLeads;
   final String date;
   final String salesPersonName;
   final String role;
@@ -136,6 +139,8 @@ class SalesEodLedgerRow {
 
   const SalesEodLedgerRow({
     this.userId = '',
+    this.isTeamCount = false,
+    this.otherLeads = 0,
     this.date = '',
     this.salesPersonName = '',
     this.role = '',
@@ -157,6 +162,8 @@ class SalesEodLedgerRow {
   factory SalesEodLedgerRow.fromJson(Map<String, dynamic> j) {
     return SalesEodLedgerRow(
       userId: '${j['userId'] ?? ''}',
+      isTeamCount: j['isTeamCount'] == true,
+      otherLeads: _i(j['otherLeads']),
       date: '${j['date'] ?? ''}',
       salesPersonName: '${j['salesPersonName'] ?? ''}',
       role: '${j['role'] ?? ''}',
@@ -393,6 +400,41 @@ class SalesPersonInfo {
   }
 }
 
+/// Where an EOD's lead counts came from, and the team cross-check: the manual
+/// team count vs leads the sales team actually saved in the CRM on those days.
+class EodLeadCountCheck {
+  final int manualDays;
+  final int formDays;
+
+  /// 'manual' | 'form' | 'mixed'
+  final String source;
+  final int manualCount;
+  final int savedInCrm;
+
+  /// manualCount − savedInCrm; > 0 = enquiries not yet saved as leads.
+  final int notLogged;
+
+  const EodLeadCountCheck({
+    this.manualDays = 0,
+    this.formDays = 0,
+    this.source = 'form',
+    this.manualCount = 0,
+    this.savedInCrm = 0,
+    this.notLogged = 0,
+  });
+
+  bool get hasManual => manualDays > 0;
+
+  factory EodLeadCountCheck.fromJson(Map<String, dynamic> j) => EodLeadCountCheck(
+        manualDays: _i(j['manualDays']),
+        formDays: _i(j['formDays']),
+        source: '${j['source'] ?? 'form'}',
+        manualCount: _i(j['manualCount']),
+        savedInCrm: _i(j['savedInCrm']),
+        notLogged: _i(j['notLogged']),
+      );
+}
+
 class SalesEodReport {
   final String date;
   final String reportDateFormatted;
@@ -417,6 +459,7 @@ class SalesEodReport {
   final EodMetricCell igKeralaLeads;
   final EodMetricCell paidAdsLeads;
   final EodMetricCell trialCampaignLeads;
+  final EodMetricCell otherLeads;
   final EodMetricCell leadsContacted;
   final EodMetricCell followUpsDone;
   final EodMetricCell contactedToBookingPct;
@@ -429,6 +472,10 @@ class SalesEodReport {
   final EodMetricCell totalOrderValueMetric;
   final EodMetricCell advancePaidMetric;
   final EodMetricCell balanceDueMetric;
+
+  /// Lead-count source + cross-check for the report window and the month.
+  final EodLeadCountCheck leadCheckToday;
+  final EodLeadCountCheck leadCheckMtd;
 
   // Screenshot 1: Team Daily Ledger
   final List<SalesEodLedgerRow> ledgerRows;
@@ -461,6 +508,7 @@ class SalesEodReport {
     this.igKeralaLeads = const EodMetricCell(),
     this.paidAdsLeads = const EodMetricCell(),
     this.trialCampaignLeads = const EodMetricCell(),
+    this.otherLeads = const EodMetricCell(),
     this.leadsContacted = const EodMetricCell(),
     this.followUpsDone = const EodMetricCell(),
     this.contactedToBookingPct = const EodMetricCell(),
@@ -471,6 +519,8 @@ class SalesEodReport {
     this.totalOrderValueMetric = const EodMetricCell(),
     this.advancePaidMetric = const EodMetricCell(),
     this.balanceDueMetric = const EodMetricCell(),
+    this.leadCheckToday = const EodLeadCountCheck(),
+    this.leadCheckMtd = const EodLeadCountCheck(),
     this.ledgerRows = const [],
     this.ledgerTotals,
     required this.summary,
@@ -487,6 +537,7 @@ class SalesEodReport {
     final leadsF = (j['leadsAndFollowUps'] as Map?)?.cast<String, dynamic>() ?? {};
     final trialC = (j['trialCampaign'] as Map?)?.cast<String, dynamic>() ?? {};
     final orderP = (j['orderValueAndPayments'] as Map?)?.cast<String, dynamic>() ?? {};
+    final check = (j['leadCountCheck'] as Map?)?.cast<String, dynamic>() ?? {};
 
     return SalesEodReport(
       date: '${j['date'] ?? ''}',
@@ -542,6 +593,15 @@ class SalesEodReport {
       trialCampaignLeads: leadsF['trialCampaignLeads'] is Map
           ? EodMetricCell.fromJson((leadsF['trialCampaignLeads'] as Map).cast<String, dynamic>())
           : const EodMetricCell(label: 'Trial Campaign Leads'),
+      otherLeads: leadsF['otherLeads'] is Map
+          ? EodMetricCell.fromJson((leadsF['otherLeads'] as Map).cast<String, dynamic>())
+          : const EodMetricCell(label: 'Other Leads (YouTube, Reference, Walk-in…)'),
+      leadCheckToday: check['today'] is Map
+          ? EodLeadCountCheck.fromJson((check['today'] as Map).cast<String, dynamic>())
+          : const EodLeadCountCheck(),
+      leadCheckMtd: check['mtd'] is Map
+          ? EodLeadCountCheck.fromJson((check['mtd'] as Map).cast<String, dynamic>())
+          : const EodLeadCountCheck(),
       leadsContacted: leadsF['leadsContacted'] is Map
           ? EodMetricCell.fromJson((leadsF['leadsContacted'] as Map).cast<String, dynamic>())
           : const EodMetricCell(label: 'Leads Contacted'),

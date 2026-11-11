@@ -61,6 +61,7 @@ class ExpenseService {
     required String category,
     required double amount,
     required DateTime date,
+    DateTime? eventDate,
     String notes = '',
     String receiptImage = '',
     String workType = 'bridal',
@@ -82,6 +83,7 @@ class ExpenseService {
         // A food expense carries the TIME of the meal; sent as an exact instant so the server
         // places it on the right IST day and between the right works.
         'date': (hasMeal ? date.toUtc() : date).toIso8601String(),
+        if (eventDate != null) 'eventDate': eventDate.toIso8601String(),
         'notes': notes,
         'receiptImage': receiptImage,
       };
@@ -100,6 +102,8 @@ class ExpenseService {
     String? category,
     double? amount,
     DateTime? date,
+    DateTime? eventDate,
+    bool clearEventDate = false,
     String? notes,
     String? receiptImage,
     String? workType,
@@ -117,6 +121,9 @@ class ExpenseService {
         if (covered != null) ...{'meal': covered.meal, 'meals': covered.meals},
         'amount': ?amount,
         'date': ?(hasMeal ? date?.toUtc() : date)?.toIso8601String(),
+        // '' clears it (e.g. a bill switched from Model Shoot to Bridal).
+        if (eventDate != null || clearEventDate)
+          'eventDate': eventDate?.toIso8601String() ?? '',
         'notes': ?notes,
         'receiptImage': ?receiptImage,
       });

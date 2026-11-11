@@ -19,6 +19,146 @@ class ActiveJobScreen extends ConsumerStatefulWidget {
 class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
   bool _isCompleting = false;
 
+  // Artist trip OTP — verified during the trip once the artist is in the car;
+  // required before the trip can be closed.
+  final _otpCtrl = TextEditingController();
+  bool _verifyingOtp = false;
+  String? _otpError;
+
+  @override
+  void dispose() {
+    _otpCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _verifyOtp(FleetJob job) async {
+    final otp = _otpCtrl.text.trim();
+    if (otp.length != 4) {
+      setState(() => _otpError = 'Enter all 4 digits');
+      return;
+    }
+    setState(() {
+      _verifyingOtp = true;
+      _otpError = null;
+    });
+    try {
+      await ref.read(fleetServiceProvider).verifyArtistOtp(job.id, otp);
+      ref.refreshData
+        ..fleetJobs()
+        ..bookings(); // the artist's schedule shows "verified"
+      if (mounted) {
+        _otpCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Artist OTP verified ✓'),
+          backgroundColor: Color(0xFF2E7D32),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) setState(() => _otpError = friendlyErrorMessage(e));
+    } finally {
+      if (mounted) setState(() => _verifyingOtp = false);
+    }
+  }
+
+  Widget _buildOtpCard(FleetJob job) {
+    const brand = Color(0xFF4A1942);
+    const green = Color(0xFF2E7D32);
+    final verified = job.artistOtpVerifiedAt != null;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: verified
+              ? green.withValues(alpha: 0.5)
+              : Colors.orange.withValues(alpha: 0.6),
+          width: 1.3,
+        ),
+      ),
+      child: verified
+          ? Row(children: [
+              const Icon(Icons.verified_rounded, color: green),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Artist OTP verified · ${TimeOfDay.fromDateTime(job.artistOtpVerifiedAt!.toLocal()).format(context)}',
+                  style: const TextStyle(fontWeight: FontWeight.w700, color: green),
+                ),
+              ),
+            ])
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(children: [
+                  Icon(Icons.verified_user_outlined, color: brand),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Artist Trip OTP',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                  ),
+                  Text('NEEDED TO CLOSE',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.orange)),
+                ]),
+                const SizedBox(height: 6),
+                Text(
+                  "Once the artist / assistant is in the car, ask for the 4-digit OTP on their schedule and verify it here.",
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _otpCtrl,
+                        enabled: !_verifyingOtp,
+                        keyboardType: TextInputType.number,
+                        maxLength: 4,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 12),
+                        onChanged: (_) {
+                          if (_otpError != null) setState(() => _otpError = null);
+                        },
+                        decoration: InputDecoration(
+                          counterText: '',
+                          hintText: '••••',
+                          errorText: _otpError,
+                          errorMaxLines: 3,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 52,
+                      child: FilledButton(
+                        onPressed: _verifyingOtp ? null : () => _verifyOtp(job),
+                        style: FilledButton.styleFrom(backgroundColor: brand),
+                        child: _verifyingOtp
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : const Text('Verify'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final jobsAsync = ref.watch(driverJobsProvider);
@@ -68,6 +208,10 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                   // Completed / accident trips are view-only — completing
                   // again is refused by the server.
                   if (job.tripStatus == 'in_progress') ...[
+                    if (job.requiresArtistOtp) ...[
+                      _buildOtpCard(job),
+                      const SizedBox(height: 16),
+                    ],
                     _buildCompleteButton(context, job),
                     const SizedBox(height: 12),
                     _buildAddExpenseButton(context, job),
@@ -478,6 +622,11 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
     final nextKmCtrl = TextEditingController();
     String? kmError;
     String? nextKmError;
+    // Artist OTP not verified during the trip → it must be entered here.
+    final needOtp = job.artistOtpPending;
+    final otpCtrl = TextEditingController(text: _otpCtrl.text.trim());
+    String? otpError;
+    String? artistOtp;
 
     double? parse(TextEditingController c) {
       final v = double.tryParse(c.text.replaceAll(',', '').trim());
@@ -499,7 +648,8 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
               children: [
                 Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32)),
                 SizedBox(width: 8),
-                Text('Complete trip', style: TextStyle(fontSize: 18)),
+                Expanded(
+                    child: Text('Complete trip', style: TextStyle(fontSize: 18))),
               ],
             ),
             content: SingleChildScrollView(
@@ -540,6 +690,34 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                           horizontal: 12, vertical: 8),
                     ),
                   ),
+                  if (needOtp) ...[
+                    const SizedBox(height: 16),
+                    const Text('Artist Trip OTP',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    const Text(
+                      "Not verified yet — enter the artist's 4-digit OTP to close this trip.",
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: otpCtrl,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 10),
+                      onChanged: (_) => setDialog(() => otpError = null),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '••••',
+                        errorText: otpError,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
                   if (next != null) ...[
                     const SizedBox(height: 18),
                     NextTripCard(job: next, label: 'Next trip today'),
@@ -630,6 +808,15 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                         "Can't be less than the starting ${formatKm(job.startKm!)} km");
                     return;
                   }
+                  if (needOtp) {
+                    final o = otpCtrl.text.trim();
+                    if (o.length != 4) {
+                      setDialog(() =>
+                          otpError = "Enter the artist's 4-digit OTP to close the trip");
+                      return;
+                    }
+                    artistOtp = o;
+                  }
                   if (startNext && !carryKm) {
                     final nk = parse(nextKmCtrl);
                     if (nk == null) {
@@ -664,6 +851,7 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
     locCtrl.dispose();
     kmCtrl.dispose();
     nextKmCtrl.dispose();
+    otpCtrl.dispose();
 
     if (confirmed != true || endKm == null || !mounted) return;
 
@@ -681,6 +869,7 @@ class _ActiveJobScreenState extends ConsumerState<ActiveJobScreen> {
                 parkedLocation?.isNotEmpty == true ? parkedLocation : null,
             startNextJobId: next != null && startNext ? next.id : null,
             nextStartKm: nextKm,
+            artistOtp: artistOtp,
           );
       // Jobs are bookings (tripStatus) and the vehicle's km / parking moves.
       ref.refreshData

@@ -42,7 +42,7 @@ class _Expenses extends AdminExpenseService {
     'status': 'pending',
     'projectId': body['projectId'],
     'projectName': body['projectId'] == null ? '' : 'Website redesign',
-    if (extra != null) ...extra,
+    ...?extra,
   });
 
   @override

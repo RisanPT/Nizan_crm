@@ -2334,7 +2334,7 @@ class _ExpandedDetails extends ConsumerWidget {
                               ),
                               8.w,
                               Text(
-                                'Trip Start OTP',
+                                'Trip OTP',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,

@@ -43,8 +43,15 @@ class DriverDashboard extends ConsumerWidget {
               data: (jobs) {
                 // Every trip of the day, in order — completed ones stay so
                 // the driver sees the whole day (Trip 1 of 3 …).
-                final todayJobs = todaysTrips(jobs);
                 final running = activeTrip(jobs);
+                // A running trip always shows here, even when it belongs to
+                // another day — e.g. tomorrow's long trip started today.
+                final todayJobs = [
+                  if (running != null &&
+                      !todaysTrips(jobs).any((j) => j.id == running.id))
+                    running,
+                  ...todaysTrips(jobs),
+                ];
 
                 if (todayJobs.isEmpty) {
                   return SliverToBoxAdapter(child: _buildEmptyState());
@@ -121,26 +128,32 @@ class DriverDashboard extends ConsumerWidget {
                             color: Colors.white, size: 22),
                       ),
                       const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hello, $firstName 👋',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hello, $firstName 👋',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
                             ),
-                          ),
-                          const Text(
-                            'Driver Dashboard',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
+                            const Text(
+                              'Driver Dashboard',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.5,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -383,9 +396,13 @@ class DriverDashboard extends ConsumerWidget {
                   children: [
                     Icon(Icons.speed_rounded, size: 15, color: Colors.grey[600]),
                     const SizedBox(width: 6),
-                    Text(
-                        '${formatKm(job.startKm!)} → ${formatKm(job.endKm!)} km · ${formatKm(job.tripKm!)} km driven',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                    Expanded(
+                      child: Text(
+                          '${formatKm(job.startKm!)} → ${formatKm(job.endKm!)} km · ${formatKm(job.tripKm!)} km driven',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                    ),
                   ],
                 ),
               ],
@@ -441,11 +458,16 @@ class DriverDashboard extends ConsumerWidget {
           children: [
             Icon(Icons.schedule_rounded, size: 16, color: Colors.grey[600]),
             const SizedBox(width: 6),
-            Text('Up next · starts when you complete the current trip',
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey[700])),
+            Flexible(
+              child: Text('Up next · starts when you complete the current trip',
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[700])),
+            ),
           ],
         ),
       );

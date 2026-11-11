@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
+import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
 /// Single service descriptor for the HR launcher.
 class HrServiceDescriptor {
@@ -310,6 +311,7 @@ class _HrServicesLauncherDialogState extends ConsumerState<_HrServicesLauncherDi
 
     // Filter services by user permissions
     final allowedServices = kHrServices.where((s) {
+      if (!kShowHrPreviewScreens && (s.route == '/hr/policies' || s.route == '/hr/department-scoring')) return false;
       if (s.isAllowed != null) return s.isAllowed!(access);
       // Fallback: everyone can see ESS / leave / approvals, manager gates handled on page
       return true;

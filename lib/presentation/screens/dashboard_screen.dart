@@ -2546,7 +2546,7 @@ class _ArtistMiniCard extends StatelessWidget {
                             4.w,
                             Text(
                               booking.artistOtpVerifiedAt != null
-                                  ? 'Trip Started'
+                                  ? 'OTP Verified'
                                   : 'Trip OTP: ${booking.artistTripOtp}',
                               style: TextStyle(
                                 fontSize: 10,

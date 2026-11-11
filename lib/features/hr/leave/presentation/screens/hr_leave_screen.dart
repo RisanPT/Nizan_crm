@@ -23,6 +23,27 @@ String _fmt(DateTime? d) {
   return '${d.day.toString().padLeft(2, '0')} ${m[d.month]} ${d.year}';
 }
 
+String _num(double v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 1);
+
+/// Confirm cancelling an APPROVED leave (the days go back to the balance).
+Future<bool> _confirmCancel(BuildContext context, LeaveRequest r) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Cancel approved leave?'),
+      content: Text(
+          '${r.employeeName.isNotEmpty ? '${r.employeeName} · ' : ''}${r.leaveTypeName.isEmpty ? 'Leave' : r.leaveTypeName}\n'
+          '${_fmt(r.fromDate)} – ${_fmt(r.toDate)} · ${_num(r.days)} day(s)\n\n'
+          'The days go back to the leave balance.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Keep')),
+        FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Cancel leave')),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 Color _statusColor(String status, CrmTheme crm) {
   switch (status) {
     case 'approved':
@@ -49,16 +70,20 @@ class HrLeaveScreen extends ConsumerWidget {
     final access = Access.of(session);
     final isManager = access.isFullAccess || access.isDepartmentHead;
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
+    // Leave types are company master data — only HR-wide users (server decides).
+    final canEditTypes = isManager && (ref.watch(leaveMasterAccessProvider).value ?? false);
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Leave'),
       if (isManager) const Tab(text: 'Requests'),
       if (isManager) const Tab(text: 'Holidays'),
+      if (canEditTypes) const Tab(text: 'Leave Types'),
     ];
     final views = <Widget>[
       if (hasEmployee) _MyLeaveTab(crm: crm),
-      if (isManager) _RequestsTab(crm: crm),
+      if (isManager) _RequestsTab(crm: crm, ownEmployeeId: session?.employeeId ?? ''),
       if (isManager) _HolidaysTab(crm: crm),
+      if (canEditTypes) _LeaveTypesTab(crm: crm),
     ];
 
     if (tabs.isEmpty) {
@@ -178,15 +203,48 @@ class _MyLeaveTab extends ConsumerWidget {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: crm.textPrimary))),
           ]),
           const SizedBox(height: 8),
-          Text(b.available.toStringAsFixed(b.available % 1 == 0 ? 0 : 1),
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: crm.primary)),
-          Text(b.paid
-              ? 'of ${b.allocated.toStringAsFixed(0)} left'
-              : 'unpaid',
-              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          if (b.limited) ...[
+            Text(_num(b.available),
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    color: b.available < 0 ? crm.destructive : crm.primary)),
+            Text(b.available < 0 ? 'overdrawn' : 'available',
+                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+            const SizedBox(height: 6),
+            _balLine('Credited so far', b.credited),
+            if (b.carriedForward > 0) _balLine('Carried forward', b.carriedForward),
+            _balLine('Used', b.used),
+            if (b.pending > 0) _balLine('Pending', b.pending),
+            _balLine('Annual quota', b.allocated),
+          ] else ...[
+            Text(_num(b.used),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: crm.primary)),
+            Text(b.paid ? 'used · no quota' : 'used · unpaid',
+                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+            if (b.pending > 0) _balLine('Pending', b.pending),
+          ],
         ],
       ),
     );
+  }
+
+  Widget _balLine(String label, double v) => Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(children: [
+          Expanded(child: Text(label, style: TextStyle(fontSize: 11, color: crm.textSecondary))),
+          Text(_num(v), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+        ]),
+      );
+
+  /// Own approved leave can be cancelled before its start date.
+  bool _ownCancellable(LeaveRequest r) {
+    if (r.status == 'pending') return true;
+    if (r.status != 'approved' || r.fromDate == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(r.fromDate!.year, r.fromDate!.month, r.fromDate!.day);
+    return start.isAfter(today);
   }
 
   Widget _requestRow(BuildContext context, WidgetRef ref, LeaveRequest r, {bool cancellable = false}) {
@@ -219,11 +277,12 @@ class _MyLeaveTab extends ConsumerWidget {
             ),
           ),
           _statusChip(r.status),
-          if (cancellable && r.status == 'pending')
+          if (cancellable && _ownCancellable(r))
             IconButton(
-              tooltip: 'Cancel',
+              tooltip: r.status == 'approved' ? 'Cancel approved leave' : 'Cancel',
               icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
               onPressed: () async {
+                if (r.status == 'approved' && !await _confirmCancel(context, r)) return;
                 try {
                   await ref.read(leaveServiceProvider).cancel(r.id);
                   ref.invalidate(myLeaveProvider);
@@ -270,10 +329,12 @@ class _ApplyLeaveDialog extends ConsumerStatefulWidget {
 
 class _ApplyLeaveDialogState extends ConsumerState<_ApplyLeaveDialog> {
   String? _typeId;
-  DateTime? _from;
-  DateTime? _to;
+  DateTime _from = DateTime.now();
+  DateTime _to = DateTime.now();
+  String _halfDay = 'none';
   final _reason = TextEditingController();
   bool _submitting = false;
+  String? _error; // the server's rejection message, shown inside the form
 
   @override
   void dispose() {
@@ -285,40 +346,51 @@ class _ApplyLeaveDialogState extends ConsumerState<_ApplyLeaveDialog> {
     final now = DateTime.now();
     final d = await showDatePicker(
       context: context,
-      initialDate: (from ? _from : _to) ?? now,
+      initialDate: from ? _from : _to,
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 2),
     );
     if (d != null) {
       setState(() {
+        _error = null;
         if (from) {
           _from = d;
-          if (_to == null || _to!.isBefore(d)) _to = d;
+          if (_to.isBefore(d)) _to = d;
         } else {
           _to = d;
+          if (_from.isAfter(d)) _from = d;
         }
       });
     }
   }
 
+  double get _calculatedDays {
+    final diff = _to.difference(_from).inDays + 1;
+    if (diff <= 1 && _halfDay != 'none') return 0.5;
+    return diff.toDouble();
+  }
+
   Future<void> _submit() async {
-    if (_from == null || _to == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pick the leave dates')));
-      return;
-    }
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
     try {
       await ref.read(leaveServiceProvider).apply(
             leaveTypeId: _typeId,
-            from: _from!,
-            to: _to!,
+            from: _from,
+            to: _to,
+            halfDay: _halfDay,
             reason: _reason.text.trim(),
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
+      // Shown inside the dialog — a snackbar would sit behind it.
       if (mounted) {
-        setState(() => _submitting = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+        setState(() {
+          _submitting = false;
+          _error = friendlyErrorMessage(e);
+        });
       }
     }
   }
@@ -327,59 +399,238 @@ class _ApplyLeaveDialogState extends ConsumerState<_ApplyLeaveDialog> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final types = ref.watch(leaveTypesProvider);
+    final days = _calculatedDays;
+
     return AlertDialog(
-      title: const Text('Apply for leave'),
+      title: Row(
+        children: [
+          Icon(Icons.beach_access_rounded, color: crm.primary, size: 22),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Apply for Leave', maxLines: 1, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
       content: SizedBox(
-        width: 420,
+        width: 440,
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Leave Type Dropdown with safe fallback
             types.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text(friendlyErrorMessage(e), style: TextStyle(color: crm.destructive)),
-              data: (list) => DropdownButtonFormField<String>(
-                initialValue: _typeId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Leave type'),
-                items: list
-                    .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
-                    .toList(),
-                onChanged: (v) => setState(() => _typeId = v),
-              ),
+              data: (all) {
+                final list = all.where((t) => t.active).toList();
+                final safeItems = list.isNotEmpty
+                    ? list
+                    : const [
+                        LeaveType(id: 'cl', name: 'Casual Leave'),
+                        LeaveType(id: 'sl', name: 'Sick Leave'),
+                        LeaveType(id: 'el', name: 'Earned Leave'),
+                        LeaveType(id: 'lwp', name: 'Unpaid Leave (LWP)'),
+                      ];
+                final currentId = _typeId ?? safeItems.first.id;
+                final selectedVal = safeItems.any((t) => t.id == currentId) ? currentId : safeItems.first.id;
+                if (_typeId != selectedVal) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) setState(() => _typeId = selectedVal);
+                  });
+                }
+
+                return DropdownButtonFormField<String>(
+                  key: ValueKey('leave_type_$selectedVal'),
+                  initialValue: selectedVal,
+                  isExpanded: true,
+                  dropdownColor: crm.surface,
+                  style: TextStyle(color: crm.textPrimary, fontSize: 13.5),
+                  decoration: const InputDecoration(
+                    labelText: 'Leave Type *',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: safeItems
+                      .map((t) => DropdownMenuItem(
+                            value: t.id,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: _hex(t.color),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(t.name,
+                                      maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: crm.textPrimary, fontSize: 13.5)),
+                                ),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() {
+                        _typeId = v;
+                        _error = null;
+                      });
+                    }
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // Date Range Pickers
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _pick(true),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'From Date *',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.calendar_today_rounded, size: 16),
+                      ),
+                      child: Text(
+                        _fmt(_from),
+                        style: TextStyle(color: crm.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    onTap: () => _pick(false),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'To Date *',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                        prefixIcon: Icon(Icons.event_available_rounded, size: 16),
+                      ),
+                      child: Text(
+                        _fmt(_to),
+                        style: TextStyle(color: crm.textPrimary, fontSize: 13.5, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _pick(true),
-                  child: Text(_from == null ? 'From date' : _fmt(_from)),
+
+            // Half-Day & Duration Summary
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _halfDay,
+                    isExpanded: true,
+                    dropdownColor: crm.surface,
+                    style: TextStyle(color: crm.textPrimary, fontSize: 13),
+                    decoration: const InputDecoration(
+                      labelText: 'Day Portion',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'none', child: Text('Full Day')),
+                      DropdownMenuItem(value: 'first', child: Text('First Half (Morning)')),
+                      DropdownMenuItem(value: 'second', child: Text('Second Half (Afternoon)')),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) {
+                        setState(() {
+                          _halfDay = v;
+                          _error = null;
+                        });
+                      }
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _pick(false),
-                  child: Text(_to == null ? 'To date' : _fmt(_to)),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: crm.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: crm.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.schedule_rounded, size: 16, color: crm.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_num(days)} calendar day${days == 1 ? '' : 's'}',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: crm.primary),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('Weekly offs and holidays inside the dates are not charged.',
+                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
             const SizedBox(height: 12),
+
+            // Reason field
             TextField(
               controller: _reason,
               minLines: 2,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: 'Reason', border: OutlineInputBorder()),
+              style: TextStyle(color: crm.textPrimary, fontSize: 13.5),
+              decoration: const InputDecoration(
+                labelText: 'Reason for leave',
+                hintText: 'e.g. Attending family function',
+                border: OutlineInputBorder(),
+              ),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: crm.destructive.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: crm.destructive.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.error_outline, size: 18, color: crm.destructive),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_error!,
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.destructive)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: _submitting ? null : () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-        FilledButton(
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
           onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('Submit'),
+          icon: _submitting
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.send_rounded, size: 16),
+          label: const Text('Submit Application'),
         ),
       ],
     );
@@ -388,8 +639,9 @@ class _ApplyLeaveDialogState extends ConsumerState<_ApplyLeaveDialog> {
 
 // ─── Requests (manager / HR) ───────────────────────────────────────────────
 class _RequestsTab extends ConsumerStatefulWidget {
-  const _RequestsTab({required this.crm});
+  const _RequestsTab({required this.crm, this.ownEmployeeId = ''});
   final CrmTheme crm;
+  final String ownEmployeeId;
 
   @override
   ConsumerState<_RequestsTab> createState() => _RequestsTabState();
@@ -397,6 +649,28 @@ class _RequestsTab extends ConsumerStatefulWidget {
 
 class _RequestsTabState extends ConsumerState<_RequestsTab> {
   String? _actingId;
+
+  /// Manager cancels an approved leave (any time, inside their scope).
+  Future<void> _cancelApproved(LeaveRequest r) async {
+    if (!await _confirmCancel(context, r)) return;
+    setState(() => _actingId = r.id);
+    try {
+      await ref.read(leaveServiceProvider).cancel(r.id);
+      ref.invalidate(leaveRequestsProvider);
+      ref.invalidate(myBalancesProvider);
+      ref.invalidate(myLeaveProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Leave cancelled')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      }
+    } finally {
+      if (mounted) setState(() => _actingId = null);
+    }
+  }
 
   Future<void> _handleDecision(String approvalId, bool approve) async {
     String note = '';
@@ -516,6 +790,9 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                 final isPending = r.status == 'pending';
                 final canAct = isPending && approvalId.isNotEmpty;
                 final isActing = _actingId == approvalId;
+                // Own leave is cancelled from My Leave, not with manager rights.
+                final canCancel = r.status == 'approved' &&
+                    (widget.ownEmployeeId.isEmpty || r.employeeId != widget.ownEmployeeId);
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 10),
@@ -531,7 +808,10 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     InkWell(
                                       onTap: r.employeeId.isNotEmpty
@@ -549,7 +829,6 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                       decoration: BoxDecoration(
@@ -622,6 +901,27 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                               ),
                             ],
                           ],
+                        ),
+                      ],
+                      if (canCancel) ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _actingId == r.id
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 16),
+                                  child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                                )
+                              : OutlinedButton.icon(
+                                  onPressed: () => _cancelApproved(r),
+                                  icon: const Icon(Icons.event_busy_rounded, size: 16),
+                                  label: const Text('Cancel leave'),
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    foregroundColor: crm.destructive,
+                                    side: BorderSide(color: crm.destructive.withValues(alpha: 0.5)),
+                                  ),
+                                ),
                         ),
                       ],
                     ],
@@ -749,6 +1049,245 @@ class _HolidaysTab extends ConsumerWidget {
     );
     nameCtl.dispose();
     if (added == true) ref.invalidate(holidaysProvider);
+  }
+}
+
+// ─── Leave types (HR-wide only) ──────────────────────────────────────────────
+class _LeaveTypesTab extends ConsumerWidget {
+  const _LeaveTypesTab({required this.crm});
+  final CrmTheme crm;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final types = ref.watch(leaveTypesProvider);
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(leaveTypesProvider),
+      child: types.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => ref.invalidate(leaveTypesProvider))]),
+        data: (list) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Leave types',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                  Text('Quota is credited monthly (annual ÷ 12), Jan–Dec',
+                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                ]),
+              ),
+              FilledButton.icon(
+                onPressed: () => _edit(context, ref, null),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add type'),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            if (list.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Center(child: Text('No leave types yet.', style: TextStyle(color: crm.textSecondary))),
+              )
+            else
+              ...list.map((t) => Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: hrCardDecoration(crm),
+                    child: Row(children: [
+                      Container(width: 10, height: 10, decoration: BoxDecoration(color: _hex(t.color), shape: BoxShape.circle)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('${t.name}${t.code.isNotEmpty ? ' (${t.code})' : ''}',
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: t.active ? crm.textPrimary : crm.textSecondary)),
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              t.annualQuota > 0 ? '${_num(t.annualQuota)} days/yr' : 'No quota',
+                              t.paid ? 'Paid' : 'Unpaid',
+                              if (t.carryForward)
+                                'Carry forward${t.carryForwardMax > 0 ? ' up to ${_num(t.carryForwardMax)}' : ''}',
+                              if (!t.active) 'Inactive',
+                            ].join(' · '),
+                            style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                          ),
+                        ]),
+                      ),
+                      IconButton(
+                        tooltip: 'Edit',
+                        icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary),
+                        onPressed: () => _edit(context, ref, t),
+                      ),
+                    ]),
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(BuildContext context, WidgetRef ref, LeaveType? t) async {
+    final saved = await showDialog<bool>(context: context, builder: (_) => _LeaveTypeDialog(existing: t));
+    if (saved == true) {
+      ref.invalidate(leaveTypesProvider);
+      ref.invalidate(myBalancesProvider);
+    }
+  }
+}
+
+class _LeaveTypeDialog extends ConsumerStatefulWidget {
+  const _LeaveTypeDialog({this.existing});
+  final LeaveType? existing;
+  @override
+  ConsumerState<_LeaveTypeDialog> createState() => _LeaveTypeDialogState();
+}
+
+class _LeaveTypeDialogState extends ConsumerState<_LeaveTypeDialog> {
+  late final TextEditingController _name;
+  late final TextEditingController _code;
+  late final TextEditingController _quota;
+  late final TextEditingController _cfMax;
+  late bool _paid;
+  late bool _carry;
+  late bool _active;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.existing;
+    _name = TextEditingController(text: t?.name ?? '');
+    _code = TextEditingController(text: t?.code ?? '');
+    _quota = TextEditingController(text: t == null ? '' : _num(t.annualQuota));
+    _cfMax = TextEditingController(text: t == null ? '' : _num(t.carryForwardMax));
+    _paid = t?.paid ?? true;
+    _carry = t?.carryForward ?? false;
+    _active = t?.active ?? true;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _code.dispose();
+    _quota.dispose();
+    _cfMax.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      setState(() => _error = 'Name is required.');
+      return;
+    }
+    final quota = double.tryParse(_quota.text.trim().isEmpty ? '0' : _quota.text.trim());
+    final cfMax = double.tryParse(_cfMax.text.trim().isEmpty ? '0' : _cfMax.text.trim());
+    if (quota == null || quota < 0 || cfMax == null || cfMax < 0) {
+      setState(() => _error = 'Enter valid, non-negative numbers.');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await ref.read(leaveServiceProvider).saveType(
+            id: widget.existing?.id ?? '',
+            name: name,
+            code: _code.text.trim(),
+            annualQuota: quota,
+            paid: _paid,
+            carryForward: _carry,
+            carryForwardMax: _carry ? cfMax : 0,
+            active: _active,
+          );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = friendlyErrorMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'Add leave type' : 'Edit ${widget.existing!.name}'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Name *', border: OutlineInputBorder(), isDense: true)),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                    controller: _code,
+                    decoration: const InputDecoration(labelText: 'Code (e.g. CL)', border: OutlineInputBorder(), isDense: true)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _quota,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Annual quota (days)', border: OutlineInputBorder(), isDense: true),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text('0 = no quota (no balance check). Credited monthly: quota ÷ 12 per month.',
+                style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Paid'),
+              value: _paid,
+              onChanged: (v) => setState(() => _paid = v),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Carry forward unused days'),
+              value: _carry,
+              onChanged: (v) => setState(() => _carry = v),
+            ),
+            if (_carry)
+              TextField(
+                controller: _cfMax,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                    labelText: 'Carry-forward max days (0 = nothing carries)', border: OutlineInputBorder(), isDense: true),
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Active'),
+              value: _active,
+              onChanged: (v) => setState(() => _active = v),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(_error!,
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.destructive)),
+              ),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: _saving ? null : () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+        FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving…' : 'Save')),
+      ],
+    );
   }
 }
 

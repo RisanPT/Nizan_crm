@@ -60,6 +60,13 @@ List<_Group> _groupsFor(Access access) {
         const _Item('Trial Packages', Icons.inventory_2_outlined, '/trial-packages'),
       const _Item('Client Reviews', Icons.reviews_outlined, '/reviews'),
     ]),
+    _Group('Stylist', [
+      if (access.canSeeConsultations) ...[
+        const _Item('Today', Icons.today_outlined, '/consultations/dashboard'),
+        const _Item('Clients', Icons.people_alt_outlined, '/stylist/clients'),
+        const _Item('Calendar', Icons.calendar_month_outlined, '/consultations'),
+      ],
+    ]),
     _Group('More', [
       const _Item('Notifications', Icons.notifications_none_rounded, '/notifications'),
       const _Item('Monthly Objectives', Icons.flag_outlined, '/monthly-objectives'),

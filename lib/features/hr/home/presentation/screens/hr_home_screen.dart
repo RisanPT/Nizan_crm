@@ -231,6 +231,7 @@ class _MeScope extends ConsumerWidget {
         const HrSectionLabel('Quick actions'),
         _tileGridView(context, crm, const [
           _Tile(Icons.event_busy_outlined, 'Apply for leave', 'Request time off', '/hr/leave'),
+          _Tile(Icons.receipt_long, 'My payslips', 'Download salary slips', '/hr/my-payslips'),
           _Tile(Icons.timer_outlined, 'My timesheet', 'Log & submit hours', '/hr/timesheet'),
           _Tile(Icons.event_available_outlined, 'Regularize', 'Fix an attendance day', '/hr/regularization'),
           _Tile(Icons.receipt_long_outlined, 'Claim expense', 'Reimbursements', '/hr/reimbursements'),

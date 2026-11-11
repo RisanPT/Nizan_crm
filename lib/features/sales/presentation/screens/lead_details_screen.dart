@@ -17,6 +17,8 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
+import 'package:nizan_crm/features/consultations/presentation/widgets/lead_consultations_card.dart';
 
 // Formatting helpers
 String _fmtDate(DateTime d) {
@@ -157,6 +159,10 @@ class LeadDetailsScreen extends HookConsumerWidget {
                 if (lead.status == 'Pending Lost Approval') ...[
                   16.h,
                   _PendingLostPanel(lead: lead),
+                ],
+                if (ref.watch(effectiveAccessProvider).canSeeConsultations) ...[
+                  16.h,
+                  LeadConsultationsCard(leadId: leadId),
                 ],
                 24.h,
 

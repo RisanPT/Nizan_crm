@@ -12,6 +12,13 @@ class Review {
   final DateTime? submittedAt;
   final DateTime createdAt;
 
+  // How the link reached the client: by hand ("Send Review") or the automatic
+  // next-day WhatsApp send. autoSendStatus: '' | sending | retry | sent | skipped | failed.
+  final DateTime? manualSentAt;
+  final String autoSendStatus;
+  final DateTime? autoSentAt;
+  final String autoSendError;
+
   // Bride answers
   final int overall, makeup, hair, saree;
   final Map<String, int> teamBehaviour;
@@ -47,6 +54,10 @@ class Review {
     this.status = 'pending',
     this.submittedAt,
     required this.createdAt,
+    this.manualSentAt,
+    this.autoSendStatus = '',
+    this.autoSentAt,
+    this.autoSendError = '',
     this.overall = 0,
     this.makeup = 0,
     this.hair = 0,
@@ -77,6 +88,29 @@ class Review {
   });
 
   bool get isSubmitted => status == 'submitted';
+
+  /// One line on how the review link was sent, for a pending review; empty
+  /// when nothing has happened yet.
+  String get sendNote {
+    if (autoSendStatus == 'sent' && autoSentAt != null) {
+      final d = autoSentAt!.toLocal();
+      return 'Sent on WhatsApp automatically ${d.day}/${d.month}';
+    }
+    if (manualSentAt != null) {
+      final d = manualSentAt!.toLocal();
+      return 'Sent by staff ${d.day}/${d.month}';
+    }
+    if (autoSendStatus == 'failed') {
+      return 'Auto-send failed: ${autoSendError.isEmpty ? 'unknown error' : autoSendError}';
+    }
+    if (autoSendStatus == 'skipped' && autoSendError.isNotEmpty) return 'Not auto-sent: $autoSendError';
+    if (autoSendStatus == 'retry') return 'Auto-send will retry tomorrow';
+    return '';
+  }
+
+  /// Auto-send gave up or was refused — staff should send it by hand.
+  bool get needsManualSend =>
+      !isSubmitted && manualSentAt == null && (autoSendStatus == 'failed' || autoSendStatus == 'skipped');
 
   static int _i(dynamic v) => (v is num) ? v.toInt() : int.tryParse('$v') ?? 0;
   static double _d(dynamic v) => (v is num) ? v.toDouble() : double.tryParse('$v') ?? 0;
@@ -110,6 +144,10 @@ class Review {
         status: (j['status'] ?? 'pending').toString(),
         submittedAt: _date(j['submittedAt']),
         createdAt: _date(j['createdAt']) ?? DateTime.now(),
+        manualSentAt: _date(j['manualSentAt']),
+        autoSendStatus: (j['autoSendStatus'] ?? '').toString(),
+        autoSentAt: _date(j['autoSentAt']),
+        autoSendError: (j['autoSendError'] ?? '').toString(),
         overall: _i(j['overall']),
         makeup: _i(j['makeup']),
         hair: _i(j['hair']),

@@ -208,7 +208,9 @@ String coerceLeadSource(String? s) {
   if (lower.contains('trial')) {
     return 'Trial Campaign Leads';
   }
-  if (lower.contains('paid') || lower.contains('ad')) {
+  // Whole word "ad"/"ads" — a bare contains('ad') also matched "leads"
+  // (e.g. a legacy "Instagram Leads" source became Paid Ads).
+  if (lower.contains('paid') || RegExp(r'\bads?\b').hasMatch(lower)) {
     return 'Paid Ads Leads';
   }
   if (lower.contains('main') || lower == 'instagram' || lower == 'ig') {
@@ -1048,16 +1050,22 @@ class _FormGrid extends StatelessWidget {
 class _LeadForm extends HookConsumerWidget {
   final Lead? initialLead; // null = add new
 
-  const _LeadForm({this.initialLead});
+  /// Starting values for a NEW lead (e.g. from a quote). Ignored when editing.
+  final LeadPrefill? prefill;
+
+  const _LeadForm({this.initialLead, this.prefill});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final isEditing = initialLead != null;
+    final pre = isEditing ? null : prefill;
+    // Shown in a dialog (edit, or add-from-quote): close it after saving.
+    final closeOnSave = isEditing || pre != null;
 
-    final nameCtrl      = useTextEditingController(text: initialLead?.name ?? '');
-    final phoneCtrl     = useTextEditingController(text: initialLead?.phone ?? '');
+    final nameCtrl      = useTextEditingController(text: initialLead?.name ?? pre?.name ?? '');
+    final phoneCtrl     = useTextEditingController(text: initialLead?.phone ?? pre?.phone ?? '');
     final alternateCtrl = useTextEditingController(text: initialLead?.alternateNumber ?? '');
     final initialSrc = initialLead?.source;
     final coercedInitialSrc = initialSrc != null && initialSrc.isNotEmpty
@@ -1071,7 +1079,7 @@ class _LeadForm extends HookConsumerWidget {
     );
     // Marketing campaign this lead is attributed to (drives campaign ROI).
     final selectedCampaignId = useState<String?>(initialLead?.campaignId);
-    final locationCtrl  = useTextEditingController(text: initialLead?.location ?? '');
+    final locationCtrl  = useTextEditingController(text: initialLead?.location ?? pre?.location ?? '');
     // Where the event is, as the lead knows it: an optional pincode and district. A lead linked to
     // a booking takes its address and geography from that booking, so they are not edited here.
     final linkedToBooking = initialLead?.bookingId != null;
@@ -1087,10 +1095,14 @@ class _LeadForm extends HookConsumerWidget {
     final eventType = useState(
       kEventTypes.contains(initialLead?.eventType)
           ? initialLead!.eventType
-          : (initialLead?.eventType.isNotEmpty ?? false ? 'Other' : 'Wedding'),
+          : (initialLead?.eventType.isNotEmpty ?? false
+              ? 'Other'
+              : (pre?.eventType != null && kEventTypes.contains(pre!.eventType)
+                  ? pre.eventType!
+                  : 'Wedding')),
     );
-    final remarksCtrl   = useTextEditingController(text: initialLead?.remarks ?? '');
-    final enquiryDate   = useState(initialLead?.enquiryDate ?? DateTime.now());
+    final remarksCtrl   = useTextEditingController(text: initialLead?.remarks ?? pre?.remarks ?? '');
+    final enquiryDate   = useState(initialLead?.enquiryDate ?? pre?.eventDate ?? DateTime.now());
     final bookedDate    = useState<DateTime?>(initialLead?.bookedDate);
 
     final followUpDate  = useState<DateTime?>(initialLead?.followUpDate);
@@ -1271,7 +1283,7 @@ class _LeadForm extends HookConsumerWidget {
         // that opened this dialog was rebuilt away meanwhile.
         ref.refreshData.leads();
         if (context.mounted) {
-          if (isEditing) Navigator.of(context).pop();
+          if (closeOnSave) Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(isEditing ? 'Lead updated!' : 'Lead added successfully!'),
@@ -1977,7 +1989,43 @@ class _LeadForm extends HookConsumerWidget {
 // ─────────────────────────────────────────────────────────
 /// Opens the full Edit Lead form (sheet on mobile, dialog on desktop). Public so
 /// the lead detail page reuses the exact same form.
-Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) async {
+Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) =>
+    _showLeadFormSheet(context, title: 'Edit Lead', icon: Icons.edit_rounded, lead: lead);
+
+/// Starting values for a new lead created from somewhere else (the Quote tab).
+class LeadPrefill {
+  final String name, phone, location, remarks;
+
+  /// One of [kEventTypes]; anything else falls back to the form default.
+  final String? eventType;
+
+  /// The event date the customer is enquiring for ("Date Enquired For").
+  final DateTime? eventDate;
+
+  const LeadPrefill({
+    this.name = '',
+    this.phone = '',
+    this.location = '',
+    this.remarks = '',
+    this.eventType,
+    this.eventDate,
+  });
+}
+
+/// Opens the normal Add Lead form, prefilled (e.g. from a quote). Saving goes
+/// through the same checks as a manual lead, including the duplicate-number
+/// guard, and closes the dialog.
+Future<void> showCreateLeadDialog(BuildContext context, LeadPrefill prefill) =>
+    _showLeadFormSheet(context,
+        title: 'Create Lead from Quote', icon: Icons.person_add_alt_1_rounded, prefill: prefill);
+
+Future<void> _showLeadFormSheet(
+  BuildContext context, {
+  required String title,
+  required IconData icon,
+  Lead? lead,
+  LeadPrefill? prefill,
+}) async {
   final isMobile = ResponsiveBuilder.isMobile(context);
   if (isMobile) {
     await showModalBottomSheet(
@@ -2000,10 +2048,10 @@ Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) 
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    const Icon(Icons.edit_rounded, color: Color(0xFF6C63FF)),
+                    Icon(icon, color: const Color(0xFF6C63FF)),
                     12.w,
-                    const Text(
-                      'Edit Lead',
+                    Text(
+                      title,
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
                   ],
@@ -2022,6 +2070,7 @@ Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) 
                   child: Consumer(
                     builder: (ctx, ref, _) => _LeadForm(
                       initialLead: lead,
+                      prefill: prefill,
                     ),
                   ),
                 ),
@@ -2046,10 +2095,10 @@ Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) 
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.edit_rounded, color: Color(0xFF6C63FF)),
+                    Icon(icon, color: const Color(0xFF6C63FF)),
                     12.w,
-                    const Text(
-                      'Edit Lead',
+                    Text(
+                      title,
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                     ),
                     const Spacer(),
@@ -2063,6 +2112,7 @@ Future<void> showLeadEditDialog(BuildContext context, WidgetRef ref, Lead lead) 
                 Consumer(
                   builder: (ctx, ref, _) => _LeadForm(
                     initialLead: lead,
+                    prefill: prefill,
                   ),
                 ),
               ],

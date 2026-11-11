@@ -11,6 +11,7 @@ import 'package:nizan_crm/features/hr/lms/data/lms_models.dart';
 import 'package:nizan_crm/features/hr/lms/service/lms_service.dart';
 import 'package:nizan_crm/features/hr/lms/presentation/widgets/training_modules_tabs.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
 /// Redesigned HR Learning & Orientation screen matching HRMS_Design.html (#s-training).
 /// Includes:
@@ -221,20 +222,20 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
           mainAxisSize: MainAxisSize.min,
           children: [
             _tabPill(crm, 0, 'Orientation Plan', Icons.calendar_today_outlined),
-            const SizedBox(width: 4),
-            _tabPill(crm, 1, 'Syllabus & Tutorials', Icons.menu_book_rounded),
-            const SizedBox(width: 4),
-            _tabPill(crm, 2, 'Mentor & Trainer Flow', Icons.people_alt_outlined),
-            const SizedBox(width: 4),
-            _tabPill(crm, 3, 'Evaluation & Scoring', Icons.fact_check_outlined),
-            const SizedBox(width: 4),
-            _tabPill(crm, 4, 'Quality Index', Icons.speed_rounded),
-            const SizedBox(width: 4),
-            _tabPill(crm, 5, 'GALP & AMO Bundles', Icons.military_tech_outlined),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 1, 'Syllabus & Tutorials', Icons.menu_book_rounded),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 2, 'Mentor & Trainer Flow', Icons.people_alt_outlined),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 3, 'Evaluation & Scoring', Icons.fact_check_outlined),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 4, 'Quality Index', Icons.speed_rounded),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 5, 'GALP & AMO Bundles', Icons.military_tech_outlined),
             const SizedBox(width: 4),
             _tabPill(crm, 6, 'Courses & LMS', Icons.school_outlined),
-            const SizedBox(width: 4),
-            _tabPill(crm, 7, 'Skills Matrix', Icons.auto_awesome_outlined),
+            if (kShowHrPreviewScreens) const SizedBox(width: 4),
+            if (kShowHrPreviewScreens) _tabPill(crm, 7, 'Skills Matrix', Icons.auto_awesome_outlined),
           ],
         ),
       ),

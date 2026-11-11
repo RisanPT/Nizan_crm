@@ -179,6 +179,9 @@ class ArtistExpense {
   final String workType;
   final double amount;
   final DateTime date;
+  /// Event date stored on the bill itself (model-shoot bills). Bridal bills
+  /// take it from [booking] instead — use [eventStart]/[eventEnd].
+  final DateTime? eventDate;
   final String notes;
   final String receiptImage;
   final String status; // pending | verified | rejected
@@ -200,6 +203,7 @@ class ArtistExpense {
     this.workType = 'bridal',
     required this.amount,
     required this.date,
+    this.eventDate,
     required this.notes,
     required this.receiptImage,
     required this.status,
@@ -237,6 +241,7 @@ class ArtistExpense {
       workType: json['workType'] as String? ?? 'bridal',
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
       date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
+      eventDate: DateTime.tryParse(json['eventDate']?.toString() ?? '')?.toLocal(),
       notes: json['notes'] as String? ?? '',
       receiptImage: json['receiptImage'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
@@ -253,4 +258,10 @@ class ArtistExpense {
       ocrAmountFound: (json['ocrAmountFound'] as num?)?.toDouble(),
     );
   }
+
+  /// When the work took place: the linked booking's event, else [eventDate].
+  DateTime? get eventStart => booking?.serviceStart ?? eventDate;
+
+  /// Last day of a multi-day booking; null for a single day.
+  DateTime? get eventEnd => booking?.serviceStart != null ? booking?.serviceEnd : null;
 }

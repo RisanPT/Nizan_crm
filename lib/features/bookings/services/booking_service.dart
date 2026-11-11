@@ -51,6 +51,7 @@ class BookingService {
     String? salesPersonId,
     String? createdBy,
     String? packageId,
+    bool secondLook = false,
   }) async {
     try {
       final response = await _dio.get(
@@ -79,6 +80,7 @@ class BookingService {
             'salesPersonId': salesPersonId,
           if (createdBy != null && createdBy.isNotEmpty) 'createdBy': createdBy,
           if (packageId != null && packageId.isNotEmpty) 'packageId': packageId,
+          if (secondLook) 'secondLook': 'yes',
         },
       );
       return PaginatedBookingsResponse.fromJson(

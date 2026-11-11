@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'expense_km_check.dart';
 import 'expense_split.dart';
@@ -122,7 +121,7 @@ class FuelExpense {
           ? RateCheck.fromJson(json['rateCheck'] as Map<String, dynamic>)
           : null,
     );
-    debugPrint('[FuelExpense] id=${expense.id} notes="${expense.notes}" raw_notes=${json['notes']}');
+
     return expense;
   }
 }

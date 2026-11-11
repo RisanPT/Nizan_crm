@@ -9,11 +9,13 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/features/accounts/controllers/salary_controller.dart';
 import 'package:nizan_crm/features/accounts/services/salary_service.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/payslip_download_button.dart';
 import 'package:nizan_crm/features/hr/data/timebox_models.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -592,10 +594,16 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                         color: Colors.green),
                   _buildSlipRow('Allowances', '+ ${_formatCurrency(salary.allowances)}',
                       color: Colors.green),
-                  _buildSlipRow('Bonus / Incentive', '+ ${_formatCurrency(salary.bonus)}',
+                  _buildSlipRow('Bonus', '+ ${_formatCurrency(salary.bonus)}',
                       color: Colors.green),
-                  _buildSlipRow('Deductions / Advances', '- ${_formatCurrency(salary.deductions)}',
-                      color: Colors.red),
+                  if ((salary.attendanceDeduction ?? 0) > 0) ...[
+                    _buildSlipRow('Attendance / Absence Deduction', '- ${_formatCurrency(salary.attendanceDeduction!.clamp(0, salary.deductions).toDouble())}',
+                        color: Colors.red),
+                    _buildSlipRow('Deductions / Advances', '- ${_formatCurrency((salary.deductions - salary.attendanceDeduction!.clamp(0, salary.deductions)).toDouble())}',
+                        color: Colors.red),
+                  ] else
+                    _buildSlipRow('Deductions / Advances', '- ${_formatCurrency(salary.deductions)}',
+                        color: Colors.red),
                   const Divider(height: 24),
                   _buildSlipRow(
                     'Net Payable Amount',
@@ -646,6 +654,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Close'),
             ),
+            PayslipDownloadButton(salary: salary),
           ],
         );
       },
@@ -804,6 +813,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             )
                           : const SizedBox.shrink(),
                     ) ?? const SizedBox.shrink(),
+                    // ── Lock / unlock the month ──
+                    _PayrollLockButton(month: filter.month, year: filter.year),
                   ],
                 ),
                 ),
@@ -1443,6 +1454,78 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Lock (finalise) or unlock the selected payroll month. A locked month can't
+/// be generated, edited, approved or deleted — only paid. Unlock is admin-only.
+class _PayrollLockButton extends ConsumerStatefulWidget {
+  final int month;
+  final int year;
+  const _PayrollLockButton({required this.month, required this.year});
+
+  @override
+  ConsumerState<_PayrollLockButton> createState() => _PayrollLockButtonState();
+}
+
+class _PayrollLockButtonState extends ConsumerState<_PayrollLockButton> {
+  bool _busy = false;
+
+  Future<void> _toggle(bool locked) async {
+    final label = DateFormat('MMMM y').format(DateTime(widget.year, widget.month));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(locked ? 'Unlock $label payroll?' : 'Lock $label payroll?'),
+        content: Text(locked
+            ? 'Slips for $label can be generated and edited again. Use only to correct a mistake.'
+            : 'After locking, slips for $label can no longer be generated, edited, approved or deleted — only paid. '
+                'All drafts must be approved first. Only an admin can unlock.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(locked ? 'Unlock' : 'Lock')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      final svc = ref.read(salaryServiceProvider);
+      final msg = locked
+          ? await svc.unlockMonth(month: widget.month, year: widget.year)
+          : await svc.lockMonth(month: widget.month, year: widget.year);
+      ref.invalidate(payrollLockProvider((widget.month, widget.year)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg), backgroundColor: Colors.green.shade700),
+        );
+      }
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lockAsync = ref.watch(payrollLockProvider((widget.month, widget.year)));
+    final isAdmin = ref.watch(authSessionProvider)?.role == 'admin';
+    final locked = lockAsync.value ?? false;
+    if (lockAsync.isLoading && lockAsync.value == null) return const SizedBox.shrink();
+    // Locked + not admin: show the state, no action.
+    if (locked && !isAdmin) {
+      return Chip(
+        avatar: const Icon(Icons.lock, size: 16),
+        label: const Text('Month locked'),
+        backgroundColor: Colors.blueGrey.shade50,
+      );
+    }
+    return OutlinedButton.icon(
+      onPressed: _busy ? null : () => _toggle(locked),
+      icon: Icon(locked ? Icons.lock_open : Icons.lock_outline, size: 16),
+      label: Text(_busy ? 'Please wait…' : (locked ? 'Unlock month' : 'Lock month')),
     );
   }
 }

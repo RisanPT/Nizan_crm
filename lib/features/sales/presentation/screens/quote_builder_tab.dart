@@ -22,6 +22,8 @@ import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 
+import 'sales_leads_screen.dart' show LeadPrefill, kEventTypes, showCreateLeadDialog;
+
 /// Bridal Quote Builder: the builder on the left, a live client-facing quote
 /// sheet on the right (stacked on phones). Prices come from the ERP package
 /// (district price for the chosen district) unless overridden in
@@ -860,6 +862,74 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     widget.onCreateInvoice(q.name, q.phone, district?.id, lines);
   }
 
+  /// Lead event type for a quote event: the same name when the lead form has
+  /// it, else the closest match, else 'Other' (the exact event goes in remarks).
+  String _leadEventType(String event) {
+    final e = event.trim().toLowerCase();
+    for (final t in kEventTypes) {
+      if (t.toLowerCase() == e) return t;
+    }
+    if (e.contains('haldi')) return 'Haldi';
+    if (e.contains('mehendi') || e.contains('mehndi')) return 'Mehendi';
+    if (e.contains('engagement')) return 'Engagement';
+    if (e.contains('reception')) return 'Reception';
+    if (e.contains('wedding') || e.contains('nikah')) return 'Wedding';
+    if (e.contains('save the date') || e.contains('shoot')) return 'Photoshoot';
+    return 'Other';
+  }
+
+  /// Opens the normal Add Lead form prefilled with this quote's client, event,
+  /// district and a summary of what was quoted. Nothing is saved until the
+  /// salesperson presses Save in that form.
+  Future<void> _createLead(_Quote q) async {
+    final r = <String>['From quote ${q.no} (${_fmtDate(q.today)})'];
+    DateTime? eventDate;
+    String event;
+    if (q.multi) {
+      final dated = [for (final d in q.program) if (d.date != null) d]
+        ..sort((a, b) => a.date!.compareTo(b.date!));
+      eventDate = dated.isEmpty ? null : dated.first.date;
+      event = dated.isNotEmpty ? dated.first.event : (q.program.isEmpty ? 'Wedding' : q.program.first.event);
+      for (final d in q.program) {
+        r.add('Day ${d.no}: ${d.date == null ? 'Date TBC' : _fmtDate(d.date!)} · ${d.event} · '
+            '${d.pkg?.name ?? 'Package TBC'}${d.amount == null ? '' : ' ${_inr(d.amount!)}'}');
+      }
+    } else {
+      eventDate = q.date;
+      event = q.event;
+      if (event.isNotEmpty) r.add('Event: $event');
+      if (q.pkgs.isNotEmpty) {
+        r.add('Packages: ${[
+          for (final p in q.pkgs)
+            '${p.name}${q.prices[p.id] == null ? '' : ' ${_inr(q.prices[p.id]!)}'}${p.id == q.rec ? ' (recommended)' : ''}',
+        ].join(', ')}');
+      }
+    }
+    if (q.lines.isNotEmpty) {
+      r.add('Add-ons: ${[for (final l in q.lines) l.qty > 1 ? '${l.addon.name} × ${l.qty}' : l.addon.name].join(', ')}');
+    }
+    if (q.travel > 0) r.add('Travel: ${_inr(q.travel)}');
+    if (q.discount > 0) r.add('Discount: ${_inr(q.discount)}');
+    if (q.multi) {
+      r.add('Total: ${_inr(q.programGrandTotal)}');
+    } else if (q.pkgs.isNotEmpty) {
+      r.add('Total: ${[for (final p in q.pkgs) '${p.name} ${_inr(q.totals[p.id]!.total)}'].join(' / ')}');
+    }
+    if (q.advance > 0) r.add('Advance quoted: ${_inr(q.advance)}');
+
+    await showCreateLeadDialog(
+      context,
+      LeadPrefill(
+        name: q.name,
+        phone: q.phone,
+        location: q.venue,
+        eventType: _leadEventType(event),
+        eventDate: eventDate,
+        remarks: r.join('\n'),
+      ),
+    );
+  }
+
   void _newQuote() {
     final oldDays = _days;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1263,6 +1333,14 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
                   : 'Create invoice (${q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first).name})',
           icon: Icons.receipt_long_rounded,
           onTap: (q.multi ? q.program.isEmpty : q.pkgs.isEmpty) ? null : () => _createInvoice(q, district),
+        ),
+        const SizedBox(height: 8),
+        // Customer took a quote first: turn it into a lead without retyping.
+        _Btn(
+          pal: pal,
+          label: 'Create lead from this quote',
+          icon: Icons.person_add_alt_1_rounded,
+          onTap: q.name.isEmpty && q.phone.isEmpty ? null : () => _createLead(q),
         ),
         const SizedBox(height: 8),
         _Btn(pal: pal, label: 'New quote', onTap: _newQuote),

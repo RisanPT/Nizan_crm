@@ -24,6 +24,47 @@ class LeaveService {
     }
   }
 
+  /// Whether the caller may edit leave types / holidays (HR-wide users only).
+  Future<bool> canEditMaster() async {
+    try {
+      final res = await _dio.get('/leave/types/access');
+      final data = res.data;
+      return data is Map && data['canEdit'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Create (id empty) or update a leave type.
+  Future<LeaveType> saveType({
+    String id = '',
+    required String name,
+    String code = '',
+    double annualQuota = 0,
+    bool paid = true,
+    bool carryForward = false,
+    double carryForwardMax = 0,
+    bool active = true,
+  }) async {
+    final body = {
+      'name': name,
+      'code': code,
+      'annualQuota': annualQuota,
+      'paid': paid,
+      'carryForward': carryForward,
+      'carryForwardMax': carryForwardMax,
+      'active': active,
+    };
+    try {
+      final res = id.isEmpty
+          ? await _dio.post('/leave/types', data: body)
+          : await _dio.put('/leave/types/$id', data: body);
+      return LeaveType.fromJson(res.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'save leave type');
+    }
+  }
+
   Future<void> seedTypes() async {
     try {
       await _dio.post('/leave/types/seed');
@@ -80,8 +121,8 @@ class LeaveService {
       final res = await _dio.post('/leave/apply', data: {
         if (employeeId != null && employeeId.isNotEmpty) 'employeeId': employeeId,
         if (leaveTypeId != null && leaveTypeId.isNotEmpty) 'leaveTypeId': leaveTypeId,
-        'fromDate': from.toIso8601String(),
-        'toDate': to.toIso8601String(),
+        'fromDate': '${from.year.toString().padLeft(4, '0')}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}',
+        'toDate': '${to.year.toString().padLeft(4, '0')}-${to.month.toString().padLeft(2, '0')}-${to.day.toString().padLeft(2, '0')}',
         'halfDay': halfDay,
         'reason': reason,
       });
@@ -91,9 +132,11 @@ class LeaveService {
     }
   }
 
-  Future<void> cancel(String id) async {
+  /// Cancel a pending request, or an approved one (owner before it starts;
+  /// a manager in scope any time).
+  Future<void> cancel(String id, {String reason = ''}) async {
     try {
-      await _dio.post('/leave/$id/cancel');
+      await _dio.post('/leave/$id/cancel', data: {if (reason.isNotEmpty) 'reason': reason});
     } catch (e) {
       throw AppException(e, action: 'cancel leave');
     }
@@ -155,6 +198,10 @@ final leaveYearProvider = StateProvider<int>((ref) => DateTime.now().year);
 
 final leaveTypesProvider =
     FutureProvider<List<LeaveType>>((ref) => ref.watch(leaveServiceProvider).getTypes());
+
+/// True for HR-wide users, who may edit leave types and holidays.
+final leaveMasterAccessProvider =
+    FutureProvider<bool>((ref) => ref.watch(leaveServiceProvider).canEditMaster());
 
 final myLeaveProvider = FutureProvider<List<LeaveRequest>>((ref) async {
   final y = ref.watch(leaveYearProvider);

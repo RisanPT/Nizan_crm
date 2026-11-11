@@ -27,6 +27,7 @@ import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/vehicle.dart';
 import 'package:nizan_crm/core/utils/whatsapp_service.dart';
+import 'package:nizan_crm/core/utils/booking_whatsapp.dart';
 import 'package:nizan_crm/features/reviews/services/review_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -893,7 +894,10 @@ class ManageBookingScreen extends HookConsumerWidget {
       );
 
       if (action == 'whatsapp') {
-        await WhatsAppService.sendInvoiceMessage(updatedBooking);
+        // Automated WhatsApp (TeamN Chat): team hand-over or send now.
+        if (context.mounted) {
+          await chooseAndSendBookingOnWhatsApp(context, ref, updatedBooking);
+        }
       } else if (action == 'client') {
         final filteredItems = updatedBooking.bookingItems
             .asMap()
@@ -1395,20 +1399,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                     label: const Text('Print'),
                   ),
                   12.w,
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      try {
-                        await WhatsAppService.sendInvoiceMessage(booking);
-                      } catch (e) {
-                        if (context.mounted) showErrorSnackBar(context, e);
-                      }
-                    },
-                    icon: const Icon(Icons.chat_outlined, size: 18),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                    ),
-                  ),
+                  // Sends the Booking Confirmation through TeamN Chat (the
+                  // automated WhatsApp) — same as the Bookings list icon.
+                  BookingWhatsAppButton(booking: booking),
                   12.w,
                   // Fetches (or creates) the review link for this booking and
                   // opens WhatsApp with a short review-request message.
@@ -1417,7 +1410,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                       try {
                         final link = await ref
                             .read(reviewServiceProvider)
-                            .getReviewLink(booking.id);
+                            .getReviewLink(booking.id, markSent: true);
                         // May have just created the review record.
                         ref.refreshData.reviews();
                         await WhatsAppService.sendReviewRequest(booking, link);

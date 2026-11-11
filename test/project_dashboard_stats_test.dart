@@ -44,7 +44,7 @@ Project _p(
         ]
       : depts,
   'departmentProgress': deptProgress,
-  if (cost != null) 'cost': cost,
+  'cost': ?cost,
   if (cost != null) 'costStatus': 'approved',
 });
 
@@ -62,7 +62,7 @@ ITTask _t(
   'projectId': project,
   'title': 'Task $id',
   'status': status,
-  if (parent != null) 'parentTaskId': parent,
+  'parentTaskId': ?parent,
   if (due != null) 'dueDate': due.toIso8601String(),
   if (created != null) 'createdAt': created.toIso8601String(),
   if (completed != null) 'completedAt': completed.toIso8601String(),

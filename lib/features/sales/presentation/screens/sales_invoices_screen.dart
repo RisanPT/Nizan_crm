@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/booking_amount_breakdown.dart';
+import 'package:nizan_crm/features/sales/utils/second_look.dart';
 import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -92,6 +94,8 @@ class SalesBookingsScreen extends HookConsumerWidget {
     final selectedCreatorId = useState<String>('');
     // Package filter — bookings using this package on any line. '' = all.
     final selectedPackageId = useState<String>('');
+    // Only bookings that include a second-look add-on (Hindu extra look / Christian Manthrakodi look).
+    final secondLookOnly = useState<bool>(false);
     final allPackages = ref.watch(packagesProvider).value ?? const <ServicePackage>[];
     final selectedPackage = allPackages
         .cast<ServicePackage?>()
@@ -148,6 +152,7 @@ class SalesBookingsScreen extends HookConsumerWidget {
       to: _ymd(dateTo.value),
       createdBy: selectedCreatorId.value.isEmpty ? null : selectedCreatorId.value,
       packageId: selectedPackageId.value.isEmpty ? null : selectedPackageId.value,
+      secondLook: secondLookOnly.value,
     );
     final pageParams = listParams(pageState.value, pageSize);
 
@@ -223,9 +228,11 @@ class SalesBookingsScreen extends HookConsumerWidget {
     bool matchesPackage(Booking b) =>
         selectedPackage == null || bookingUsesPackage(b, selectedPackage);
 
-    final geoFilteredAllBookings = allBookings
+    final baseFilteredBookings = allBookings
         .where((b) => bookingMatchesGeoFilters(b) && matchesDateRange(b) && matchesCreator(b) && matchesPackage(b))
         .toList();
+    final geoFilteredAllBookings =
+        secondLookOnly.value ? baseFilteredBookings.where(tookSecondLook).toList() : baseFilteredBookings;
 
     int countPackages(Iterable<Booking> bookings) {
       return bookings.fold(0, (sum, b) => sum + (b.bookingItems.isEmpty ? 1 : b.bookingItems.length));
@@ -255,6 +262,52 @@ class SalesBookingsScreen extends HookConsumerWidget {
       return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
     });
 
+
+    // The Financial Year dropdown scopes the list unless an explicit date range
+    // is set (the server does the same), so the CSV and the chip count follow it.
+    final hasExplicitRange = dateFrom.value != null || dateTo.value != null;
+    bool inScopeFy(Booking b) {
+      if (hasExplicitRange) return true;
+      final d = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+      return !d.isBefore(fyStart) && !d.isAfter(fyEnd);
+    }
+
+    final secondLookCountInScope =
+        baseFilteredBookings.where((b) => inScopeFy(b) && tookSecondLook(b)).length;
+
+    Future<void> exportSecondLookCsv() async {
+      final q = searchQuery.value.trim().toLowerCase();
+      final rows = geoFilteredAllBookings.where((b) {
+        if (!inScopeFy(b)) return false;
+        if (q.isEmpty) return true;
+        return b.customerName.toLowerCase().contains(q) ||
+            b.phone.toLowerCase().contains(q) ||
+            b.service.toLowerCase().contains(q) ||
+            b.displayBookingNumber.toLowerCase().contains(q);
+      }).toList()
+        ..sort((a, b) {
+          final da = useEventDateVal ? a.bookingDate : (a.createdAt ?? a.bookingDate);
+          final db = useEventDateVal ? b.bookingDate : (b.createdAt ?? b.bookingDate);
+          return db.compareTo(da);
+        });
+
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No bookings to export for the current filters.')),
+        );
+        return;
+      }
+      try {
+        await exportBookingsCsv(
+          rows,
+          periodLabel: hasExplicitRange ? 'date-range' : selectedFY.value,
+          secondLookOnly: secondLookOnly.value,
+        );
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      }
+    }
 
     // NOTE: the old all-time "Total Sales Value" tile was removed — showing an
     // all-time figure beside an FY figure (₹2.54Cr vs ₹2.51Cr) under near
@@ -1200,6 +1253,25 @@ class SalesBookingsScreen extends HookConsumerWidget {
                             pageState.value = 1;
                           },
                         ),
+                        // ── Second look (Hindu extra look / Christian Manthrakodi look add-ons) ──
+                        FilterChip(
+                          avatar: Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 16,
+                            color: secondLookOnly.value ? crmColors.primary : crmColors.textSecondary,
+                          ),
+                          label: Text('Took second look ($secondLookCountInScope)'),
+                          selected: secondLookOnly.value,
+                          onSelected: (v) {
+                            secondLookOnly.value = v;
+                            pageState.value = 1;
+                          },
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: exportSecondLookCsv,
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: Text(secondLookOnly.value ? 'Export second-look CSV' : 'Export CSV'),
+                        ),
                         // ── Added By (who entered the booking) Dropdown ──
                         if (canFilterByCreator) ...[
                           Container(
@@ -1614,6 +1686,22 @@ class SalesBookingsScreen extends HookConsumerWidget {
                               .map(
                                 (booking) => _MobileBookingCard(
                                   booking: booking,
+                                  onRowTap: () => showModalBottomSheet<void>(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    useSafeArea: true,
+                                    backgroundColor: crmColors.surface,
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                                    ),
+                                    builder: (sheetContext) => SizedBox(
+                                      height: MediaQuery.of(sheetContext).size.height * 0.88,
+                                      child: _QuickViewSidePanel(
+                                        booking: booking,
+                                        onClose: () => Navigator.of(sheetContext).pop(),
+                                      ),
+                                    ),
+                                  ),
                                   packageFilter: selectedPackage,
                                   isSelected: selectedIds.value.contains(
                                     booking.id,
@@ -1804,25 +1892,17 @@ class _QuickViewSidePanel extends StatelessWidget {
                 ),
                 24.h,
                 _DetailRow('Status', booking.status.toUpperCase(), crmColors),
-                _DetailRow('Advance', '₹${booking.advanceAmount}', crmColors),
-                _DetailRow('Total', '₹${booking.totalPrice}', crmColors),
-                _DetailRow('Balance', '₹${booking.totalPrice - booking.advanceAmount}', crmColors),
-                24.h,
-                Text(
-                  'Packages',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold, color: crmColors.textSecondary),
-                ),
-                12.h,
-                ...booking.bookingItems.map((item) => Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: crmColors.primary.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: crmColors.primary.withValues(alpha: 0.1)),
-                  ),
-                  child: Text(item.service, style: const TextStyle(fontWeight: FontWeight.w600)),
-                )),
+                if (tookSecondLook(booking))
+                  _DetailRow('Second look', 'Yes', crmColors),
+                8.h,
+                // Full money picture: packages, add-ons, discount, advance,
+                // collections and balance.
+                BookingAmountBreakdown(booking: booking),
+                if (booking.culture.isNotEmpty || booking.phone.isNotEmpty) ...[
+                  16.h,
+                  if (booking.phone.isNotEmpty) _DetailRow('Phone', booking.phone, crmColors),
+                  if (booking.culture.isNotEmpty) _DetailRow('Culture', booking.culture, crmColors),
+                ],
               ],
             ),
           ),

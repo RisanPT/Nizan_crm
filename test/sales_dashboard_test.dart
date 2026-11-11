@@ -1,342 +1,207 @@
-import 'dart:async';
-
+// Redesigned Sales Dashboard — widget tests with the server data stubbed.
+//   flutter test test/sales_dashboard_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:nizan_crm/features/bookings/data/booking.dart';
-import 'package:nizan_crm/core/models/crm_user.dart';
-import 'package:nizan_crm/features/sales/data/lead.dart';
-import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
+
 import 'package:nizan_crm/core/theme/app_theme.dart';
+import 'package:nizan_crm/features/sales/data/sales_overview.dart';
 import 'package:nizan_crm/features/sales/presentation/screens/sales_dashboard_screen.dart';
-import 'package:nizan_crm/features/sales/presentation/screens/sales_period_detail_screen.dart';
-import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
-import 'package:nizan_crm/services/user_service.dart';
+import 'package:nizan_crm/features/sales/services/sales_overview_service.dart';
 
-class _FakeBookingNotifier extends BookingNotifier {
-  _FakeBookingNotifier(this._items);
-  final List<Booking> _items;
+final _now = DateTime(2026, 11, 10, 15);
 
-  @override
-  FutureOr<List<Booking>> build() => _items;
+
+SalesOverview _data({bool countEntered = true, bool empty = false}) {
+  if (empty) {
+    return const SalesOverview(from: '2026-11-01', to: '2026-11-10');
+  }
+  return SalesOverview.fromJson({
+    'range': {'from': '2026-11-01', 'to': '2026-11-10'},
+    'selfScoped': false,
+    'kpis': {
+      'enquiries': countEntered ? 27 : null,
+      'enquiryDays': countEntered ? 1 : 0,
+      'days': 10,
+      'savedOnCountDays': 14,
+      'notSaved': countEntered ? 13 : 0,
+      'leads': 40,
+      'converted': 6,
+      'bookings': 3,
+      'orderValue': 145000,
+      'avgOrderValue': 48333.33,
+      'advance': 9000,
+      'collected': 20000,
+      'outstanding': 101000,
+      'conversion': 7.5,
+      'conversionBasis': 'leads',
+    },
+    'previous': {'leads': 30, 'bookings': 2, 'orderValue': 90000},
+    'alerts': {'notSaved': countEntered ? 13 : 0, 'overdueFollowUps': 5, 'todayCountEntered': countEntered},
+    'target': {
+      'month': 11,
+      'year': 2026,
+      'scope': 'team',
+      'bookingsTarget': 40,
+      'bookings': 18,
+      'valueTarget': 2500000,
+      'value': 820000,
+      'workingDays': 25,
+      'workingDaysElapsed': 8,
+      'expectedBookings': 12.8,
+      'expectedValue': 800000,
+    },
+    'funnel': {'leads': 40, 'contacted': 30, 'followUp': 15, 'qualified': 9, 'converted': 6, 'lost': 4},
+    'sources': [
+      {'channel': 'IG Leads — Main Page', 'enquiries': 18, 'saved': 9, 'notSaved': 9, 'leads': 25, 'converted': 4, 'bookings': 2, 'orderValue': 100000, 'conversion': 16},
+      {'channel': 'WhatsApp (Organic)', 'enquiries': 9, 'saved': 5, 'notSaved': 4, 'leads': 15, 'converted': 2, 'bookings': 0, 'orderValue': 0, 'conversion': 13.33},
+      {'channel': 'YouTube', 'enquiries': 0, 'saved': 0, 'notSaved': 0, 'leads': 0, 'converted': 0, 'bookings': 0, 'orderValue': 0, 'conversion': 0},
+    ],
+    'direct': {'bookings': 1, 'orderValue': 45000},
+    'trend': [
+      for (var d = 1; d <= 10; d++)
+        {
+          'day': '2026-11-${d.toString().padLeft(2, '0')}',
+          'enquiries': d == 10 && countEntered ? 27 : null,
+          'saved': d == 10 ? 14 : 0,
+          'leads': 4,
+          'bookings': d == 10 ? 3 : 0,
+          'orderValue': d == 10 ? 145000 : 0,
+        },
+    ],
+    'team': [
+      {
+        'id': 'u1', 'name': 'Safana', 'role': 'sales', 'leads': 22, 'converted': 4, 'calls': 30, 'followUps': 12,
+        'overdueFollowUps': 3, 'bookings': 2, 'orderValue': 100000,
+        'monthTarget': {'salesTarget': 1200000, 'salesValue': 500000, 'bookingsTarget': 20, 'bookings': 10},
+      },
+      {
+        'id': 'u2', 'name': 'Malavika', 'role': 'sales', 'leads': 18, 'converted': 2, 'calls': 21, 'followUps': 8,
+        'overdueFollowUps': 2, 'bookings': 0, 'orderValue': 0,
+        'monthTarget': {'salesTarget': 0, 'salesValue': 0, 'bookingsTarget': 0, 'bookings': 0},
+      },
+    ],
+    'othersCredited': {'bookings': 1, 'orderValue': 45000},
+    'recentLeads': [
+      {'id': 'l1', 'name': 'Bride A', 'phone': '9', 'source': 'IG Leads — Main Page', 'status': 'Follow-up', 'assignedTo': 'Safana', 'date': '2026-11-10'},
+    ],
+    'salespeople': [
+      {'id': 'u1', 'name': 'Safana'},
+      {'id': 'u2', 'name': 'Malavika'},
+    ],
+  });
 }
 
-Lead _lead({
-  required String id,
-  required String status,
-  String source = 'Instagram',
-  String district = 'Kozhikkode',
-  String pincode = '673001',
-  String? assignedTo,
-  DateTime? date,
-  String? bookingId,
-}) {
-  final d = date ?? DateTime.now();
-  return Lead(
-    id: id,
-    name: 'Lead $id',
-    phone: '98954998$id',
-    source: source,
-    location: 'Calicut',
-    leadType: 'Individual',
-    leadDate: d,
-    enquiryDate: d,
-    assignedTo: assignedTo,
-    bookingId: bookingId,
-    status: status,
-    district: district,
-    pincode: pincode,
-    reason: '',
-    remarks: '',
-    createdAt: d,
-    updatedAt: d,
-  );
-}
-
-Booking _booking(String id) {
-  final now = DateTime.now();
-  return Booking(
-    id: id,
-    customerName: 'Client $id',
-    phone: '9895499872',
-    service: 'Platinum',
-    bookingDate: now,
-    serviceStart: now,
-    serviceEnd: now.add(const Duration(hours: 1)),
-    totalPrice: 24500,
-    advanceAmount: 3000,
-    createdAt: now,
-  );
-}
-
-Widget _harness(List<dynamic> overrides, {Widget? screen}) {
-  return ProviderScope(
-    overrides: overrides.cast(),
+Future<void> _pump(WidgetTester tester, Size size, SalesOverview data, {List<SalesOverviewQuery>? seen}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(ProviderScope(
+    overrides: [
+      salesOverviewProvider.overrideWith((ref, q) async {
+        seen?.add(q);
+        return data;
+      }),
+    ],
     child: MaterialApp(
       theme: ThemeData(extensions: [AppTheme.crmThemeExtension]),
-      home: Scaffold(body: screen ?? const SalesDashboardScreen()),
+      home: Scaffold(body: SalesDashboardScreen(now: _now)),
     ),
-  );
+  ));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openTab(WidgetTester tester, int i) async {
+  await tester.ensureVisible(find.byKey(ValueKey('tab-$i')));
+  await tester.tap(find.byKey(ValueKey('tab-$i')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
-  testWidgets('renders with data without layout errors', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
+  for (final size in const [Size(390, 2600), Size(1440, 2200)]) {
+    final label = size.width < 600 ? 'phone' : 'desktop';
 
-    await tester.pumpWidget(_harness([
-      bookingProvider.overrideWith(
-          () => _FakeBookingNotifier([_booking('1'), _booking('2')])),
-      leadsProvider.overrideWith((ref) async => [
-            _lead(id: '1', status: 'Converted', assignedTo: 'u1'),
-            _lead(id: '2', status: 'New', assignedTo: 'u1'),
-            _lead(id: '3', status: 'Lost', source: 'Website'),
-          ]),
-      crmUsersProvider.overrideWith((ref) async => [
-            const CrmUser(
-                id: 'u1',
-                name: 'Amal',
-                email: 'a@b.c',
-                role: 'sales',
-                active: true),
-          ]),
-    ]));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('Sales Manager Dashboard'), findsOneWidget);
-    expect(find.text('Lead & Conversion Overview'), findsOneWidget);
-    expect(find.text('Recent Leads'), findsOneWidget);
-  });
-
-  testWidgets('renders on a narrow screen without overflow', (tester) async {
-    tester.view.physicalSize = const Size(420, 1600);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(_harness([
-      bookingProvider.overrideWith(() => _FakeBookingNotifier([_booking('1')])),
-      leadsProvider
-          .overrideWith((ref) async => [_lead(id: '1', status: 'Converted')]),
-      crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-    ]));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('day-wise report and FY/month pickers render', (tester) async {
-    tester.view.physicalSize = const Size(1600, 2200);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    final now = DateTime.now();
-    final thisMonth = DateTime(now.year, now.month, 1);
-
-    await tester.pumpWidget(_harness([
-      bookingProvider.overrideWith(() => _FakeBookingNotifier([_booking('1')])),
-      leadsProvider.overrideWith((ref) async => [
-            _lead(id: '1', status: 'Converted', date: thisMonth),
-            _lead(id: '2', status: 'New', date: thisMonth),
-          ]),
-      crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-    ]));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    // Defaults to the current month => day-wise report.
-    expect(find.text('Day-wise Report'), findsOneWidget);
-    expect(find.text('TOTAL'), findsOneWidget);
-
-    // Open the month picker (second dropdown) and choose Full Year — the
-    // report should switch from day buckets to month buckets.
-    await tester.tap(find.byType(DropdownButton<int>).last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Full Year').last);
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('Month-wise Report'), findsOneWidget);
-    expect(find.text('Day-wise Report'), findsNothing);
-
-    // Guard against unescaped-interpolation regressions: no label may leak a
-    // raw Dart template like '\$fyStartYear' into the UI.
-    final leaked = tester
-        .widgetList<Text>(find.byType(Text))
-        .map((t) => t.data ?? '')
-        .where((s) => s.contains(r'$'))
-        .toList();
-    expect(leaked, isEmpty, reason: 'Uninterpolated text rendered: $leaked');
-  });
-
-  _periodDetailTests();
-
-  testWidgets('revenue is attributed through the lead-booking link',
-      (tester) async {
-    tester.view.physicalSize = const Size(1700, 2400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    // Two bookings worth 24,500 each; only ONE is linked to a converted lead,
-    // so total revenue is 49,000 but lead-attributed revenue is 24,500.
-    await tester.pumpWidget(_harness([
-      bookingProvider.overrideWith(
-          () => _FakeBookingNotifier([_booking('1'), _booking('2')])),
-      leadsProvider.overrideWith((ref) async => [
-            _lead(id: '1', status: 'Converted', bookingId: '1'),
-            _lead(id: '2', status: 'New'),
-          ]),
-      crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-    ]));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('From Leads'), findsOneWidget);
-    // 24,500 of 49,000 == 50%.
-    expect(find.text('50% of revenue'), findsOneWidget);
-  });
-
-  testWidgets('KPI cards do not overflow at desktop widths', (tester) async {
-    // Mirrors the real app: ~1990 logical px viewport minus a 340px sidebar.
-    // Sweep the desktop range: the 6-column KPI grid must never overflow,
-    // and text scaling nudges the content taller than the test default.
-    for (final w in const [1250.0, 1400.0, 1650.0, 1920.0]) {
-      tester.view.physicalSize = Size(w, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      // 1.1x text scaling stands in for browsers rendering slightly taller
-      // than the test default — that's what surfaced this in the real app.
-      await tester.pumpWidget(MediaQuery(
-        data: const MediaQueryData(textScaler: TextScaler.linear(1.3)),
-        child: _harness([
-          bookingProvider.overrideWith(
-              () => _FakeBookingNotifier([_booking('1'), _booking('2')])),
-          leadsProvider.overrideWith((ref) async => [
-                _lead(id: '1', status: 'Converted', bookingId: '1'),
-                _lead(id: '2', status: 'New'),
-              ]),
-          crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-        ]),
-      ));
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull, reason: 'overflow at width $w');
-    }
-  });
-
-  testWidgets('renders with no data at all', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(_harness([
-      bookingProvider.overrideWith(() => _FakeBookingNotifier([])),
-      leadsProvider.overrideWith((ref) async => <Lead>[]),
-      crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-    ]));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.text('Sales Manager Dashboard'), findsOneWidget);
-  });
-}
-
-
-void _periodDetailTests() {
-  group('Sales period drill-down', () {
-    for (final mode in const ['today', 'week']) {
-      testWidgets('$mode view renders with data', (tester) async {
-        tester.view.physicalSize = const Size(1500, 2200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
-
-        await tester.pumpWidget(_harness(
-          [
-            bookingProvider
-                .overrideWith(() => _FakeBookingNotifier([_booking('1')])),
-            leadsProvider.overrideWith((ref) async => [
-                  _lead(id: '1', status: 'Converted', assignedTo: 'u1'),
-                  _lead(id: '2', status: 'New'),
-                ]),
-            crmUsersProvider.overrideWith((ref) async => [
-                  const CrmUser(
-                      id: 'u1',
-                      name: 'Amal',
-                      email: 'a@b.c',
-                      role: 'sales',
-                      active: true),
-                ]),
-          ],
-          screen: SalesPeriodDetailScreen(mode: mode),
-        ));
-        await tester.pumpAndSettle();
-
-        expect(tester.takeException(), isNull);
-        expect(find.text(mode == 'week' ? 'This Week' : "Today's Sales"),
-            findsWidgets);
-        expect(find.text('By Salesperson'), findsOneWidget);
-      });
-
-      testWidgets('$mode view renders empty and narrow', (tester) async {
-        tester.view.physicalSize = const Size(400, 1800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
-
-        await tester.pumpWidget(_harness(
-          [
-            bookingProvider.overrideWith(() => _FakeBookingNotifier([])),
-            leadsProvider.overrideWith((ref) async => <Lead>[]),
-            crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-          ],
-          screen: SalesPeriodDetailScreen(mode: mode),
-        ));
-        await tester.pumpAndSettle();
-
-        expect(tester.takeException(), isNull);
-      });
-    }
-
-    testWidgets('specific-day view renders that date', (tester) async {
-      tester.view.physicalSize = const Size(1500, 2000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      final target = DateTime(2026, 7, 8);
-      await tester.pumpWidget(_harness(
-        [
-          bookingProvider.overrideWith(() => _FakeBookingNotifier([])),
-          leadsProvider.overrideWith(
-              (ref) async => [_lead(id: '1', status: 'New', date: target)]),
-          crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-        ],
-        screen: SalesPeriodDetailScreen(mode: 'day', date: target),
-      ));
-      await tester.pumpAndSettle();
-
+    testWidgets('$label: header, alerts, target, key numbers — no overflow', (tester) async {
+      await _pump(tester, size, _data());
       expect(tester.takeException(), isNull);
-      expect(find.text('8 July 2026'), findsOneWidget);
-      // The lead dated 8 Jul must appear in that day's list.
-      expect(find.text('Leads (1)'), findsOneWidget);
+      expect(find.text('Sales dashboard'), findsOneWidget);
+      expect(find.text('13 enquiries not saved as leads'), findsOneWidget);
+      expect(find.text('5 follow-ups overdue'), findsOneWidget);
+      expect(find.text("Today's team count is in"), findsOneWidget);
+      expect(find.text('Team target · November 2026'), findsOneWidget);
+      expect(find.text('On pace'), findsNWidgets(2)); // 18 ≥ 12.8 and ₹8.2L ≥ ₹8L
+      expect(find.text('27'), findsWidgets);
+      expect(find.textContaining('14 saved · 13 not saved'), findsOneWidget);
+      expect(find.textContaining('+1 vs previous period'), findsOneWidget);
+      expect(find.text('₹1.45L'), findsWidgets);
     });
 
-    testWidgets('dashboard shows Today and This Week shortcuts',
-        (tester) async {
-      tester.view.physicalSize = const Size(1500, 2400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(_harness([
-        bookingProvider.overrideWith(() => _FakeBookingNotifier([_booking('1')])),
-        leadsProvider
-            .overrideWith((ref) async => [_lead(id: '1', status: 'New')]),
-        crmUsersProvider.overrideWith((ref) async => <CrmUser>[]),
-      ]));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-      expect(find.text('Today'), findsWidgets);
-      expect(find.text('This Week'), findsWidgets);
+    testWidgets('$label: every tab renders without overflow', (tester) async {
+      await _pump(tester, size, _data());
+      for (var i = 0; i < 4; i++) {
+        await _openTab(tester, i);
+        expect(tester.takeException(), isNull, reason: 'tab $i');
+      }
+      await _openTab(tester, 1);
+      expect(find.text('By channel'), findsOneWidget);
+      expect(find.text('Direct / no lead'), findsOneWidget);
+      expect(find.text('YouTube'), findsNothing); // empty channels are hidden
+      await _openTab(tester, 2);
+      expect(find.text('Team leaderboard'), findsOneWidget);
+      expect(find.text('Not credited to a salesperson'), findsOneWidget);
+      expect(find.text('No target'), findsOneWidget); // Malavika
+      await _openTab(tester, 3);
+      expect(find.text('Day-by-day report'), findsOneWidget);
     });
+
+    testWidgets('$label: no data at all', (tester) async {
+      await _pump(tester, size, _data(empty: true));
+      expect(tester.takeException(), isNull);
+      expect(find.text('No target set for this month.'), findsOneWidget);
+      for (var i = 0; i < 4; i++) {
+        await _openTab(tester, i);
+        expect(tester.takeException(), isNull, reason: 'tab $i');
+      }
+    });
+  }
+
+  testWidgets("today's count missing shows a call to enter it", (tester) async {
+    await _pump(tester, const Size(1440, 2200), _data(countEntered: false));
+    // This month ends today, so the reminder shows.
+    expect(find.text("Today's team lead count isn't entered yet"), findsOneWidget);
+    expect(find.text('—'), findsWidgets); // enquiries tile
+    expect(find.text('not entered for this period'), findsOneWidget);
+  });
+
+  testWidgets('period chips and salesperson filter change the query', (tester) async {
+    final seen = <SalesOverviewQuery>[];
+    await _pump(tester, const Size(1440, 2200), _data(), seen: seen);
+    expect(seen.last, (from: '2026-11-01', to: '2026-11-10', salesPersonId: null));
+
+    await tester.tap(find.byKey(const ValueKey('period-today')));
+    await tester.pumpAndSettle();
+    expect(seen.last.from, '2026-11-10');
+    expect(seen.last.to, '2026-11-10');
+
+    await tester.tap(find.byKey(const ValueKey('period-week')));
+    await tester.pumpAndSettle();
+    expect(seen.last.from, '2026-11-09'); // Monday
+
+    await tester.tap(find.byKey(const ValueKey('period-lastMonth')));
+    await tester.pumpAndSettle();
+    expect((seen.last.from, seen.last.to), ('2026-10-01', '2026-10-31'));
+
+    await tester.tap(find.byKey(const ValueKey('salesperson-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Malavika').last);
+    await tester.pumpAndSettle();
+    expect(seen.last.salesPersonId, 'u2');
+  });
+
+  test('period ranges', () {
+    final n = DateTime(2026, 1, 3); // a Saturday
+    expect(salesPeriodRange(SalesPeriod.week, n).from, DateTime(2025, 12, 29));
+    expect(salesPeriodRange(SalesPeriod.lastMonth, n).from, DateTime(2025, 12, 1));
+    expect(salesPeriodRange(SalesPeriod.lastMonth, n).to, DateTime(2025, 12, 31));
   });
 }

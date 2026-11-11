@@ -1,4 +1,4 @@
-import 'package:nizan_crm/core/config/sales_rules.dart' as rules;
+﻿import 'package:nizan_crm/core/config/sales_rules.dart' as rules;
 
 class BookingAssignment {
   final String employeeId;
@@ -576,6 +576,7 @@ class Booking {
   final double collectedAmount;
   // GST invoice fields
   final String paymentMode; // e.g. 'UPI', 'Cash', 'Card'
+  final String advanceScreenshotUrl;
   final String hsnCode; // HSN/SAC code, default 998361 for beauty services
   // Multiple outfit looks (replaces / supersedes outfitDetails)
   final List<OutfitLook> outfitLooks;
@@ -657,6 +658,7 @@ class Booking {
     this.pocPhone = '',
     this.collectedAmount = 0,
     this.paymentMode = '',
+    this.advanceScreenshotUrl = '',
     this.hsnCode = '998361',
     this.outfitLooks = const [],
     this.createdByName = '',
@@ -1085,6 +1087,7 @@ class Booking {
       pocName: json['pocName'] as String? ?? '',
       pocPhone: json['pocPhone'] as String? ?? '',
       paymentMode: json['paymentMode'] as String? ?? '',
+      advanceScreenshotUrl: json['advanceScreenshotUrl'] as String? ?? '',
       hsnCode: json['hsnCode'] as String? ?? '998361',
       outfitLooks: _parseOutfitLooks(json),
       createdByName: json['createdByName'] as String? ?? '',
@@ -1154,6 +1157,7 @@ class Booking {
       'pocName': pocName,
       'pocPhone': pocPhone,
       'paymentMode': paymentMode,
+      'advanceScreenshotUrl': advanceScreenshotUrl,
       'hsnCode': hsnCode,
       'outfitLooks': outfitLooks.map((l) => l.toJson()).toList(),
       // Keep legacy field in sync so old PDF/print code still works
@@ -1225,6 +1229,7 @@ class Booking {
     String? pocPhone,
     double? collectedAmount,
     String? paymentMode,
+    String? advanceScreenshotUrl,
     String? hsnCode,
     List<OutfitLook>? outfitLooks,
     String? createdByName,
@@ -1297,6 +1302,7 @@ class Booking {
       pocPhone: pocPhone ?? this.pocPhone,
       collectedAmount: collectedAmount ?? this.collectedAmount,
       paymentMode: paymentMode ?? this.paymentMode,
+      advanceScreenshotUrl: advanceScreenshotUrl ?? this.advanceScreenshotUrl,
       hsnCode: hsnCode ?? this.hsnCode,
       outfitLooks: outfitLooks ?? this.outfitLooks,
       createdByName: createdByName ?? this.createdByName,

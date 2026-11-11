@@ -43,7 +43,7 @@ Project _p(
       'managerId': {'_id': 'm1', 'name': 'Mira Nair'},
       'startDate': _iso(start ?? _in(-3)),
       if (end != null) 'endDate': _iso(end),
-      if (targetYear != null) 'targetYear': targetYear,
+      'targetYear': ?targetYear,
       'departments': [
         {'name': 'Marketing', 'role': 'owner', 'status': 'accepted'},
       ],
@@ -65,7 +65,7 @@ class _FakeProjects extends ProjectService {
 
   @override
   Future<Project> saveProject(Map<String, dynamic> body, {String? id}) async {
-    saved.add({...body, if (id != null) '_id': id});
+    saved.add({...body, '_id': ?id});
     return _p('new', body['name'] as String? ?? 'x');
   }
 }

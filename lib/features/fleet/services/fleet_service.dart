@@ -67,6 +67,20 @@ class FleetService {
     }
   }
 
+  /// Verifies the artist's 4-digit trip OTP while the trip is running (once
+  /// the artist is in the car). Required before the trip can be closed.
+  Future<FleetJob> verifyArtistOtp(String jobId, String otp) async {
+    try {
+      final response = await _dio.post(
+        '/fleet/driver/verify-otp/$jobId',
+        data: {'artistOtp': otp.trim()},
+      );
+      return FleetJob.fromJson(response.data['job']);
+    } catch (e) {
+      throw AppException(e, action: 'verify the artist OTP');
+    }
+  }
+
   /// Completes the trip with the vehicle's ending odometer reading. With
   /// [startNextJobId], the server also starts that next trip of the day
   /// (at [nextStartKm], or at [endKm] when it's the same vehicle).
@@ -77,6 +91,8 @@ class FleetService {
     String? parkedLocation,
     String? startNextJobId,
     double? nextStartKm,
+    // The artist's trip OTP, when it wasn't verified earlier in the trip.
+    String? artistOtp,
   }) async {
     try {
       final response = await _dio.post(
@@ -86,6 +102,8 @@ class FleetService {
           'parkedLocation': ?parkedLocation,
           'startNextJobId': ?startNextJobId,
           'nextStartKm': ?nextStartKm,
+          if (artistOtp != null && artistOtp.trim().isNotEmpty)
+            'artistOtp': artistOtp.trim(),
         },
       );
       final next = response.data['nextJob'];

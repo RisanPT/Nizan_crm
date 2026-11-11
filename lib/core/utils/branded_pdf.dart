@@ -99,8 +99,11 @@ pw.Widget _footer(pw.Context ctx) {
   );
 }
 
-pw.Widget _sectionTable(PdfSection s) {
-  return pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+// Returned flat (not wrapped in a Column): a Column can't split across pages,
+// so a section taller than one page made MultiPage loop into
+// TooManyPagesException. The Table itself is splittable.
+List<pw.Widget> _sectionTable(PdfSection s) {
+  return [
     pw.SizedBox(height: 16),
     if (s.title.trim().isNotEmpty) ...[
       pw.Text(pdfSafe(s.title),
@@ -126,7 +129,7 @@ pw.Widget _sectionTable(PdfSection s) {
         for (var i = 1; i < s.headers.length; i++) i: pw.Alignment.centerRight,
       },
     ),
-  ]);
+  ];
 }
 
 /// Build a branded multi-section report as PDF bytes.
@@ -138,13 +141,14 @@ Future<Uint8List> buildBrandedReportBytes({
   final logo = await _logo();
   final doc = pw.Document(title: title);
   doc.addPage(pw.MultiPage(
+    maxPages: 500, // default 20 is too low for month-range ledgers
     pageFormat: PdfPageFormat.a4,
     margin: const pw.EdgeInsets.fromLTRB(30, 30, 30, 34),
     header: (ctx) => ctx.pageNumber == 1
         ? _header(logo, title, subtitle)
         : pw.SizedBox(height: 0),
     footer: _footer,
-    build: (ctx) => [for (final s in sections) _sectionTable(s)],
+    build: (ctx) => [for (final s in sections) ..._sectionTable(s)],
   ));
   return doc.save();
 }

@@ -134,9 +134,21 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
     }
   }
 
+  /// The query shown on screen (set in build). Exports re-fetch it first so
+  /// the file always has the latest numbers — e.g. a manual lead count that
+  /// was edited after this dialog loaded.
+  SalesEodQuery? _query;
+
+  Future<SalesEodReport> _latest(SalesEodReport shown) async {
+    final q = _query;
+    if (q == null) return shown;
+    return ref.refresh(salesEodReportProvider(q).future);
+  }
+
   Future<void> _handleDownloadPdf(SalesEodReport report) async {
     setState(() => _isDownloading = true);
     try {
+      report = await _latest(report);
       await downloadSalesEodPdf(report);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -153,9 +165,27 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
     }
   }
 
+  Future<void> _handleDownloadCsv(SalesEodReport report) async {
+    try {
+      report = await _latest(report);
+      await downloadSalesEodCsv(report);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('EOD CSV for ${report.date} downloaded successfully.'),
+            backgroundColor: const Color(0xFF16A34A),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
+
   Future<void> _handlePrintPdf(SalesEodReport report) async {
     setState(() => _isPrinting = true);
     try {
+      report = await _latest(report);
       await printSalesEodPdf(report);
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
@@ -166,6 +196,7 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
 
   Future<void> _handleCopySummary(SalesEodReport report) async {
     try {
+      report = await _latest(report);
       final text = formatSalesEodWhatsAppText(report);
       await Clipboard.setData(ClipboardData(text: text));
 
@@ -216,6 +247,7 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
       salesPersonId: isSalesExec ? null : _selectedSalesPersonId,
     );
 
+    _query = query;
     final asyncReport = ref.watch(salesEodReportProvider(query));
     final usersAsync = ref.watch(crmUsersProvider);
 
@@ -276,12 +308,16 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                         children: [
                           Row(
                             children: [
-                              Text(
-                                'End of Day (EOD) Report',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: crm.textPrimary,
+                              Flexible(
+                                child: Text(
+                                  'End of Day (EOD) Report',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: crm.textPrimary,
+                                  ),
                                 ),
                               ),
                               if (isToday) ...[
@@ -373,8 +409,10 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                     ),
 
                     // Quick Chips & Custom Range
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         _QuickDateChip(
                           label: 'Today',
@@ -384,7 +422,6 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                             _selectedDateRange = null;
                           }),
                         ),
-                        const SizedBox(width: 6),
                         _QuickDateChip(
                           label: 'Yesterday',
                           isSelected: isYesterday,
@@ -393,7 +430,6 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                             _selectedDateRange = null;
                           }),
                         ),
-                        const SizedBox(width: 6),
                         // Custom Range Button
                         InkWell(
                           onTap: _pickDateRange,
@@ -432,7 +468,6 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                           ),
                         ),
                         if (_isRange) ...[
-                          const SizedBox(width: 4),
                           IconButton(
                             icon: const Icon(Icons.close_rounded, size: 16),
                             tooltip: 'Reset to Single Day',
@@ -473,9 +508,15 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                                   for (final u in salesUsers)
                                     DropdownMenuItem<String?>(
                                       value: u.id,
-                                      child: Text(
-                                        '${u.name} (${u.role})',
-                                        style: const TextStyle(fontSize: 12.5),
+                                      // Capped so a long name can't push the picker off a phone screen.
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(maxWidth: 220),
+                                        child: Text(
+                                          '${u.name} (${u.role})',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(fontSize: 12.5),
+                                        ),
                                       ),
                                     ),
                                 ],
@@ -706,32 +747,37 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                 ),
                 child: Row(
                   children: [
-                    // Copy Summary Button
-                    OutlinedButton.icon(
-                      icon: Icon(
-                        _isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
-                        size: 16,
-                        color: _isCopied ? const Color(0xFF16A34A) : const Color(0xFF601A29),
-                      ),
-                      label: Text(
-                        _isCopied ? 'Copied!' : 'Copy Summary',
-                        style: TextStyle(
-                          color: _isCopied ? const Color(0xFF16A34A) : crm.textPrimary,
-                          fontWeight: _isCopied ? FontWeight.bold : FontWeight.w600,
+                    // Copy Summary Button (Flexible: on a phone the labels
+                    // shorten with an ellipsis instead of overflowing)
+                    Flexible(
+                      child: OutlinedButton.icon(
+                        icon: Icon(
+                          _isCopied ? Icons.check_circle_rounded : Icons.copy_rounded,
+                          size: 16,
+                          color: _isCopied ? const Color(0xFF16A34A) : const Color(0xFF601A29),
                         ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        side: BorderSide(
-                          color: _isCopied ? const Color(0xFF16A34A) : crm.border,
-                          width: _isCopied ? 1.5 : 1,
+                        label: Text(
+                          _isCopied ? 'Copied!' : 'Copy Summary',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: _isCopied ? const Color(0xFF16A34A) : crm.textPrimary,
+                            fontWeight: _isCopied ? FontWeight.bold : FontWeight.w600,
+                          ),
                         ),
-                        backgroundColor: _isCopied ? const Color(0xFF16A34A).withValues(alpha: 0.1) : null,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          side: BorderSide(
+                            color: _isCopied ? const Color(0xFF16A34A) : crm.border,
+                            width: _isCopied ? 1.5 : 1,
+                          ),
+                          backgroundColor: _isCopied ? const Color(0xFF16A34A).withValues(alpha: 0.1) : null,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: asyncReport.hasValue
+                            ? () => _handleCopySummary(asyncReport.requireValue)
+                            : null,
                       ),
-                      onPressed: asyncReport.hasValue
-                          ? () => _handleCopySummary(asyncReport.requireValue)
-                          : null,
                     ),
                     const SizedBox(width: 10),
 
@@ -754,31 +800,53 @@ class _SalesEodDialogState extends ConsumerState<_SalesEodDialog> {
                           : null,
                     ),
 
-                    const Spacer(),
+                    const SizedBox(width: 10),
 
-                    // Primary: Download PDF Button
-                    ElevatedButton.icon(
-                      icon: _isDownloading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            )
-                          : const Icon(Icons.download_rounded, size: 18, color: Colors.white),
-                      label: Text(
-                        _isDownloading ? 'Generating...' : 'Download PDF',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF601A29), // Team N Maroon
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-                        elevation: 0,
+                    // Download CSV
+                    IconButton.outlined(
+                      icon: const Icon(Icons.table_view_rounded, size: 18),
+                      tooltip: 'Download CSV',
+                      style: IconButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(color: crm.border),
                       ),
-                      onPressed: asyncReport.hasValue && !_isDownloading
-                          ? () => _handleDownloadPdf(asyncReport.requireValue)
+                      onPressed: asyncReport.hasValue
+                          ? () => _handleDownloadCsv(asyncReport.requireValue)
                           : null,
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Primary: Download PDF Button (right-aligned in the space left)
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton.icon(
+                          icon: _isDownloading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                )
+                              : const Icon(Icons.download_rounded, size: 18, color: Colors.white),
+                          label: Text(
+                            _isDownloading ? 'Generating...' : 'Download PDF',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF601A29), // Team N Maroon
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: asyncReport.hasValue && !_isDownloading
+                              ? () => _handleDownloadPdf(asyncReport.requireValue)
+                              : null,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -1011,15 +1079,32 @@ class _BookingsList extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          b.customerName,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: crm.textPrimary),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  b.customerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: crm.textPrimary),
+                                ),
+                              ),
+                              if (b.bookingNumber.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    '#${b.bookingNumber}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11, color: crm.textSecondary),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        if (b.bookingNumber.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Text('#${b.bookingNumber}', style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-                        ],
-                        const Spacer(),
+                        const SizedBox(width: 8),
                         Text(
                           _currFmt.format(b.totalPrice),
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: Color(0xFF16A34A)),
@@ -1029,8 +1114,15 @@ class _BookingsList extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Text('${b.service}  ·  ${b.phone}', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                        const Spacer(),
+                        Expanded(
+                          child: Text(
+                            '${b.service}  ·  ${b.phone}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Text('Adv: ${_currFmt.format(b.advanceAmount)}', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
                       ],
                     ),
@@ -1107,29 +1199,50 @@ class _ActivityList extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          a.leadName,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: crm.textPrimary),
-                        ),
-                        if (a.leadPhone.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Text('(${a.leadPhone})', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
-                        ],
-                        const Spacer(),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isConnected
-                                ? const Color(0xFF16A34A).withValues(alpha: 0.12)
-                                : const Color(0xFFD97706).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  a.leadName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: crm.textPrimary),
+                                ),
+                              ),
+                              if (a.leadPhone.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    '(${a.leadPhone})',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          child: Text(
-                            a.callResponse.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.bold,
-                              color: isConnected ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isConnected
+                                  ? const Color(0xFF16A34A).withValues(alpha: 0.12)
+                                  : const Color(0xFFD97706).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              a.callResponse.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: isConnected ? const Color(0xFF16A34A) : const Color(0xFFD97706),
+                              ),
                             ),
                           ),
                         ),
@@ -1398,12 +1511,16 @@ class _EodSpreadsheetView extends StatelessWidget {
               ['Paid Ads Leads', '${report.paidAdsLeads.today.toInt()}', '${report.paidAdsLeads.mtd.toInt()}'],
               if (report.trialCampaignLeads.today > 0 || report.trialCampaignLeads.mtd > 0)
                 ['Trial Campaign Leads', '${report.trialCampaignLeads.today.toInt()}', '${report.trialCampaignLeads.mtd.toInt()}'],
+              if (report.otherLeads.today > 0 || report.otherLeads.mtd > 0)
+                ['Other Leads (YouTube, Reference, Walk-in…)', '${report.otherLeads.today.toInt()}', '${report.otherLeads.mtd.toInt()}'],
               ['Leads Contacted', '${report.leadsContacted.today.toInt()}', '${report.leadsContacted.mtd.toInt()}'],
               ['Follow-ups Done', '${report.followUpsDone.today.toInt()}', '${report.followUpsDone.mtd.toInt()}'],
               ['Contacted → Booking %', '${report.contactedToBookingPct.today.toStringAsFixed(1)}%', '${report.contactedToBookingPct.mtd.toStringAsFixed(1)}%'],
               ['Team Missed Leads (IG – WhatsApp)', '${report.teamMissedLeads.today.toInt()}', '(${report.teamMissedLeads.mtd.toInt()})'],
             ],
           ),
+          const SizedBox(height: 8),
+          _LeadCountCheckBox(report: report, crm: crm, periodLabel: periodCol),
           const SizedBox(height: 14),
 
           // ── Section 5: TRIAL BOOKING CAMPAIGN ──
@@ -1460,6 +1577,10 @@ class _TeamLedgerTableView extends StatelessWidget {
       );
     }
 
+    final teamCountDates = {
+      for (final r in report.ledgerRows)
+        if (r.isTeamCount) r.date,
+    };
     final headers = [
       'Date',
       'Sales Person',
@@ -1537,18 +1658,28 @@ class _TeamLedgerTableView extends StatelessWidget {
                     ],
                   ),
 
-                // Rep Rows
+                // Rep Rows (plus one "Team — manual lead count" row on days
+                // with a manual count; salesperson rows then show "—" for
+                // leads, since the count is a team number).
                 for (final (idx, r) in report.ledgerRows.indexed)
                   DataRow(
-                    color: WidgetStateProperty.all(idx.isEven ? crm.surface : crm.background),
+                    color: WidgetStateProperty.all(r.isTeamCount
+                        ? const Color(0xFFFFF7E6)
+                        : (idx.isEven ? crm.surface : crm.background)),
                     cells: [
                       DataCell(Text(r.date, style: const TextStyle(fontSize: 11.5))),
-                      DataCell(Text(r.salesPersonName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                      DataCell(Center(child: Text('${r.whatsappLeads}', style: const TextStyle(fontSize: 12)))),
-                      DataCell(Center(child: Text('${r.igMainLeads}', style: const TextStyle(fontSize: 12)))),
-                      DataCell(Center(child: Text('${r.igKeralaLeads}', style: const TextStyle(fontSize: 12)))),
-                      DataCell(Center(child: Text('${r.paidAdsLeads}', style: const TextStyle(fontSize: 12)))),
-                      DataCell(Center(child: Text('${r.trialCampaignLeads}', style: const TextStyle(fontSize: 12)))),
+                      DataCell(Text(r.salesPersonName,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              fontStyle: r.isTeamCount ? FontStyle.italic : FontStyle.normal))),
+                      for (final n in [r.whatsappLeads, r.igMainLeads, r.igKeralaLeads, r.paidAdsLeads, r.trialCampaignLeads])
+                        DataCell(Center(
+                            child: Text(
+                                !r.isTeamCount && teamCountDates.contains(r.date) ? '—' : '$n',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: r.isTeamCount ? FontWeight.w800 : FontWeight.normal)))),
                       DataCell(Center(child: Text('${r.leadsContacted}', style: const TextStyle(fontSize: 12)))),
                       DataCell(Center(child: Text('${r.followUpsDone}', style: const TextStyle(fontSize: 12)))),
                       DataCell(Center(child: Text('${r.organicBookings}', style: const TextStyle(fontSize: 12)))),
@@ -1571,6 +1702,91 @@ class _TeamLedgerTableView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Under the leads table: where the lead counts came from (the team's manual
+/// morning count, or leads saved in the form on days with no count) and the
+/// team cross-check — manual count vs leads actually saved in the CRM.
+class _LeadCountCheckBox extends StatelessWidget {
+  final SalesEodReport report;
+  final CrmTheme crm;
+  final String periodLabel;
+  const _LeadCountCheckBox({required this.report, required this.crm, required this.periodLabel});
+
+  String _source(EodLeadCountCheck c) {
+    switch (c.source) {
+      case 'manual':
+        return "team's manual count";
+      case 'mixed':
+        return "team's manual count (${c.manualDays} day${c.manualDays == 1 ? '' : 's'}), "
+            'form leads for ${c.formDays} day${c.formDays == 1 ? '' : 's'} with no count';
+      default:
+        return 'leads saved in the form (no manual count entered)';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = report.leadCheckToday;
+    final m = report.leadCheckMtd;
+
+    Widget gap(int n) => Text(
+          n == 0 ? '✓ 0' : (n > 0 ? '$n not saved yet' : '${-n} more saved than counted'),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: n == 0 ? const Color(0xFF16A34A) : (n > 0 ? crm.destructive : crm.warning),
+          ),
+        );
+
+    Widget row(String label, EodLeadCountCheck c) => Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: c.hasManual
+              ? Wrap(
+                  spacing: 14,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 52,
+                      child: Text(label,
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+                    ),
+                    Text('Manual count ${c.manualCount}', style: TextStyle(fontSize: 12, color: crm.textPrimary)),
+                    Text('Saved in CRM ${c.savedInCrm}', style: TextStyle(fontSize: 12, color: crm.textPrimary)),
+                    gap(c.notLogged),
+                  ],
+                )
+              : Text('$label: no manual count entered — nothing to cross-check.',
+                  style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crm.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: crm.primary.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Lead counts above: ${_source(t)}.',
+              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          if (!report.isTeam && t.hasManual)
+            Text('The manual count is one shared number for the whole sales team.',
+                style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          const SizedBox(height: 4),
+          Text('TEAM CROSS-CHECK',
+              style: TextStyle(
+                  fontSize: 11, letterSpacing: 0.5, fontWeight: FontWeight.w800, color: crm.primary)),
+          row(periodLabel, t),
+          row('MTD', m),
+        ],
       ),
     );
   }
@@ -1619,16 +1835,19 @@ class _MetaItem extends StatelessWidget {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
         ),
         const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: isYellowPill ? const Color(0xFFFFF2CC) : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: isYellowPill ? const Color(0xFFD6B656) : const Color(0xFFCBD5E1)),
-          ),
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+        // Flexible so a long value wraps inside the pill on a phone.
+        Flexible(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: isYellowPill ? const Color(0xFFFFF2CC) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(color: isYellowPill ? const Color(0xFFD6B656) : const Color(0xFFCBD5E1)),
+            ),
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+            ),
           ),
         ),
       ],

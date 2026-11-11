@@ -10,6 +10,12 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/offboarding/data/offboarding_models.dart';
 import 'package:nizan_crm/features/hr/offboarding/service/offboarding_service.dart';
+import 'package:nizan_crm/features/hr/assets/data/employee_asset_models.dart';
+import 'package:nizan_crm/features/hr/assets/service/employee_asset_service.dart';
+import 'package:nizan_crm/features/hr/assets/presentation/widgets/employee_assets_panel.dart';
+import 'package:nizan_crm/features/hr/files/service/employee_document_service.dart';
+import 'package:nizan_crm/features/hr/letters/service/letter_service.dart';
+import 'package:nizan_crm/features/hr/letters/utils/nizan_hr_document_pdf.dart';
 
 String _fmt(DateTime? d) {
   if (d == null) return '—';
@@ -71,7 +77,8 @@ class _HrOffboardingScreenState extends ConsumerState<HrOffboardingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
+                    Expanded(
+                      child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
@@ -90,6 +97,8 @@ class _HrOffboardingScreenState extends ConsumerState<HrOffboardingScreen> {
                         ),
                       ],
                     ),
+                    ),
+                    const SizedBox(width: 12),
                     FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: const Color(0xFF601A29),
@@ -311,6 +320,7 @@ class _HrOffboardingScreenState extends ConsumerState<HrOffboardingScreen> {
               employeeId: selected!,
               reason: reason,
               lastWorkingDay: lwd,
+              notes: notesCtrl.text,
             );
         ref.invalidate(offboardingsProvider);
         if (context.mounted) {
@@ -362,7 +372,10 @@ class _ModernOffboardingCard extends ConsumerWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: hrCardDecoration(crm),
-      child: Theme(
+      // Transparent Material so the tiles' ink paints above the card colour.
+      child: Material(
+        type: MaterialType.transparency,
+        child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: !completed,
@@ -423,7 +436,9 @@ class _ModernOffboardingCard extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 4),
-              Row(
+              Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 4,
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -460,9 +475,13 @@ class _ModernOffboardingCard extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Text(
-                    '$cleared / $total clearance signed off',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crm.textSecondary),
+                  Flexible(
+                    child: Text(
+                      '$cleared / $total clearance signed off',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: crm.textSecondary),
+                    ),
                   ),
                 ],
               ),
@@ -502,6 +521,24 @@ class _ModernOffboardingCard extends ConsumerWidget {
                   }),
                 ],
               ),
+            ),
+            const Divider(height: 1),
+
+            // Company property still with the employee (blocks completion).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: EmployeeAssetsPanel(
+                employeeId: off.employeeId,
+                title: 'ASSETS TO RECOVER',
+                allowIssue: !completed,
+              ),
+            ),
+            const Divider(height: 1),
+
+            // Final settlement = unpaid salary up to the last working day.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+              child: _FinalSettlementCard(off: off, crm: crm),
             ),
             const Divider(height: 1),
 
@@ -546,8 +583,12 @@ class _ModernOffboardingCard extends ConsumerWidget {
                   const SizedBox(height: 12),
 
                   // Bottom Action Buttons: Experience Certificate & Complete Exit
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  // (Wrap so the two buttons stack on narrow screens.)
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       // Experience Certificate Button (SRS FR-8.1, FR-8.2)
                       OutlinedButton.icon(
@@ -565,7 +606,7 @@ class _ModernOffboardingCard extends ConsumerWidget {
                           color: allCleared ? const Color(0xFFC9A66B) : crm.textSecondary,
                         ),
                         label: Text(
-                          'Experience Certificate',
+                          off.experienceLetterIssued ? 'Experience Letter ✓ Issued' : 'Experience Certificate',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -594,12 +635,15 @@ class _ModernOffboardingCard extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF0D9488)),
                               SizedBox(width: 6),
-                              Text(
-                                'Employee Exited & Archived',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0D9488)),
+                              Flexible(
+                                child: Text(
+                                  'Employee Exited & Archived',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF0D9488)),
+                                ),
                               ),
                             ],
                           ),
@@ -612,6 +656,7 @@ class _ModernOffboardingCard extends ConsumerWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -623,9 +668,11 @@ class _ModernOffboardingCard extends ConsumerWidget {
           children: [
             const Icon(Icons.workspace_premium_rounded, color: Color(0xFFC9A66B)),
             const SizedBox(width: 8),
-            Text(
-              'Experience Certificate Preview',
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16),
+            Expanded(
+              child: Text(
+                'Experience Certificate Preview',
+                style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
             ),
           ],
         ),
@@ -674,19 +721,24 @@ class _ModernOffboardingCard extends ConsumerWidget {
                 const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Authorized Signatory', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        Text('Head of Human Resources', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Authorized Signatory', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          Text('Head of Human Resources', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
                     ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text('Official Seal', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                        Text('Nizan CRM HR Desk', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('Official Seal', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          Text('Nizan CRM HR Desk', textAlign: TextAlign.right, style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -695,6 +747,9 @@ class _ModernOffboardingCard extends ConsumerWidget {
           ),
         ),
         actions: [
+          // "Generate experience letter" builds the letterhead PDF, saves it to
+          // the employee's documents (category experience_letter), records it
+          // in HR Letters and flags the exit as letter-issued.
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close')),
           FilledButton.icon(
             style: FilledButton.styleFrom(
@@ -703,12 +758,10 @@ class _ModernOffboardingCard extends ConsumerWidget {
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Experience certificate generated and sent to employee files')),
-              );
+              _generateExperienceLetter(context, ref);
             },
-            icon: const Icon(Icons.print_rounded, size: 16),
-            label: const Text('Issue & Export'),
+            icon: const Icon(Icons.description_outlined, size: 16),
+            label: Text(off.experienceLetterIssued ? 'Generate again & save' : 'Generate experience letter'),
           ),
         ],
       ),
@@ -735,7 +788,117 @@ class _ModernOffboardingCard extends ConsumerWidget {
     }
   }
 
+  Future<void> _generateExperienceLetter(BuildContext context, WidgetRef ref) async {
+    if (off.employeeId.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context, rootNavigator: true);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(children: [
+          SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+          SizedBox(width: 16),
+          Expanded(child: Text('Generating & saving experience letter…')),
+        ]),
+      ),
+    );
+    var progressOpen = true;
+    void closeProgress() {
+      if (progressOpen) {
+        progressOpen = false;
+        nav.pop();
+      }
+    }
+
+    try {
+      final emp = await ref.read(employeeServiceProvider).getEmployeeById(off.employeeId);
+      final lwd = off.lastWorkingDay ?? DateTime.now();
+      final designation = (emp.role ?? '').trim();
+      final department = (emp.department ?? off.department).trim();
+      final body = experienceLetterBody(
+        employeeName: emp.name,
+        designation: designation,
+        department: department,
+        joiningDate: emp.dateOfJoining,
+        lastWorkingDay: lwd,
+      );
+      final bytes = await generateExperienceLetterPdf(
+        employeeName: emp.name,
+        designation: designation,
+        department: department,
+        email: emp.email,
+        phone: emp.phone,
+        joiningDate: emp.dateOfJoining,
+        lastWorkingDay: lwd,
+        body: body,
+      );
+      final safeName = emp.name.trim().replaceAll(RegExp(r'[^\w]+'), '_');
+
+      // 1) Save the PDF to the employee's document vault.
+      await ref.read(employeeDocumentServiceProvider).upload(
+            employeeId: off.employeeId,
+            title: 'Experience & Relieving Certificate',
+            category: 'experience_letter',
+            description: 'Generated at exit — last working day ${_fmt(lwd)}',
+            bytes: bytes,
+            filename: '${safeName}_Experience_Letter.pdf',
+          );
+      ref.invalidate(employeeDocumentsProvider(off.employeeId));
+
+      // 2) Record it in HR Letters (non-fatal if this part fails).
+      var letterRecorded = true;
+      try {
+        await ref.read(letterServiceProvider).generate(
+              employeeId: off.employeeId,
+              type: 'experience',
+              subject: 'Experience & Relieving Certificate - ${emp.name}',
+              body: body,
+            );
+        ref.invalidate(generatedLettersProvider);
+      } catch (_) {
+        letterRecorded = false;
+      }
+
+      // 3) Flag the exit.
+      await ref.read(offboardingServiceProvider).update(off.id, experienceLetterIssued: true);
+      ref.invalidate(offboardingsProvider);
+
+      closeProgress();
+      messenger.showSnackBar(SnackBar(
+        content: Text(letterRecorded
+            ? 'Experience letter saved to ${emp.name}\'s documents and HR Letters'
+            : 'Experience letter saved to documents (could not add it to HR Letters)'),
+        action: SnackBarAction(
+          label: 'Open PDF',
+          onPressed: () => previewOrDownloadNizanHrDocument(
+            filename: '${safeName}_Experience_Letter',
+            documentBuilder: () async => bytes,
+          ),
+        ),
+      ));
+    } catch (e) {
+      closeProgress();
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+
   Future<void> _completeExit(WidgetRef ref, BuildContext context) async {
+    // Assets still with the employee block completion; HR may override with a
+    // reason (the backend enforces the same rule and the HR-only override).
+    List<EmployeeAsset> outstanding = const [];
+    try {
+      final assets = await ref.read(employeeAssetServiceProvider).getAll(employeeId: off.employeeId, status: 'issued');
+      outstanding = assets.where((a) => a.isIssued).toList();
+    } catch (_) {
+      // If the list can't be loaded the server check still applies.
+    }
+    if (!context.mounted) return;
+    if (outstanding.isNotEmpty) {
+      await _forceCompleteExit(ref, context, outstanding);
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -758,6 +921,202 @@ class _ModernOffboardingCard extends ConsumerWidget {
       await ref.read(offboardingServiceProvider).update(off.id, status: 'completed');
       ref.invalidate(offboardingsProvider);
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exit successfully completed')));
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+
+  Future<void> _forceCompleteExit(WidgetRef ref, BuildContext context, List<EmployeeAsset> outstanding) async {
+    final reasonCtrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          title: const Text('Assets not returned'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${off.employeeName} still has ${outstanding.length} item(s):'),
+                const SizedBox(height: 8),
+                ...outstanding.map((a) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text('•  ${a.item}${a.serialNo.isNotEmpty ? ' (${a.serialNo})' : ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                    )),
+                const SizedBox(height: 10),
+                const Text(
+                  'Mark them returned or lost first. HR can still complete the exit, with a reason that is saved to the exit notes.',
+                  style: TextStyle(fontSize: 12.5),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonCtrl,
+                  maxLines: 2,
+                  onChanged: (_) => setDlg(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Reason for completing anyway *',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+              onPressed: reasonCtrl.text.trim().isEmpty ? null : () => Navigator.of(ctx).pop(true),
+              child: const Text('Complete anyway (HR)'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(offboardingServiceProvider).update(
+            off.id,
+            status: 'completed',
+            forceComplete: true,
+            notes: reasonCtrl.text.trim(),
+          );
+      ref.invalidate(offboardingsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exit completed with assets outstanding')));
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+}
+
+/// Final settlement = ONLY the unpaid salary for the exit month up to the last
+/// working day (owner rule): base × days worked ÷ days in month, plus
+/// allowances prorated the same way. No leave encashment / gratuity / recoveries.
+class _FinalSettlementCard extends ConsumerWidget {
+  const _FinalSettlementCard({required this.off, required this.crm});
+  final Offboarding off;
+  final CrmTheme crm;
+
+  static String _rupees(double v) => '₹${v.toStringAsFixed(0)}';
+  static const _months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const header = Text(
+      'FINAL SETTLEMENT',
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: Color(0xFF601A29)),
+    );
+    if (off.lastWorkingDay == null) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        header,
+        const SizedBox(height: 6),
+        Text('Set the last working day to compute the final settlement.',
+            style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+      ]);
+    }
+    final async = ref.watch(offboardingSettlementProvider(off.id));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        const SizedBox(height: 6),
+        async.when(
+          loading: () => const LinearProgressIndicator(minHeight: 2),
+          error: (e, _) => Text(friendlyErrorMessage(e), style: const TextStyle(fontSize: 12, color: Colors.red)),
+          data: (s) {
+            final monthLabel = '${_months[s.month.clamp(0, 12)]} ${s.year}';
+            final line = TextStyle(fontSize: 12.5, color: crm.textPrimary);
+            final muted = TextStyle(fontSize: 11.5, color: crm.textSecondary);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Unpaid salary for $monthLabel: 1st → ${_fmt(off.lastWorkingDay)} = ${s.daysWorked} of ${s.daysInMonth} days',
+                    style: muted),
+                const SizedBox(height: 6),
+                Text('Base: ${_rupees(s.baseSalary)} × ${s.daysWorked}/${s.daysInMonth} = ${_rupees(s.proratedBase)}', style: line),
+                if (s.allowances > 0)
+                  Text('Allowances: ${_rupees(s.allowances)} × ${s.daysWorked}/${s.daysInMonth} = ${_rupees(s.proratedAllowances)}',
+                      style: line),
+                const SizedBox(height: 4),
+                Text('Final settlement: ${_rupees(s.amount)}',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                Text('No leave encashment, gratuity or recoveries are included.', style: muted),
+                for (final w in s.warnings)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('⚠ $w', style: const TextStyle(fontSize: 11.5, color: Color(0xFFD97706))),
+                  ),
+                if (s.existingSlipStatus != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Existing $monthLabel slip: ${s.existingSlipStatus!.replaceAll('_', ' ')}'
+                      '${s.existingSlipNet != null ? ' (${_rupees(s.existingSlipNet!)})' : ''}',
+                      style: muted,
+                    ),
+                  ),
+                if (s.payrollLocked)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text('Payroll for this month is locked — unlock it to create the slip.',
+                        style: TextStyle(fontSize: 11.5, color: Colors.red)),
+                  ),
+                const SizedBox(height: 8),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF601A29),
+                    foregroundColor: const Color(0xFFF5F3EF),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  onPressed: s.canCreateSlip ? () => _createSlip(context, ref, s) : null,
+                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                  label: Text(
+                    s.existingSlipStatus == 'draft' ? 'Update draft final salary slip' : 'Create final salary slip',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _createSlip(BuildContext context, WidgetRef ref, OffboardingSettlement s) async {
+    final monthLabel = '${_months[s.month.clamp(0, 12)]} ${s.year}';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Create final salary slip'),
+        content: Text(
+          'A DRAFT salary slip for $monthLabel will be ${s.existingSlipStatus == 'draft' ? 'updated' : 'created'} for '
+          '${off.employeeName} with ${_rupees(s.amount)} (${s.daysWorked}/${s.daysInMonth} days). '
+          'It still goes through the normal payroll approval and payment. Continue?',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF601A29)),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Create slip'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(offboardingServiceProvider).createSettlementSlip(off.id);
+      ref.invalidate(offboardingSettlementProvider(off.id));
+      ref.invalidate(offboardingsProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Draft final salary slip saved for $monthLabel')));
+      }
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }

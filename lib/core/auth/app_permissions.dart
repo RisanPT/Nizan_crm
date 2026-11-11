@@ -41,6 +41,13 @@ const List<AppFeature> kAppFeatures = [
       Icons.event_note_outlined),
   AppFeature('trials', 'Trials', 'Trial bookings and trial packages',
       Icons.checklist_outlined),
+  AppFeature('consultations', 'Consultations',
+      'Bridal video consultations and stylist schedule',
+      Icons.video_camera_front_outlined, subs: [
+    AppSubFeature('consultations.calendar', 'Consultation Calendar'),
+    AppSubFeature('consultations.notes', 'Consultation Notes'),
+    AppSubFeature('consultations.reports', 'Stylist Reports'),
+  ]),
   AppFeature('services', 'Services', 'Packages, regions and add-ons',
       Icons.design_services_outlined),
   AppFeature('staff', 'Staff / HR', 'Employees, attendance and leave',
@@ -116,6 +123,7 @@ const List<AppFeature> kAppFeatures = [
   AppFeature('marketing', 'Marketing', 'Competitor and growth intelligence',
       Icons.campaign_outlined, subs: [
     AppSubFeature('marketing.dashboard', 'Marketing Dashboard'),
+    AppSubFeature('marketing.eod', 'EOD & Dashboard'),
     AppSubFeature('marketing.competitors', 'Competitors'),
     AppSubFeature('marketing.scores', 'Growth Scores'),
     AppSubFeature('marketing.insights', 'Marketing Insights'),

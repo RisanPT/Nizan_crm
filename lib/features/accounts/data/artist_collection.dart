@@ -5,12 +5,17 @@ class BookingRef {
   final String bookingNumber;
   final String customerName;
   final String service;
+  /// Event start/end — only sent where the API populates them (expenses).
+  final DateTime? serviceStart;
+  final DateTime? serviceEnd;
 
   const BookingRef({
     required this.id,
     required this.bookingNumber,
     required this.customerName,
     required this.service,
+    this.serviceStart,
+    this.serviceEnd,
   });
 
   factory BookingRef.fromJson(Map<String, dynamic> json) {
@@ -19,6 +24,8 @@ class BookingRef {
       bookingNumber: json['bookingNumber'] as String? ?? '',
       customerName: json['customerName'] as String? ?? '',
       service: json['service'] as String? ?? '',
+      serviceStart: DateTime.tryParse(json['serviceStart']?.toString() ?? '')?.toLocal(),
+      serviceEnd: DateTime.tryParse(json['serviceEnd']?.toString() ?? '')?.toLocal(),
     );
   }
 }

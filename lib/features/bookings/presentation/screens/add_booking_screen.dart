@@ -21,6 +21,9 @@ import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/widgets/hq_distance_line.dart';
 import 'package:nizan_crm/core/widgets/pincode_field.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:nizan_crm/services/upload_service.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
 
 // New Booking — redesigned (Oct 2026).
 //
@@ -53,6 +56,7 @@ class AddBookingScreen extends HookConsumerWidget {
 
     final formKey = useMemoized(() => GlobalKey<FormState>());
     final qParams = GoRouterState.of(context).uri.queryParameters;
+    final isLeadConversion = (qParams['leadId'] ?? '').isNotEmpty && qParams['another'] != '1';
     // Prefill from query params — Lead → Booking conversion (lead_conversion.dart).
     final nameCtrl = useMemoized(() => <TextEditingController?>[null]);
     final phoneCtrl = useTextEditingController(text: qParams['phone'] ?? '');
@@ -75,6 +79,7 @@ class AddBookingScreen extends HookConsumerWidget {
     final showErrors = useState(
       false,
     ); // highlight unfinished lines after a failed save
+    final advanceScreenshotUrl = useState<String>(''); // payment screenshot (required for lead conversion)
 
     ServicePackage? pkgById(String id) {
       for (final p in packages) {
@@ -287,6 +292,18 @@ class AddBookingScreen extends HookConsumerWidget {
 
     Future<void> submit() async {
       if (isSubmitting.value) return;
+      // Payment screenshot is required for lead conversions.
+      if (isLeadConversion && advanceScreenshotUrl.value.isEmpty) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('Please upload the payment screenshot before converting the lead.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        return;
+      }
       final formOk = formKey.currentState!.validate();
       final problem = programmeProblem();
       if (!formOk || problem != null) {
@@ -387,6 +404,7 @@ class AddBookingScreen extends HookConsumerWidget {
         discountReason: discountNoteCtrl.text.trim(),
         advanceAmount: advance,
         leadId: qParams['leadId'],
+        advanceScreenshotUrl: advanceScreenshotUrl.value,
         bookingItems: items,
         // Add-ons live on each package line (bookingItems).
         addons: const <BookingAddon>[],
@@ -778,6 +796,21 @@ class AddBookingScreen extends HookConsumerWidget {
       ),
     );
 
+    // Payment screenshot section — only shown when converting a lead.
+    final paymentScreenshotSection = isLeadConversion
+        ? _Section(
+            number: 4,
+            title: 'Payment Screenshot',
+            subtitle: 'Compulsory for conversion',
+            child: _PaymentScreenshotPicker(
+              url: advanceScreenshotUrl.value,
+              onUploaded: (url) => advanceScreenshotUrl.value = url,
+              onRemoved: () => advanceScreenshotUrl.value = '',
+              enabled: !isSubmitting.value,
+            ),
+          )
+        : null;
+
     final percentOver =
         discountType.value == 'percent' && discountValue.value > 100;
 
@@ -833,7 +866,9 @@ class AddBookingScreen extends HookConsumerWidget {
                       )
                     : const Icon(Icons.check_circle_outline),
                 label: Text(
-                  isSubmitting.value ? 'Saving…' : 'Create booking',
+                  isSubmitting.value
+                      ? 'Saving…'
+                      : (isLeadConversion ? 'Convert to Booking' : 'Create booking'),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -875,7 +910,7 @@ class AddBookingScreen extends HookConsumerWidget {
                                 8.w,
                                 Expanded(
                                   child: Text(
-                                    'New booking',
+                                    isLeadConversion ? 'Convert Lead to Booking' : 'New booking',
                                     style: Theme.of(context)
                                         .textTheme
                                         .headlineSmall
@@ -890,6 +925,10 @@ class AddBookingScreen extends HookConsumerWidget {
                             programmeSection,
                             16.h,
                             discountSection,
+                            if (paymentScreenshotSection != null) ...[
+                              16.h,
+                              paymentScreenshotSection,
+                            ],
                           ],
                         ),
                       ),
@@ -2150,6 +2189,369 @@ class _DistrictPricePickerSheetState extends State<_DistrictPricePickerSheet> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Payment Screenshot Picker ────────────────────────────────────────────────
+/// Lets the salesperson upload a payment screenshot (image only, camera or gallery).
+/// Keeps the exact photo aspect ratio without cropping, previews cleanly with zoom/fullscreen.
+class _PaymentScreenshotPicker extends ConsumerStatefulWidget {
+  final String url;
+  final ValueChanged<String> onUploaded;
+  final VoidCallback onRemoved;
+  final bool enabled;
+
+  const _PaymentScreenshotPicker({
+    required this.url,
+    required this.onUploaded,
+    required this.onRemoved,
+    this.enabled = true,
+  });
+
+  @override
+  ConsumerState<_PaymentScreenshotPicker> createState() =>
+      _PaymentScreenshotPickerState();
+}
+
+class _PaymentScreenshotPickerState
+    extends ConsumerState<_PaymentScreenshotPicker> {
+  bool _busy = false;
+
+  bool _isImageFile(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.png') ||
+        lower.endsWith('.webp') ||
+        lower.endsWith('.heic');
+  }
+
+  Future<void> _pick(ImageSource source) async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: source, imageQuality: 90);
+    if (file == null || !mounted) return;
+
+    if (!_isImageFile(file.name) && !_isImageFile(file.path)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only image files (JPG, PNG, WEBP, HEIC) are supported.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      final url = await ref.read(uploadServiceProvider).uploadImage(file);
+      widget.onUploaded(url);
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickSource() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Upload Payment Screenshot (Image Only)',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF6366F1)),
+                title: const Text('Choose from Gallery'),
+                subtitle: const Text('PNG, JPG, WEBP, or HEIC screenshot'),
+                onTap: () => Navigator.pop(ctx, 'gallery'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined, color: Color(0xFF10B981)),
+                title: const Text('Capture with Camera'),
+                subtitle: const Text('Take a photo of physical receipt / screen'),
+                onTap: () => Navigator.pop(ctx, 'camera'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (choice == 'gallery') await _pick(ImageSource.gallery);
+    if (choice == 'camera') await _pick(ImageSource.camera);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final hasImage = widget.url.isNotEmpty;
+
+    if (_busy) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+        decoration: BoxDecoration(
+          color: crm.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: crm.border),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(strokeWidth: 3),
+              ),
+              SizedBox(height: 14),
+              Text(
+                'Uploading screenshot…',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              SizedBox(height: 4),
+              Text(
+                'Processing image to preserve original quality',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!hasImage) {
+      return InkWell(
+        onTap: widget.enabled ? _pickSource : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEF4444).withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add_photo_alternate_outlined,
+                  size: 28,
+                  color: Color(0xFFEF4444),
+                ),
+              ),
+              12.h,
+              const Text(
+                'Upload Payment Screenshot',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFEF4444),
+                ),
+              ),
+              6.h,
+              Text(
+                'Compulsory: Client payment receipt or transfer screenshot (JPG, PNG)',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: crm.textSecondary,
+                ),
+              ),
+              14.h,
+              FilledButton.tonalIcon(
+                onPressed: widget.enabled ? _pickSource : null,
+                icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+                label: const Text('Browse image'),
+                style: FilledButton.styleFrom(
+                  foregroundColor: const Color(0xFFEF4444),
+                  backgroundColor: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: crm.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF22C55E),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check, color: Colors.white, size: 14),
+              ),
+              8.w,
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Payment screenshot attached',
+                      style: TextStyle(
+                        color: Color(0xFF15803D),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      'Original photo preserved without cropping',
+                      style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
+              OutlinedButton.icon(
+                onPressed: widget.enabled ? _pickSource : null,
+                icon: const Icon(Icons.sync_rounded, size: 16),
+                label: const Text('Change'),
+                style: OutlinedButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                ),
+              ),
+              8.w,
+              IconButton(
+                tooltip: 'Remove',
+                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                onPressed: widget.enabled ? widget.onRemoved : null,
+              ),
+            ],
+          ),
+          12.h,
+          InkWell(
+            onTap: () => showDialog(
+              context: context,
+              barrierColor: Colors.transparent,
+              builder: (_) => CollectionImageViewerDialog(url: widget.url),
+            ),
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: crm.border),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      widget.url,
+                      fit: BoxFit.contain,
+                      alignment: Alignment.center,
+                      loadingBuilder: (ctx, child, progress) {
+                        if (progress == null) return child;
+                        return const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40),
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, _, _) => Container(
+                        height: 180,
+                        color: crm.border,
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.broken_image_outlined,
+                                color: crm.textSecondary, size: 40),
+                            6.h,
+                            Text(
+                              'Could not preview image',
+                              style: TextStyle(color: crm.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.fullscreen, color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text(
+                          'Tap to view full screen',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -401,6 +401,7 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final crm = context.crmColors;
     final employees = ref.watch(employeesProvider);
     final shifts = ref.watch(shiftsProvider);
     return AlertDialog(
@@ -428,13 +429,19 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
             shifts.when(
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text(friendlyErrorMessage(e)),
-              data: (list) => DropdownButtonFormField<String>(
-                initialValue: _shiftId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Shift'),
-                items: list.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name))).toList(),
-                onChanged: (v) => setState(() => _shiftId = v),
-              ),
+              data: (list) {
+                final curId = _shiftId ?? (list.isNotEmpty ? list.first.id : null);
+                return DropdownButtonFormField<String>(
+                  key: ValueKey('shift_assign_$curId'),
+                  initialValue: list.any((s) => s.id == curId) ? curId : (list.isNotEmpty ? list.first.id : null),
+                  isExpanded: true,
+                  dropdownColor: crm.surface,
+                  style: TextStyle(color: crm.textPrimary, fontSize: 13.5),
+                  decoration: const InputDecoration(labelText: 'Shift *', border: OutlineInputBorder(), isDense: true),
+                  items: list.map((s) => DropdownMenuItem(value: s.id, child: Text(s.name, style: TextStyle(color: crm.textPrimary)))).toList(),
+                  onChanged: (v) => setState(() => _shiftId = v),
+                );
+              },
             ),
             const SizedBox(height: 10),
             Row(children: [

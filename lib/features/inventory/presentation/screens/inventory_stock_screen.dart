@@ -15,6 +15,7 @@ import 'package:nizan_crm/features/inventory/presentation/widgets/inventory_cate
 import 'package:nizan_crm/features/inventory/data/inventory_category.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/features/inventory/utils/inventory_stock_report.dart';
 
 enum StockView { all, kits, remaining }
 
@@ -672,6 +673,13 @@ class _InventoryStockScreenState extends ConsumerState<InventoryStockScreen> {
             onPressed: _importStock,
             icon: const Icon(Icons.upload_file, size: 22),
             tooltip: 'Import stock from Excel / CSV',
+            style: tonal(),
+          ),
+          8.w,
+          IconButton(
+            onPressed: () => exportInventoryStockReport(context, ref),
+            icon: const Icon(Icons.download_rounded, size: 22),
+            tooltip: 'Download stock report (in stock / out of stock)',
             style: tonal(),
           ),
           8.w,

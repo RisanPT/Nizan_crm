@@ -73,7 +73,9 @@ class AttendancePayrollScreen extends HookConsumerWidget {
             '• ${preview.matched} employees will get slips\n'
             '• ${preview.unmatched} unmatched (no CRM link) will be skipped\n'
             '• Total net payable: ${_money(preview.totalNetPayable)}\n\n'
-            'Slips already marked "paid" are never changed.\n'
+            'Paid and cancelled slips are never changed. On existing slips only the '
+            'attendance deduction is recalculated — manual deductions, bonus, '
+            'incentives, notes and status are kept. A locked month cannot be regenerated.\n'
             'Tip: Run "Sync Timebox → CRM" first to maximise matched employees.',
           ),
           actions: [
