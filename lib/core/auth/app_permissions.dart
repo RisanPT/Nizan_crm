@@ -41,12 +41,14 @@ const List<AppFeature> kAppFeatures = [
       Icons.event_note_outlined),
   AppFeature('trials', 'Trials', 'Trial bookings and trial packages',
       Icons.checklist_outlined),
-  AppFeature('consultations', 'Consultations',
-      'Bridal video consultations and stylist schedule',
-      Icons.video_camera_front_outlined, subs: [
-    AppSubFeature('consultations.calendar', 'Consultation Calendar'),
-    AppSubFeature('consultations.notes', 'Consultation Notes'),
-    AppSubFeature('consultations.reports', 'Stylist Reports'),
+  AppFeature('stylist', 'Stylist',
+      'Bridal video consultations, stylist schedule and client files',
+      Icons.face_retouching_natural_outlined, subs: [
+    AppSubFeature('stylist.today', 'Today (Consultation Dashboard)'),
+    AppSubFeature('stylist.clients', 'Stylist Clients'),
+    AppSubFeature('stylist.calendar', 'Consultation Calendar'),
+    AppSubFeature('stylist.notes', 'Consultation Notes'),
+    AppSubFeature('stylist.reports', 'Stylist Reports'),
   ]),
   AppFeature('services', 'Services', 'Packages, regions and add-ons',
       Icons.design_services_outlined),
@@ -204,6 +206,9 @@ const List<AppFeature> kAppFeatures = [
 AppFeature? featureForKey(String key) {
   for (final f in kAppFeatures) {
     if (f.key == key) return f;
+  }
+  if (key == 'consultations') {
+    return featureForKey('stylist');
   }
   return null;
 }

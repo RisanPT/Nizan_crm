@@ -114,6 +114,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/marketing/competitors')) return 1;
       if (location.startsWith('/marketing/scores')) return 2;
       return 0;
+    } else if (role == AppRole.stylist) {
+      if (location == '/consultations/dashboard') return 0;
+      if (location.startsWith('/stylist/clients')) return 1;
+      if (location.startsWith('/consultations')) return 2;
+      return 0;
     } else {
       if (location == '/') return 0;
       if (location.startsWith('/clients')) return 1;
@@ -192,6 +197,12 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 0: context.go('/marketing/dashboard'); break;
         case 1: context.go('/marketing/competitors'); break;
         case 2: context.go('/marketing/scores'); break;
+      }
+    } else if (role == AppRole.stylist) {
+      switch (index) {
+        case 0: context.go('/consultations/dashboard'); break;
+        case 1: context.go('/stylist/clients'); break;
+        case 2: context.go('/consultations'); break;
       }
     } else {
       switch (index) {
@@ -443,6 +454,24 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                                 icon: Icon(Icons.leaderboard_outlined),
                                 selectedIcon: Icon(Icons.leaderboard),
                                 label: 'Score',
+                              ),
+                            ]
+                          : role == AppRole.stylist
+                          ? const [
+                              NavigationDestination(
+                                icon: Icon(Icons.today_outlined),
+                                selectedIcon: Icon(Icons.today),
+                                label: 'Today',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.people_alt_outlined),
+                                selectedIcon: Icon(Icons.people_alt),
+                                label: 'Clients',
+                              ),
+                              NavigationDestination(
+                                icon: Icon(Icons.calendar_month_outlined),
+                                selectedIcon: Icon(Icons.calendar_month),
+                                label: 'Calendar',
                               ),
                             ]
                           : const [

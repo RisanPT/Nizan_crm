@@ -158,7 +158,7 @@ class Sidebar extends ConsumerWidget {
     final effectiveItExpanded =
         !isCollapsed && (itExpanded || (isItRoute && !itUserCollapsed));
     final effectiveStylistExpanded = !isCollapsed &&
-        (stylistExpanded || (isStylistRoute && !stylistUserCollapsed));
+        (stylistExpanded || (isStylistRoute && !stylistUserCollapsed) || role == AppRole.stylist);
     final effectiveMarketingExpanded = !isCollapsed &&
         (marketingExpanded || (isMarketingRoute && !marketingUserCollapsed));
     final effectiveContentExpanded = !isCollapsed &&

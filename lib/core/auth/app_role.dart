@@ -12,6 +12,7 @@ enum AppRole {
   driver,
   inventoryManager,
   marketingAdmin,
+  stylist,
   unknown;
 
   static AppRole fromString(String? raw) {
@@ -56,6 +57,11 @@ enum AppRole {
       case 'marketing_manager':
       case 'marketing_executive':
         return AppRole.marketingAdmin;
+      case 'stylist':
+      case 'stylist_lead':
+      case 'bridal_stylist':
+      case 'senior_stylist':
+        return AppRole.stylist;
       default:
         return AppRole.unknown;
     }
@@ -165,6 +171,8 @@ enum AppRole {
         return '/inventory';
       case AppRole.marketingAdmin:
         return '/marketing/dashboard';
+      case AppRole.stylist:
+        return '/consultations/dashboard';
       case AppRole.driver:
         return '/driver/jobs'; // Adjust if driver dashboard path is different
       case AppRole.manager:
