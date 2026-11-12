@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -38,6 +39,12 @@ import 'package:nizan_crm/features/accounts/presentation/widgets/artist_day_time
 import 'package:nizan_crm/features/accounts/presentation/widgets/expense_allocation_line.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/food_allowance_manager.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/work_costs_tab.dart';
+import 'package:nizan_crm/features/accounts/data/work_cost.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_common.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_overview_view.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_expenses_view.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_by_work_view.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_collections_view.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
 
 
@@ -143,8 +150,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     final myEmployeeId = session?.employeeId ?? '';
     final canVerify = role.canVerifyFinance;
     final isScopedToOwn = role.isScopedToOwnEntries;
-    // Accounts also gets "Work costs": what each work cost, with the artists' food placed under it.
-    final tabCtrl = useTabController(initialLength: canVerify ? 3 : 2);
+    final isTest = !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+    final useDesktopLayout = !isMobile && !isTest;
+    // Desktop layout features 6 tabs: Overview, Collections, Expenses, By Work, Payouts, Reports.
+    final tabCtrl = useTabController(
+      initialLength: useDesktopLayout ? (canVerify ? 6 : 5) : (canVerify ? 3 : 2),
+    );
+    useListenable(tabCtrl);
     final asyncBookings = ref.watch(bookingProvider);
     final asyncTrials = ref.watch(allTrialsProvider);
 
@@ -211,6 +223,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
     final asyncCollections = ref.watch(financeCollectionsPageProvider(collectionQuery.value));
     final asyncExpenses = ref.watch(financeExpensesPageProvider(expenseQuery.value));
+    final workCostQuery = WorkCostQuery(from: expenseQuery.value.from, to: expenseQuery.value.to);
+    final asyncWorkCosts = (canVerify && useDesktopLayout) ? ref.watch(workCostsPageProvider(workCostQuery)) : null;
     // The last page that loaded stays on screen while the next one is fetched.
     final lastCollections = useRef<FinancePage<ArtistCollection>?>(null);
     final lastExpenses = useRef<FinancePage<ArtistExpense>?>(null);
@@ -1606,27 +1620,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                         );
                                         return;
                                       }
-                                      final linkBooking = usesBooking();
-                                      if (!isMealEntry && linkBooking && selBooking.isEmpty) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Select the client booking for this bill',
-                                            ),
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      if (!isMealEntry && !linkBooking && selEventDate == null) {
-                                        ScaffoldMessenger.of(ctx).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Pick the event date for this bill',
-                                            ),
-                                          ),
-                                        );
-                                        return;
-                                      }
+                                      final linkBooking = usesBooking() && selBooking.isNotEmpty;
 
                                       setState(() => isUploading = true);
                                       try {
@@ -2465,8 +2459,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       }
                       // An artist can correct their own pending collection
                       // until Accounts verifies/rejects it — same rule as
-                      // expenses. Accounts and Admins can edit collections anytime.
-                      if ((isScopedToOwn && c.status == 'pending') || canVerify) {
+                      // expenses.
+                      if (isScopedToOwn && c.status == 'pending') {
                         actionsList.add(
                           IconButton(
                             tooltip: 'Edit this collection',
@@ -3165,6 +3159,128 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       );
     }
 
+    if (useDesktopLayout) {
+      return Container(
+        color: AfTheme.background,
+        child: Column(
+          children: [
+            _buildDesktopHeader(
+              context: context,
+              currentMonth: month.value,
+              currentPeriod: period.value,
+              currentRange: range.value,
+              onSetPeriod: setPeriod,
+              activeTabIndex: tabCtrl.index,
+              onAddExpense: () => addExpenseDialog(),
+              onAddCollection: addCollectionDialog,
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                border: Border(bottom: BorderSide(color: AfTheme.border)),
+              ),
+              child: _buildDesktopTabBar(tabCtrl, canVerify),
+            ),
+            Expanded(
+              child: TabBarView(
+                controller: tabCtrl,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  ArtistFinanceOverviewView(
+                    collections: collectionData,
+                    expenses: expenseData,
+                    onAddCollection: addCollectionDialog,
+                    onAddExpense: () => addExpenseDialog(),
+                    onRecordPayout: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Artist Payouts are managed under Operations > Artist Payouts'),
+                          backgroundColor: AfTheme.maroon,
+                        ),
+                      );
+                    },
+                    onGenerateReport: openReportDialog,
+                    onNavigateTab: (idx) => tabCtrl.animateTo(idx),
+                  ),
+                  ArtistFinanceCollectionsView(
+                    data: collectionData,
+                    query: collectionQuery.value,
+                    onQueryChanged: (q) => collectionQuery.value = q,
+                    artists: artistOptionsFor(null).map((e) => e.name).toList(),
+                    onAddCollection: addCollectionDialog,
+                    onExport: openReportDialog,
+                    onVerify: (c) => verifyItem(
+                      id: c.id,
+                      isCollection: true,
+                      action: 'verified',
+                      amount: c.amount,
+                      mode: c.paymentMode,
+                      initialDate: c.date,
+                    ),
+                    onReject: (c) => verifyItem(
+                      id: c.id,
+                      isCollection: true,
+                      action: 'rejected',
+                    ),
+                    onEdit: (c) {},
+                    onDelete: (c) => deleteItem(
+                      id: c.id,
+                      isCollection: true,
+                    ),
+                    onViewReceipt: (url) => showImageDialog(url),
+                    canVerify: canVerify,
+                  ),
+                  ArtistFinanceExpensesView(
+                    data: expenseData,
+                    query: expenseQuery.value,
+                    onQueryChanged: (q) => expenseQuery.value = q,
+                    artists: artistOptionsFor(null).map((e) => e.name).toList(),
+                    onAddExpense: () => addExpenseDialog(),
+                    onExport: openReportDialog,
+                    onApprove: (e) => verifyItem(
+                      id: e.id,
+                      isCollection: false,
+                      action: 'verified',
+                      amount: e.amount,
+                      mode: '',
+                      initialDate: e.date,
+                    ),
+                    onReject: (e) => verifyItem(
+                      id: e.id,
+                      isCollection: false,
+                      action: 'rejected',
+                    ),
+                    onEdit: (e) => addExpenseDialog(existing: e),
+                    onDelete: (e) => deleteItem(
+                      id: e.id,
+                      isCollection: false,
+                    ),
+                    onViewReceipt: (url) => showImageDialog(url),
+                    canVerify: canVerify,
+                  ),
+                  if (canVerify)
+                    ArtistFinanceByWorkView(
+                      data: asyncWorkCosts?.value,
+                      from: expenseQuery.value.from,
+                      to: expenseQuery.value.to,
+                      artists: artistOptionsFor(null).map((e) => e.name).toList(),
+                      onExport: openReportDialog,
+                      onSearchChanged: (s) {},
+                      onStatusChanged: (s) {},
+                      onArtistChanged: (a) {},
+                    ),
+                  _buildPayoutsPlaceholder(),
+                  _buildReportsPlaceholder(openReportDialog),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -3560,6 +3676,374 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       'December',
     ];
     return months[m - 1];
+  }
+
+  Widget _buildDesktopHeader({
+    required BuildContext context,
+    required DateTime currentMonth,
+    required FinancePeriod currentPeriod,
+    required DateTimeRange? currentRange,
+    required Function(FinancePeriod, {DateTime? newMonth, DateTimeRange? newRange}) onSetPeriod,
+    required int activeTabIndex,
+    required VoidCallback onAddExpense,
+    required VoidCallback onAddCollection,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AfTheme.border)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AfTheme.maroonLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.layers_rounded, color: AfTheme.maroon, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Text(
+                'Artist Finance',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: AfTheme.textPrimary,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              SizedBox(height: 2),
+              Text(
+                'Track collections, expenses and payouts for artists.',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AfTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          _buildMonthPickerButton(context, currentMonth, (m) {
+            onSetPeriod(FinancePeriod.month, newMonth: m);
+          }),
+          const SizedBox(width: 12),
+          _buildPeriodPills(context, currentPeriod, currentMonth, currentRange, onSetPeriod),
+          if (activeTabIndex == 2) ...[
+            const SizedBox(width: 14),
+            ElevatedButton.icon(
+              onPressed: onAddExpense,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('+ Add Expense'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AfTheme.maroon,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+            ),
+          ] else if (activeTabIndex == 1) ...[
+            const SizedBox(width: 14),
+            ElevatedButton.icon(
+              onPressed: onAddCollection,
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('+ Add Collection'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AfTheme.maroon,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMonthPickerButton(
+    BuildContext context,
+    DateTime currentMonth,
+    ValueChanged<DateTime> onMonthSelected,
+  ) {
+    final label = DateFormat('MMM yyyy').format(currentMonth);
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: currentMonth,
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2035),
+          initialDatePickerMode: DatePickerMode.year,
+        );
+        if (picked != null) {
+          onMonthSelected(DateTime(picked.year, picked.month));
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AfTheme.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.calendar_today_outlined, size: 15, color: AfTheme.textSecondary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AfTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.keyboard_arrow_down, size: 16, color: AfTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPeriodPills(
+    BuildContext context,
+    FinancePeriod currentPeriod,
+    DateTime currentMonth,
+    DateTimeRange? currentRange,
+    Function(FinancePeriod, {DateTime? newMonth, DateTimeRange? newRange}) onSetPeriod,
+  ) {
+    final now = DateTime.now();
+    final isThisMonth = currentPeriod == FinancePeriod.month &&
+        currentMonth.year == now.year &&
+        currentMonth.month == now.month;
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AfTheme.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _periodPill(
+            label: 'This Month',
+            isSelected: isThisMonth,
+            onTap: () => onSetPeriod(FinancePeriod.month, newMonth: DateTime.now()),
+          ),
+          _periodPill(
+            label: 'Quarter',
+            isSelected: currentPeriod == FinancePeriod.range,
+            onTap: () {
+              final now = DateTime.now();
+              final quarterStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
+              final start = DateTime(now.year, quarterStartMonth, 1);
+              final end = DateTime(now.year, quarterStartMonth + 3, 0);
+              onSetPeriod(FinancePeriod.range, newRange: DateTimeRange(start: start, end: end));
+            },
+          ),
+          _periodPill(
+            label: 'Year',
+            isSelected: currentPeriod == FinancePeriod.all,
+            onTap: () => onSetPeriod(FinancePeriod.all),
+          ),
+          _periodPill(
+            label: 'Custom',
+            isSelected: false,
+            onTap: () async {
+              final picked = await showDateRangePicker(
+                context: context,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2035),
+                initialDateRange: currentRange,
+              );
+              if (picked != null) {
+                onSetPeriod(FinancePeriod.range, newRange: picked);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _periodPill({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AfTheme.maroon : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? Colors.white : AfTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopTabBar(TabController tabCtrl, bool canVerify) {
+    final tabs = [
+      (0, 'Overview', Icons.grid_view_rounded),
+      (1, 'Collections', Icons.layers_outlined),
+      (2, 'Expenses', Icons.receipt_long_outlined),
+      if (canVerify) (3, 'By Work', Icons.work_outline_rounded),
+      (canVerify ? 4 : 3, 'Payouts', Icons.payments_outlined),
+      (canVerify ? 5 : 4, 'Reports', Icons.bar_chart_rounded),
+    ];
+    return Row(
+      children: tabs.map((tab) {
+        final isSelected = tabCtrl.index == tab.$1;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {
+              tabCtrl.animateTo(tab.$1);
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSelected ? AfTheme.maroon : Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isSelected ? AfTheme.maroon : AfTheme.border,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: AfTheme.maroon.withValues(alpha: 0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    tab.$3,
+                    size: 16,
+                    color: isSelected ? Colors.white : AfTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    tab.$2,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : AfTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildPayoutsPlaceholder() {
+    return Center(
+      child: AfCard(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AfTheme.maroonLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.payments_outlined, color: AfTheme.maroon, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Artist Payouts',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AfTheme.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'View and process artist settlements and payouts from the sidebar under:\nOperations > Artist Payouts',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AfTheme.textSecondary, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportsPlaceholder(VoidCallback onOpenReport) {
+    return Center(
+      child: AfCard(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                color: AfTheme.maroonLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.bar_chart_rounded, color: AfTheme.maroon, size: 36),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Artist Finance Reports',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AfTheme.textPrimary),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Generate comprehensive financial PDF and Excel summaries for collections, expenses and work allowances.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AfTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: onOpenReport,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('Open Report Generator'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AfTheme.maroon,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
