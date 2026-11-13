@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/features/ceo/services/decision_service.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
 import '../../core/auth/workspace.dart';
@@ -11,6 +12,8 @@ import 'fleet_menu_sheet.dart';
 import 'inventory_menu_sheet.dart';
 import 'sales_menu_sheet.dart';
 import 'sidebar.dart';
+import '../../features/marketing/presentation/kit/mkt_kit.dart' show Mkt;
+import '../../features/marketing/presentation/shell/marketing_sidebar.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
 import '../../features/notifications/presentation/widgets/notification_watcher.dart';
@@ -18,6 +21,43 @@ import '../../features/notifications/presentation/widgets/notification_watcher.d
 /// Tab-root screens that render their OWN AppBar — the mobile shell bar is
 /// suppressed for these so they don't show two stacked bars.
 const _mobileOwnAppBarRoutes = {'/works', '/hr/slots', '/sales/home'};
+
+/// Which bottom tab the CEO / Executive Director shows as selected on [location]: Home, Decisions, Money — and for every other
+/// screen (projects, people, reports, the rules…) More, the tab that opens the full menu, so no tab claims a screen it does not own.
+int leadershipTabIndex(String location) {
+  if (location == '/ceo') return 0;
+  if (location == '/ceo/decisions' || location == '/ceo/rules') return 1;
+  if (location.startsWith('/accounts') || location.startsWith('/company-finance')) return 2;
+  return 3;
+}
+
+/// The CEO / Executive Director's bottom bar: Home, Decisions (with the number waiting), Money, and More (the full menu).
+List<NavigationDestination> leadershipDestinations(int waiting) => [
+      const NavigationDestination(
+        key: Key('ceo_nav_home'),
+        icon: Icon(Icons.space_dashboard_outlined),
+        selectedIcon: Icon(Icons.space_dashboard),
+        label: 'Home',
+      ),
+      NavigationDestination(
+        key: const Key('ceo_nav_decisions'),
+        icon: Badge(key: const Key('ceo_nav_badge'), isLabelVisible: waiting > 0, label: Text('$waiting'), child: const Icon(Icons.gavel_outlined)),
+        selectedIcon: Badge(isLabelVisible: waiting > 0, label: Text('$waiting'), child: const Icon(Icons.gavel)),
+        label: 'Decisions',
+      ),
+      const NavigationDestination(
+        key: Key('ceo_nav_money'),
+        icon: Icon(Icons.account_balance_wallet_outlined),
+        selectedIcon: Icon(Icons.account_balance_wallet),
+        label: 'Money',
+      ),
+      const NavigationDestination(
+        key: Key('ceo_nav_more'),
+        icon: Icon(Icons.menu),
+        selectedIcon: Icon(Icons.menu_open),
+        label: 'More',
+      ),
+    ];
 
 class MainLayout extends ConsumerStatefulWidget {
   final Widget child;
@@ -58,6 +98,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
   bool _marketingUserCollapsed = false;
   bool _contentExpanded = false;
   bool _contentUserCollapsed = false;
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   int _calculateSelectedIndex(BuildContext context, AppRole role) {
     final location = GoRouterState.of(context).uri.path;
@@ -98,11 +139,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       if (location.startsWith('/driver/expenses')) return 2;
       if (location == '/profile') return 3;
     } else if (role == AppRole.ceo) {
-      if (location == '/ceo') return 0;
-      if (location == '/ceo/decisions') return 1;
-      if (location.startsWith('/accounts') || location.startsWith('/company-finance')) return 2;
-      if (location == '/') return 3;
-      // Everything else is in the drawer (the hamburger), which holds the CEO's whole menu.
+      return leadershipTabIndex(location);
     } else if (role == AppRole.accounts) {
       if (location == '/accounts/dashboard') return 0;
       if (location.startsWith('/finance')) return 1;
@@ -183,7 +220,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         case 0: context.go('/ceo'); break;
         case 1: context.go('/ceo/decisions'); break;
         case 2: context.go('/accounts/dashboard'); break;
-        case 3: context.go('/'); break;
+        case 3: _scaffoldKey.currentState?.openDrawer(); break; // More: the full menu
       }
     } else if (role == AppRole.accounts) {
       switch (index) {
@@ -234,6 +271,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       final unread = ref.watch(unreadCountProvider).asData?.value ?? 0;
 
       return Scaffold(
+        key: _scaffoldKey,
         // The full role-gated sidebar as a slide-out drawer, so EVERY feature a
         // role can reach on desktop is reachable on mobile too (fixes the admin
         // shell exposing only 5 bottom-nav tabs). Opened by the AppBar hamburger.
@@ -391,28 +429,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                           ),
                         ]
                       : role == AppRole.ceo
-                          ? const [
-                              NavigationDestination(
-                                icon: Icon(Icons.space_dashboard_outlined),
-                                selectedIcon: Icon(Icons.space_dashboard),
-                                label: 'Overview',
-                              ),
-                              NavigationDestination(
-                                icon: Icon(Icons.gavel_outlined),
-                                selectedIcon: Icon(Icons.gavel),
-                                label: 'Decisions',
-                              ),
-                              NavigationDestination(
-                                icon: Icon(Icons.account_balance_wallet_outlined),
-                                selectedIcon: Icon(Icons.account_balance_wallet),
-                                label: 'Money',
-                              ),
-                              NavigationDestination(
-                                icon: Icon(Icons.trending_up_outlined),
-                                selectedIcon: Icon(Icons.trending_up),
-                                label: 'Sales',
-                              ),
-                            ]
+                          ? leadershipDestinations(ref.watch(leadershipOpenCountProvider))
                       : role == AppRole.accounts
                           ? const [
                               NavigationDestination(
@@ -512,7 +529,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           _buildSidebar(),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.all(24.0),
+              color: _inMarketing() ? Mkt.bg : null,
+              padding: _inMarketing() ? const EdgeInsets.only(top: 14) : const EdgeInsets.all(24.0),
               child: NotificationWatcher(child: widget.child),
             ),
           ),
@@ -521,10 +539,20 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     );
   }
 
+  /// True on the Marketing login and on any /marketing screen: they use the Marketing ERP shell.
+  bool _inMarketing() {
+    final role = ref.watch(effectiveRoleProvider);
+    final path = GoRouterState.of(context).uri.path;
+    return role == AppRole.marketingAdmin || path.startsWith('/marketing');
+  }
+
   /// The full role-gated navigation sidebar. Rendered inline on desktop/tablet
   /// and as a Drawer on mobile, so every feature a role can access stays
   /// reachable on phones (including foldables) — not just the bottom-nav tabs.
   Widget _buildSidebar() {
+    // The Marketing ERP has its own menu (the one in the marketing team's document): the Marketing login always gets it, and anyone
+    // else gets it while they are inside /marketing (with a "Main menu" way back).
+    if (_inMarketing()) return const MarketingSidebar();
     return Sidebar(
       fleetExpanded: _fleetExpanded,
       fleetUserCollapsed: _fleetUserCollapsed,

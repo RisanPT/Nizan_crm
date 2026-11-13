@@ -9,6 +9,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
+import 'package:nizan_crm/features/ceo/services/decision_service.dart';
 import 'package:nizan_crm/features/client_chat/controllers/live_client_chat.dart';
 import 'package:nizan_crm/features/sales/services/goal_service.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
@@ -423,7 +424,7 @@ class Sidebar extends ConsumerWidget {
                   // Everything here is read-only (the server refuses writes) except the decisions.
                   _SidebarItem(
                     icon: Icons.space_dashboard_outlined,
-                    title: 'Overview',
+                    title: 'Home',
                     isCollapsed: isCollapsed,
                     isSelected: currentPath == '/ceo',
                     onTap: () => context.go('/ceo'),
@@ -434,6 +435,22 @@ class Sidebar extends ConsumerWidget {
                     isCollapsed: isCollapsed,
                     isSelected: currentPath == '/ceo/decisions',
                     onTap: () => context.go('/ceo/decisions'),
+                    // how many wait for a decision
+                    trailing: ref.watch(leadershipOpenCountProvider) > 0
+                        ? Container(
+                            key: const Key('sidebar_decisions_badge'),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                            decoration: BoxDecoration(color: const Color(0xFFE5484D), borderRadius: BorderRadius.circular(10)),
+                            child: Text('${ref.watch(leadershipOpenCountProvider)}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800)),
+                          )
+                        : null,
+                  ),
+                  _SidebarItem(
+                    icon: Icons.rule_rounded,
+                    title: 'Decision rules',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/ceo/rules',
+                    onTap: () => context.go('/ceo/rules'),
                   ),
                   8.h,
                   _buildSectionTitle('MONEY', isCollapsed: isCollapsed, theme: theme),
@@ -1649,6 +1666,17 @@ class Sidebar extends ConsumerWidget {
                         Padding(
                           padding: const EdgeInsets.only(left: 14),
                           child: _SidebarItem(
+                            icon: Icons.groups_2_outlined,
+                            title: 'Team Dashboard',
+                            isCollapsed: false,
+                            isSelected: currentPath == '/marketing/team',
+                            onTap: () => context.go('/marketing/team'),
+                          ),
+                        ),
+                      if (access.canSeeSub('marketing.eod') || access.canManageMarketing)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 14),
+                          child: _SidebarItem(
                             icon: Icons.assignment_outlined,
                             title: 'EOD & Team Log',
                             isCollapsed: false,
@@ -1972,22 +2000,24 @@ class Sidebar extends ConsumerWidget {
             Padding(
               padding: 12.p,
               child: Column(children: [
-                _SidebarItem(
-                  icon: Icons.bug_report_outlined,
-                  title: 'Report Bug',
-                  isCollapsed: true,
-                  isSelected: currentPath.startsWith('/helpdesk'),
-                  onTap: () => context.go('/helpdesk'),
-                ),
-                8.h,
-                _SidebarItem(
-                  icon: Icons.cloud_download_outlined,
-                  title: 'Backup Data',
-                  isCollapsed: true,
-                  isSelected: currentPath.startsWith('/backup'),
-                  onTap: () => context.go('/backup'),
-                ),
-                8.h,
+                if (!access.isCeo) ...[
+                  _SidebarItem(
+                    icon: Icons.bug_report_outlined,
+                    title: 'Report Bug',
+                    isCollapsed: true,
+                    isSelected: currentPath.startsWith('/helpdesk'),
+                    onTap: () => context.go('/helpdesk'),
+                  ),
+                  8.h,
+                  _SidebarItem(
+                    icon: Icons.cloud_download_outlined,
+                    title: 'Backup Data',
+                    isCollapsed: true,
+                    isSelected: currentPath.startsWith('/backup'),
+                    onTap: () => context.go('/backup'),
+                  ),
+                  8.h,
+                ],
                 _SidebarItem(
                   icon: Icons.account_circle_outlined,
                   title: 'My Profile',
@@ -2016,10 +2046,13 @@ class Sidebar extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Row(children: [
-                  _footerAction(context, Icons.bug_report_outlined, 'Support',
-                      currentPath.startsWith('/helpdesk'), () => context.go('/helpdesk')),
-                  _footerAction(context, Icons.cloud_download_outlined, 'Backup',
-                      currentPath.startsWith('/backup'), () => context.go('/backup')),
+                  // the CEO / Executive Director have no help desk or backup to open
+                  if (!access.isCeo) ...[
+                    _footerAction(context, Icons.bug_report_outlined, 'Support',
+                        currentPath.startsWith('/helpdesk'), () => context.go('/helpdesk')),
+                    _footerAction(context, Icons.cloud_download_outlined, 'Backup',
+                        currentPath.startsWith('/backup'), () => context.go('/backup')),
+                  ],
                   _footerAction(context, Icons.account_circle_outlined, 'Profile',
                       currentPath == '/profile', () => context.go('/profile')),
                   _footerAction(context, Icons.logout_rounded, 'Logout', false,

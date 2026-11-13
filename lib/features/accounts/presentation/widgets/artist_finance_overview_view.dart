@@ -783,3 +783,4 @@ class _ArtistFinanceOverviewViewState extends State<ArtistFinanceOverviewView> {
     );
   }
 }
+

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
@@ -646,7 +647,7 @@ void main() {
       FlutterError.onError = (d) {
         final text = d.toDiagnosticsNode().toStringDeep();
         if (!text.contains('overflowed by 3.1 pixels on the bottom')) {
-          print('EXACT LOC: $text');
+          log('EXACT LOC: $text');
           other.add(text.split('\n').take(6).join(' | '));
         }
       };

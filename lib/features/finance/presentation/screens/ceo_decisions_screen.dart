@@ -19,9 +19,12 @@ String _money(num v) =>
 /// (cost/hiring/CapEx/investment), strategic calls, and assigned action items
 /// with an owner, deadline and status — the accountability layer of the review.
 class CeoDecisionsScreen extends ConsumerStatefulWidget {
-  const CeoDecisionsScreen({super.key, this.initialOpenOnly});
+  const CeoDecisionsScreen({super.key, this.initialOpenOnly, this.canSettle = true});
 
   final bool? initialOpenOnly;
+
+  /// May change an entry's status (the CEO, the Executive Director, an administrator). Others can still add and edit.
+  final bool canSettle;
 
   @override
   ConsumerState<CeoDecisionsScreen> createState() => _CeoDecisionsScreenState();
@@ -70,7 +73,7 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(null),
         icon: const Icon(Icons.add),
-        label: const Text('Add'),
+        label: const Text('Add to log'),
       ),
       body: Column(children: [
         _header(crm),
@@ -173,9 +176,16 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
               ],
               8.h,
               Row(children: [
-                InkWell(
-                  onTap: () => _cycleStatus(d),
-                  borderRadius: BorderRadius.circular(20),
+                // The status changes only through this menu, with a confirmation — never by a stray tap.
+                PopupMenuButton<String>(
+                  key: Key('decision_status_${d.id}'),
+                  tooltip: 'Change status',
+                  enabled: widget.canSettle,
+                  onSelected: (to) => _changeStatus(d, to),
+                  itemBuilder: (_) => [
+                    for (final st in const ['pending', 'approved', 'rejected', 'deferred', 'done'])
+                      if (st != d.status) PopupMenuItem(value: st, child: Text('Mark ${decisionStatusLabel(st).toLowerCase()}')),
+                  ],
                   child: _chip(crm, decisionStatusLabel(d.status), _statusColor(crm, d.status)),
                 ),
                 8.w,
@@ -192,12 +202,26 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
                       style: TextStyle(fontSize: 12, fontWeight: overdue ? FontWeight.w700 : FontWeight.w400, color: overdue ? crm.destructive : crm.textSecondary)),
                 ],
                 const Spacer(),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
-                  onPressed: () => _delete(d),
+                PopupMenuButton<String>(
+                  key: Key('decision_more_${d.id}'),
+                  tooltip: 'More',
+                  icon: Icon(Icons.more_vert_rounded, size: 18, color: crm.textSecondary),
+                  onSelected: (v) => v == 'remove' ? _delete(d) : _edit(d),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(value: 'remove', child: Text('Remove from the log')),
+                  ],
                 ),
               ]),
+              if (d.decidedByName.isNotEmpty && d.status != 'pending')
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    '${decisionStatusLabel(d.status)} by ${d.decidedByName}${d.decidedAt == null ? '' : ' · ${DateFormat('d MMM').format(d.decidedAt!)}'}${d.decisionNote.isEmpty ? '' : ': “${d.decisionNote}”'}',
+                    key: Key('decision_settled_${d.id}'),
+                    style: TextStyle(fontSize: 12, color: crm.textSecondary),
+                  ),
+                ),
             ]),
           ),
         ),
@@ -211,24 +235,25 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
         child: Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color)),
       );
 
-  Future<void> _cycleStatus(CeoDecision d) async {
-    const order = ['pending', 'approved', 'done', 'deferred', 'rejected'];
-    final next = order[(order.indexOf(d.status) + 1) % order.length];
-    await _persist(CeoDecision(
-      id: d.id, month: d.month, year: d.year, type: d.type, title: d.title,
-      description: d.description, amount: d.amount, owner: d.owner, dueDate: d.dueDate, status: next,
-    ));
+  /// Ask first (with an optional note), then change — the note is kept with who changed it.
+  Future<void> _changeStatus(CeoDecision d, String to) async {
+    final note = await showDialog<String>(context: context, builder: (_) => _StatusNoteDialog(title: 'Mark "${d.title}" ${decisionStatusLabel(to).toLowerCase()}?'));
+    if (note == null) return;
+    await _persist(
+      CeoDecision(id: d.id, month: d.month, year: d.year, type: d.type, title: d.title, description: d.description, amount: d.amount, owner: d.owner, dueDate: d.dueDate, status: to),
+      note: note,
+    );
   }
 
   Future<void> _delete(CeoDecision d) async {
     final yes = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Delete decision?'),
-        content: Text('"${d.title}" will be removed.'),
+        title: const Text('Remove from the log?'),
+        content: Text('"${d.title}" will be hidden from the log.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+          FilledButton(key: const Key('decision_remove_confirm'), onPressed: () => Navigator.pop(c, true), child: const Text('Remove')),
         ],
       ),
     );
@@ -236,15 +261,15 @@ class _CeoDecisionsScreenState extends ConsumerState<CeoDecisionsScreen> {
     try {
       await ref.read(monthEndServiceProvider).deleteDecision(d.id);
       _invalidate();
-      if (mounted) showSuccessSnackBar(context, 'Deleted');
+      if (mounted) showSuccessSnackBar(context, 'Removed from the log');
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
     }
   }
 
-  Future<void> _persist(CeoDecision d) async {
+  Future<void> _persist(CeoDecision d, {String? note}) async {
     try {
-      await ref.read(monthEndServiceProvider).saveDecision(d);
+      await ref.read(monthEndServiceProvider).saveDecision(d, note: note);
       _invalidate();
     } catch (e) {
       if (mounted) showErrorSnackBar(context, e);
@@ -401,4 +426,34 @@ class _DecisionFormState extends State<_DecisionForm> {
       ),
     );
   }
+}
+
+/// "Mark it approved?" with an optional note. Pops the note (possibly empty) on Mark, null on Cancel. Owns its controller, so it is
+/// disposed only when the dialog is really gone.
+class _StatusNoteDialog extends StatefulWidget {
+  const _StatusNoteDialog({required this.title});
+  final String title;
+
+  @override
+  State<_StatusNoteDialog> createState() => _StatusNoteDialogState();
+}
+
+class _StatusNoteDialogState extends State<_StatusNoteDialog> {
+  final _note = TextEditingController();
+
+  @override
+  void dispose() {
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.title),
+        content: TextField(key: const Key('decision_status_note'), controller: _note, maxLines: 2, decoration: const InputDecoration(labelText: 'Note (optional)', border: OutlineInputBorder())),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(key: const Key('decision_status_confirm'), onPressed: () => Navigator.pop(context, _note.text), child: const Text('Mark')),
+        ],
+      );
 }

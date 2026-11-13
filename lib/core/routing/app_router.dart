@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../auth/app_role.dart';
@@ -72,6 +73,9 @@ import '../../features/sales/presentation/screens/monthly_bookings_screen.dart';
 import '../../features/sales/presentation/screens/cancelled_works_screen.dart';
 import '../../features/sales/presentation/screens/booking_map_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_dashboard_screen.dart';
+import '../../features/marketing/presentation/team/team_dashboard_screen.dart';
+import '../../features/marketing/presentation/socials/socials_screen.dart';
+import '../../features/marketing/presentation/portfolio/portfolio_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_eod_screen.dart';
 import '../../features/marketing/presentation/screens/competitors_screen.dart';
 import '../../features/marketing/presentation/screens/growth_scores_screen.dart';
@@ -124,7 +128,9 @@ import 'package:nizan_crm/features/finance/presentation/screens/reports_center_s
 import 'package:nizan_crm/features/finance/presentation/screens/sales_report_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/month_end_review_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/monthly_planning_screen.dart';
+import 'package:nizan_crm/features/ceo/presentation/screens/ceo_desk_screen.dart';
 import 'package:nizan_crm/features/ceo/presentation/screens/ceo_home_screen.dart';
+import 'package:nizan_crm/features/ceo/presentation/screens/decision_rules_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/ceo_decisions_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/financial_glossary_screen.dart';
 import 'package:nizan_crm/features/finance/presentation/screens/department_report_screen.dart';
@@ -308,6 +314,7 @@ String? subKeyForPath(String path) {
   if (path.startsWith('/marketing/calendar')) return 'marketing.calendar';
   if (path.startsWith('/marketing/leads-report')) return 'marketing.leads_report';
   if (path.startsWith('/marketing/campaigns')) return 'marketing.campaigns';
+  if (path.startsWith('/marketing/team')) return 'marketing.eod'; // the Team Dashboard is the EOD tracker's successor: same people, same key
   if (path.startsWith('/marketing/dashboard')) return 'marketing.dashboard';
   // Staff / HR
   if (path == '/hr/salaries') return 'staff.salaries';
@@ -357,6 +364,11 @@ const _ceoScreens = [
   '/company-finance/sales/summary',
   '/company-finance/sales/by-package',
   '/company-finance/sales/by-salesperson',
+  '/company-finance/sales/by-customer',
+  '/company-finance/profit-loss',
+  '/company-finance/aging',
+  '/company-finance/reports',
+  '/company-finance/tax-filings',
   '/marketing/insights',
   '/hr/analytics',
   '/hr/evaluation',
@@ -373,7 +385,11 @@ bool isRouteAllowed(String path, Access access,
     {bool inventoryAccess = false, bool inventoryManage = false}) {
   final role = access.role;
   if (path == '/' || path == '/auth/loading') return access.canSeeDashboard;
-  if (access.isCeo && !_ceoMayOpen(path)) return false;
+  // For the CEO / Executive Director the allow-list above is the WHOLE rule. Their role's permission list is not consulted: an admin
+  // can trim it, an older login may carry only part of it, and a leader must never be bounced silently to the home screen from a
+  // menu item that is offered to them. (What they may read is decided by the server: it refuses every pay and bank route and every
+  // change — backend utils/ceoAccess.js.)
+  if (access.isCeo) return _ceoMayOpen(path);
   if (path.startsWith('/artist-head')) {
     return access.canSeeArtistHead;
   }
@@ -827,9 +843,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           } else if (state.uri.path == '/company-finance/planning') {
             title = 'Monthly Planning';
           } else if (state.uri.path == '/ceo') {
-            title = 'Overview';
+            title = 'Home';
           } else if (state.uri.path == '/ceo/decisions') {
             title = 'Decisions';
+          } else if (state.uri.path == '/ceo/rules') {
+            title = 'Decision rules';
           } else if (state.uri.path == '/company-finance/decisions') {
             title = 'CEO Decisions';
           } else if (state.uri.path == '/company-finance/glossary') {
@@ -956,6 +974,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'HRA · House Rent Allowance';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
+          } else if (state.uri.path == '/marketing/team') {
+            title = 'Team Dashboard';
+          } else if (state.uri.path == '/marketing/socials') {
+            title = 'Socials';
+          } else if (state.uri.path == '/marketing/portfolio') {
+            title = 'Creative Portfolio';
           } else if (state.uri.path == '/marketing/eod') {
             title = 'Marketing EOD & Team Log';
           } else if (state.uri.path == '/marketing/competitors') {
@@ -1053,9 +1077,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/ceo/decisions',
-            builder: (context, state) => CeoDecisionsScreen(
-              initialOpenOnly: state.uri.queryParameters['open'] == 'true' || state.uri.path == '/ceo/decisions',
-            ),
+            builder: (context, state) => deskFromUri(state.uri),
+          ),
+          GoRoute(
+            path: '/ceo/rules',
+            builder: (context, state) => const DecisionRulesScreen(),
           ),
           GoRoute(
             path: '/artist-head',
@@ -1443,6 +1469,18 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const MarketingDashboardScreen(),
           ),
           GoRoute(
+            path: '/marketing/team',
+            builder: (context, state) => TeamDashboardScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
+          ),
+          GoRoute(
+            path: '/marketing/portfolio',
+            builder: (context, state) => PortfolioScreen(initialTab: state.uri.queryParameters['tab'] ?? 'planner'),
+          ),
+          GoRoute(
+            path: '/marketing/socials',
+            builder: (context, state) => SocialsScreen(initialTab: state.uri.queryParameters['tab'] ?? 'overview'),
+          ),
+          GoRoute(
             path: '/marketing/eod',
             builder: (context, state) => const MarketingEodScreen(),
           ),
@@ -1755,8 +1793,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/company-finance/decisions',
-            builder: (context, state) => CeoDecisionsScreen(
-              initialOpenOnly: state.uri.queryParameters['open'] == 'true',
+            builder: (context, state) => Consumer(
+              builder: (context, ref, _) => CeoDecisionsScreen(
+                initialOpenOnly: state.uri.queryParameters['open'] == 'true',
+                canSettle: ref.watch(effectiveAccessProvider).canSettleDecisionLog,
+              ),
             ),
           ),
           GoRoute(

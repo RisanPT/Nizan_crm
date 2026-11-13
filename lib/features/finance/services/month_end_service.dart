@@ -53,11 +53,12 @@ class MonthEndService {
     }
   }
 
-  Future<CeoDecision> saveDecision(CeoDecision d) async {
+  Future<CeoDecision> saveDecision(CeoDecision d, {String? note}) async {
     try {
+      final body = {...d.toJson(), if (note != null && note.trim().isNotEmpty) 'note': note.trim()};
       final res = d.id.isEmpty
-          ? await _dio.post('/reports/decisions', data: d.toJson())
-          : await _dio.put('/reports/decisions/${d.id}', data: d.toJson());
+          ? await _dio.post('/reports/decisions', data: body)
+          : await _dio.put('/reports/decisions/${d.id}', data: body);
       return CeoDecision.fromJson(Map<String, dynamic>.from(res.data as Map));
     } catch (e) {
       throw AppException(e, action: 'save decision');

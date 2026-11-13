@@ -1,4 +1,5 @@
 // The CEO home's two server payloads: GET /api/ceo/inbox and GET /api/ceo/signals (backend services/ceoInbox.js).
+import 'package:nizan_crm/features/ceo/data/decision_models.dart';
 
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
 double? _dn(dynamic v) => (v as num?)?.toDouble();
@@ -51,12 +52,29 @@ class CeoInboxItem {
 }
 
 class CeoInbox {
-  const CeoInbox({required this.items, required this.needsYou, required this.withTeam, required this.oldestTeamDays});
+  const CeoInbox({
+    required this.items,
+    required this.needsYou,
+    required this.withTeam,
+    required this.oldestTeamDays,
+    this.desk = const DecisionCounts(),
+    this.preview = const [],
+    this.recent = const [],
+    this.logOpen = 0,
+  });
 
   final List<CeoInboxItem> items;
   final int needsYou;
   final int withTeam;
   final int oldestTeamDays;
+
+  /// The decision desk: how many requests wait (and what kind), the first few of them, and the last few decided.
+  final DecisionCounts desk;
+  final List<DecisionRequest> preview;
+  final List<DecisionRequest> recent;
+
+  /// Open entries in the manual decisions log.
+  final int logOpen;
 
   List<CeoInboxItem> get mine => items.where((i) => i.isMine).toList();
   List<CeoInboxItem> get team => items.where((i) => !i.isMine).toList();
@@ -67,6 +85,10 @@ class CeoInbox {
         needsYou: _i(j['needsYou']),
         withTeam: _i(j['withTeam']),
         oldestTeamDays: _i(j['oldestTeamDays']),
+        desk: DecisionCounts.fromJson(j['decisions'] is Map ? Map<String, dynamic>.from(j['decisions'] as Map) : null),
+        preview: (((j['decisions'] as Map?)?['preview'] as List?) ?? const []).map((e) => DecisionRequest.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+        recent: ((j['recent'] as List?) ?? const []).map((e) => DecisionRequest.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
+        logOpen: _i((j['log'] as Map?)?['open']),
       );
 }
 

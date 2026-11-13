@@ -1003,8 +1003,11 @@ class _PipelineKanbanTab extends ConsumerWidget {
                                           if (isRaised) ...[
                                             OutlinedButton(
                                               onPressed: () async {
-                                                await ref.read(recruitmentServiceProvider).approveHiringPlan(p.id);
+                                                final sentOn = await ref.read(recruitmentServiceProvider).approveHiringPlan(p.id);
                                                 ref.invalidate(hiringPlansProvider);
+                                                if (sentOn && context.mounted) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vetted. The CEO / Executive Director will decide on this plan.')));
+                                                }
                                               },
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: crm.success,

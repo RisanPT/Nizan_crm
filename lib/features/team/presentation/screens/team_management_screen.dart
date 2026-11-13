@@ -11,6 +11,7 @@ import '../../../../services/role_service.dart';
 import '../../../../services/user_service.dart';
 import '../../../../services/employee_service.dart';
 import '../../../../core/models/employee.dart';
+import '../../../../core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 
 /// Scoped user-management screen for Department Heads.
@@ -56,6 +57,8 @@ class TeamManagementScreen extends HookConsumerWidget {
       final nameCtrl = TextEditingController(text: user?.name ?? '');
       final emailCtrl = TextEditingController(text: user?.email ?? '');
       final passwordCtrl = TextEditingController();
+      final phoneCtrl = TextEditingController();
+      var obscurePassword = true;
 
       // Department Heads only create within their own department.
       final allowed = access.creatableRoles.toList();
@@ -64,214 +67,437 @@ class TeamManagementScreen extends HookConsumerWidget {
       // Artist/driver logins MUST link to an Employee profile, otherwise their
       // assigned works never resolve (their screens filter by employeeId).
       var selEmployeeId = user?.employeeId ?? '';
+      var saving = false;
+
+      InputDecoration fieldDeco({
+        required String label,
+        required IconData icon,
+        Widget? suffixIcon,
+        String? helperText,
+      }) {
+        return InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(
+            fontSize: 13,
+            color: Color(0xFF6B7280),
+          ),
+          prefixIcon: Icon(icon, size: 18, color: const Color(0xFF9CA3AF)),
+          suffixIcon: suffixIcon,
+          helperText: helperText,
+          helperStyle: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            borderSide: BorderSide(color: Color(0xFF7B1E3B), width: 1.5),
+          ),
+        );
+      }
 
       await showDialog<void>(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setState) {
+            final isMobile = MediaQuery.of(ctx).size.width < 600;
+            Widget pair(Widget a, Widget b) => isMobile
+                ? Column(children: [a, 12.h, b])
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: a),
+                      12.w,
+                      Expanded(child: b),
+                    ],
+                  );
+
             return AlertDialog(
-              title: Text(user == null ? 'Add Team Member' : 'Edit Team Member'),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              insetPadding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 32,
+                vertical: 24,
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
+              title: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFCE4EC),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      user == null
+                          ? Icons.person_add_alt_1
+                          : Icons.manage_accounts_outlined,
+                      size: 20,
+                      color: const Color(0xFF7B1E3B),
+                    ),
+                  ),
+                  14.w,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          user == null ? 'Add Team Member' : 'Edit Member · ${user.name}',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF111827),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          user == null
+                              ? 'Create a team member and assign role, access and profile.'
+                              : 'Update team member credentials, role and employee link.',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w400,
+                            color: Color(0xFF6B7280),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close, size: 20, color: Color(0xFF6B7280)),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
               content: SizedBox(
-                width: 440,
+                width: 580,
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Name
-                      TextField(
-                        controller: nameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Full Name *',
-                          prefixIcon: Icon(Icons.person_outline),
+                      // ── Account Information ─────────────────────────────
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: 10),
+                        child: Text(
+                          'ACCOUNT INFORMATION',
+                          style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B7280),
+                          ),
                         ),
                       ),
-                      16.h,
-                      // Email
-                      TextField(
-                        controller: emailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Email (login) *',
-                          prefixIcon: Icon(Icons.email_outlined),
+                      pair(
+                        TextField(
+                          controller: nameCtrl,
+                          decoration: fieldDeco(
+                            label: 'Full Name *',
+                            icon: Icons.person_outline,
+                          ),
+                        ),
+                        TextField(
+                          controller: emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: fieldDeco(
+                            label: 'Email (login) *',
+                            icon: Icons.email_outlined,
+                          ),
                         ),
                       ),
-                      16.h,
-                      // Password
-                      TextField(
-                        controller: passwordCtrl,
-                        obscureText: true,
-                        decoration: InputDecoration(
-                          labelText: user == null
-                              ? 'Password *'
-                              : 'New Password (leave blank to keep)',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                        ),
-                      ),
-                      16.h,
-                      // Role — scoped to allowed subordinate roles
-                      Consumer(
-                        builder: (ctx, ref, _) {
-                          final rolesAsync = ref.watch(rolesProvider);
-                          final allRoles = rolesAsync.value ?? [];
-                          final filtered = allowed.isEmpty
-                              ? allRoles
-                              : allRoles
-                                  .where((r) => allowed.contains(r.key))
-                                  .toList();
-
-                          return DropdownButtonFormField<String>(
-                            initialValue: filtered.any((r) => r.key == selectedRole)
-                                ? selectedRole
-                                : null,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Role *',
-                              prefixIcon: Icon(Icons.badge_outlined),
-                            ),
-                            items: [
-                              for (final r in filtered)
-                                DropdownMenuItem(
-                                  value: r.key,
-                                  child: Text(r.label),
-                                ),
-                            ],
-                            onChanged: (v) {
-                              if (v != null) setState(() => selectedRole = v);
-                            },
-                          );
-                        },
-                      ),
-                      16.h,
-                      // Link to Employee profile — required for artist/driver so
-                      // their assigned works resolve; optional for other roles.
-                      Consumer(
-                        builder: (ctx, ref, _) {
-                          final needsLink = selectedRole == 'artist' ||
-                              selectedRole == 'driver';
-                          final asyncEmployees = ref.watch(employeesProvider);
-                          final employees = (asyncEmployees.value ?? [])
-                              .where((e) => e.isActive || e.id == selEmployeeId)
-                              .toList();
-                          if (asyncEmployees.isLoading) {
-                            return const LinearProgressIndicator();
-                          }
-                          final hasEmployee = employees.any((e) => e.id == selEmployeeId);
-                          return DropdownButtonFormField<String>(
-                            initialValue: (selEmployeeId.isEmpty || !hasEmployee)
-                                ? ''
-                                : selEmployeeId,
-                            isExpanded: true,
-                            decoration: InputDecoration(
-                              labelText: needsLink
-                                  ? 'Link to Employee Profile *'
-                                  : 'Link to Employee Profile (Optional)',
-                              prefixIcon: const Icon(Icons.link_outlined),
-                              helperText:
-                                  'Connects this login to a staff profile so assigned works show up.',
-                              helperMaxLines: 2,
-                            ),
-                            items: [
-                              const DropdownMenuItem(
-                                value: '',
-                                child: Text('Not linked'),
+                      12.h,
+                      pair(
+                        TextField(
+                          controller: passwordCtrl,
+                          obscureText: obscurePassword,
+                          decoration: fieldDeco(
+                            label: user == null
+                                ? 'Password *'
+                                : 'New Password (leave blank to keep)',
+                            icon: Icons.lock_outline,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                obscurePassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                size: 18,
+                                color: const Color(0xFF9CA3AF),
                               ),
-                              for (final e in employees)
-                                DropdownMenuItem(
-                                  value: e.id,
-                                  child: Text(
-                                    '${e.name} (${e.artistRole})',
-                                    overflow: TextOverflow.ellipsis,
+                              onPressed: () => setState(
+                                () => obscurePassword = !obscurePassword,
+                              ),
+                            ),
+                          ),
+                        ),
+                        TextField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          decoration: fieldDeco(
+                            label: 'Phone number',
+                            icon: Icons.phone_outlined,
+                          ),
+                        ),
+                      ),
+                      16.h,
+                      // ── Role and team ───────────────────────────────────
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: 10),
+                        child: Text(
+                          'ROLE AND TEAM',
+                          style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                      pair(
+                        Consumer(
+                          builder: (ctx, ref, _) {
+                            final rolesAsync = ref.watch(rolesProvider);
+                            final allRoles = rolesAsync.value ?? [];
+                            final filtered = allowed.isEmpty
+                                ? allRoles
+                                : allRoles
+                                    .where((r) => allowed.contains(r.key))
+                                    .toList();
+
+                            return DropdownButtonFormField<String>(
+                              initialValue: filtered.any((r) => r.key == selectedRole)
+                                  ? selectedRole
+                                  : null,
+                              isExpanded: true,
+                              decoration: fieldDeco(
+                                label: 'Role *',
+                                icon: Icons.badge_outlined,
+                                helperText: rolesAsync.isLoading
+                                    ? 'Loading roles…'
+                                    : '${filtered.length} roles available',
+                              ),
+                              items: [
+                                for (final r in filtered)
+                                  DropdownMenuItem(
+                                    value: r.key,
+                                    child: Text(r.label),
+                                  ),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) setState(() => selectedRole = v);
+                              },
+                            );
+                          },
+                        ),
+                        Consumer(
+                          builder: (ctx, ref, _) {
+                            final needsLink = selectedRole == 'artist' ||
+                                selectedRole == 'driver';
+                            final asyncEmployees = ref.watch(employeesProvider);
+                            final employees = (asyncEmployees.value ?? [])
+                                .where((e) => e.isActive || e.isTimeboxLinked || e.id == selEmployeeId)
+                                .toList();
+                            if (asyncEmployees.isLoading) {
+                              return const Padding(
+                                padding: EdgeInsets.only(top: 24),
+                                child: LinearProgressIndicator(),
+                              );
+                            }
+                            return EmployeePickerField(
+                              employees: employees,
+                              selectedId: selEmployeeId.isEmpty ? null : selEmployeeId,
+                              label: needsLink
+                                  ? 'Employee profile *'
+                                  : 'Employee profile (optional)',
+                              icon: Icons.link_outlined,
+                              allowUnassign: true,
+                              onChanged: (e) => setState(
+                                () => selEmployeeId = e?.id ?? '',
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      16.h,
+
+                      // ── Extra Access ────────────────────────────────────
+                      const Padding(
+                        padding: EdgeInsets.only(top: 8, bottom: 10),
+                        child: Text(
+                          'EXTRA ACCESS',
+                          style: TextStyle(
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => setState(() => active = !active),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+                          decoration: BoxDecoration(
+                            color: active
+                                ? const Color(0xFF7B1E3B).withValues(alpha: 0.04)
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: active
+                                  ? const Color(0xFF7B1E3B).withValues(alpha: 0.35)
+                                  : const Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.verified_user_outlined,
+                                size: 18,
+                                color: active ? const Color(0xFF7B1E3B) : const Color(0xFF6B7280),
+                              ),
+                              10.w,
+                              const Expanded(
+                                child: Text(
+                                  'Active (can log in)',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1F2937),
                                   ),
                                 ),
+                              ),
+                              Switch(
+                                value: active,
+                                activeThumbColor: const Color(0xFF7B1E3B),
+                                activeTrackColor: const Color(0xFFFCE4EC),
+                                onChanged: (v) => setState(() => active = v),
+                              ),
                             ],
-                            onChanged: (v) =>
-                                setState(() => selEmployeeId = v ?? ''),
-                          );
-                        },
+                          ),
+                        ),
                       ),
-                      16.h,
-                      // Active toggle
-                      SwitchListTile(
-                        title: const Text('Account Active'),
-                        subtitle: const Text('Inactive users cannot log in'),
-                        value: active,
-                        onChanged: (v) => setState(() => active = v),
-                        secondary: const Icon(Icons.toggle_on_outlined),
-                      ),
+                      12.h,
                     ],
                   ),
                 ),
               ),
+              actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF6B7280),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
                   child: const Text('Cancel'),
                 ),
-                FilledButton(
-                  onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    final email = emailCtrl.text.trim();
-                    final password = passwordCtrl.text;
+                ElevatedButton(
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          final name = nameCtrl.text.trim();
+                          final email = emailCtrl.text.trim();
+                          final password = passwordCtrl.text;
 
-                    if (name.isEmpty || email.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Name and email are required')),
-                      );
-                      return;
-                    }
-                    if (user == null && password.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Password is required for new users')),
-                      );
-                      return;
-                    }
-                    // Without an employee link, an artist/driver login can never
-                    // see the works assigned to them — block it here.
-                    if ((selectedRole == 'artist' || selectedRole == 'driver') &&
-                        selEmployeeId.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Link this login to an Employee profile so assigned works show up.'),
-                        ),
-                      );
-                      return;
-                    }
+                          if (name.isEmpty || email.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Name and email are required')),
+                            );
+                            return;
+                          }
+                          if (user == null && password.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Password is required for new users')),
+                            );
+                            return;
+                          }
+                          if ((selectedRole == 'artist' || selectedRole == 'driver') &&
+                              selEmployeeId.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                    'Link this login to an Employee profile so assigned works show up.'),
+                              ),
+                            );
+                            return;
+                          }
 
-                    try {
-                      final svc = ref.read(userServiceProvider);
-                      if (user == null) {
-                        await svc.createUser(
-                          name: name,
-                          email: email,
-                          password: password,
-                          role: selectedRole,
-                          active: active,
-                          employeeId:
-                              selEmployeeId.isEmpty ? null : selEmployeeId,
-                        );
-                      } else {
-                        await svc.updateUser(
-                          id: user.id,
-                          name: name,
-                          email: email,
-                          role: selectedRole,
-                          active: active,
-                          password: password.isNotEmpty ? password : null,
-                          employeeId:
-                              selEmployeeId.isEmpty ? null : selEmployeeId,
-                        );
-                      }
-                      ref.refreshData.crmUsers();
-                      if (ctx.mounted) Navigator.pop(ctx);
-                    } catch (e) {
-                      if (ctx.mounted) showErrorSnackBar(ctx, e);
-                    }
-                  },
-                  child: Text(user == null ? 'Add Member' : 'Save Changes'),
+                          setState(() => saving = true);
+                          try {
+                            final svc = ref.read(userServiceProvider);
+                            if (user == null) {
+                              await svc.createUser(
+                                name: name,
+                                email: email,
+                                password: password,
+                                role: selectedRole,
+                                active: active,
+                                employeeId:
+                                    selEmployeeId.isEmpty ? null : selEmployeeId,
+                              );
+                            } else {
+                              await svc.updateUser(
+                                id: user.id,
+                                name: name,
+                                email: email,
+                                role: selectedRole,
+                                active: active,
+                                password: password.isNotEmpty ? password : null,
+                                employeeId:
+                                    selEmployeeId.isEmpty ? null : selEmployeeId,
+                              );
+                            }
+                            ref.refreshData.crmUsers();
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          } catch (e) {
+                            if (ctx.mounted) {
+                              setState(() => saving = false);
+                              showErrorSnackBar(ctx, e);
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7B1E3B),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  child: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(user == null ? 'Create Member' : 'Save Changes'),
                 ),
               ],
             );

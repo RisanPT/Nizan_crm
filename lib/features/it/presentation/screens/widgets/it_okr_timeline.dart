@@ -784,7 +784,7 @@ class _ITOkrTimelineState extends State<ITOkrTimeline> {
       ),
       child: Stack(
         children: [
-          if (bar != null) bar,
+          ?bar,
         ],
       ),
     );

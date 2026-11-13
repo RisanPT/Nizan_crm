@@ -3,12 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:nizan_crm/core/auth/workspace.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/accounts/controllers/work_profit_controller.dart';
 import 'package:nizan_crm/features/accounts/data/finance_list.dart';
 import 'package:nizan_crm/features/accounts/data/work_profit.dart';
+import 'package:nizan_crm/features/ceo/data/ceo_inbox.dart';
 import 'package:nizan_crm/features/ceo/presentation/widgets/ceo_cards.dart';
+import 'package:nizan_crm/features/ceo/presentation/widgets/leadership_sections.dart';
 import 'package:nizan_crm/features/ceo/services/ceo_service.dart';
+import 'package:nizan_crm/features/ceo/services/decision_service.dart';
 import 'package:nizan_crm/features/dashboard/controllers/dashboard_analytics_provider.dart';
 import 'package:nizan_crm/features/dashboard/data/dashboard_analytics.dart';
 import 'package:nizan_crm/features/dashboard/presentation/widgets/dashboard_widgets.dart' show deltaPct, kDashBad, kDashGood;
@@ -20,9 +25,10 @@ import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/features/it/services/okr_service.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 
-/// The CEO's home: what needs a decision, what is stuck with the team, and how the company is doing — money, sales and
-/// capacity, people and customers, strategy and risks. Every figure comes from an endpoint that already exists (or the two
-/// small /ceo ones); each card loads and fails on its own, so one broken source never blanks the page.
+/// The leadership home (CEO and Executive Director): first what needs a decision — real cards you can act on — then what deserves
+/// a second look, the company's pulse in four numbers, and the money, sales, people and strategy sections. Every figure comes from
+/// an endpoint that already exists (or the small /ceo and /decisions ones); each section loads and fails on its own, so one broken
+/// source never blanks the page. Laptop: the decisions and figures on the left, what is stuck and what was decided on the right.
 class CeoHomeScreen extends ConsumerStatefulWidget {
   const CeoHomeScreen({super.key});
 
@@ -36,6 +42,7 @@ class _CeoHomeScreenState extends ConsumerState<CeoHomeScreen> {
   late final ({int month, int year}) _period = (month: DateTime.now().month, year: DateTime.now().year);
   late final ({String from, String to}) _range = _monthRange();
   late final WorkProfitQuery _loss = _lossQuery();
+  DateTime? _updated;
 
   ({String from, String to}) _monthRange() {
     final (from, to) = FinanceQuery.monthBounds(DateTime.now());
@@ -50,6 +57,7 @@ class _CeoHomeScreenState extends ConsumerState<CeoHomeScreen> {
   Future<void> _refresh() async {
     ref.invalidate(ceoInboxProvider);
     ref.invalidate(ceoSignalsProvider);
+    ref.invalidate(decisionQueueProvider);
     ref.invalidate(accountsDashboardSummaryProvider(_range));
     ref.invalidate(monthEndReviewProvider(_period));
     ref.invalidate(workProfitPageProvider(_loss));
@@ -62,53 +70,158 @@ class _CeoHomeScreenState extends ConsumerState<CeoHomeScreen> {
     await ref.read(ceoInboxProvider.future).then<void>((_) {}, onError: (_) {});
   }
 
+  String _greeting() {
+    final h = DateTime.now().hour;
+    final part = h < 12 ? 'Good morning' : (h < 17 ? 'Good afternoon' : 'Good evening');
+    final first = (ref.read(authSessionProvider)?.name ?? '').trim().split(' ').first;
+    return first.isEmpty ? part : '$part, $first';
+  }
+
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    final access = ref.watch(effectiveAccessProvider);
     final inbox = ref.watch(ceoInboxProvider);
+    final signals = ref.watch(ceoSignalsProvider).maybeWhen(data: (s) => s, orElse: () => const <CeoSignal>[]);
+    ref.listen(ceoInboxProvider, (_, next) {
+      if (next.hasValue && mounted) setState(() => _updated = DateTime.now());
+    });
     final today = DateFormat('EEEE, d MMMM').format(DateTime.now());
 
     return RefreshIndicator(
       onRefresh: _refresh,
       child: LayoutBuilder(builder: (context, box) {
-        final wide = box.maxWidth >= 980;
+        final wide = box.maxWidth >= 1100;
         const gap = 14.0;
         final pad = box.maxWidth >= 600 ? 24.0 : 16.0;
-        final colWidth = wide ? (box.maxWidth - pad * 2 - gap) / 2 : box.maxWidth - pad * 2;
+        final inner = box.maxWidth - pad * 2;
+        final railWidth = wide ? 340.0 : 0.0;
+        final mainWidth = wide ? inner - railWidth - gap : inner;
+        final cols = mainWidth >= 760 ? 2 : 1;
+        final colWidth = (mainWidth - gap * (cols - 1)) / cols;
 
-        final inboxBody = CeoAsync(
+        Widget whenData(Widget Function(CeoInbox) build) => inbox.maybeWhen(data: build, orElse: () => const SizedBox.shrink());
+
+        final header = Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_greeting(), key: const Key('ceo_title'), style: TextStyle(fontSize: wide ? 26 : 22, fontWeight: FontWeight.w800, color: crm.textPrimary, letterSpacing: -0.4)),
+              const SizedBox(height: 2),
+              Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Container(
+                  key: const Key('ceo_role_chip'),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+                  decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(20)),
+                  child: Text(access.isCeo ? access.leadershipTitle : 'Company overview', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w800, color: crm.primary)),
+                ),
+                Text(today, style: TextStyle(fontSize: 13, color: crm.textSecondary)),
+                if (_updated != null) Text('Updated ${DateFormat('h:mm a').format(_updated!)}', key: const Key('ceo_updated'), style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+              ]),
+            ]),
+          ),
+          IconButton(key: const Key('ceo_refresh'), tooltip: 'Refresh', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
+        ]);
+
+        // what needs a decision comes first, on any screen; its own failure is shown once, here
+        final decisions = CeoAsync(
           value: inbox,
           onRetry: () => ref.invalidate(ceoInboxProvider),
-          builder: (data) => CeoInboxCards(inbox: data),
+          builder: (data) => CeoDecisionsSection(inbox: data),
         );
+        final attention = whenData((data) => CeoAttention(inbox: data, signals: signals));
+        final pulse = _PulseStrip(range: _range, period: _period, width: mainWidth);
+        final sections = Wrap(spacing: gap, runSpacing: gap, children: [
+          SizedBox(width: colWidth, child: _MoneyCard(range: _range, period: _period, loss: _loss)),
+          SizedBox(width: colWidth, child: _SalesCard(query: _dash)),
+          SizedBox(width: colWidth, child: const _PeopleCard()),
+          SizedBox(width: colWidth, child: const _StrategyCard()),
+        ]);
+        final team = whenData((data) => CeoTeamWaiting(inbox: data));
+        final recent = whenData((data) => CeoRecentDecisions(inbox: data));
+
+        Widget stack(List<Widget> kids) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              for (var i = 0; i < kids.length; i++) ...[if (i > 0) const SizedBox(height: gap), kids[i]],
+            ]);
+
+        final body = wide
+            ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                SizedBox(width: mainWidth, child: stack([decisions, pulse, sections])),
+                const SizedBox(width: gap),
+                SizedBox(width: railWidth, child: stack([attention, team, recent])),
+              ])
+            : stack([decisions, attention, pulse, sections, team, recent]);
 
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: EdgeInsets.fromLTRB(pad, 18, pad, 32),
-          children: [
-            Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Overview', key: const Key('ceo_title'), style: TextStyle(fontSize: wide ? 26 : 22, fontWeight: FontWeight.w800, color: crm.textPrimary, letterSpacing: -0.4)),
-                  Text(today, style: TextStyle(fontSize: 13, color: crm.textSecondary)),
-                ]),
-              ),
-              IconButton(key: const Key('ceo_refresh'), tooltip: 'Refresh', onPressed: _refresh, icon: const Icon(Icons.refresh_rounded)),
-            ]),
-            const SizedBox(height: 16),
-            // The decisions come first, on any screen.
-            inboxBody,
-            const SizedBox(height: gap),
-            Wrap(spacing: gap, runSpacing: gap, children: [
-              SizedBox(width: colWidth, child: _MoneyCard(range: _range, period: _period, loss: _loss)),
-              SizedBox(width: colWidth, child: _SalesCard(query: _dash)),
-              SizedBox(width: colWidth, child: const _PeopleCard()),
-              SizedBox(width: colWidth, child: const _StrategyCard()),
-            ]),
-          ],
+          children: [header, const SizedBox(height: 16), body],
         );
       }),
     );
+  }
+}
+
+/// The company in four numbers, each one tap from its detail. (Revenue, profit, cash, what clients owe — shown here and nowhere else.)
+class _PulseStrip extends ConsumerWidget {
+  const _PulseStrip({required this.range, required this.period, required this.width});
+  final ({String from, String to}) range;
+  final ({int month, int year}) period;
+  final double width;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final review = ref.watch(monthEndReviewProvider(period));
+    final summary = ref.watch(accountsDashboardSummaryProvider(range));
+    final cols = width >= 640 ? 4 : 2;
+    const gap = 12.0;
+    final w = (width - gap * (cols - 1)) / cols;
+
+    Widget tile(String key, PulseTile t) => SizedBox(key: Key(key), width: w, child: t);
+
+    final rev = review.maybeWhen(
+      data: (r) {
+        final hasTarget = r.revenueTarget != null && r.revenueTarget! > 0;
+        final c = _change(r.revenue, r.revenuePrev);
+        return PulseTile(
+          label: 'Revenue',
+          value: rupeesShort(r.revenue),
+          change: hasTarget ? '${(r.revenueTargetPct ?? 0).toStringAsFixed(0)}% of target' : c.text,
+          good: hasTarget ? ((r.revenueTargetPct ?? 0) >= 100 ? true : null) : c.good,
+          route: '/company-finance/month-end',
+        );
+      },
+      orElse: () => PulseTile(label: 'Revenue', value: '—', loading: review.isLoading, route: '/company-finance/month-end'),
+    );
+    final profit = review.maybeWhen(
+      data: (r) => PulseTile(
+        label: 'Net profit',
+        value: rupeesShort(r.netProfit),
+        change: '${r.netMarginPct.toStringAsFixed(0)}% margin',
+        good: r.netProfit < 0 ? false : null,
+        route: '/company-finance/month-end',
+      ),
+      orElse: () => PulseTile(label: 'Net profit', value: '—', loading: review.isLoading, route: '/company-finance/month-end'),
+    );
+    final cash = summary.maybeWhen(
+      data: (s) => PulseTile(label: 'Cash + bank', value: rupeesShort(s.cashBankTotal), change: 'today', route: '/accounts/dashboard'),
+      orElse: () => PulseTile(label: 'Cash + bank', value: '—', loading: summary.isLoading, route: '/accounts/dashboard'),
+    );
+    final owed = summary.maybeWhen(
+      data: (s) => PulseTile(
+        label: 'Clients owe',
+        value: rupeesShort(s.receivables.totalOutstanding),
+        change: s.receivables.totalOverdue > 0 ? '${rupeesShort(s.receivables.totalOverdue)} overdue' : 'nothing overdue',
+        good: s.receivables.totalOverdue > 0 ? false : null,
+        route: '/accounts/dashboard',
+      ),
+      orElse: () => PulseTile(label: 'Clients owe', value: '—', loading: summary.isLoading, route: '/accounts/dashboard'),
+    );
+    return Wrap(key: const Key('ceo_pulse'), spacing: gap, runSpacing: gap, children: [
+      tile('ceo_pulse_revenue', rev),
+      tile('ceo_pulse_profit', profit),
+      tile('ceo_pulse_cash', cash),
+      tile('ceo_pulse_owed', owed),
+    ]);
   }
 }
 
@@ -153,45 +266,24 @@ class _MoneyCard extends ConsumerWidget {
         CeoAsync(
           value: review,
           onRetry: () => ref.invalidate(monthEndReviewProvider(period)),
-          builder: (r) {
-            final rev = _change(r.revenue, r.revenuePrev);
-            final hasTarget = r.revenueTarget != null && r.revenueTarget! > 0;
-            final profitTarget = r.profitTarget != null && r.profitTarget! > 0;
-            return CeoStatGrid(stats: [
-              CeoStat(
-                label: 'Revenue',
-                value: rupeesShort(r.revenue),
-                change: hasTarget ? '${(r.revenueTargetPct ?? 0).toStringAsFixed(0)}% of ${rupeesShort(r.revenueTarget!)} target' : rev.text,
-                // part-way through the month a figure under target is not a failure: neutral until it is reached
-                good: hasTarget ? ((r.revenueTargetPct ?? 0) >= 100 ? true : null) : rev.good,
-                hint: hasTarget ? rev.text : null,
-              ),
-              CeoStat(
-                label: 'Profit',
-                value: rupeesShort(r.netProfit),
-                change: profitTarget ? '${(r.profitTargetPct ?? 0).toStringAsFixed(0)}% of ${rupeesShort(r.profitTarget!)} target' : '${r.netMarginPct.toStringAsFixed(0)}% margin',
-                good: r.netProfit < 0 ? false : (profitTarget ? ((r.profitTargetPct ?? 0) >= 100 ? true : null) : true),
-                hint: profitTarget ? '${r.netMarginPct.toStringAsFixed(0)}% margin' : null,
-              ),
-              CeoStat(
-                label: 'Runway',
-                value: r.cashRunwayMonths == null ? '—' : '${r.cashRunwayMonths!.toStringAsFixed(1)} mo',
-                hint: 'burn ${rupeesShort(r.burnRate)}/mo',
-                good: r.cashRunwayMonths == null ? null : r.cashRunwayMonths! >= 6,
-              ),
-            ]);
-          },
+          // revenue and profit are in the Pulse strip above; here is what that strip does not say
+          builder: (r) => CeoStatGrid(stats: [
+            CeoStat(
+              label: 'Runway',
+              value: r.cashRunwayMonths == null ? '—' : '${r.cashRunwayMonths!.toStringAsFixed(1)} mo',
+              hint: 'burn ${rupeesShort(r.burnRate)}/mo',
+              good: r.cashRunwayMonths == null ? null : r.cashRunwayMonths! >= 6,
+            ),
+          ]),
         ),
         const SizedBox(height: 16),
         Divider(height: 1, color: crm.border.faded(1.5)),
         const SizedBox(height: 12),
-        _subTitle(context, 'Cash and dues, today'),
+        _subTitle(context, 'Dues, today'),
         CeoAsync(
           value: summary,
           onRetry: () => ref.invalidate(accountsDashboardSummaryProvider(range)),
           builder: (s) => CeoStatGrid(stats: [
-            CeoStat(label: 'Cash + bank', value: rupeesShort(s.cashBankTotal)),
-            CeoStat(label: 'Clients owe', value: rupeesShort(s.receivables.totalOutstanding), hint: '${rupeesShort(s.receivables.totalOverdue)} overdue'),
             CeoStat(
               label: 'Over 90 days',
               value: rupeesShort(s.receivables.days90),

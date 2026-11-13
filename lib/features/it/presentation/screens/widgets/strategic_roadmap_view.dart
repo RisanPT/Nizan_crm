@@ -216,7 +216,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                       children: [
                         for (final preset in [5, 10, 15, 20])
                           ChoiceChip(
-                            label: Text('$preset-Year Plan (${startYear}–${startYear + preset})'),
+                            label: Text('$preset-Year Plan ($startYear–${startYear + preset})'),
                             selected: duration == preset,
                             onSelected: (_) => applyPreset(preset, setDialogState),
                             selectedColor: crm.primary,
@@ -235,7 +235,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<int>(
-                            value: startYear,
+                            initialValue: startYear,
                             decoration: const InputDecoration(labelText: 'Start Year'),
                             items: [for (var y = 2024; y <= 2035; y++) DropdownMenuItem(value: y, child: Text('$y'))],
                             onChanged: (v) {
@@ -251,7 +251,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<int>(
-                            value: targetYear,
+                            initialValue: targetYear,
                             decoration: const InputDecoration(labelText: 'Target Horizon Year'),
                             items: [
                               for (var y = startYear + 1; y <= startYear + 30; y++)
@@ -482,7 +482,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<int>(
-                          value: horizon,
+                          initialValue: horizon,
                           decoration: const InputDecoration(labelText: 'Horizon Wave'),
                           items: [
                             for (final h in vision.horizons)
@@ -497,7 +497,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: vision.pillars.any((p) => p.id == pillarId)
+                          initialValue: vision.pillars.any((p) => p.id == pillarId)
                               ? pillarId
                               : (vision.pillars.isNotEmpty ? vision.pillars.first.id : null),
                           decoration: const InputDecoration(labelText: 'Strategic Pillar'),
@@ -538,7 +538,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                       Expanded(
                         flex: 2,
                         child: DropdownButtonFormField<String>(
-                          value: quarter,
+                          initialValue: quarter,
                           decoration: const InputDecoration(labelText: 'Quarter'),
                           items: const [
                             DropdownMenuItem(value: 'Q1', child: Text('Q1')),
@@ -553,7 +553,7 @@ class _StrategicRoadmapViewState extends ConsumerState<StrategicRoadmapView> {
                       Expanded(
                         flex: 3,
                         child: DropdownButtonFormField<String>(
-                          value: status,
+                          initialValue: status,
                           decoration: const InputDecoration(labelText: 'Status'),
                           items: const [
                             DropdownMenuItem(value: 'planned', child: Text('Planned')),

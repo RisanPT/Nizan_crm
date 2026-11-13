@@ -1866,7 +1866,7 @@ class _AccountsCollectionsScreenState
                     ),
                     const SizedBox(height: 14),
                     DropdownButtonFormField<String>(
-                      value: selMode,
+                      initialValue: selMode,
                       decoration: const InputDecoration(
                         labelText: 'Payment Mode',
                         border: OutlineInputBorder(),
@@ -2477,7 +2477,7 @@ class _AccountsCollectionsScreenState
                           labelText: 'Artist',
                           prefixIcon: Icon(Icons.person_outline),
                         ),
-                        value: effectiveArtist,
+                        initialValue: effectiveArtist,
                         items: artistItems,
                         onChanged: busy ? null : (v) => setLocal(() => selArtist = v),
                       );
@@ -2939,7 +2939,7 @@ class _InvoiceBalancesTabState extends ConsumerState<_InvoiceBalancesTab> {
         awaitTotal += b.balanceDue;
       }
       for (final c in s.collections) {
-        final mode = (c.paymentMode ?? '').toLowerCase();
+        final mode = (c.paymentMode).toLowerCase();
         if (mode == 'cash') {
           cashTotal += c.amount;
         } else {
@@ -4069,7 +4069,7 @@ class _InvoiceDetailsDialog extends StatelessWidget {
                         Icon(Icons.check_circle_outline_rounded, size: 14, color: crm.success),
                         const SizedBox(width: 6),
                         Text(
-                          '${currency(c.amount)} · ${c.paymentMode?.toUpperCase() ?? 'UPI'}',
+                          '${currency(c.amount)} · ${c.paymentMode.toUpperCase()}',
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                         if (c.employee?.name != null) ...[

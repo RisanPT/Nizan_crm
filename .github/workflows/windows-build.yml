@@ -30,6 +30,9 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+          _CL_: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release --dart-define-from-file=.env.production
 
       - name: Upload Windows build

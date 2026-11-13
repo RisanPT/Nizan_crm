@@ -36,6 +36,9 @@ enum AppRole {
       case 'regional_artist_head':
         return AppRole.artistHead;
       case 'ceo':
+      // The Executive Director has the CEO's login rules and screens (the server calls both "leadership"): the same role here.
+      case 'executive_director':
+      case 'executivedirector':
         return AppRole.ceo;
       case 'accounts':
       case 'accounts_manager':

@@ -100,7 +100,8 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
     final access = Access.of(ref.watch(authSessionProvider));
     final isLeadership =
         access.isFullAccess || access.isDepartmentHead || access.canManageAllPlanning;
-    const canCreate = true;
+    // the CEO / Executive Director look and decide; the server refuses a new project from them, so the button is not offered
+    final canCreate = !access.isViewOnly;
     final mode = _mode == 'strategy'
         ? 'strategy'
         : _mode == 'objectives'
@@ -1894,7 +1895,7 @@ class _CompanyProjectsScreenState extends ConsumerState<CompanyProjectsScreen> {
                       ),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
-                        value: (ref.read(strategicVisionProvider).value?.pillars.any((p) => p.id == strategicPillar) ?? false)
+                        initialValue: (ref.read(strategicVisionProvider).value?.pillars.any((p) => p.id == strategicPillar) ?? false)
                             ? strategicPillar
                             : (ref.read(strategicVisionProvider).value?.pillars.isNotEmpty ?? false
                                 ? ref.read(strategicVisionProvider).value!.pillars.first.id

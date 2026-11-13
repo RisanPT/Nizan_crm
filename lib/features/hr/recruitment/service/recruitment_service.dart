@@ -189,9 +189,12 @@ class RecruitmentService {
     }
   }
 
-  Future<void> approveHiringPlan(String id) async {
+  /// Approve (vet) a plan. → true when the plan was sent on to the CEO / Executive Director instead of being approved here.
+  Future<bool> approveHiringPlan(String id) async {
     try {
-      await _dio.post('/recruitment/plans/$id/approve');
+      final res = await _dio.post('/recruitment/plans/$id/approve');
+      final data = res.data;
+      return data is Map && data['awaitingLeadership'] == true;
     } catch (e) {
       throw AppException(e, action: 'approve hiring plan');
     }

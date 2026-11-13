@@ -203,6 +203,21 @@ class Access {
   /// backend middleware/ceoGuard.js). This flag only tidies the screens: it never grants anything.
   bool get isCeo => role == AppRole.ceo;
 
+  /// The Executive Director login — the CEO's rules and screens, a second leader (see [isCeo]).
+  bool get isExecutiveDirector => isCeo && roleKey == 'executive_director';
+
+  /// How the leader's role reads on screen: "CEO" or "Executive Director".
+  String get leadershipTitle => isExecutiveDirector ? 'Executive Director' : 'CEO';
+
+  /// A leadership login looks and decides; the server refuses every other write, so screens hide their write controls from it.
+  bool get isViewOnly => isCeo;
+
+  /// May change the status of an entry in the manual decisions log: the leaders and the administrators (not Accounts).
+  bool get canSettleDecisionLog => isCeo || roleKey == 'admin' || roleKey == 'manager';
+
+  /// May change the Decision rules (what needs the CEO / Executive Director): an administrator or a leader — never a manager.
+  bool get canEditDecisionRules => roleKey == 'admin' || isCeo;
+
   /// The CEO home (decisions inbox + company at a glance): the CEO, or full-access management who want to see what the CEO sees.
   bool get canSeeCeoHome => isFullAccess || isCeo || has('ceo', false);
 

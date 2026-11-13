@@ -53,6 +53,8 @@ class SettingsScreen extends HookConsumerWidget {
       final nameCtrl = TextEditingController(text: user?.name ?? '');
       final emailCtrl = TextEditingController(text: user?.email ?? '');
       final passwordCtrl = TextEditingController();
+      final phoneCtrl = TextEditingController();
+      var obscurePassword = true;
       var role = user?.role ?? 'manager';
       var active = user?.active ?? true;
       var inventoryAccess = user?.inventoryAccess ?? false;
@@ -114,6 +116,40 @@ class SettingsScreen extends HookConsumerWidget {
                       ],
                     );
 
+              InputDecoration fieldDeco({
+                required String label,
+                required IconData icon,
+                Widget? suffixIcon,
+                String? helperText,
+              }) {
+                return InputDecoration(
+                  labelText: label,
+                  labelStyle: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF6B7280),
+                  ),
+                  prefixIcon: Icon(icon, size: 18, color: const Color(0xFF9CA3AF)),
+                  suffixIcon: suffixIcon,
+                  helperText: helperText,
+                  helperStyle: const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  ),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
+                    borderSide: BorderSide(color: Color(0xFF7B1E3B), width: 1.5),
+                  ),
+                );
+              }
+
               Widget geoDropdown<T>({
                 required String label,
                 required String value,
@@ -126,16 +162,23 @@ class SettingsScreen extends HookConsumerWidget {
                 width: isMobile ? double.infinity : 186,
                 child: DropdownButtonFormField<String>(
                   isExpanded: true,
-                  decoration: InputDecoration(labelText: label, isDense: true),
+                  decoration: fieldDeco(
+                    label: label,
+                    icon: Icons.location_on_outlined,
+                  ),
                   initialValue: value.isEmpty ? '' : value,
                   items: [
-                    DropdownMenuItem(value: '', child: Text(anyLabel)),
+                    DropdownMenuItem(
+                      value: '',
+                      child: Text(anyLabel, style: const TextStyle(fontSize: 13)),
+                    ),
                     for (final it in items)
                       DropdownMenuItem(
                         value: idOf(it),
                         child: Text(
                           nameOf(it),
                           overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                   ],
@@ -144,40 +187,70 @@ class SettingsScreen extends HookConsumerWidget {
               );
 
               return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                backgroundColor: Colors.white,
+                surfaceTintColor: Colors.transparent,
                 insetPadding: EdgeInsets.symmetric(
-                  horizontal: isMobile ? 12 : 40,
+                  horizontal: isMobile ? 12 : 32,
                   vertical: 24,
                 ),
-                titlePadding: const EdgeInsets.fromLTRB(24, 20, 12, 0),
+                titlePadding: const EdgeInsets.fromLTRB(24, 20, 16, 16),
                 title: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: crmColors.primary.withValues(
-                        alpha: 0.12,
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFCE4EC),
+                        shape: BoxShape.circle,
                       ),
+                      alignment: Alignment.center,
                       child: Icon(
                         user == null
                             ? Icons.person_add_alt_1
                             : Icons.manage_accounts_outlined,
-                        size: 18,
-                        color: crmColors.primary,
+                        size: 20,
+                        color: const Color(0xFF7B1E3B),
                       ),
                     ),
-                    12.w,
+                    14.w,
                     Expanded(
-                      child: Text(
-                        user == null ? 'Add user' : 'Edit user · ${user.name}',
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            user == null ? 'Add User' : 'Edit User · ${user.name}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF111827),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            user == null
+                                ? 'Create a new user and assign role, access and profile.'
+                                : 'Update user credentials, role permissions and access limits.',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w400,
+                              color: Color(0xFF6B7280),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
                     IconButton(
                       tooltip: 'Close',
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close, size: 20, color: Color(0xFF6B7280)),
                       onPressed: () => Navigator.of(dialogContext).pop(),
                     ),
                   ],
                 ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
                 content: SizedBox(
                   width: 600,
                   child: SingleChildScrollView(
@@ -185,34 +258,56 @@ class SettingsScreen extends HookConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // ── Account ─────────────────────────────────────────
-                        const _FormSection('Account'),
+                        // ── Account Information ─────────────────────────────
+                        const _FormSection('Account Information'),
                         pair(
                           TextField(
                             controller: nameCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Full name *',
-                              prefixIcon: Icon(Icons.person_outline),
+                            decoration: fieldDeco(
+                              label: 'Full name *',
+                              icon: Icons.person_outline,
                             ),
                           ),
                           TextField(
                             controller: emailCtrl,
                             keyboardType: TextInputType.emailAddress,
-                            decoration: const InputDecoration(
-                              labelText: 'Email (login) *',
-                              prefixIcon: Icon(Icons.email_outlined),
+                            decoration: fieldDeco(
+                              label: 'Email (login) *',
+                              icon: Icons.email_outlined,
                             ),
                           ),
                         ),
                         12.h,
-                        TextField(
-                          controller: passwordCtrl,
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: user == null
-                                ? 'Password *'
-                                : 'New password (leave blank to keep)',
-                            prefixIcon: const Icon(Icons.lock_outline),
+                        pair(
+                          TextField(
+                            controller: passwordCtrl,
+                            obscureText: obscurePassword,
+                            decoration: fieldDeco(
+                              label: user == null
+                                  ? 'Password *'
+                                  : 'New password (leave blank to keep)',
+                              icon: Icons.lock_outline,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  obscurePassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 18,
+                                  color: const Color(0xFF9CA3AF),
+                                ),
+                                onPressed: () => setState(
+                                  () => obscurePassword = !obscurePassword,
+                                ),
+                              ),
+                            ),
+                          ),
+                          TextField(
+                            controller: phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            decoration: fieldDeco(
+                              label: 'Phone number',
+                              icon: Icons.phone_outlined,
+                            ),
                           ),
                         ),
 
@@ -239,9 +334,9 @@ class SettingsScreen extends HookConsumerWidget {
                                     ? role
                                     : null,
                                 isExpanded: true,
-                                decoration: InputDecoration(
-                                  labelText: 'Role *',
-                                  prefixIcon: const Icon(Icons.badge_outlined),
+                                decoration: fieldDeco(
+                                  label: 'Role *',
+                                  icon: Icons.badge_outlined,
                                   helperText: rolesAsync.isLoading
                                       ? 'Loading roles…'
                                       : '${roles.length} roles available',
@@ -462,9 +557,14 @@ class SettingsScreen extends HookConsumerWidget {
                     ),
                   ),
                 ),
+                actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
                 actions: [
                   TextButton(
                     onPressed: () => Navigator.of(dialogContext).pop(),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF6B7280),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
                     child: const Text('Cancel'),
                   ),
                   ElevatedButton(
@@ -580,7 +680,29 @@ class SettingsScreen extends HookConsumerWidget {
                               showErrorSnackBar(dialogContext, error);
                             }
                           },
-                    child: Text(user == null ? 'Create user' : 'Save changes'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7B1E3B),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      textStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    child: saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(user == null ? 'Create user' : 'Save changes'),
                   ),
                 ],
               );
@@ -1390,19 +1512,19 @@ class _AccessToggle extends StatelessWidget {
       waitDuration: const Duration(milliseconds: 400),
       child: InkWell(
         onTap: () => onChanged(!value),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 268,
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+          width: 270,
+          padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
           decoration: BoxDecoration(
             color: warn
                 ? crm.warning.withValues(alpha: 0.08)
-                : (value ? crm.primary.withValues(alpha: 0.05) : null),
-            borderRadius: BorderRadius.circular(10),
+                : (value ? const Color(0xFF7B1E3B).withValues(alpha: 0.04) : Colors.white),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: warn
                   ? crm.warning.withValues(alpha: 0.6)
-                  : (value ? crm.primary.withValues(alpha: 0.35) : crm.border),
+                  : (value ? const Color(0xFF7B1E3B).withValues(alpha: 0.35) : const Color(0xFFE5E7EB)),
             ),
           ),
           child: Row(
@@ -1415,11 +1537,16 @@ class _AccessToggle extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: warn ? crm.warning : crm.textPrimary,
+                    color: warn ? crm.warning : const Color(0xFF1F2937),
                   ),
                 ),
               ),
-              Switch(value: value, onChanged: onChanged),
+              Switch(
+                value: value,
+                activeThumbColor: const Color(0xFF7B1E3B),
+                activeTrackColor: const Color(0xFFFCE4EC),
+                onChanged: onChanged,
+              ),
             ],
           ),
         ),
@@ -1436,18 +1563,17 @@ class _FormSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crm = context.crmColors;
     return Padding(
-      padding: const EdgeInsets.only(top: 18, bottom: 8),
+      padding: const EdgeInsets.only(top: 20, bottom: 10),
       child: Row(
         children: [
           Text(
             title.toUpperCase(),
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
-              letterSpacing: 0.7,
-              fontWeight: FontWeight.w800,
-              color: crm.textSecondary,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF6B7280),
             ),
           ),
           if (hint != null) ...[
@@ -1456,12 +1582,10 @@ class _FormSection extends StatelessWidget {
               child: Text(
                 '· $hint',
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                style: const TextStyle(fontSize: 11.5, color: Color(0xFF9CA3AF)),
               ),
             ),
           ],
-          8.w,
-          Expanded(child: Divider(color: crm.border, height: 1)),
         ],
       ),
     );
