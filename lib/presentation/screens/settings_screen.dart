@@ -73,9 +73,10 @@ class SettingsScreen extends HookConsumerWidget {
         builder: (dialogContext) {
           return StatefulBuilder(
             builder: (context, setState) {
-              // employees already fetched at build level — safe to use here
+              // employees already fetched at build level — safe to use here.
+              // Show active staff, Timebox-synced employees, or the currently assigned employee.
               final employees = (asyncEmployees.value ?? [])
-                  .where((e) => e.isActive || e.id == selEmployeeId)
+                  .where((e) => e.isActive || e.isTimeboxLinked || e.id == selEmployeeId)
                   .toList();
 
               final zones = asyncZones.value ?? [];
@@ -1480,6 +1481,7 @@ String _initials(String name) {
 String _roleLabel(String key) {
   const known = {
     'ceo': 'CEO',
+    'executive_director': 'Executive Director',
     'admin': 'Admin',
     'manager': 'Manager',
     'crm': 'CRM',
@@ -1554,6 +1556,7 @@ class _RoleBadge extends StatelessWidget {
 
   static const _meta = {
     'ceo': ('CEO', Colors.brown),
+    'executive_director': ('Executive Director', Colors.brown),
     'admin': ('Admin', Colors.deepPurple),
     'manager': ('Manager', Colors.indigo),
     'crm': ('CRM', Colors.blue),
@@ -1593,6 +1596,7 @@ class _RoleBadge extends StatelessWidget {
 Color _roleColor(String key) {
   const known = {
     'ceo': Colors.brown,
+    'executive_director': Colors.brown,
     'admin': Colors.deepPurple,
     'manager': Colors.indigo,
     'crm': Colors.blue,
