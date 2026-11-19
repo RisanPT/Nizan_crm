@@ -27,8 +27,22 @@ nothing changes on the site. If a build passes on GitHub but the server's
 check fails, the server rolls back by itself and does not try that build
 again; `ssh crm status` shows it.
 
-The `crm-dev` account can run only these commands. It has no shell, no file
-access and no other app's commands.
+Everyone who deploys shares the account `crm-dev`, each with their own key.
+It can run only these commands: no shell, no file access, no other app's
+commands. The deploy log names the person (`ssh crm status`).
+
+## Who has access (server owner, as root)
+
+| Command | |
+|---|---|
+| `crm-access list` | Everyone with access and their key fingerprint |
+| `crm-access add <name> '<their .pub line>'` | Give someone access. One key per computer: `risan`, `risan-mac` |
+| `crm-access remove <name>` | Take it away, at once |
+
+A new person makes a key (`ssh-keygen -t ed25519 -f ~/.ssh/crm_deploy -C <name>`),
+sends only the `.pub` line, and adds the `Host crm` block to `~/.ssh/config`.
+Someone leaving: `crm-access remove` here, and remove them from the GitHub
+repo too, since merging to `main` is itself a deploy.
 
 The API address is `.env.production` (`API_BASE_URL`), baked in at build time.
 The build stops if it is not an `https://` address.
@@ -41,6 +55,7 @@ The build stops if it is not an `https://` address.
 | `deploy/web.Dockerfile`, `deploy/nginx.conf` | Inside the image |
 | `deploy/server/docker-compose.yml` | Server: `/root/nizan-crm/docker-compose.yml` |
 | `deploy/server/crm-deploy.sh` | Server: `/usr/local/bin/crm-deploy`, installed by root |
+| `deploy/server/crm-access.sh` | Server: `/usr/local/bin/crm-access`, root only (who may deploy) |
 | `deploy/server/crm-deploy.cron` | Server: `/etc/cron.d/crm-deploy` (the automatic deploys) |
 | `deploy/server/Caddyfile.snippet` | TeamN's Caddyfile |
 

@@ -38,6 +38,17 @@ usage() {
   exit 2
 }
 
+# Who is deploying. crm-dev is one account shared by several people; each
+# person's key (added with crm-access) runs `crm-deploy --as <name> ...`, so
+# the log names the person. Only the first --as counts: a second one typed by
+# the developer is not a command, so it stops at usage.
+WHO=${SUDO_USER:-root}
+if [ "${1:-}" = --as ]; then
+  [[ "${2:-}" =~ ^[a-z0-9][a-z0-9._-]{0,31}$ ]] || usage
+  WHO=$2
+  shift 2
+fi
+
 exec 9>/run/crm-deploy.lock
 if ! flock -n 9; then
   [ "${1:-}" = auto ] && exit 0
@@ -76,7 +87,7 @@ deploy() {
   if [ "$mode" = auto ] && [ "$new" = "$(cat "$SKIP" 2>/dev/null || true)" ]; then
     return 0
   fi
-  log "deploy ($mode, ${SUDO_USER:-root}): $(revision "$running") -> $(revision "$new")"
+  log "deploy ($mode, $WHO): $(revision "$running") -> $(revision "$new")"
   if [ "$running" != none ]; then
     oldprev=$(docker image inspect -f '{{.Id}}' "$IMAGE:prev" 2>/dev/null || true)
     docker tag "$running" "$IMAGE:prev"
@@ -110,7 +121,7 @@ rollback() {
   [ "$running" = none ] || echo "$running" > "$SKIP"
   docker tag "$IMAGE:prev" "$IMAGE:latest"
   dc up -d
-  log "rolled back to $(revision "$IMAGE:prev") (by ${SUDO_USER:-root}). Automatic deploys resume with the next build of main."
+  log "rolled back to $(revision "$IMAGE:prev") (by $WHO). Automatic deploys resume with the next build of main."
 }
 
 status() {
