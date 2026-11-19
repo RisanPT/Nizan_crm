@@ -2,9 +2,14 @@
 # add to ~/whatapp_api_app/Caddyfile and reload (no restart):
 #   cd ~/whatapp_api_app && docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 #
-# Caddy gets the certificate only once crm.teamnmakeovers.com points at
-# 187.127.179.74 (an A record, replacing Netlify's).
+# Add it only AFTER crm.teamnmakeovers.com points at 187.127.179.74, and
+# straight away after: Caddy gets the certificate within seconds then. Added
+# before, its certificate attempts fail and back off for minutes to hours.
 crm.teamnmakeovers.com {
 	encode gzip
-	reverse_proxy nizan-crm-web:80
+	# A deploy swaps the container in about a second; Caddy waits for it
+	# instead of showing an error to anyone loading the page right then.
+	reverse_proxy nizan-crm-web:80 {
+		lb_try_duration 10s
+	}
 }

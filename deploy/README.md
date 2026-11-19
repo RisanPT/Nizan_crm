@@ -4,26 +4,30 @@ The web app runs on the Hostinger VPS (187.127.179.74), which it shares with
 TeamN Chat (production) and Weddesy. Nothing is built on that server.
 
 ```
-push to main ─▶ GitHub Actions builds the web app ─▶ image ghcr.io/risanpt/nizan_crm-web:latest
-                        (Actions tab, ~5–8 min)                         │
-ssh crm deploy ─▶ the server downloads that image, swaps it in, checks it serves, rolls back if not
+merge to main ─▶ GitHub Actions builds the web app ─▶ image ghcr.io/risanpt/nizan_crm-web:latest
+                       (Actions tab, ~5–8 min)                          │
+the server checks every 2 minutes ─▶ downloads it, swaps it in, checks it serves, rolls back if not
 ```
 
 ## Deploying (developer)
 
-1. Merge to `main`. Only `main` is published.
-2. Wait for the green ✅ on **Web image** in the repo's **Actions** tab.
-3. `ssh crm deploy`. Any hour; it takes seconds.
-4. Test in a private window or after Ctrl/Cmd+Shift+R.
+Merge to `main`. That is all: about 10 minutes later it is live. Check with
+`ssh crm status` (it shows the live commit), and test in a private window or
+after Ctrl/Cmd+Shift+R.
 
 | Command | What it does |
 |---|---|
-| `ssh crm deploy` | Puts the latest `main` build live |
-| `ssh crm rollback` | Back to the build before the last deploy |
+| `ssh crm deploy` | Put the newest build live now instead of within 2 minutes |
+| `ssh crm rollback` | Back to the build before. Automatic deploys then leave that bad build alone and resume with your next merge |
 | `ssh crm status` | The container, the live commit, the last deploys |
 | `ssh crm logs 100` | nginx's last 100 log lines |
 
-The `crm-dev` account can run only those four. It has no shell, no file
+If the build on GitHub fails (a red ✗ in Actions, and GitHub emails you),
+nothing changes on the site. If a build passes on GitHub but the server's
+check fails, the server rolls back by itself and does not try that build
+again; `ssh crm status` shows it.
+
+The `crm-dev` account can run only these commands. It has no shell, no file
 access and no other app's commands.
 
 The API address is `.env.production` (`API_BASE_URL`), baked in at build time.
@@ -37,6 +41,7 @@ The build stops if it is not an `https://` address.
 | `deploy/web.Dockerfile`, `deploy/nginx.conf` | Inside the image |
 | `deploy/server/docker-compose.yml` | Server: `/root/nizan-crm/docker-compose.yml` |
 | `deploy/server/crm-deploy.sh` | Server: `/usr/local/bin/crm-deploy`, installed by root |
+| `deploy/server/crm-deploy.cron` | Server: `/etc/cron.d/crm-deploy` (the automatic deploys) |
 | `deploy/server/Caddyfile.snippet` | TeamN's Caddyfile |
 
 Changes to anything under `deploy/server/` take effect only when the server

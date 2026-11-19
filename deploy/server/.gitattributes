@@ -1,2 +1,3 @@
 # Run on Linux as-is
 *.sh text eol=lf
+*.cron text eol=lf
