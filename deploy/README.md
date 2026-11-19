@@ -1,4 +1,6 @@
-# Hosting: crm.teamnmakeovers.com
+# Hosting: erp.teamnmakeovers.com
+
+(The old address, crm.teamnmakeovers.com, redirects here.)
 
 The web app runs on the Hostinger VPS (187.127.179.74), which it shares with
 TeamN Chat (production) and Weddesy. Nothing is built on that server.
