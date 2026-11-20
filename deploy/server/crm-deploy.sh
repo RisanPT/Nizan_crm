@@ -60,11 +60,21 @@ mkdir -p "$STATE"
 # The commit an image was built from, from the label the workflow sets.
 revision() {
   local r
+  [ "$1" = none ] && { echo none; return; }
   r=$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$1" 2>/dev/null || true)
   echo "${r:0:7}"
 }
 
-running_image() { docker inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null || echo none; }
+# With no container yet (the first deploy), `docker inspect` prints an empty
+# line before failing, so its output is never used unless it succeeded.
+running_image() {
+  local id
+  if id=$(docker inspect -f '{{.Image}}' "$CONTAINER" 2>/dev/null) && [ -n "$id" ]; then
+    echo "$id"
+  else
+    echo none
+  fi
+}
 
 serving() {
   sleep 2
