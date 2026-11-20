@@ -177,7 +177,15 @@ class ArtistExpense {
   final TeamMealCheck? limitCheck;
   /// What the spend was for: 'bridal' (client work) or 'model_shoot'.
   final String workType;
+  /// What counts: while pending, what the artist logged; once approved, the APPROVED amount (which
+  /// may be less than [loggedAmount]). The books, the account balance and every report use this.
   final double amount;
+
+  /// What the artist originally logged — only sent when the approval reduced it; null otherwise.
+  final double? loggedAmount;
+
+  /// Why it was approved for less (optional).
+  final String approvalNote;
   final DateTime date;
   /// Event date stored on the bill itself (model-shoot bills). Bridal bills
   /// take it from [booking] instead — use [eventStart]/[eventEnd].
@@ -202,6 +210,8 @@ class ArtistExpense {
     this.limitCheck,
     this.workType = 'bridal',
     required this.amount,
+    this.loggedAmount,
+    this.approvalNote = '',
     required this.date,
     this.eventDate,
     required this.notes,
@@ -216,6 +226,12 @@ class ArtistExpense {
 
   /// The meals of the entry in the order they are eaten: [meals], or the single [meal] of an older entry.
   List<String> get effectiveMeals => meals.isNotEmpty ? orderMeals(meals) : (meal.isEmpty ? const [] : [meal]);
+
+  /// What the artist logged: [loggedAmount] when the approval changed it, else [amount] itself.
+  double get claimedAmount => loggedAmount ?? amount;
+
+  /// Approved for less than was logged — show both numbers.
+  bool get isReduced => loggedAmount != null && loggedAmount! > amount;
 
   /// One bill for more than one meal.
   bool get isCombined => effectiveMeals.length > 1;
@@ -240,6 +256,8 @@ class ArtistExpense {
       limitCheck: json['limitCheck'] is Map ? TeamMealCheck.fromJson((json['limitCheck'] as Map).cast<String, dynamic>()) : null,
       workType: json['workType'] as String? ?? 'bridal',
       amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      loggedAmount: (json['loggedAmount'] as num?)?.toDouble(),
+      approvalNote: json['approvalNote'] as String? ?? '',
       date: DateTime.tryParse(json['date']?.toString() ?? '') ?? DateTime.now(),
       eventDate: DateTime.tryParse(json['eventDate']?.toString() ?? '')?.toLocal(),
       notes: json['notes'] as String? ?? '',

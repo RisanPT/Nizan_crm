@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:intl/intl.dart';
 import '../../core/utils/export_utils.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 
 class ExportReportDialog<T> extends HookWidget {
   final String title;
@@ -11,7 +12,10 @@ class ExportReportDialog<T> extends HookWidget {
   final String? Function(T) getDriverName;
   final List<String> headers;
   final List<String> Function(T) buildRow;
-  
+
+  /// The dates [items] were cut to, when they were: said in the dialog, on the PDF and in the file name.
+  final ReportRange? range;
+
   const ExportReportDialog({
     super.key,
     required this.title,
@@ -20,6 +24,7 @@ class ExportReportDialog<T> extends HookWidget {
     required this.getDriverName,
     required this.headers,
     required this.buildRow,
+    this.range,
   });
 
   @override
@@ -44,12 +49,13 @@ class ExportReportDialog<T> extends HookWidget {
         final rows = filteredItems.map((e) => buildRow(e)).toList();
         final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
         final cleanTitle = title.replaceAll(' ', '_').toLowerCase();
-        
+        final dates = range == null ? '' : '${range!.fileTag}_';
+
         if (isPdf) {
-          final fileName = '${cleanTitle}_$timestamp.pdf';
-          await ExportUtils.exportPdf(fileName, title, headers, rows);
+          final fileName = '${cleanTitle}_$dates$timestamp.pdf';
+          await ExportUtils.exportPdf(fileName, range == null ? title : '$title · ${range!.label}', headers, rows);
         } else {
-          final fileName = '${cleanTitle}_$timestamp.csv';
+          final fileName = '${cleanTitle}_$dates$timestamp.csv';
           final csvRows = [headers, ...rows];
           await ExportUtils.exportCsv(fileName, csvRows);
         }
@@ -77,6 +83,11 @@ class ExportReportDialog<T> extends HookWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (range != null) ...[
+              Text('${range!.label} · ${items.length} ${items.length == 1 ? 'entry' : 'entries'}',
+                  key: const Key('export_dialog_range'), style: const TextStyle(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+            ],
             const Text('Select filters (optional) before exporting your report.'),
             const SizedBox(height: 16),
             if (vehicles.isNotEmpty)

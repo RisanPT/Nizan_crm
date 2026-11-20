@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -33,6 +35,20 @@ class MarketingPortfolioService {
   Future<ShootReports> reports(TeamFilter f, ReportQuery q) => _get('load the shoot reports', '/reports', ShootReports.fromJson, query: {..._range(f), if (q.filter != 'all') 'filter': q.filter, if (q.q.trim().isNotEmpty) 'q': q.q.trim(), 'page': q.page});
   Future<ShootSetup> setup() => _get('open the shoot form', '/setup', ShootSetup.fromJson);
 
+  /// Every report row that matches (the Export button) — not one page.
+  Future<ShootReports> allReports(TeamFilter f, ReportQuery q) => _get('export the shoot reports', '/reports', ShootReports.fromJson, query: {..._range(f), if (q.filter != 'all') 'filter': q.filter, if (q.q.trim().isNotEmpty) 'q': q.q.trim(), 'all': 1});
+
+  /// Works (CRM bookings) a shoot can be linked to: those matching [q], or with an event within 30 days of [around].
+  Future<List<BookingBrief>> bookingOptions({String q = '', String? around}) =>
+      _get('load the bookings', '/booking-options', (j) => ((j['items'] as List?) ?? const []).map((e) => BookingBrief.fromJson(Map<String, dynamic>.from(e as Map))).toList(), query: {if (q.trim().isNotEmpty) 'q': q.trim(), 'around': ?around});
+
+  /// Shoots a post or an asset can be attached to (not cancelled, newest first).
+  Future<List<ShootOption>> shootOptions({String q = ''}) =>
+      _get('load the shoots', '/shoot-options', (j) => ((j['items'] as List?) ?? const []).map((e) => ShootOption.fromJson(Map<String, dynamic>.from(e as Map))).toList(), query: {if (q.trim().isNotEmpty) 'q': q.trim()});
+
+  /// A booking's linked shoots with their content checklist.
+  Future<BookingContent> bookingContent(String bookingId) => _get('load the booking\'s content', '/bookings/$bookingId/content', BookingContent.fromJson);
+
   Future<T> _write<T>(String action, Future<Response<dynamic>> Function() call, T Function(Map<String, dynamic>) parse) async {
     try {
       final res = await call();
@@ -49,6 +65,47 @@ class MarketingPortfolioService {
 
   Future<ShootSummary> saveShoot(Map<String, dynamic> body, {String? id}) => _write('save the shoot', () => id == null ? _dio.post('/marketing/portfolio/shoots', data: body) : _dio.put('/marketing/portfolio/shoots/$id', data: body), ShootSummary.fromJson);
   Future<void> deleteShoot(String id) => _write('delete the shoot', () => _dio.delete('/marketing/portfolio/shoots/$id'), (_) {});
+
+  /// Pictures and links onto the shoot's moodboard ([items]: {url, label}); returns how many were added (a link already there is not).
+  Future<int> addMoodboard(String shootId, List<Map<String, dynamic>> items) =>
+      _write('add to the moodboard', () => _dio.post('/marketing/portfolio/shoots/$shootId/moodboard', data: {'items': items}), (j) => (j['added'] as num?)?.toInt() ?? 0);
+  Future<void> renameMoodboardItem(String shootId, String url, String label) =>
+      _write('rename the moodboard item', () => _dio.patch('/marketing/portfolio/shoots/$shootId/moodboard', data: {'url': url, 'label': label}), (_) {});
+  Future<void> removeMoodboardItem(String shootId, String url) =>
+      _write('remove the moodboard item', () => _dio.delete('/marketing/portfolio/shoots/$shootId/moodboard', queryParameters: {'url': url}), (_) {});
+
+  /// Crew & Logistics: call time, map link, checklist ([{text, done}]), notes — only what is sent changes.
+  /// One checklist line ticked or unticked — that line alone (a tick never undoes another person's).
+  Future<void> tickChecklist(String shootId, String text, bool done) =>
+      _write('tick the line', () => _dio.patch('/marketing/portfolio/shoots/$shootId/logistics/check', data: {'text': text, 'done': done}), (_) {});
+
+  /// A storyboard frame ticked as filmed (or not) on the shoot day — that frame alone.
+  Future<void> markFrameShot(String shootId, String frameKey, bool shot) =>
+      _write('tick the frame', () => _dio.patch('/marketing/portfolio/shoots/$shootId/storyboard/${Uri.encodeComponent(frameKey)}', data: {'shot': shot}), (_) {});
+
+  /// A PDF onto the moodboard or the storyboard ([part]) → the added document.
+  Future<ShootDocument> uploadDocument(String shootId, String part, {required String fileName, required List<int> bytes, String label = ''}) => _write(
+        'upload the PDF',
+        () => _dio.post('/marketing/portfolio/shoots/$shootId/documents', data: FormData.fromMap({'part': part, if (label.isNotEmpty) 'label': label, 'file': MultipartFile.fromBytes(bytes, filename: fileName)})),
+        (j) => ShootDocument.fromJson(Map<String, dynamic>.from(j['added'] as Map? ?? const {})),
+      );
+
+  /// The PDF itself (fetched with the login, never by a public link).
+  Future<Uint8List> documentBytes(String shootId, String key) async {
+    try {
+      final res = await _dio.get<List<int>>('/marketing/portfolio/shoots/$shootId/documents/${Uri.encodeComponent(key)}', options: Options(responseType: ResponseType.bytes));
+      return Uint8List.fromList(res.data ?? const <int>[]);
+    } catch (e) {
+      throw AppException(e, action: 'open the PDF');
+    }
+  }
+
+  Future<void> renameDocument(String shootId, String key, String label) =>
+      _write('rename the PDF', () => _dio.patch('/marketing/portfolio/shoots/$shootId/documents/${Uri.encodeComponent(key)}', data: {'label': label}), (_) {});
+  Future<void> removeDocument(String shootId, String key) =>
+      _write('remove the PDF', () => _dio.delete('/marketing/portfolio/shoots/$shootId/documents/${Uri.encodeComponent(key)}'), (_) {});
+
+  Future<void> saveLogistics(String shootId, Map<String, dynamic> body) => _write('save the logistics', () => _dio.put('/marketing/portfolio/shoots/$shootId/logistics', data: body), (_) {});
 }
 
 final marketingPortfolioServiceProvider = Provider<MarketingPortfolioService>((ref) => MarketingPortfolioService(ref.watch(dioProvider)));
@@ -67,6 +124,9 @@ final productionCalendarProvider = FutureProvider.autoDispose.family<ProductionC
 }, retry: (_, _) => null);
 final shootReportsProvider = FutureProvider.autoDispose<ShootReports>((ref) => ref.watch(marketingPortfolioServiceProvider).reports(ref.watch(teamFilterProvider), ref.watch(reportQueryProvider)), retry: (_, _) => null);
 final shootSetupProvider = FutureProvider.autoDispose<ShootSetup>((ref) => ref.watch(marketingPortfolioServiceProvider).setup(), retry: (_, _) => null);
+final shootOptionsProvider = FutureProvider.autoDispose.family<List<ShootOption>, String>((ref, q) => ref.watch(marketingPortfolioServiceProvider).shootOptions(q: q), retry: (_, _) => null);
+final bookingOptionsProvider = FutureProvider.autoDispose.family<List<BookingBrief>, ({String q, String? around})>((ref, k) => ref.watch(marketingPortfolioServiceProvider).bookingOptions(q: k.q, around: k.around), retry: (_, _) => null);
+final bookingContentProvider = FutureProvider.autoDispose.family<BookingContent, String>((ref, id) => ref.watch(marketingPortfolioServiceProvider).bookingContent(id), retry: (_, _) => null);
 
 /// After a shoot, an asset or a log changes: every Creative Portfolio read starts again (and the Socials library the Gallery shares).
 void refreshPortfolio(WidgetRef ref) {
@@ -75,5 +135,7 @@ void refreshPortfolio(WidgetRef ref) {
   ref.invalidate(productionCalendarProvider);
   ref.invalidate(shootReportsProvider);
   ref.invalidate(shootSetupProvider);
+  ref.invalidate(shootOptionsProvider);
+  ref.invalidate(bookingContentProvider);
   refreshSocials(ref);
 }

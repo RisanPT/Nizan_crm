@@ -12,7 +12,7 @@ import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier
 import 'package:nizan_crm/features/it/presentation/screens/widgets/functional_plan_wizard_dialog.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
-// The Gantt Plan Wizard: nothing is pre-filled — the phases and tasks are the ones you add, rename, reorder and delete;
+// The Gratt Plan Wizard: nothing is pre-filled — the phases and tasks are the ones you add, rename, reorder and delete;
 // a task can have sub-tasks (and a task with them spans them); it adds to a plan that is already there instead of laying a
 // second copy beside it; and what it sends to the server has every parent made before its children.
 
@@ -124,7 +124,7 @@ Future<_Repo> _open(
 
 Future<void> _continue(WidgetTester tester, [int times = 1]) async {
   for (var i = 0; i < times; i++) {
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const Key('wizard_next')));
     await tester.pumpAndSettle();
   }
 }
@@ -138,6 +138,18 @@ Future<int> _total(WidgetTester tester) async {
   await tester.pumpAndSettle();
   return n;
 }
+
+/// Opens a task's ⋯ menu and picks the item with [itemKey] (the actions that used to sit on the row live there).
+Future<void> _pick(WidgetTester tester, String taskId, String itemKey) async {
+  await tester.ensureVisible(find.byKey(Key('wizard_menu_$taskId')));
+  await tester.tap(find.byKey(Key('wizard_menu_$taskId')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(Key(itemKey)));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _addSub(WidgetTester tester, String taskId) => _pick(tester, taskId, 'wizard_add_sub_$taskId');
+Future<void> _remove(WidgetTester tester, String taskId) => _pick(tester, taskId, 'wizard_remove_$taskId');
 
 Finder _keyed(String part) => find.byWidgetPredicate((w) => w.key.toString().contains(part));
 Finder _row(String id) => find.byKey(ValueKey('task_$id'));
@@ -155,7 +167,7 @@ DateTime _from(int offset) {
 }
 
 Future<void> _generate(WidgetTester tester) async {
-  await tester.tap(find.text('Generate Gantt Plan'));
+  await tester.tap(find.text('Generate Gratt Plan'));
   await tester.pumpAndSettle();
 }
 
@@ -289,7 +301,7 @@ void main() {
       double y(String t) => tester.getTopLeft(find.text(t)).dy;
       expect(y('First'), lessThan(y('Second')));
       // the first cannot go up, the last cannot go down
-      await tester.tap(find.byKey(const Key('wizard_task_move_tk1')));
+      await tester.tap(find.byKey(const Key('wizard_menu_tk1')));
       await tester.pumpAndSettle();
       expect(tester.widget<PopupMenuItem<String>>(find.byKey(const Key('wizard_move_up'))).enabled, isFalse);
       expect(tester.widget<PopupMenuItem<String>>(find.byKey(const Key('wizard_move_down'))).enabled, isTrue);
@@ -308,8 +320,7 @@ void main() {
       final repo = await _open(tester, seed: _two());
       await _continue(tester, 2);
       await _name(tester, 'tk1', 'Wireframes');
-      await tester.tap(find.byKey(const Key('wizard_remove_tk2')));
-      await tester.pumpAndSettle();
+      await _remove(tester, 'tk2');
       expect(find.text('Second'), findsNothing);
       await _continue(tester);
       await _generate(tester);
@@ -322,7 +333,7 @@ void main() {
       final repo = await _open(tester, seed: (phases: [PlanPhaseDraft(id: 'ph1', name: 'Design')], tasks: <PlanTaskDraft>[]));
       await _continue(tester, 3);
       await _generate(tester);
-      expect(find.text('Please add at least one task before generating the Gantt plan.'), findsOneWidget);
+      expect(find.text('Please add at least one task before generating the Gratt plan.'), findsOneWidget);
       expect(find.text('Tasks & Ownership'), findsOneWidget);
       expect(repo.created, isEmpty);
     });
@@ -360,7 +371,7 @@ void main() {
     testWidgets('pressing Generate twice in a row makes the plan once, not twice', (tester) async {
       final repo = await _open(tester, seed: _four());
       await _continue(tester, 3);
-      final generate = find.text('Generate Gantt Plan');
+      final generate = find.text('Generate Gratt Plan');
       await tester.tap(generate);
       await tester.tap(generate); // before the screen has had a frame to grey the button out
       await tester.pumpAndSettle();
@@ -400,7 +411,7 @@ void main() {
       expect(repo.created[2]['parentTaskId'], 'c1');
       expect(repo.created[3]['parentTaskId'], 'c2');
       expect(repo.created[2]['startDate'], isNotNull);
-      expect(find.text('Functional Plan & Gantt Auto-Scheduler'), findsNothing);
+      expect(find.text('Functional Plan & Gratt Auto-Scheduler'), findsNothing);
     });
   });
 
@@ -411,39 +422,46 @@ void main() {
       expect(await _total(tester), 4);
       expect(find.text('from sub-tasks'), findsNothing);
 
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
 
       expect(await _total(tester), 5);
       expect(find.text('from sub-tasks'), findsOneWidget);
-      expect(find.byTooltip('Remove sub-task'), findsOneWidget);
+      expect(_row('tsk_1'), findsOneWidget); // the sub-task, in a row of its own
       expect(find.text('Sub-task title'), findsOneWidget); // nameless until you name it
     });
 
     testWidgets('a sub-task cannot be given sub-tasks here, and a milestone cannot have them at all', (tester) async {
       await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(_keyed('wizard_add_sub_').first);
+      await _addSub(tester, 'tk1');
+      // a sub-task's menu has no "Add sub-task"
+      await tester.tap(find.byKey(const Key('wizard_menu_tsk_1')));
       await tester.pumpAndSettle();
-      // the last task is a milestone: scroll down to it
-      await tester.drag(find.byType(ListView), const Offset(0, -600));
+      expect(find.byKey(const Key('wizard_move_up')), findsOneWidget); // the menu is open
+      expect(find.byKey(const Key('wizard_add_sub_tsk_1')), findsNothing);
+      await tester.tapAt(const Offset(4, 4)); // close it
       await tester.pumpAndSettle();
-      final milestone = tester.widgetList<IconButton>(find.byType(IconButton)).where((b) => b.tooltip == 'A milestone cannot have sub-tasks');
-      expect(milestone, hasLength(1));
-      expect(milestone.single.onPressed, isNull);
-      await tester.drag(find.byType(ListView), const Offset(0, 600));
+      // the last task is a milestone: its menu shows it, and says why it is greyed out
+      await tester.ensureVisible(find.byKey(const Key('wizard_menu_tk4')));
+      await tester.tap(find.byKey(const Key('wizard_menu_tk4')));
       await tester.pumpAndSettle();
-      expect(find.descendant(of: _row('tsk_1'), matching: _keyed('wizard_add_sub_')), findsNothing);
+      final item = tester.widget<PopupMenuItem<String>>(find.byKey(const Key('wizard_add_sub_tk4')));
+      expect(item.enabled, isFalse);
+      expect(find.text('A milestone cannot have sub-tasks'), findsOneWidget);
+      // and an ordinary task's offers it
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('wizard_menu_tk2')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<PopupMenuItem<String>>(find.byKey(const Key('wizard_add_sub_tk2'))).enabled, isTrue);
     });
 
     testWidgets('the first sub-task keeps the task\'s length, the next follows it — and the plan adds up', (tester) async {
       await _open(tester, seed: _four());
       await _continue(tester, 2);
-      final firstTask = _keyed('wizard_add_sub_').first; // "Requirements & Scope Approval", 3 days
-      await tester.tap(firstTask);
-      await tester.pumpAndSettle();
-      await tester.tap(firstTask);
-      await tester.pumpAndSettle();
+      // "Requirements & Scope Approval", 3 days
+      await _addSub(tester, 'tk1');
+      await _addSub(tester, 'tk1');
       await _continue(tester);
 
       // 3 + 7 + 3 days, then a milestone that takes none = 13; the first task now runs 3 (first sub-task) + 2 (second) = 5, so 15
@@ -458,27 +476,22 @@ void main() {
     testWidgets('removing a task removes its sub-tasks, and removing the last sub-task gives it back its own length', (tester) async {
       await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
       expect(await _total(tester), 5);
 
-      await tester.tap(find.byTooltip('Remove sub-task'));
-      await tester.pumpAndSettle();
+      await _remove(tester, 'tsk_1');
       expect(await _total(tester), 4);
       expect(find.text('from sub-tasks'), findsNothing);
 
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Remove task and its sub-tasks'));
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
+      await _remove(tester, 'tk1');
       expect(await _total(tester), 3); // the task and its sub-task are both gone
     });
 
     testWidgets('a task\'s dependencies are cleaned up when what it waited for is removed', (tester) async {
       await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(find.byKey(const Key('wizard_remove_tk1'))); // the second waited for it
-      await tester.pumpAndSettle();
+      await _remove(tester, 'tk1'); // the second waited for it
       await _continue(tester);
       expect(find.text('Requirements & Scope Approval'), findsNothing);
       expect(find.textContaining('Task tk1'), findsNothing); // no chip left pointing at a task that is gone
@@ -491,8 +504,7 @@ void main() {
     testWidgets('every parent is made before what hangs under it, and each child points at its own parent', (tester) async {
       final repo = await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(_keyed('wizard_add_sub_').first); // a sub-task under "Requirements & Scope Approval"
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1'); // a sub-task under "Requirements & Scope Approval"
       await _name(tester, 'tsk_1', 'Interviews');
       await _continue(tester);
       await _generate(tester);
@@ -508,14 +520,13 @@ void main() {
       expect(repo.created[6]['parentTaskId'], 'c2');
       expect(repo.created[7]['parentTaskId'], 'c3');
       expect(repo.created[8]['parentTaskId'], 'c4');
-      expect(find.text('Functional Plan & Gantt Auto-Scheduler'), findsNothing); // the dialog closes once it is done
+      expect(find.text('Functional Plan & Gratt Auto-Scheduler'), findsNothing); // the dialog closes once it is done
     });
 
     testWidgets('a task that waited for a task with sub-tasks still waits for it, by its new id', (tester) async {
       final repo = await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
       await _name(tester, 'tsk_1', 'Interviews');
       await _continue(tester);
       await _generate(tester);
@@ -526,10 +537,8 @@ void main() {
     testWidgets('a task with sub-tasks is dated across them, and carries their span', (tester) async {
       final repo = await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
-      await tester.tap(_keyed('wizard_add_sub_').first);
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
+      await _addSub(tester, 'tk1');
       await _name(tester, 'tsk_1', 'Interviews');
       await _name(tester, 'tsk_2', 'Summary of findings');
       await _continue(tester);
@@ -597,8 +606,7 @@ void main() {
     testWidgets('removing the first task leaves the others\' titles where they were', (tester) async {
       await _open(tester, seed: _four());
       await _continue(tester, 2);
-      await tester.tap(find.byKey(const Key('wizard_remove_tk1')));
-      await tester.pumpAndSettle();
+      await _remove(tester, 'tk1');
       expect(find.text('Requirements & Scope Approval'), findsNothing);
       expect(find.text('Execution & Deliverable Build'), findsOneWidget);
       expect(find.text('Quality Assurance & Stakeholder Review'), findsOneWidget);

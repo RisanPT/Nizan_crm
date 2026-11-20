@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'package:nizan_crm/core/utils/branded_pdf.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 
 /// Monthly works schedule: every work in [month] that has an artist assigned,
@@ -12,18 +14,36 @@ import 'package:nizan_crm/features/bookings/data/booking.dart';
 ///
 /// [bookings] should already be filtered the way the calendar is (artist /
 /// geography); [filterNote] describes those filters for the header.
+///
+/// ASSOCIATE REPORT: pass [associateIds] (everyone flagged as an associate) to
+/// mark associates on the team list, and [onlyStaffIds] to keep only the works
+/// those people are actually on (a package they are not on is left out) — the
+/// report is then titled "Associate Works Schedule". [fileTag] is added to the
+/// file name (e.g. `associates`).
+///
+/// [range] (any days, both ends inclusive) replaces [month]: the works dated on those days go in the report, which says the dates in
+/// its heading and file name. Null = the whole of [month], as always.
 Future<void> downloadMonthlyWorksReport({
   required List<Booking> bookings,
   required DateTime month,
   String filterNote = '',
+  Set<String> associateIds = const {},
+  Set<String>? onlyStaffIds,
+  String fileTag = '',
+  ReportRange? range,
 }) async {
   final bytes = await buildMonthlyWorksReportBytes(
     bookings: bookings,
     month: month,
     filterNote: filterNote,
+    associateIds: associateIds,
+    onlyStaffIds: onlyStaffIds,
+    range: range,
   );
-  final fileName =
-      'works_${DateFormat('yyyy_MM').format(month)}_${DateFormat('MMM').format(month).toLowerCase()}.pdf';
+  final tag = fileTag.trim().isEmpty ? '' : '_${fileTag.trim()}';
+  final fileName = range != null
+      ? 'works_${range.fileTag}$tag.pdf'
+      : 'works_${DateFormat('yyyy_MM').format(month)}_${DateFormat('MMM').format(month).toLowerCase()}$tag.pdf';
   await saveFileBytes(fileName, bytes, mime: 'application/pdf');
 }
 
@@ -33,22 +53,46 @@ Future<List<int>> buildMonthlyWorksReportBytes({
   required List<Booking> bookings,
   required DateTime month,
   String filterNote = '',
-}) => _buildPdf(monthlyWorks(bookings, month), month, filterNote);
+  Set<String> associateIds = const {},
+  Set<String>? onlyStaffIds,
+  ReportRange? range,
+}) => _buildPdf(
+  monthlyWorks(bookings, month, onlyStaffIds: onlyStaffIds, range: range),
+  month,
+  filterNote,
+  associateIds: associateIds,
+  associateReport: onlyStaffIds != null,
+  range: range,
+);
 
-/// The works that go in the report: entries dated inside [month] with at least
-/// one non-driver team member assigned, excluding cancelled / postponed /
+/// The works that go in the report: entries dated inside [month] (or on the days of [range], both ends inclusive, when one is given)
+/// with at least one non-driver team member assigned, excluding cancelled / postponed /
 /// rejected works. Sorted by date, then start time, then client.
-List<BookingDisplayEntry> monthlyWorks(List<Booking> bookings, DateTime month) {
+///
+/// [onlyStaffIds] (the associate report) keeps only the entries one of those
+/// people is assigned to — a package they are not on does not count as their work.
+List<BookingDisplayEntry> monthlyWorks(
+  List<Booking> bookings,
+  DateTime month, {
+  Set<String>? onlyStaffIds,
+  ReportRange? range,
+}) {
   const skip = {'cancelled', 'postponed', 'rejected'};
   final works =
       bookings
           .expand((b) => b.displayEntries)
           .where(
             (e) =>
-                e.calendarDate.year == month.year &&
-                e.calendarDate.month == month.month &&
+                (range != null
+                    ? range.contains(e.calendarDate)
+                    : e.calendarDate.year == month.year &&
+                          e.calendarDate.month == month.month) &&
                 !skip.contains(e.status.toLowerCase()) &&
-                _team(e).any((m) => !m.isDriver),
+                _team(e).any((m) => !m.isDriver) &&
+                (onlyStaffIds == null ||
+                    e.assignedStaff.any(
+                      (a) => onlyStaffIds.contains(a.employeeId),
+                    )),
           )
           .toList()
         ..sort((a, b) {
@@ -70,17 +114,22 @@ class _Member {
   final String role;
   final bool isLead;
   final bool isDriver;
+  final bool isAssociate;
   const _Member(
     this.name,
     this.role, {
     this.isLead = false,
     this.isDriver = false,
+    this.isAssociate = false,
   });
 }
 
 /// Everyone going for this work: lead first, then artists/assistants, then the
 /// driver (from the assignment list, or the booking's driver as a fallback).
-List<_Member> _team(BookingDisplayEntry e) {
+List<_Member> _team(
+  BookingDisplayEntry e, [
+  Set<String> associateIds = const {},
+]) {
   final seen = <String>{};
   final out = <_Member>[];
   for (final a in e.assignedStaff) {
@@ -96,7 +145,18 @@ List<_Member> _team(BookingDisplayEntry e) {
         : rt == 'artist'
         ? 'Artist'
         : (a.role.trim().isNotEmpty ? a.role.trim() : 'Assistant');
-    out.add(_Member(name, role, isLead: isLead, isDriver: isDriver));
+    final isAssociate = !isDriver && associateIds.contains(a.employeeId);
+    out.add(
+      _Member(
+        name,
+        isAssociate && !role.toLowerCase().contains('associate')
+            ? '$role - Associate'
+            : role,
+        isLead: isLead,
+        isDriver: isDriver,
+        isAssociate: isAssociate,
+      ),
+    );
   }
   final driver = e.booking.driverName.trim();
   if (driver.isNotEmpty && seen.add(driver.toLowerCase())) {
@@ -106,6 +166,13 @@ List<_Member> _team(BookingDisplayEntry e) {
   out.sort((a, b) => rank(a).compareTo(rank(b)));
   return out;
 }
+
+/// Who is on [e], one `Name  Role` line each, in the order the report prints them (for tests).
+@visibleForTesting
+List<String> worksReportTeamLines(
+  BookingDisplayEntry e, {
+  Set<String> associateIds = const {},
+}) => [for (final m in _team(e, associateIds)) '${m.name}  ${m.role}'];
 
 String _time(BookingDisplayEntry e) {
   final s = e.serviceStart, t = e.serviceEnd;
@@ -147,10 +214,15 @@ const _gold = PdfColor.fromInt(0xFFC9A66B);
 Future<List<int>> _buildPdf(
   List<BookingDisplayEntry> works,
   DateTime month,
-  String filterNote,
-) async {
+  String filterNote, {
+  Set<String> associateIds = const {},
+  bool associateReport = false,
+  ReportRange? range,
+}) async {
+  final title = associateReport ? 'Associate Works Schedule' : 'Works Schedule';
   final logo = await brandedPdfLogo();
-  final monthLabel = DateFormat('MMMM yyyy').format(month);
+  // the dates in words: the month, or the days that were chosen
+  final monthLabel = range?.label ?? DateFormat('MMMM yyyy').format(month);
   final generated = DateFormat('d MMM yyyy, h:mm a').format(DateTime.now());
 
   // Group by day.
@@ -161,9 +233,11 @@ Future<List<int>> _buildPdf(
 
   // Artist workload (non-drivers).
   final perArtist = <String, int>{};
+  final associateNames = <String>{};
   for (final w in works) {
-    for (final m in _team(w).where((m) => !m.isDriver)) {
+    for (final m in _team(w, associateIds).where((m) => !m.isDriver)) {
       perArtist[m.name] = (perArtist[m.name] ?? 0) + 1;
+      if (m.isAssociate) associateNames.add(m.name);
     }
   }
   final artistRows = perArtist.entries.toList()
@@ -174,7 +248,7 @@ Future<List<int>> _buildPdf(
     );
   final clients = works.map((w) => w.booking.id).toSet().length;
 
-  final doc = pw.Document(title: 'Works Schedule - $monthLabel');
+  final doc = pw.Document(title: '$title - $monthLabel');
 
   pw.Widget txt(
     String s, {
@@ -231,7 +305,7 @@ Future<List<int>> _buildPdf(
   );
 
   pw.Widget teamCell(BookingDisplayEntry e) {
-    final team = _team(e);
+    final team = _team(e, associateIds);
     return pad(
       pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -253,7 +327,7 @@ Future<List<int>> _buildPdf(
                       ),
                     ),
                     pw.TextSpan(
-                      text: '  ${m.role}',
+                      text: pdfSafe('  ${m.role}'),
                       style: const pw.TextStyle(fontSize: 7, color: _muted),
                     ),
                   ],
@@ -383,7 +457,7 @@ Future<List<int>> _buildPdf(
               child: pw.Row(
                 children: [
                   txt(
-                    'Works Schedule - $monthLabel',
+                    '$title - $monthLabel',
                     size: 8.5,
                     bold: true,
                     color: kPdfBrand,
@@ -432,7 +506,7 @@ Future<List<int>> _buildPdf(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  txt('Works Schedule', size: 20, bold: true, color: kPdfBrand),
+                  txt(title, size: 20, bold: true, color: kPdfBrand),
                   txt(monthLabel, size: 12, color: _ink),
                   if (filterNote.trim().isNotEmpty)
                     txt(
@@ -447,7 +521,13 @@ Future<List<int>> _buildPdf(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 txt('TEAM N MAKEOVERS', size: 10, bold: true, color: kPdfBrand),
-                txt('Works with artists assigned', size: 8, color: _muted),
+                txt(
+                  associateReport
+                      ? 'Works with associates'
+                      : 'Works with artists assigned',
+                  size: 8,
+                  color: _muted,
+                ),
               ],
             ),
           ],
@@ -462,7 +542,9 @@ Future<List<int>> _buildPdf(
             padding: const pw.EdgeInsets.only(top: 40),
             child: pw.Center(
               child: txt(
-                'No works with an assigned artist in $monthLabel.',
+                associateReport
+                    ? 'No works with an associate in $monthLabel.'
+                    : 'No works with an assigned artist in $monthLabel.',
                 size: 12,
                 color: _muted,
               ),
@@ -475,6 +557,8 @@ Future<List<int>> _buildPdf(
               stat('Working days', '${byDay.length}'),
               stat('Clients', '$clients'),
               stat('Artists on duty', '${perArtist.length}'),
+              if (associateNames.isNotEmpty)
+                stat('Associates', '${associateNames.length}'),
             ],
           ),
           // Artist workload — heading and chips kept together in one block.
@@ -504,7 +588,11 @@ Future<List<int>> _buildPdf(
                         text: pw.TextSpan(
                           children: [
                             pw.TextSpan(
-                              text: pdfSafe(a.key),
+                              text: pdfSafe(
+                                associateNames.contains(a.key)
+                                    ? '${a.key} (Associate)'
+                                    : a.key,
+                              ),
                               style: const pw.TextStyle(
                                 fontSize: 8.5,
                                 color: _ink,

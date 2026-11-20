@@ -401,7 +401,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 isManager
-                    ? 'Create a project, then plan it with the WBS & Gantt tabs.'
+                    ? 'Create a project, then plan it with the WBS & Gratt tabs.'
                     : 'You will see projects here once tasks or projects are assigned to you by the project manager.',
                 style: TextStyle(color: crm.textSecondary, fontSize: 12.5),
                 textAlign: TextAlign.center,

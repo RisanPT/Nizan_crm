@@ -1,777 +1,478 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
-import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/bank_account.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/bank_account_dialogs.dart';
+import 'package:nizan_crm/features/finance/presentation/widgets/bank_transactions_view.dart';
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
 
-const _mon = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-String _date(DateTime? d) {
-  if (d == null) return '—';
-  final l = d.toLocal();
-  return '${l.day} ${_mon[l.month]} ${l.year}';
-}
+/// Where an account's full list of transactions opens.
+String bankTransactionsPath(String accountId) => '/company-finance/bank-balance/$accountId/transactions';
 
-// Indian-grouped rupee formatting (₹1,23,45,678).
-String _inr(double v) {
-  final neg = v < 0;
-  var s = v.abs().toStringAsFixed(0);
-  if (s.length > 3) {
-    final last3 = s.substring(s.length - 3);
-    var rest = s.substring(0, s.length - 3);
-    rest = rest.replaceAllMapped(RegExp(r'\B(?=(\d{2})+(?!\d))'), (_) => ',');
-    s = '$rest,$last3';
-  }
-  return '${neg ? '-' : ''}₹$s';
-}
-
-/// Sentinel dropdown value: create a new ledger for the account.
-const _newLedger = '__new__';
-
-/// Finance → Bank Balance. Bank accounts and cash in hand. Each account is
-/// linked to a Cash / Bank ledger; its live balance is the latest manually
-/// entered closing balance plus the ledger's receipts and payments since.
-class BankBalanceScreen extends ConsumerWidget {
+/// Finance → Bank & Cash Balance.
+///
+/// The totals (against the end of last month), the accounts on the left, and — beside them on a wide
+/// window — the chosen account's latest transactions, each saying what it was for. The whole list of an
+/// account's transactions is its own screen ([bankTransactionsPath]); on a phone, tapping an account
+/// goes straight there.
+///
+/// Each account is linked to a Cash / Bank ledger: its live balance is the last balance entered by hand
+/// plus the ledger's receipts and payments since that day.
+class BankBalanceScreen extends ConsumerStatefulWidget {
   const BankBalanceScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BankBalanceScreen> createState() => _BankBalanceScreenState();
+}
+
+class _BankBalanceScreenState extends ConsumerState<BankBalanceScreen> {
+  String? _selectedId;
+  BankPeriod _period = BankPeriod.sinceBalance;
+
+  /// What the transactions panel is showing — so Export downloads exactly that.
+  BankTxnQuery? _query;
+
+  @override
+  Widget build(BuildContext context) {
     final crm = context.crmColors;
     final async = ref.watch(bankAccountsProvider);
-
     return Scaffold(
       backgroundColor: crm.background,
-      appBar: AppBar(
-        title: const Text('Bank & Cash Balance'),
-        backgroundColor: crm.surface,
-        foregroundColor: crm.textPrimary,
-        elevation: 0,
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openAccountForm(context, ref),
-        backgroundColor: crm.primary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add account'),
-      ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(bankAccountsProvider)),
-        data: (result) {
-          final accounts = result.accounts;
-          final banks = accounts.where((a) => !a.isCash).toList();
-          final cash = accounts.where((a) => a.isCash).toList();
-          return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(bankAccountsProvider),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              children: [
-                _totalCard(context, result),
-                const SizedBox(height: 16),
-                if (accounts.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 48),
-                    child: Center(
-                      child: Column(children: [
-                        Icon(Icons.account_balance_outlined, size: 48, color: crm.textSecondary),
-                        const SizedBox(height: 10),
-                        Text('No accounts yet.', style: TextStyle(color: crm.textSecondary)),
-                        const SizedBox(height: 2),
-                        Text('Add your bank accounts and cash in hand.',
-                            style: TextStyle(color: crm.textSecondary, fontSize: 12)),
-                      ]),
-                    ),
-                  )
-                else ...[
-                  if (banks.isNotEmpty) ...[
-                    _sectionLabel(context, 'BANK ACCOUNTS', result.bankTotal),
-                    for (final a in banks) _accountCard(context, ref, a),
-                  ],
-                  if (cash.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    _sectionLabel(context, 'CASH IN HAND', result.cashTotal),
-                    for (final a in cash) _accountCard(context, ref, a),
-                  ],
-                ],
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _sectionLabel(BuildContext context, String label, double total) {
-    final crm = context.crmColors;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-      child: Row(children: [
-        Text(label,
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: crm.textSecondary)),
-        const Spacer(),
-        Text(_inr(total), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crm.textSecondary)),
-      ]),
-    );
-  }
-
-  Widget _totalCard(BuildContext context, BankAccountsResult r) {
-    final crm = context.crmColors;
-    final count = r.accounts.where((a) => a.active).length;
-    final unlinked = r.accounts.where((a) => a.active && !a.isLinked).length;
-    final faded = Colors.white.withValues(alpha: 0.85);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [crm.primary, crm.primary.withValues(alpha: 0.78)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('TOTAL CASH & BANK',
-              style: TextStyle(color: faded, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(_inr(r.totalBalance),
-              style: const TextStyle(color: Colors.white, fontSize: 34, fontWeight: FontWeight.w900, height: 1)),
-          const SizedBox(height: 8),
-          Text('Bank ${_inr(r.bankTotal)}  ·  Cash ${_inr(r.cashTotal)}',
-              style: TextStyle(color: faded, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Text(
-            unlinked == 0
-                ? 'across $count account${count == 1 ? '' : 's'} · live from the ledger'
-                : 'across $count account${count == 1 ? '' : 's'} · $unlinked not linked to a ledger (manual balance)',
-            style: TextStyle(color: faded, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _accountCard(BuildContext context, WidgetRef ref, BankAccount a) {
-    final crm = context.crmColors;
-    final m = a.movement;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: crm.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
-            leading: CircleAvatar(
-              backgroundColor: crm.primary.withValues(alpha: 0.12),
-              child: Icon(a.isCash ? Icons.payments_outlined : Icons.account_balance, color: crm.primary, size: 20),
-            ),
-            title: Text(a.name, style: const TextStyle(fontWeight: FontWeight.w800)),
-            subtitle: Text(
-              [
-                if (a.isCash) 'Cash in hand',
-                if (a.bankName.isNotEmpty) a.bankName,
-                if (a.accountNumber.isNotEmpty) a.maskedAccount,
-              ].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: PopupMenuButton<String>(
-              onSelected: (v) {
-                if (v == 'txns') _showTransactions(context, a);
-                if (v == 'link') _linkLedger(context, ref, a);
-                if (v == 'edit') _openAccountForm(context, ref, existing: a);
-                if (v == 'history') _showHistory(context, a);
-                if (v == 'delete') _confirmDelete(context, ref, a);
+        data: (result) => LayoutBuilder(
+          builder: (context, c) {
+            final wide = c.maxWidth >= 1000;
+            final accounts = result.accounts;
+            // the account on show: the one picked, else the first
+            final selected = accounts.where((a) => a.id == _selectedId).firstOrNull ?? accounts.firstOrNull;
+            return RefreshIndicator(
+              onRefresh: () async {
+                ref.invalidate(bankAccountsProvider);
+                ref.invalidate(bankStatementProvider);
               },
-              itemBuilder: (_) => [
-                if (a.isLinked) const PopupMenuItem(value: 'txns', child: Text('Transactions')),
-                PopupMenuItem(value: 'link', child: Text(a.isLinked ? 'Change ledger link' : 'Link to ledger')),
-                const PopupMenuItem(value: 'history', child: Text('Balance history')),
-                const PopupMenuItem(value: 'edit', child: Text('Edit details')),
-                const PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(_inr(a.currentBalance),
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: crm.textPrimary)),
-                      Text(
-                        a.isLinked ? 'current balance' : 'as of ${_date(a.asOf)} (manual)',
-                        style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _updateBalance(context, ref, a),
-                  icon: const Icon(Icons.edit_outlined, size: 16),
-                  label: const Text('Update balance'),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-            child: a.isLinked
-                ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    // How the live balance is built: checkpoint + in − out.
-                    Text(
-                      'Balance on ${_date(a.asOf)}: ${_inr(a.balance)}'
-                      '   + In ${_inr(m?.moneyIn ?? 0)}   − Out ${_inr(m?.moneyOut ?? 0)}',
-                      style: TextStyle(fontSize: 12, color: crm.textSecondary),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(children: [
-                      Icon(Icons.link, size: 14, color: crm.textSecondary),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text('Ledger ${a.ledger!.label}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                      ),
-                      if ((m?.count ?? 0) > 0) ...[
-                        const SizedBox(width: 8),
-                        InkWell(
-                          onTap: () => _showTransactions(context, a),
-                          child: Text('${m!.count} transaction${m.count == 1 ? '' : 's'}',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crm.primary)),
-                        ),
-                      ],
-                    ]),
-                  ])
-                : Container(
-                    padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
-                    decoration: BoxDecoration(
-                      color: crm.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(children: [
-                      Icon(Icons.link_off, size: 16, color: crm.warning),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text('Not linked to a ledger — this balance does not move with transactions.',
-                            style: TextStyle(fontSize: 12, color: crm.textPrimary)),
-                      ),
-                      TextButton(onPressed: () => _linkLedger(context, ref, a), child: const Text('Link')),
-                    ]),
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Ledger picker (shared by Add account and Link) ───────────────────────
-  static List<DropdownMenuItem<String>> _ledgerItems(List<LedgerOption> options, String kind, {String? currentId}) {
-    final usable = options.where((o) => o.linkedTo.isEmpty || o.id == currentId).toList()
-      // Same kind first (bank ledgers for a bank account, cash for cash).
-      ..sort((x, y) => (x.accountType == kind ? 0 : 1).compareTo(y.accountType == kind ? 0 : 1));
-    return [
-      const DropdownMenuItem(value: _newLedger, child: Text('Create a new ledger account')),
-      for (final o in usable)
-        DropdownMenuItem(
-          value: o.id,
-          child: Text('Use ${o.label} (${o.accountType == 'cash' ? 'Cash' : 'Bank'})',
-              maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-    ];
-  }
-
-  // ── Add / edit account ──────────────────────────────────────────────────
-  Future<void> _openAccountForm(BuildContext context, WidgetRef ref, {BankAccount? existing}) async {
-    final editing = existing != null;
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final bankCtrl = TextEditingController(text: existing?.bankName ?? '');
-    final acctCtrl = TextEditingController(text: existing?.accountNumber ?? '');
-    final balanceCtrl = TextEditingController();
-    var asOf = DateTime.now();
-    var kind = existing?.kind ?? 'bank';
-    var ledgerChoice = _newLedger;
-    final messenger = ScaffoldMessenger.of(context);
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        var busy = false;
-        return Consumer(
-          builder: (ctx, ref, _) {
-            final options = editing
-                ? const <LedgerOption>[]
-                : (ref.watch(bankLedgerOptionsProvider).value ?? const <LedgerOption>[]);
-            return StatefulBuilder(
-              builder: (ctx, setSheet) => Padding(
-                padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(editing ? 'Edit account' : 'Add account',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 14),
-                      if (!editing) ...[
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(value: 'bank', icon: Icon(Icons.account_balance, size: 16), label: Text('Bank account')),
-                            ButtonSegment(value: 'cash', icon: Icon(Icons.payments_outlined, size: 16), label: Text('Cash in hand')),
-                          ],
-                          selected: {kind},
-                          onSelectionChanged: (s) => setSheet(() => kind = s.first),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      TextField(
-                        controller: nameCtrl,
-                        decoration: InputDecoration(
-                          labelText: 'Account name *',
-                          hintText: kind == 'cash' ? 'e.g. Office Cash, Petty Cash' : 'e.g. HDFC Current',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                      ),
-                      if (kind == 'bank') ...[
-                        const SizedBox(height: 10),
-                        TextField(controller: bankCtrl, decoration: const InputDecoration(labelText: 'Bank name', border: OutlineInputBorder(), isDense: true)),
-                        const SizedBox(height: 10),
-                        TextField(controller: acctCtrl, decoration: const InputDecoration(labelText: 'Account number', border: OutlineInputBorder(), isDense: true)),
-                      ],
-                      if (!editing) ...[
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: balanceCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                          decoration: const InputDecoration(labelText: 'Opening balance *', prefixText: '₹ ', border: OutlineInputBorder(), isDense: true),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          onPressed: () async {
-                            final d = await showDatePicker(context: ctx, initialDate: asOf, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                            if (d != null) setSheet(() => asOf = d);
-                          },
-                          icon: const Icon(Icons.calendar_today, size: 16),
-                          label: Text('Closing balance on ${_date(asOf)}'),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: ledgerChoice,
-                          isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Ledger account',
-                            helperText: 'Receipts and payments on this ledger move the balance.',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          items: _ledgerItems(options, kind),
-                          onChanged: (v) => setSheet(() => ledgerChoice = v ?? _newLedger),
-                        ),
-                      ],
-                      const SizedBox(height: 18),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: busy
-                              ? null
-                              : () async {
-                                  final name = nameCtrl.text.trim();
-                                  if (name.isEmpty) {
-                                    messenger.showSnackBar(const SnackBar(content: Text('Enter an account name')));
-                                    return;
-                                  }
-                                  setSheet(() => busy = true);
-                                  try {
-                                    final svc = ref.read(bankAccountServiceProvider);
-                                    if (editing) {
-                                      await svc.updateDetails(existing.id, name: name, bankName: bankCtrl.text.trim(), accountNumber: acctCtrl.text.trim());
-                                    } else {
-                                      await svc.create(
-                                        name: name,
-                                        kind: kind,
-                                        ledgerId: ledgerChoice == _newLedger ? null : ledgerChoice,
-                                        bankName: kind == 'bank' ? bankCtrl.text.trim() : '',
-                                        accountNumber: kind == 'bank' ? acctCtrl.text.trim() : '',
-                                        balance: double.tryParse(balanceCtrl.text.trim()) ?? 0,
-                                        asOf: asOf,
-                                      );
-                                    }
-                                    ref.refreshData.bankAccounts();
-                                    ref.refreshData.chartOfAccounts();
-                                    if (ctx.mounted) Navigator.pop(ctx, true);
-                                  } catch (e) {
-                                    setSheet(() => busy = false);
-                                    messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                                  }
-                                },
-                          child: Text(busy ? 'Saving…' : (editing ? 'Save' : 'Add account')),
-                        ),
-                      ),
-                    ],
-                  ),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.all(wide ? 24 : 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _header(crm, wide, selected),
+                    const SizedBox(height: 18),
+                    _KpiRow(result: result),
+                    const SizedBox(height: 18),
+                    if (accounts.isEmpty)
+                      _emptyState(crm)
+                    else if (wide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(width: 340, child: _accountsPanel(crm, accounts, selected, wide)),
+                          const SizedBox(width: 18),
+                          Expanded(child: _transactionsPanel(crm, selected!)),
+                        ],
+                      )
+                    else
+                      _accountsPanel(crm, accounts, null, wide),
+                  ],
                 ),
               ),
             );
           },
-        );
-      },
-    );
-    if (saved == true) {
-      messenger.showSnackBar(SnackBar(content: Text(editing ? 'Account updated' : 'Account added')));
-    }
-  }
-
-  // ── Link / change the ledger ────────────────────────────────────────────
-  Future<void> _linkLedger(BuildContext context, WidgetRef ref, BankAccount a) async {
-    final messenger = ScaffoldMessenger.of(context);
-    var choice = a.ledger?.id ?? '';
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        var busy = false;
-        return Consumer(builder: (ctx, ref, _) {
-          final async = ref.watch(bankLedgerOptionsProvider);
-          return StatefulBuilder(builder: (ctx, setDlg) {
-            final crm = ctx.crmColors;
-            final options = async.value ?? const <LedgerOption>[];
-            final items = _ledgerItems(options, a.kind, currentId: a.ledger?.id);
-            if (choice.isEmpty || !items.any((i) => i.value == choice)) {
-              // Default: the first free ledger of the same kind, else a new one.
-              choice = items.length > 1 ? items[1].value! : _newLedger;
-            }
-            return AlertDialog(
-              title: Text('Link "${a.name}" to a ledger'),
-              content: SizedBox(
-                width: 420,
-                child: async.isLoading && options.isEmpty
-                    ? const LinearProgressIndicator()
-                    : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(
-                          'Receipts and payments posted to this ledger after '
-                          '${_date(a.asOf)} will be added to the ${_inr(a.balance)} balance you entered.',
-                          style: TextStyle(fontSize: 13, color: crm.textSecondary),
-                        ),
-                        const SizedBox(height: 14),
-                        DropdownButtonFormField<String>(
-                          initialValue: choice,
-                          isExpanded: true,
-                          decoration: const InputDecoration(labelText: 'Ledger account', border: OutlineInputBorder(), isDense: true),
-                          items: items,
-                          onChanged: (v) => setDlg(() => choice = v ?? choice),
-                        ),
-                        if (a.isLinked) ...[
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: busy
-                                ? null
-                                : () async {
-                                    setDlg(() => busy = true);
-                                    try {
-                                      await ref.read(bankAccountServiceProvider).linkLedger(a.id);
-                                      ref.refreshData.bankAccounts();
-                                      if (ctx.mounted) Navigator.pop(ctx, true);
-                                    } catch (e) {
-                                      setDlg(() => busy = false);
-                                      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                                    }
-                                  },
-                            icon: const Icon(Icons.link_off, size: 16),
-                            label: const Text('Unlink (back to manual balance)'),
-                          ),
-                        ],
-                      ]),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                FilledButton(
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          setDlg(() => busy = true);
-                          try {
-                            await ref.read(bankAccountServiceProvider).linkLedger(
-                                  a.id,
-                                  create: choice == _newLedger,
-                                  ledgerId: choice == _newLedger ? null : choice,
-                                );
-                            ref.refreshData.bankAccounts();
-                            ref.refreshData.chartOfAccounts();
-                            if (ctx.mounted) Navigator.pop(ctx, true);
-                          } catch (e) {
-                            setDlg(() => busy = false);
-                            messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                          }
-                        },
-                  child: Text(busy ? 'Saving…' : 'Save'),
-                ),
-              ],
-            );
-          });
-        });
-      },
-    );
-    if (saved == true) {
-      ref.invalidate(bankLedgerOptionsProvider);
-      messenger.showSnackBar(const SnackBar(content: Text('Ledger link updated')));
-    }
-  }
-
-  // ── Record a new balance ────────────────────────────────────────────────
-  Future<void> _updateBalance(BuildContext context, WidgetRef ref, BankAccount a) async {
-    final balanceCtrl = TextEditingController();
-    final noteCtrl = TextEditingController();
-    var asOf = DateTime.now();
-    final messenger = ScaffoldMessenger.of(context);
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final crm = ctx.crmColors;
-        var busy = false;
-        return StatefulBuilder(
-          builder: (ctx, setSheet) => Padding(
-            padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Update balance — ${a.name}', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                Text('Current: ${_inr(a.currentBalance)}',
-                    style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                if (a.isLinked)
-                  Text('Enter the closing balance from the bank / cash count. Transactions dated after this day will be added to it.',
-                      style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: balanceCtrl,
-                  autofocus: true,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                  decoration: const InputDecoration(labelText: 'Closing balance *', prefixText: '₹ ', border: OutlineInputBorder(), isDense: true),
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final d = await showDatePicker(context: ctx, initialDate: asOf, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                    if (d != null) setSheet(() => asOf = d);
-                  },
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text('Closing balance on ${_date(asOf)}'),
-                ),
-                const SizedBox(height: 10),
-                TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)', border: OutlineInputBorder(), isDense: true)),
-                const SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            final val = double.tryParse(balanceCtrl.text.trim());
-                            if (val == null) {
-                              messenger.showSnackBar(const SnackBar(content: Text('Enter a balance amount')));
-                              return;
-                            }
-                            setSheet(() => busy = true);
-                            try {
-                              await ref.read(bankAccountServiceProvider)
-                                  .recordBalance(a.id, balance: val, asOf: asOf, note: noteCtrl.text.trim());
-                              ref.refreshData.bankAccounts();
-                              if (ctx.mounted) Navigator.pop(ctx, true);
-                            } catch (e) {
-                              setSheet(() => busy = false);
-                              messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                            }
-                          },
-                    child: Text(busy ? 'Saving…' : 'Save balance'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    if (saved == true) {
-      messenger.showSnackBar(const SnackBar(content: Text('Balance updated')));
-    }
-  }
-
-  // ── Transactions since the last balance ─────────────────────────────────
-  void _showTransactions(BuildContext context, BankAccount a) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.7,
-        maxChildSize: 0.95,
-        builder: (_, controller) => Consumer(builder: (ctx, ref, _) {
-          final crm = ctx.crmColors;
-          final async = ref.watch(bankTransactionsProvider(a.id));
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${a.name} — transactions', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                Text('Since the ${_date(a.asOf)} balance · ledger ${a.ledger?.label ?? ''}',
-                    style: TextStyle(fontSize: 12, color: crm.textSecondary)),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: async.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => AppErrorView(error: e, onRetry: () => ref.invalidate(bankTransactionsProvider(a.id))),
-                    data: (r) => ListView(
-                      controller: controller,
-                      children: [
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Balance entered', style: TextStyle(fontWeight: FontWeight.w700)),
-                          subtitle: Text(_date(r.since)),
-                          trailing: Text(_inr(r.opening), style: const TextStyle(fontWeight: FontWeight.w700)),
-                        ),
-                        const Divider(height: 1),
-                        if (r.rows.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('No transactions since then.', style: TextStyle(color: crm.textSecondary))),
-                          ),
-                        for (final t in r.rows.reversed) ...[
-                          ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(t.narration.isEmpty ? t.voucherNo : t.narration,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            subtitle: Text('${_date(t.date)} · ${t.voucherNo}'),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  t.moneyIn > 0 ? '+${_inr(t.moneyIn)}' : '−${_inr(t.moneyOut)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: t.moneyIn > 0 ? crm.success : crm.destructive,
-                                  ),
-                                ),
-                                Text(_inr(t.balance), style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-                        ],
-                        ListTile(
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('Current balance', style: TextStyle(fontWeight: FontWeight.w800)),
-                          trailing: Text(_inr(r.closing), style: const TextStyle(fontWeight: FontWeight.w800)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }),
+        ),
       ),
     );
   }
 
-  // ── History ─────────────────────────────────────────────────────────────
-  void _showHistory(BuildContext context, BankAccount a) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final crm = ctx.crmColors;
-        final entries = a.history.reversed.toList();
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.6,
-          maxChildSize: 0.95,
-          builder: (_, controller) => Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${a.name} — balance history', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: entries.isEmpty
-                      ? Center(child: Text('No updates yet.', style: TextStyle(color: crm.textSecondary)))
-                      : ListView.separated(
-                          controller: controller,
-                          itemCount: entries.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (_, i) {
-                            final e = entries[i];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(_inr(e.balance), style: const TextStyle(fontWeight: FontWeight.w700)),
-                              subtitle: Text([
-                                'as of ${_date(e.asOf)}',
-                                if (e.note.isNotEmpty) e.note,
-                                if (e.byName.isNotEmpty) 'by ${e.byName}',
-                              ].join(' · ')),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+  // ── header ─────────────────────────────────────────────────────────────────
+
+  Widget _header(CrmTheme crm, bool wide, BankAccount? selected) {
+    final title = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('Bank & Cash Balance', style: TextStyle(fontSize: wide ? 26 : 21, fontWeight: FontWeight.w800, color: crm.textPrimary, letterSpacing: -0.3)),
+        const SizedBox(height: 2),
+        Text('Manage bank accounts and cash balances', style: TextStyle(fontSize: 13, color: crm.textSecondary)),
+      ],
+    );
+    if (!wide) return title; // on a phone the period and Export live on the account's own screen
+    return Row(
+      children: [
+        Expanded(child: title),
+        const SizedBox(width: 16),
+        BankPeriodButton(period: _period, onChanged: (p) => setState(() => _period = p)),
+        const SizedBox(width: 12),
+        BankExportButton(account: selected, query: selected == null || _query?.accountId != selected.id ? null : _query),
+      ],
     );
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref, BankAccount a) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: Text('Remove "${a.name}" and its balance history? This cannot be undone. '
-            '${a.isLinked ? 'Its ledger (${a.ledger!.label}) and postings stay in the Chart of Accounts.' : ''}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: ctx.crmColors.destructive),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
+  Widget _emptyState(CrmTheme crm) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+        decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: crm.border)),
+        child: Column(
+          children: [
+            Icon(Icons.account_balance_outlined, size: 48, color: crm.textSecondary),
+            const SizedBox(height: 10),
+            Text('No accounts yet.', key: const Key('bankNoAccounts'), style: TextStyle(fontWeight: FontWeight.w700, color: crm.textPrimary)),
+            const SizedBox(height: 2),
+            Text('Add your bank accounts and cash in hand.', style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () => openBankAccountForm(context, ref),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Account'),
+            ),
+          ],
+        ),
+      );
+
+  // ── accounts ───────────────────────────────────────────────────────────────
+
+  Widget _accountsPanel(CrmTheme crm, List<BankAccount> accounts, BankAccount? selected, bool wide) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: crm.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Accounts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: crm.textPrimary))),
+              OutlinedButton.icon(
+                key: const Key('bankAddAccount'),
+                onPressed: () => openBankAccountForm(context, ref),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Add Account'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: crm.primary,
+                  side: BorderSide(color: crm.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          for (final a in accounts)
+            _AccountTile(
+              account: a,
+              selected: selected?.id == a.id,
+              // wide: show it beside the list; narrow: its transactions are a screen of their own
+              onTap: wide ? () => setState(() => _selectedId = a.id) : () => context.go(bankTransactionsPath(a.id)),
+              trailing: wide ? null : BankAccountMenuButton(account: a),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── the chosen account's transactions ──────────────────────────────────────
+
+  Widget _transactionsPanel(CrmTheme crm, BankAccount a) {
+    final since = _period.isSinceBalance ? 'Since the ${bankDate(a.asOf)} balance' : _period.label;
+    return Container(
+      key: const Key('bankTransactionsPanel'),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: crm.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: crm.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _IconDisc(icon: a.isCash ? Icons.payments_outlined : Icons.account_balance, size: 44),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${a.name} — Transactions', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                    Text(
+                      [since, if (a.isLinked) 'Ledger ${a.ledger!.label}'].join('  •  '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (a.isLinked) ...[
+                OutlinedButton.icon(
+                  key: const Key('bankViewLedger'),
+                  onPressed: () => context.go('/company-finance/ledger?account=${a.ledger!.id}'),
+                  icon: const Icon(Icons.menu_book_outlined, size: 17),
+                  label: const Text('View Ledger'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: crm.textPrimary,
+                    side: BorderSide(color: crm.border),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              BankAccountMenuButton(account: a, onDeleted: () => setState(() => _selectedId = null)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (!a.isLinked)
+            _NotLinkedNotice(account: a)
+          else
+            BankTransactionsView(
+              account: a,
+              period: _period,
+              pageSize: 8,
+              onViewAll: () => context.go(bankTransactionsPath(a.id)),
+              onQueryChanged: (q) => setState(() => _query = q),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An icon in a soft round disc.
+class _IconDisc extends StatelessWidget {
+  final IconData icon;
+  final double size;
+  const _IconDisc({required this.icon, this.size = 48});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: crm.primary.withValues(alpha: 0.08), shape: BoxShape.circle),
+      child: Icon(icon, color: crm.primary, size: size * 0.46),
+    );
+  }
+}
+
+/// An account that is not linked to a ledger: its balance is only what was typed.
+class _NotLinkedNotice extends ConsumerWidget {
+  final BankAccount account;
+  const _NotLinkedNotice({required this.account});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    return Container(
+      key: const Key('bankNotLinked'),
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      decoration: BoxDecoration(color: crm.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        children: [
+          Icon(Icons.link_off, size: 18, color: crm.warning),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Not linked to a ledger — this balance (${bankInr(account.balance)} as of ${bankDate(account.asOf)}) does not move with transactions, and there is nothing to list.',
+              style: TextStyle(fontSize: 12.5, color: crm.textPrimary),
+            ),
+          ),
+          TextButton(onPressed: () => linkBankLedger(context, ref, account), child: const Text('Link')),
+        ],
+      ),
+    );
+  }
+}
+
+/// One account in the list: what it is, its number, its live balance.
+class _AccountTile extends StatelessWidget {
+  final BankAccount account;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? trailing;
+  const _AccountTile({required this.account, required this.selected, required this.onTap, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final a = account;
+    final sub = [
+      if (a.bankName.isNotEmpty) a.bankName,
+      if (a.accountNumber.isNotEmpty) a.maskedAccount,
+      if (a.isCash && a.isLinked) a.ledger!.code,
+      if (a.isCash && !a.isLinked) 'Cash in hand',
+    ].join('  ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: selected ? crm.primary.withValues(alpha: 0.06) : crm.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? crm.primary : crm.border, width: selected ? 1.5 : 1),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: Key('bankAccount_${a.id}'),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+            child: Row(
+              children: [
+                _IconDisc(icon: a.isCash ? Icons.payments_outlined : Icons.account_balance, size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(a.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: crm.textPrimary, height: 1.2)),
+                      if (sub.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(bankInr(a.currentBalance), key: Key('bankAccountBalance_${a.id}'), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                      if (!a.isLinked)
+                        Text('Not linked to a ledger', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: crm.warning)),
+                    ],
+                  ),
+                ),
+                trailing ?? Icon(Icons.chevron_right, color: crm.textSecondary),
+                if (trailing != null) Icon(Icons.chevron_right, color: crm.textSecondary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The totals across the top: everything, the banks, and the cash boxes — each against what it held at
+/// the end of last month.
+class _KpiRow extends StatelessWidget {
+  final BankAccountsResult result;
+  const _KpiRow({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = result.accounts.where((a) => a.active).toList();
+    final banks = active.where((a) => !a.isCash).toList();
+    final cash = active.where((a) => a.isCash).toList();
+    final prev = result.previous;
+    final cards = <_KpiCard>[
+      _KpiCard(
+        keyName: 'total',
+        icon: Icons.account_balance,
+        label: 'Total Balance',
+        value: result.totalBalance,
+        change: percentChange(result.totalBalance, prev.total),
+        changeSuffix: 'vs last month',
+        highlight: true,
+      ),
+      if (banks.isNotEmpty)
+        _KpiCard(keyName: 'bank', icon: Icons.credit_card, label: 'Bank Balance', value: result.bankTotal, change: percentChange(result.bankTotal, prev.bank)),
+      // up to two cash boxes each get a card of their own; more than that share one
+      if (cash.length <= 2)
+        for (final a in cash)
+          _KpiCard(keyName: 'cash_${a.id}', icon: Icons.payments_outlined, label: a.name, value: a.currentBalance, change: percentChange(a.currentBalance, a.previousBalance))
+      else
+        _KpiCard(keyName: 'cash', icon: Icons.payments_outlined, label: 'Cash in Hand (${cash.length})', value: result.cashTotal, change: percentChange(result.cashTotal, prev.cash)),
+    ];
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth >= 900) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 14),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          );
+        }
+        // two to a row, smaller, on a narrow window (one to a row only when it is very narrow)
+        final w = c.maxWidth >= 340 ? (c.maxWidth - 12) / 2 : c.maxWidth;
+        return Wrap(spacing: 12, runSpacing: 12, children: [for (final card in cards) SizedBox(width: w, child: card.compact())]);
+      },
+    );
+  }
+}
+
+class _KpiCard extends StatelessWidget {
+  final String keyName;
+  final IconData icon;
+  final String label;
+  final double value;
+
+  /// Percent against the end of last month; null = nothing to compare with.
+  final double? change;
+  final String changeSuffix;
+  final bool highlight;
+
+  /// Smaller, for two to a row on a phone.
+  final bool small;
+  const _KpiCard({required this.keyName, required this.icon, required this.label, required this.value, this.change, this.changeSuffix = '', this.highlight = false, this.small = false});
+
+  _KpiCard compact() => _KpiCard(keyName: keyName, icon: icon, label: label, value: value, change: change, changeSuffix: changeSuffix, highlight: highlight, small: true);
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final up = (change ?? 0) >= 0;
+    final flat = change != null && change!.abs() < 0.05;
+    final tone = flat ? crm.textSecondary : (up ? crm.success : crm.destructive);
+    return Container(
+      key: Key('bankKpi_$keyName'),
+      padding: EdgeInsets.all(small ? 12 : 18),
+      decoration: BoxDecoration(
+        color: highlight ? crm.primary.withValues(alpha: 0.06) : crm.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: highlight ? crm.primary.withValues(alpha: 0.18) : crm.border),
+      ),
+      child: Row(
+        children: [
+          _IconDisc(icon: icon, size: small ? 36 : 52),
+          SizedBox(width: small ? 10 : 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: small ? 12 : 13, color: crm.textSecondary)),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(bankInr(value), style: TextStyle(fontSize: small ? 19 : 24, fontWeight: FontWeight.w800, color: crm.textPrimary, letterSpacing: -0.3)),
+                ),
+                const SizedBox(height: 4),
+                // only said when there is a figure for the end of last month to compare with
+                if (change != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!flat) Icon(up ? Icons.arrow_drop_up : Icons.arrow_drop_down, size: 20, color: tone),
+                      Flexible(
+                        child: Text.rich(
+                          TextSpan(children: [
+                            TextSpan(text: flat ? '0.0%' : '${up ? '+' : '−'}${change!.abs().toStringAsFixed(1)}%', style: TextStyle(fontWeight: FontWeight.w800, color: tone)),
+                            if (changeSuffix.isNotEmpty) TextSpan(text: ' $changeSuffix', style: TextStyle(color: crm.textSecondary)),
+                          ]),
+                          key: Key('bankKpiChange_$keyName'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12.5),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text('—', key: Key('bankKpiChange_$keyName'), style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+              ],
+            ),
           ),
         ],
       ),
     );
-    if (ok != true) return;
-    try {
-      await ref.read(bankAccountServiceProvider).delete(a.id);
-      ref.refreshData.bankAccounts();
-      messenger.showSnackBar(const SnackBar(content: Text('Account deleted')));
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-    }
   }
 }

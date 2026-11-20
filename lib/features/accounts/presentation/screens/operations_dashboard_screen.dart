@@ -18,6 +18,8 @@ import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart'
 import 'package:nizan_crm/features/inventory/controllers/inventory_controller.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -255,12 +257,27 @@ class _OperationsDashboardScreenState
     );
   }
 
-  void _export(List<ArtistCollection> collections, List<ArtistExpense> expenses) {
+  /// Asks which dates to export (the month on screen to begin with, or any days), then exports what falls in them from ALL entries.
+  Future<void> _export(List<ArtistCollection> allCollections, List<ArtistExpense> allExpenses) async {
+    final what = _tab == 0 ? 'collections' : 'expenses';
+    final range = await showReportRangeDialog(
+      context,
+      title: 'Export $what for which dates?',
+      confirmLabel: 'Continue',
+      initial: monthRange(_month),
+      allowAll: true,
+    );
+    if (range == null || !mounted) return;
+    // the same rule as the dashboard: rejected ones are not counted
+    final collections = filterByRange(allCollections.where((c) => c.status != 'rejected'), (c) => c.date, range);
+    final expenses = filterByRange(allExpenses.where((e) => e.status != 'rejected'), (e) => e.date, range);
+    if (!mounted) return;
     if (_tab == 0) {
       showDialog(
         context: context,
         builder: (_) => ExportReportDialog<ArtistCollection>(
           title: 'Collections',
+          range: range,
           items: collections,
           getVehicleName: (_) => null,
           getDriverName: (_) => null,
@@ -279,15 +296,18 @@ class _OperationsDashboardScreenState
         context: context,
         builder: (_) => ExportReportDialog<ArtistExpense>(
           title: 'Expenses',
+          range: range,
           items: expenses,
           getVehicleName: (_) => null,
           getDriverName: (_) => null,
-          headers: const ['Date', 'Category', 'Notes', 'Amount', 'Status'],
+          headers: const ['Date', 'Category', 'Notes', 'Amount', 'Logged amount', 'Status'],
           buildRow: (e) => [
             DateFormat('yyyy-MM-dd').format(e.date),
             _cap(e.category),
             e.notes,
             e.amount.toStringAsFixed(2),
+            // only when the approval reduced it: what the artist logged
+            e.isReduced ? e.loggedAmount!.toStringAsFixed(2) : '',
             e.status,
           ],
         ),
@@ -680,7 +700,7 @@ class _OperationsDashboardScreenState
     return ListView(
       padding: const EdgeInsets.only(bottom: 28),
       children: [
-        _header(crm, isMobile, () => _export(collections, expenses)),
+        _header(crm, isMobile, () => _export(allCollections, allExpenses)),
         18.h,
         kpiGrid,
         18.h,

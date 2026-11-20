@@ -544,7 +544,7 @@ void main() {
       expect(find.byKey(const Key('project_title')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('project_title'))).data, 'Lifestyle brand at 2030');
       expect(find.text('Strategic project to build our lifestyle brand.'), findsOneWidget);
-      expect(find.text('Gantt Plan Wizard'), findsOneWidget);
+      expect(find.text('Gratt Plan Wizard'), findsOneWidget);
       expect(find.text('Add Task'), findsOneWidget); // not an IT project: Task, not Ticket
       expect(find.byKey(const Key('project_more')), findsOneWidget);
     });
@@ -563,7 +563,7 @@ void main() {
 
     testWidgets('someone who may not add tasks has neither the wizard nor Add Task', (tester) async {
       await _pumpScreen(tester, project: _project(access: _access(canManage: false, canCreateTasks: false)));
-      expect(find.text('Gantt Plan Wizard'), findsNothing);
+      expect(find.text('Gratt Plan Wizard'), findsNothing);
       expect(find.text('Add Task'), findsNothing);
       expect(find.byKey(const Key('project_more')), findsOneWidget);
     });
@@ -595,7 +595,7 @@ void main() {
 
     testWidgets('on a phone the header stacks and nothing overflows', (tester) async {
       await _pumpScreen(tester, size: const Size(390, 900), events: [_event('Project created', 24)]);
-      expect(find.text('Gantt Plan Wizard'), findsOneWidget);
+      expect(find.text('Gratt Plan Wizard'), findsOneWidget);
       expect(find.byKey(const Key('overview_hero')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

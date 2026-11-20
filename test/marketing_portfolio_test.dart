@@ -6,13 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/marketing/data/portfolio_models.dart';
+import 'package:nizan_crm/features/marketing/data/asset_search.dart';
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_screen.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
+import 'package:nizan_crm/features/marketing/data/footage_models.dart';
+import 'package:nizan_crm/features/marketing/services/footage_service.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
+import 'package:nizan_crm/features/marketing/presentation/media/media_stream.dart';
 
 // The Creative Portfolio: Shoot Planner, Production Calendar, Shoot Reports, Gallery — and the shoot picker in the Log Activity form.
 
@@ -87,8 +91,14 @@ class _FakePortfolio extends MarketingPortfolioService {
     return PlannerData.fromJson(plannerJson);
   }
 
+  /// crew lines added to the plan (a member no longer in the team list)
+  List<Map<String, dynamic>> extraCrew = const [];
+
   @override
-  Future<ShootDetail> shoot(String id) async => ShootDetail.fromJson(_detail(id));
+  Future<ShootDetail> shoot(String id) async {
+    final d = _detail(id);
+    return ShootDetail.fromJson({...d, 'crew': [...(d['crew'] as List), ...extraCrew]});
+  }
 
   @override
   Future<ProductionCalendar> calendar(TeamFilter f, {String? day}) async {
@@ -124,23 +134,43 @@ class _FakeSocials extends MarketingSocialsService {
   final assetQueries = <AssetQuery>[];
   final savedAssets = <({Map<String, dynamic> body, String? id})>[];
 
+  final searches = <AssetSearch>[];
+
+  @override
+  Future<AssetPage> searchAssets(AssetSearch s, {int pageNo = 1, int limit = kGalleryPageSize}) async {
+    searches.add(s);
+    return AssetPage.fromJson({..._library(), 'total': 1, 'pageNo': 1, 'pages': 1});
+  }
+
   @override
   Future<AssetList> assets(AssetQuery q) async {
     assetQueries.add(q);
-    return AssetList.fromJson({
+    return AssetList.fromJson(_library());
+  }
+
+  Map<String, dynamic> _library() => ({
       'items': [
         {'id': 'g1', 'title': 'SkyBride_Exterior.mp4', 'brand': 'main', 'kind': 'reel', 'media': 'video', 'stage': 'approved', 'url': 'https://d.test/a', 'thumbUrl': '', 'portfolio': 'Main (Company)', 'page': 'Bridal Makeup', 'tags': [], 'durationSec': 42, 'sizeMb': 0, 'isFinal': true},
       ],
       'counts': {'total': 1248, 'photos': 432, 'videos': 186, 'finals': 58, 'approved': 52, 'approvedPct': 4, 'postProducedPct': 96},
       'facets': {'portfolios': {'Main (Company)': 520, 'Kerala': 180}, 'pages': {'Bridal Makeup': 248, 'Party Makeup': 86}, 'stages': {'approved': 432, 'raw': 120}, 'media': {'video': 186, 'image': 432}, 'kinds': {}},
     });
-  }
 
   @override
   Future<Asset> saveAsset(Map<String, dynamic> body, {String? id}) async {
     savedAssets.add((body: body, id: id));
     return Asset.fromJson({'id': id ?? 'n', ...body});
   }
+}
+
+class _NoFootage extends FootageService {
+  _NoFootage() : super(Dio());
+  @override
+  Future<FootageInbox> inbox({String status = 'all'}) async => FootageInbox.fromJson({
+        'counts': {'new': 1, 'waiting': 1},
+        'items': [{'id': 'f1', 'day': '2026-11-18', 'folderName': '2026-11-18 · BK-1001 · Amina K · A very long service name that has to fit a phone', 'status': 'new', 'links': [{'id': 'l1', 'url': 'https://www.dropbox.com/scl/fo/a/b', 'kind': 'folder'}], 'uploaders': ['Anu']}],
+        'waiting': [{'bookingId': 'b2', 'client': 'Diya', 'service': 'Reception', 'day': '2026-11-18', 'artists': ['Bina', 'Meera']}],
+      });
 }
 
 class _NoTeam extends MarketingTeamService {
@@ -171,7 +201,7 @@ Future<({_FakePortfolio p, _FakeSocials s})> _pump(WidgetTester tester, {String 
   addTearDown(tester.view.reset);
   final p = fake ?? _FakePortfolio();
   final s = _FakeSocials();
-  final overrides = <Override>[marketingPortfolioServiceProvider.overrideWithValue(p), marketingSocialsServiceProvider.overrideWithValue(s), marketingTeamServiceProvider.overrideWithValue(_NoTeam())];
+  final overrides = <Override>[marketingPortfolioServiceProvider.overrideWithValue(p), marketingSocialsServiceProvider.overrideWithValue(s), marketingTeamServiceProvider.overrideWithValue(_NoTeam()), mediaStreamServiceProvider.overrideWithValue(NoMediaStream()), footageServiceProvider.overrideWithValue(_NoFootage())];
   await tester.pumpWidget(ProviderScope(overrides: overrides, child: MaterialApp(theme: AppTheme.lightTheme, home: Scaffold(body: PortfolioScreen(initialTab: tab)))));
   await tester.pumpAndSettle();
   return (p: p, s: s);
@@ -220,12 +250,12 @@ void main() {
   });
 
   group('the Creative Portfolio screen', () {
-    testWidgets('has the four tabs the document draws and the New Shoot Plan button', (tester) async {
+    testWidgets('has the four tabs the document draws, the Footage tab, and the New Shoot Plan button', (tester) async {
       await _pump(tester);
       for (final t in kPortfolioTabs) {
         expect(_k('pf_tab_${t.$1}'), findsOneWidget, reason: t.$1);
       }
-      expect(kPortfolioTabs.map((t) => t.$1).toList(), ['planner', 'calendar', 'reports', 'gallery']);
+      expect(kPortfolioTabs.map((t) => t.$1).toList(), ['planner', 'calendar', 'reports', 'gallery', 'footage']);
       expect(_k('pf_new_shoot'), findsOneWidget);
       expect(find.text('Creative Portfolio'), findsWidgets);
     });
@@ -430,6 +460,21 @@ void main() {
       expect(f.p.saved.single.body['title'], 'Bridal Transformation v2');
       expect(f.p.saved.single.body['status'], 'pre_production');
     });
+
+    testWidgets('a team member on the plan who is no longer in the team list stays on the crew when the plan is edited', (tester) async {
+      final fake = _FakePortfolio()..extraCrew = [{'memberId': 'm9', 'name': 'Riya (left)', 'role': 'Editor'}];
+      final f = await _pump(tester, fake: fake);
+      await tester.tap(_k('shoot_menu'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit plan'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_k('shoot_title'), 'Renamed');
+      await tester.tap(_k('shoot_save'));
+      await tester.pumpAndSettle();
+      final crew = (f.p.saved.single.body['crew'] as List).cast<Map<String, dynamic>>();
+      expect(crew.map((c) => c['memberId']).whereType<String>(), containsAll(['m1', 'm9']));
+      expect(crew.firstWhere((c) => c['memberId'] == 'm9')['name'], 'Riya (left)');
+    });
   });
 
   group('Production Calendar', () {
@@ -557,23 +602,27 @@ void main() {
       expect(find.descendant(of: _k('gl_portfolio_Kerala'), matching: find.text('180')), findsOneWidget);
       await tester.tap(_k('gl_portfolio_Kerala'));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.portfolio, 'Kerala');
+      expect(f.s.searches.last.facet('portfolio'), {'Kerala'});
+      await tester.ensureVisible(_k('gl_page_Bridal Makeup'));
       await tester.tap(_k('gl_page_Bridal Makeup'));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.page, 'Bridal Makeup');
-      expect(f.s.assetQueries.last.portfolio, 'Kerala', reason: 'filters add up');
+      expect(f.s.searches.last.facet('page'), {'Bridal Makeup'});
+      expect(f.s.searches.last.facet('portfolio'), {'Kerala'}, reason: 'filters add up');
+      await tester.ensureVisible(_k('gl_stage_approved'));
       await tester.tap(_k('gl_stage_approved'));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.stage, 'approved');
+      expect(f.s.searches.last.facet('stage'), {'approved'});
+      await tester.ensureVisible(_k('gl_media_video'));
       await tester.tap(_k('gl_media_video'));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.media, 'video');
+      expect(f.s.searches.last.facet('media'), {'video'});
       await tester.tap(_k('gl_media_video'));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.media, isNull);
+      expect(f.s.searches.last.facet('media'), isEmpty);
       await tester.enterText(_k('gl_search'), 'bridal');
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(f.s.assetQueries.last.q, 'bridal');
+      expect(f.s.searches.last.q, 'bridal');
     });
 
     testWidgets('Upload opens the asset form', (tester) async {
@@ -655,7 +704,7 @@ void main() {
     testWidgets('every tab fits a 390-wide screen without overflow', (tester) async {
       await _pump(tester, size: const Size(390, 2000));
       expect(tester.takeException(), isNull);
-      for (final t in ['calendar', 'reports', 'gallery']) {
+      for (final t in ['calendar', 'reports', 'gallery', 'footage']) {
         await tester.tap(_k('pf_tab_$t'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: t);

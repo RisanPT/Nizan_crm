@@ -1,3 +1,5 @@
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
+
 enum ITProjectCategory {
   software,
   infrastructure,
@@ -162,6 +164,9 @@ class ProjectCost {
   final String note;
   final List<CostChange> changes;
 
+  /// What the project's tasks add up to against the budget (null from an older server).
+  final TaskPlan? taskPlan;
+
   const ProjectCost({
     this.budget = 0,
     this.approvedBudget = 0,
@@ -171,6 +176,7 @@ class ProjectCost {
     this.committed = 0,
     this.note = '',
     this.changes = const [],
+    this.taskPlan,
   });
 
   factory ProjectCost.fromJson(Map<String, dynamic> j) => ProjectCost(
@@ -185,6 +191,7 @@ class ProjectCost {
     committed: (j['committed'] as num?)?.toDouble() ?? 0,
     note: (j['note'] ?? '').toString(),
     changes: [for (final c in (j['changes'] as List?) ?? const []) ?(c is Map ? CostChange.tryParse(c.cast<String, dynamic>()) : null)],
+    taskPlan: j['taskPlan'] is Map ? TaskPlan.fromJson((j['taskPlan'] as Map).cast<String, dynamic>()) : null,
   );
 
   /// A change is with the finance head while an earlier amount is still the limit.
@@ -227,6 +234,15 @@ class PendingProjectCost {
   final List<String> changeLines;
   final bool canDecide;
 
+  /// What the project's tasks add up to, how many tasks carry a cost plan, and how many still have none.
+  final double taskPlanned;
+  final int taskCount;
+  final int taskUnpriced;
+
+  /// The tasks behind that figure, one line each (the biggest first), and how many more were left off the list.
+  final List<TaskCostLine> taskLines;
+  final int taskLinesMore;
+
   const PendingProjectCost({
     required this.id,
     required this.name,
@@ -243,6 +259,11 @@ class PendingProjectCost {
     this.changeReason = '',
     this.changeLines = const [],
     this.canDecide = false,
+    this.taskPlanned = 0,
+    this.taskCount = 0,
+    this.taskUnpriced = 0,
+    this.taskLines = const [],
+    this.taskLinesMore = 0,
   });
 
   factory PendingProjectCost.fromJson(Map<String, dynamic> j) {
@@ -266,6 +287,14 @@ class PendingProjectCost {
       changeReason: (j['changeReason'] ?? '').toString(),
       changeLines: [for (final l in (j['changeLines'] as List?) ?? const []) l.toString()],
       canDecide: j['canDecide'] == true,
+      taskPlanned: (j['taskPlanned'] as num?)?.toDouble() ?? 0,
+      taskCount: (j['taskCount'] as num?)?.toInt() ?? 0,
+      taskUnpriced: (j['taskUnpriced'] as num?)?.toInt() ?? 0,
+      taskLines: [
+        for (final l in (j['taskLines'] as List?) ?? const [])
+          if (l is Map) TaskCostLine.fromJson(l.cast<String, dynamic>()),
+      ],
+      taskLinesMore: (j['taskLinesMore'] as num?)?.toInt() ?? 0,
     );
   }
 }

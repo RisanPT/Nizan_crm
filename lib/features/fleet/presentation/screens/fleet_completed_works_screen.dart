@@ -9,6 +9,8 @@ import 'package:nizan_crm/features/fleet/controllers/fleet_controller.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_models.dart';
 import 'package:nizan_crm/presentation/common_widgets/export_report_dialog.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'fleet_mobile_ui.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -88,12 +90,29 @@ class FleetCompletedWorksScreen extends ConsumerWidget {
                 trailing: works.isEmpty
                     ? null
                     : IconButton(
-                        onPressed: () {
+                        key: const Key('fleet_completed_export'),
+                        onPressed: () async {
+                          // which dates (by the day the job was done): all time to begin with, or any days
+                          final range = await showReportRangeDialog(
+                            context,
+                            title: 'Export completed works for which dates?',
+                            subtitle: 'By the day of the work.',
+                            initial: ReportRange.all(),
+                            allowAll: true,
+                          );
+                          if (range == null || !context.mounted) return;
+                          final inRange = filterByRange(works, (j) => j.serviceStart, range);
+                          if (inRange.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No completed works for ${range.label}.')));
+                            return;
+                          }
+                          if (!context.mounted) return;
                           showDialog(
                             context: context,
                             builder: (ctx) => ExportReportDialog<FleetJob>(
                               title: 'Completed Works',
-                              items: works,
+                              range: range.isAll ? null : range,
+                              items: inRange,
                               getVehicleName: (j) => vehicleNameOf(j.vehicleId),
                               getDriverName: (j) => driverNameOf(j.driverId),
                               headers: const [

@@ -672,6 +672,14 @@ class LeadDetailsScreen extends HookConsumerWidget {
                     ],
                   ),
                   8.h,
+                  if (activity.type == 'followup' && followUpChannelName(activity.channel).isNotEmpty) ...[
+                    Text(
+                      'Follow-up by: ${followUpChannelName(activity.channel)}',
+                      key: Key('activity_channel_${activity.id}'),
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                    4.h,
+                  ],
                   Text(
                     'Scheduled: ${_fmtDateTime(activity.scheduledDate)}',
                     style: TextStyle(
@@ -1124,6 +1132,8 @@ class _AddActivityLogDialog extends HookConsumerWidget {
     final type = useState(initialType);
     final remarkCtrl = useTextEditingController();
     final callResponse = useState('Connected');
+    // How the follow-up is done (call / WhatsApp / visit / meeting / other) — shown on the Marketing Lead Report's Follow-ups.
+    final channel = useState('call');
     final status = useState('Pending');
     final scheduledDate = useState(DateTime.now());
     final leadStatus = useState<String?>('Follow-up');
@@ -1197,6 +1207,19 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                 child: Text(_fmtDateTime(scheduledDate.value)),
               ),
             ),
+            if (type.value == 'followup') ...[
+              12.h,
+              DropdownButtonFormField<String>(
+                key: const Key('followup_channel'),
+                initialValue: channel.value,
+                decoration: const InputDecoration(labelText: 'Follow-up By'),
+                items: [
+                  for (final c in kFollowUpChannels)
+                    DropdownMenuItem(value: c.$1, child: Text(c.$2)),
+                ],
+                onChanged: (val) => channel.value = val ?? channel.value,
+              ),
+            ],
             if (type.value == 'call') ...[
               12.h,
               DropdownButtonFormField<String>(
@@ -1308,6 +1331,7 @@ class _AddActivityLogDialog extends HookConsumerWidget {
                         'callResponse': type.value == 'call'
                             ? callResponse.value
                             : 'N/A',
+                        if (type.value == 'followup') 'channel': channel.value,
                         'leadStatus': leadStatus.value,
                         if (leadStatus.value == 'Lost')
                           'reason': remarkCtrl.text.trim(),

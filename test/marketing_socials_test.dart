@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
+import 'package:nizan_crm/features/marketing/data/asset_search.dart';
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
@@ -12,6 +13,7 @@ import 'package:nizan_crm/features/marketing/presentation/socials/socials_screen
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
+import 'package:nizan_crm/features/marketing/presentation/media/media_stream.dart';
 
 // The Socials module: Overview, Content Calendar, Content & Assets, Publishing & Accounts, Performance, Reports & Insights.
 
@@ -83,6 +85,17 @@ class _FakeSocials extends MarketingSocialsService {
   Future<SocialsCalendar> calendar(TeamFilter f, {String platform = 'all'}) async {
     calendars.add((from: f.fromDay, to: f.toDay, platform: platform, brand: f.brand.wire));
     return SocialsCalendar.fromJson({'items': [_post('c1', title: 'Calendar reel', day: '2026-11-10'), _post('c2', title: 'Scheduled carousel', type: 'carousel', status: 'scheduled', day: '2026-11-12')], 'pipeline': overviewJson['pipeline']});
+  }
+
+  final searches = <AssetSearch>[];
+  bool canManage = false;
+
+  @override
+  Future<AssetPage> searchAssets(AssetSearch s, {int pageNo = 1, int limit = kGalleryPageSize}) async {
+    searches.add(s);
+    final media = s.facet('media');
+    final items = (assetsJson['items'] as List).cast<Map<String, dynamic>>().where((a) => (s.q.isEmpty || (a['title'] as String).toLowerCase().contains(s.q.toLowerCase())) && (media.isEmpty || media.contains(a['media']))).toList();
+    return AssetPage.fromJson({...assetsJson, 'items': items, 'total': items.length, 'canManage': canManage});
   }
 
   @override
@@ -176,12 +189,13 @@ class _NoTeam extends MarketingTeamService {
   Future<LogSetup> logSetup({required String date, String? memberId}) async => throw Exception('no team in this test');
 }
 
-Future<_FakeSocials> _pump(WidgetTester tester, Widget screen, {_FakeSocials? fake, Size size = const Size(1280, 1500)}) async {
+Future<_FakeSocials> _pump(WidgetTester tester, Widget screen, {_FakeSocials? fake, Size size = const Size(1280, 1500), bool manager = false}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final f = fake ?? _FakeSocials();
-  final overrides = <Override>[marketingSocialsServiceProvider.overrideWithValue(f), marketingTeamServiceProvider.overrideWithValue(_NoTeam())];
+  final overrides = <Override>[marketingSocialsServiceProvider.overrideWithValue(f), marketingTeamServiceProvider.overrideWithValue(_NoTeam()), mediaStreamServiceProvider.overrideWithValue(NoMediaStream())];
+  f.canManage = manager;
   await tester.pumpWidget(ProviderScope(overrides: overrides, child: MaterialApp(theme: AppTheme.lightTheme, home: Scaffold(body: screen))));
   await tester.pumpAndSettle();
   return f;
@@ -379,8 +393,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(_k('post_title')).controller!.text, 'Calendar reel');
       await tester.enterText(_k('post_title'), 'Calendar reel v2');
+      final asked = f.calendars.length;
       await tester.tap(_k('post_save'));
       await tester.pumpAndSettle();
+      expect(f.calendars.length, greaterThan(asked), reason: 'the calendar reads its window again after the save');
       expect(f.savedPosts.single.id, 'c1');
       expect(f.savedPosts.single.body['title'], 'Calendar reel v2');
       expect(f.savedPosts.single.body['status'], 'published');
@@ -445,15 +461,16 @@ void main() {
   });
 
   group('Content & Assets', () {
-    testWidgets('counts on the chips, the cards with their stage, and search narrows the library', (tester) async {
+    testWidgets('counts on the chips, the cards with their stage, and the same search as the Gallery narrows the library', (tester) async {
       final f = await _pump(tester, const SocialsScreen(initialTab: 'assets'));
       expect(find.descendant(of: _k('soc_asset_media_all'), matching: find.text('2')), findsOneWidget);
       expect(find.descendant(of: _k('soc_asset_media_video'), matching: find.text('1')), findsOneWidget);
       expect(find.descendant(of: _k('asset_a1'), matching: find.text('Approved / Final')), findsOneWidget);
       expect(find.descendant(of: _k('asset_a2'), matching: find.text('In Review')), findsOneWidget);
-      await tester.enterText(_k('soc_asset_search'), 'studio');
+      await tester.enterText(_k('gl_search'), 'studio');
+      await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
-      expect(f.assetQueries.last.q, 'studio');
+      expect(f.searches.last.q, 'studio');
       expect(_k('asset_a2'), findsOneWidget);
       expect(_k('asset_a1'), findsNothing);
     });
@@ -462,10 +479,11 @@ void main() {
       final f = await _pump(tester, const SocialsScreen(initialTab: 'assets'));
       await tester.tap(_k('soc_asset_media_video'));
       await tester.pumpAndSettle();
-      expect(f.assetQueries.last.media, 'video');
+      expect(f.searches.last.facet('media'), {'video'});
+      expect(_k('asset_a2'), findsNothing);
       await tester.tap(_k('soc_asset_media_video'));
       await tester.pumpAndSettle();
-      expect(f.assetQueries.last.media, isNull);
+      expect(f.searches.last.facet('media'), isEmpty);
     });
 
     testWidgets('an asset is added with a title and a link; a refusal from the server is shown', (tester) async {
@@ -488,8 +506,20 @@ void main() {
       expect(f.savedAssets.single.id, isNull);
     });
 
+    testWidgets('a member does not get Approve or Reject on an asset, nor the final-output switch — a Marketing Manager\'s call', (tester) async {
+      await _pump(tester, const SocialsScreen(initialTab: 'assets'));
+      await tester.tap(_k('asset_menu_a2'));
+      await tester.pumpAndSettle();
+      expect(find.text('Approve'), findsNothing);
+      expect(find.text('Reject'), findsNothing);
+      await tester.tap(find.text('Edit').last);
+      await tester.pumpAndSettle();
+      expect(tester.widget<SwitchListTile>(_k('asset_final')).onChanged, isNull);
+      expect(find.text('A Marketing Manager marks final outputs.'), findsOneWidget);
+    });
+
     testWidgets('the menu moves an asset on: approve sends the stage with the asset\'s id', (tester) async {
-      final f = await _pump(tester, const SocialsScreen(initialTab: 'assets'));
+      final f = await _pump(tester, const SocialsScreen(initialTab: 'assets'), manager: true);
       await tester.tap(_k('asset_menu_a2'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Approve').last);
@@ -554,7 +584,8 @@ void main() {
       expect(find.descendant(of: _k('soc_perf_views'), matching: find.text('↓ −4% vs last week')), findsOneWidget);
       expect(find.descendant(of: _k('soc_perf_clicks'), matching: find.textContaining('vs last week')), findsNothing);
       expect(find.descendant(of: _k('soc_perf_row_instagram'), matching: find.text('2.7%')), findsOneWidget);
-      expect(find.descendant(of: _k('soc_perf_row_youtube'), matching: find.text('—')), findsOneWidget, reason: 'no reach-based rate when nothing was typed');
+      expect(find.descendant(of: _k('soc_perf_row_youtube'), matching: find.text('—')), findsNWidgets(2), reason: 'no reach-based rate when nothing was typed, and no growth without a period before');
+      expect(_text(tester, _k('soc_perf_growth_youtube')), '—');
       expect(find.descendant(of: _k('soc_top_t1'), matching: find.text('Family at SkyCity')), findsOneWidget);
       expect(_text(tester, _k('soc_perf_status_total')), '64');
     });
@@ -677,14 +708,14 @@ void main() {
       expect(reqs[3].queryParameters.containsKey('platform'), isFalse);
     });
 
-    test('publishing filters by brand only when one is chosen; assets send their filters', () async {
+    test('publishing carries the shared range, and the brand only when one is chosen; assets send their filters', () async {
       final reqs = await capture((s) async {
         await s.publishing(f);
         await s.publishing(TeamFilter(from: f.from, to: f.to));
         await s.assets(const AssetQuery(q: 'bridal', stage: 'approved', brand: 'kerala'));
       });
-      expect(reqs[0].queryParameters, {'brand': 'kerala'});
-      expect(reqs[1].queryParameters, isEmpty);
+      expect(reqs[0].queryParameters, {'from': f.fromDay, 'to': f.toDay, 'brand': 'kerala'});
+      expect(reqs[1].queryParameters, {'from': f.fromDay, 'to': f.toDay});
       expect(reqs[2].queryParameters, {'q': 'bridal', 'stage': 'approved', 'brand': 'kerala'});
     });
 

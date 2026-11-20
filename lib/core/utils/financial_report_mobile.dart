@@ -77,7 +77,7 @@ Future<void> printFinancialReport(FinancialAnalystReport r) async {
             pw.Text('TEAM N ERP',
                 style: pw.TextStyle(
                     fontSize: 18, fontWeight: pw.FontWeight.bold, color: primary)),
-            pw.Text('Monthly Financial-Analyst Report · ${r.month}',
+            pw.Text('${r.reportTitle} · ${r.periodText}',
                 style: pw.TextStyle(fontSize: 10, color: muted)),
           ]),
         ),
@@ -146,8 +146,8 @@ Future<void> printFinancialReport(FinancialAnalystReport r) async {
 
   final bytes = await pdf.save();
   final tempDir = await getTemporaryDirectory();
-  final file = File('${tempDir.path}/financial_report_${r.month}.pdf');
+  final file = File('${tempDir.path}/financial_report_${r.fileTag}.pdf');
   await file.writeAsBytes(bytes);
   await Share.shareXFiles([XFile(file.path)],
-      subject: 'Financial Report ${r.month}');
+      subject: 'Financial Report ${r.periodText}');
 }

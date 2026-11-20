@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -254,8 +255,10 @@ class _Gstr3bSummaryScreenState extends ConsumerState<Gstr3bSummaryScreen> {
     if (d == null) return;
     final s = d.s;
     final net = s.totalOutput - s.inputCredit;
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      ['GSTR-3B Summary'],
+      ['GSTR-3B Summary', 'Period: ${period.label}'],
       ['Section', 'Description', 'Amount'],
       ['3.1(a)', 'Outward taxable value', csvNum(d.taxable)],
       ['3.1', 'IGST', csvNum(s.outputIgst)],
@@ -266,7 +269,7 @@ class _Gstr3bSummaryScreenState extends ConsumerState<Gstr3bSummaryScreen> {
       ['5.1', 'Net tax payable', csvNum(net)],
     ];
     try {
-      await downloadCsv('gstr3b_summary.csv', rows);
+      await downloadCsv('gstr3b_summary_${period.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('GSTR-3B summary exported')));

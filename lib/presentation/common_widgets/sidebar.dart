@@ -9,6 +9,7 @@ import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
 import '../../features/notifications/controllers/notification_providers.dart';
+import 'package:nizan_crm/features/crm/services/crm_service.dart';
 import 'package:nizan_crm/features/ceo/services/decision_service.dart';
 import 'package:nizan_crm/features/client_chat/controllers/live_client_chat.dart';
 import 'package:nizan_crm/features/sales/services/goal_service.dart';
@@ -517,6 +518,20 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/reviews',
                     onTap: () => context.go('/reviews'),
                   ),
+                  _SidebarItem(
+                    icon: Icons.support_agent_outlined,
+                    title: 'CRM team',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath.startsWith('/crm') && currentPath != '/crm/weekly',
+                    onTap: () => context.go('/crm/dashboard'),
+                  ),
+                  _SidebarItem(
+                    icon: Icons.summarize_outlined,
+                    title: 'CRM weekly report',
+                    isCollapsed: isCollapsed,
+                    isSelected: currentPath == '/crm/weekly',
+                    onTap: () => context.go('/crm/weekly'),
+                  ),
                   8.h,
                   _buildSectionTitle('PEOPLE & STRATEGY', isCollapsed: isCollapsed, theme: theme),
                   4.h,
@@ -585,6 +600,7 @@ class Sidebar extends ConsumerWidget {
                       access.canSeeBookings ||
                       access.canSeeCalendar ||
                       access.canSeeTrials ||
+                      access.canSeeCrmWork ||
                       access.canSeeArtistHead) ...[
                     _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
                     4.h,
@@ -596,6 +612,44 @@ class Sidebar extends ConsumerWidget {
                       isCollapsed: isCollapsed,
                       isSelected: currentPath == '/',
                       onTap: () => context.go('/'),
+                    ),
+                  // The CRM team's own work: the head's dashboard, a member's queue, and the cases (with how many are overdue).
+                  if (access.canSeeCrmDashboard)
+                    _SidebarItem(
+                      key: const Key('sidebar_crm_dashboard'),
+                      icon: Icons.support_agent_outlined,
+                      title: 'CRM Dashboard',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/crm/dashboard' || currentPath.startsWith('/crm/team'),
+                      onTap: () => context.go('/crm/dashboard'),
+                    )
+                  else if (access.isCrmTeam)
+                    _SidebarItem(
+                      key: const Key('sidebar_crm_my_work'),
+                      icon: Icons.assignment_ind_outlined,
+                      title: 'My CRM Work',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/crm/my-work',
+                      onTap: () => context.go('/crm/my-work'),
+                    ),
+                  if (access.canSeeCrmDashboard)
+                    _SidebarItem(
+                      key: const Key('sidebar_crm_weekly'),
+                      icon: Icons.summarize_outlined,
+                      title: 'CRM Weekly Report',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/crm/weekly',
+                      onTap: () => context.go('/crm/weekly'),
+                    ),
+                  if (access.canSeeCrmWork)
+                    _SidebarItem(
+                      key: const Key('sidebar_crm_cases'),
+                      icon: Icons.report_problem_outlined,
+                      title: 'CRM Cases',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/crm/cases') || currentPath == '/crm/re-engagement',
+                      trailing: _crmOverdueBadge(ref, crmColors, isCollapsed),
+                      onTap: () => context.go('/crm/cases'),
                     ),
                   if (access.canSeeClients)
                     _SidebarItem(
@@ -646,6 +700,14 @@ class Sidebar extends ConsumerWidget {
                       isCollapsed: isCollapsed,
                       isSelected: currentPath == '/calendar',
                       onTap: () => context.go('/calendar'),
+                    ),
+                  if (access.canSeeAssociateWorks && access.canSeeBookings)
+                    _SidebarItem(
+                      icon: Icons.how_to_reg_outlined,
+                      title: 'Associate Works',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/associate-works',
+                      onTap: () => context.go('/associate-works'),
                     ),
                   if (access.canSeeTrials) ...[
                     _SidebarItem(
@@ -1226,7 +1288,7 @@ class Sidebar extends ConsumerWidget {
                             icon: Icons.account_balance_outlined,
                             title: 'Bank Balance',
                             isCollapsed: false,
-                            isSelected: currentPath == '/company-finance/bank-balance',
+                            isSelected: currentPath.startsWith('/company-finance/bank-balance'),
                             onTap: () => context.go('/company-finance/bank-balance'),
                           ),
                         ),
@@ -2287,6 +2349,22 @@ Widget? _unreadBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
 
 /// Unread client-message badge for the sidebar Client Chat item. Polls
 /// `/chat/unread-count` every 15s via [clientChatUnreadProvider].
+/// Overdue CRM cases, for the sidebar's CRM Cases item.
+Widget? _crmOverdueBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
+  final count = ref.watch(crmOverdueCasesProvider).asData?.value ?? 0;
+  if (count <= 0) return null;
+  if (collapsed) {
+    return Container(width: 8, height: 8, decoration: BoxDecoration(color: crm.destructive, shape: BoxShape.circle));
+  }
+  return Container(
+    key: const Key('sidebar_crm_overdue_badge'),
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(color: crm.destructive, borderRadius: BorderRadius.circular(10)),
+    constraints: const BoxConstraints(minWidth: 18),
+    child: Text(count > 99 ? '99+' : '$count', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+  );
+}
+
 Widget? _clientChatBadge(WidgetRef ref, CrmTheme crm, bool collapsed) {
   final count = ref.watch(clientChatUnreadProvider).asData?.value ?? 0;
   if (count <= 0) return null;
@@ -2456,6 +2534,7 @@ class _SidebarItem extends StatelessWidget {
   final Widget? trailing;
 
   const _SidebarItem({
+    super.key,
     required this.icon,
     required this.title,
     required this.isCollapsed,

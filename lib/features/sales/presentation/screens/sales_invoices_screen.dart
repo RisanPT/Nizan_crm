@@ -686,6 +686,23 @@ class SalesBookingsScreen extends HookConsumerWidget {
               );
             },
           ),
+          onCustomRangeReport: (useEventDate, range, reportType) => _runWithReportLoader(
+            context: context,
+            crmColors: crmColors,
+            action: () => (asCsv ? downloadDashboardReportCsv : downloadDashboardReport)(
+              month: range.from ?? DateTime.now(),
+              bookings: reportBookings,
+              packages: packages,
+              employees: employees,
+              reportType: reportType,
+              useEventDate: useEventDate,
+              // both ends inclusive: the last day to its last moment
+              startDate: range.from,
+              endDate: range.endOfDay,
+              districts: allDistricts,
+              activeFilters: activeFiltersStr,
+            ),
+          ),
           onOneYearReport: (useEventDate) => _runWithReportLoader(
             context: context,
             crmColors: crmColors,

@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_cost_widgets.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/task_cost_widgets.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
 /// Finance's "Project budgets": the estimated costs waiting for the finance head. Nothing is spent against a project, and
@@ -107,6 +108,19 @@ class ProjectBudgetsScreen extends ConsumerWidget {
           Expanded(child: _figure(crm, 'Asks for', rupees(r.budget), key: Key('pb_budget_${r.id}'))),
           if (r.isChange) Expanded(child: _figure(crm, 'Approved so far', rupees(r.approvedBudget), key: Key('pb_approved_${r.id}'))),
         ]),
+        // the plan behind the request: what the project's tasks add up to
+        if (r.taskCount > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            'The tasks add up to ${rupees(r.taskPlanned)}${r.taskUnpriced > 0 ? ' · ${r.taskUnpriced} of ${r.taskCount} ${r.taskCount == 1 ? 'task has' : 'tasks have'} no cost yet' : ''}',
+            key: Key('pb_task_plan_${r.id}'),
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: crm.textPrimary),
+          ),
+          if (r.taskLines.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            TaskCostList(lines: r.taskLines, more: r.taskLinesMore, initialShown: 4),
+          ],
+        ],
         if (r.plan.isNotEmpty) ...[
           const SizedBox(height: 8),
           for (final l in r.plan)
@@ -145,6 +159,11 @@ class ProjectBudgetsScreen extends ConsumerWidget {
                 requested: r.budget,
                 approvedBudget: r.approvedBudget,
                 changeReason: r.changeReason,
+                taskPlanned: r.taskPlanned,
+                taskUnpriced: r.taskUnpriced,
+                taskCount: r.taskCount,
+                taskLines: r.taskLines,
+                taskLinesMore: r.taskLinesMore,
               );
               if (done != null) {
                 ref.invalidate(pendingProjectCostsProvider);

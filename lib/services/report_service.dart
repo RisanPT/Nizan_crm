@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/dio_provider.dart';
 import '../core/providers/auth_provider.dart';
 import '../core/error/errors.dart';
+import '../core/utils/report_range.dart';
 
 final reportServiceProvider = Provider<ReportService>((ref) {
   final dio = ref.watch(dioProvider);
@@ -17,25 +18,37 @@ class ReportService {
 
   ReportService(this._dio, this._token);
 
-  Future<void> downloadFinanceReport({
-    required int month,
-    required int year,
+  /// The address of the finance report for the days in [range] (from and to, both inclusive). [range] needs both ends.
+  static Uri financeReportUri({
+    required String baseUrl,
+    required String token,
+    required ReportRange range,
     String? employeeId,
-    required String format, // 'pdf' | 'csv'
-  }) async {
-    final baseUrl = _dio.options.baseUrl;
+    required String format, // 'pdf' | 'xlsx' (Excel) | 'csv'
+  }) {
+    final from = range.fromIso, to = range.toIso;
+    if (from == null || to == null) {
+      // the server builds this file from every entry in the range, so it needs both ends
+      throw const AppException(null, action: 'make the finance report: choose the dates it is for');
+    }
     final queryParams = {
-      'month': month,
-      'year': year,
+      'from': from,
+      'to': to,
       if (employeeId != null && employeeId != 'all') 'employeeId': employeeId,
       'format': format,
-      'token': _token, // Pass token in query for browser download if needed, or use headers
+      'token': token, // Pass token in query for browser download if needed, or use headers
     };
+    return Uri.parse('$baseUrl/reports/finance').replace(queryParameters: queryParams);
+  }
 
-    // Construct the URL
-    final uri = Uri.parse('$baseUrl/reports/finance').replace(
-      queryParameters: queryParams.map((k, v) => MapEntry(k, v.toString())),
-    );
+  /// Collections and expenses for the days in [range] — as a PDF, an Excel sheet or a CSV. Each expense is on one
+  /// row with the work (client, booking number) it belongs to.
+  Future<void> downloadFinanceReport({
+    required ReportRange range,
+    String? employeeId,
+    required String format, // 'pdf' | 'xlsx' (Excel) | 'csv'
+  }) async {
+    final uri = financeReportUri(baseUrl: _dio.options.baseUrl, token: _token, range: range, employeeId: employeeId, format: format);
 
     // Using url_launcher to open in browser for direct download
     // Ensure the backend can handle token in query if using this, or use a custom download logic

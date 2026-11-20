@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mod
 import 'package:nizan_crm/features/bookings/presentation/widgets/month_kpi_strip.dart';
 import 'package:nizan_crm/presentation/common_widgets/reference_images.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/data/assignment_rules.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/models/zone.dart';
 import 'package:nizan_crm/core/models/geographic_state.dart';
@@ -18,6 +19,8 @@ import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/booking_print_service.dart';
 import 'package:nizan_crm/core/utils/monthly_works_report.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/services/zone_service.dart';
@@ -27,6 +30,21 @@ import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+
+/// Builds and saves the monthly works PDF — [downloadMonthlyWorksReport]; replaced in tests.
+typedef WorksReportDownloader = Future<void> Function({
+  required List<Booking> bookings,
+  required DateTime month,
+  String filterNote,
+  Set<String> associateIds,
+  Set<String>? onlyStaffIds,
+  String fileTag,
+  ReportRange? range,
+});
+
+final worksReportDownloaderProvider = Provider<WorksReportDownloader>(
+  (ref) => downloadMonthlyWorksReport,
+);
 
 class CalendarScreen extends HookConsumerWidget {
   const CalendarScreen({
@@ -515,6 +533,7 @@ class CalendarScreen extends HookConsumerWidget {
                             ),
                           ),
                         ),
+                        _AssociateBadge(entries: entries),
                         if (multi) ...[
                           const SizedBox(width: 6),
                           Container(
@@ -766,11 +785,25 @@ class CalendarScreen extends HookConsumerWidget {
         .where((booking) => booking.status.toLowerCase() != 'rejected')
         .toList();
     final asyncEmployees = ref.watch(employeesProvider);
+    final allEmployees = asyncEmployees.value ?? const <Employee>[];
+    // Associates (outside artists paid per work) get their own entries in the
+    // staff filter, so they are kept out of the plain artist list.
+    final associateIds = associateIdsOf(allEmployees);
+    final activeAssociates =
+        allEmployees
+            .where(
+              (employee) =>
+                  employee.isAssociate &&
+                  employee.status.toLowerCase() == 'active',
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
     final activeArtists =
-        (asyncEmployees.value ?? const [])
+        allEmployees
             .where(
               (employee) =>
                   employee.status.toLowerCase() == 'active' &&
+                  !employee.isAssociate &&
                   (employee.isArtist ||
                       employee.artistRole.toLowerCase().contains('artist') ||
                       employee.designation.toLowerCase().contains('artist')),
@@ -951,33 +984,22 @@ class CalendarScreen extends HookConsumerWidget {
         }
       }
 
-      final filter = selectedArtistFilter.value;
-      if (filter == 'all') return true;
-      if (filter == 'unassigned') {
-        final hasDirect = booking.assignedStaff.any(
-          (assignment) => assignment.artistName.trim().isNotEmpty,
-        );
-        final hasItem = booking.bookingItems.any(
-          (item) => item.assignedStaff.any(
-            (assignment) => assignment.artistName.trim().isNotEmpty,
-          ),
-        );
-        return !hasDirect && !hasItem;
-      }
-      final matchesDirect = booking.assignedStaff.any(
-        (assignment) => assignment.employeeId == filter,
+      return bookingMatchesStaffFilter(
+        booking,
+        selectedArtistFilter.value,
+        associateIds,
       );
-      final matchesItem = booking.bookingItems.any(
-        (item) => item.assignedStaff.any(
-          (assignment) => assignment.employeeId == filter,
-        ),
-      );
-      return matchesDirect || matchesItem;
     }).toList();
 
     // ── Monthly works report ─────────────────────────────────────────────
     // Month view → the month on screen; Day/Week view → the selected day's
-    // month. Uses the same artist / location filters as the calendar.
+    // month. Uses the same artist / location filters as the calendar. With an
+    // associate picked in the staff filter it becomes the ASSOCIATE report:
+    // only the works those associates are on, with them marked on the team.
+    final associateFocusIds = associateFocus(
+      selectedArtistFilter.value,
+      associateIds,
+    );
     final downloadingReport = useState(false);
     DateTime reportMonth() => viewMode.value == 'Month'
         ? monthFocus.value
@@ -985,6 +1007,15 @@ class CalendarScreen extends HookConsumerWidget {
 
     Future<void> downloadReport() async {
       if (downloadingReport.value) return;
+      // which dates: the month on screen to begin with, or any days
+      final screenMonth = monthRange(reportMonth());
+      final chosen = await showReportRangeDialog(
+        context,
+        title: associateFocusIds != null ? 'Associate works for which dates?' : 'Works report for which dates?',
+        subtitle: 'Works with an artist on them, dated on the days you choose.',
+        initial: screenMonth,
+      );
+      if (chosen == null || !context.mounted) return;
       downloadingReport.value = true;
       try {
         String? nameOf(Iterable<({String id, String name})> items, String id) =>
@@ -993,9 +1024,17 @@ class CalendarScreen extends HookConsumerWidget {
         final artist = selectedArtistFilter.value;
         if (artist == 'unassigned') {
           notes.add('Unassigned works');
+        } else if (artist == kAssociatesFilter) {
+          notes.add('All associates');
         } else if (artist != 'all') {
+          final who = nameOf(
+            allEmployees.map((e) => (id: e.id, name: e.name)),
+            artist,
+          );
           notes.add(
-            'Artist: ${nameOf(activeArtists.map((e) => (id: e.id, name: e.name)), artist) ?? 'selected artist'}',
+            associateFocusIds != null
+                ? 'Associate: ${who ?? 'selected associate'}'
+                : 'Artist: ${who ?? 'selected artist'}',
           );
         }
         void geo(
@@ -1013,10 +1052,15 @@ class CalendarScreen extends HookConsumerWidget {
         geo('Region', regionFilter.value, regions.map((r) => (id: r.id, name: r.name)));
         geo('District', districtFilter.value, districts.map((d) => (id: d.id, name: d.name)));
 
-        await downloadMonthlyWorksReport(
+        await ref.read(worksReportDownloaderProvider)(
           bookings: filteredCalendarBookings,
-          month: reportMonth(),
+          // the month on screen is the usual monthly report; any other days are said as they are
+          month: chosen == screenMonth ? reportMonth() : (chosen.from ?? reportMonth()),
           filterNote: notes.join(', '),
+          associateIds: associateIds,
+          onlyStaffIds: associateFocusIds,
+          fileTag: associateReportFileTag(artist, allEmployees),
+          range: chosen == screenMonth ? null : chosen,
         );
       } catch (e) {
         if (context.mounted) showErrorSnackBar(context, e);
@@ -1217,7 +1261,9 @@ class CalendarScreen extends HookConsumerWidget {
                   ),
                   Tooltip(
                     message:
-                        'Download works with assigned artists for ${monthTitle(reportMonth())}',
+                        associateFocusIds != null
+                        ? 'Download works with associates for ${monthTitle(reportMonth())}'
+                        : 'Download works with assigned artists for ${monthTitle(reportMonth())}',
                     child: OutlinedButton.icon(
                       onPressed: downloadingReport.value ? null : downloadReport,
                       icon: downloadingReport.value
@@ -1227,7 +1273,11 @@ class CalendarScreen extends HookConsumerWidget {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                      label: Text('${monthTitle(reportMonth())} Report'),
+                      label: Text(
+                        associateFocusIds != null
+                            ? '${monthTitle(reportMonth())} Associate Report'
+                            : '${monthTitle(reportMonth())} Report',
+                      ),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: crmColors.primary,
                         side: BorderSide(
@@ -1318,7 +1368,9 @@ class CalendarScreen extends HookConsumerWidget {
                                     ),
                                     IconButton(
                                       tooltip:
-                                          '${monthTitle(reportMonth())} report (PDF)',
+                                          associateFocusIds != null
+                                          ? '${monthTitle(reportMonth())} associate report (PDF)'
+                                          : '${monthTitle(reportMonth())} report (PDF)',
                                       onPressed: downloadingReport.value
                                           ? null
                                           : downloadReport,
@@ -1364,6 +1416,7 @@ class CalendarScreen extends HookConsumerWidget {
                                         context,
                                         crmColors,
                                         activeArtists,
+                                        activeAssociates,
                                         selectedArtistFilter,
                                         isSoloArtist,
                                       ),
@@ -1465,6 +1518,7 @@ class CalendarScreen extends HookConsumerWidget {
                                       context,
                                       crmColors,
                                       activeArtists,
+                                      activeAssociates,
                                       selectedArtistFilter,
                                       isSoloArtist,
                                     ),
@@ -1747,13 +1801,20 @@ class CalendarScreen extends HookConsumerWidget {
                                   color: crmColors.primary,
                                 ),
                                 4.w,
-                                Text(
-                                  _artistLabelForEntry(entry),
-                                  style: TextStyle(
-                                    color: crmColors.primary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                Flexible(
+                                  child: Text(
+                                    _artistLabelForEntry(entry),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: crmColors.primary,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
+                                ),
+                                _AssociateBadge(
+                                  entries: [entry],
+                                  tone: _BadgeTone.surface,
                                 ),
                               ],
                             ),
@@ -2139,6 +2200,7 @@ class CalendarScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     List<Employee> activeArtists,
+    List<Employee> activeAssociates,
     ValueNotifier<String> selectedArtistFilter,
     bool isSoloArtist,
   ) {
@@ -2175,10 +2237,45 @@ class CalendarScreen extends HookConsumerWidget {
           value: 'unassigned',
           child: Text('Not Assigned'),
         ),
+        // Every work an associate is on — the associate report.
+        PopupMenuItem<String>(
+          key: const Key('cal_staff_associates'),
+          value: kAssociatesFilter,
+          child: Row(
+            children: [
+              Icon(Icons.handshake_outlined, size: 18, color: crmColors.primary),
+              8.w,
+              const Text('All Associates'),
+            ],
+          ),
+        ),
         ...activeArtists.map(
           (artist) =>
               PopupMenuItem<String>(value: artist.id, child: Text(artist.name)),
         ),
+        if (activeAssociates.isNotEmpty) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            enabled: false,
+            height: 28,
+            child: Text(
+              'ASSOCIATES',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: crmColors.textSecondary,
+              ),
+            ),
+          ),
+          ...activeAssociates.map(
+            (associate) => PopupMenuItem<String>(
+              key: Key('cal_staff_${associate.id}'),
+              value: associate.id,
+              child: Text(associate.name),
+            ),
+          ),
+        ],
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -2194,7 +2291,11 @@ class CalendarScreen extends HookConsumerWidget {
             8.w,
             Flexible(
               child: Text(
-                _filterLabelForValue(selectedArtistFilter.value, activeArtists),
+                _filterLabelForValue(
+                  selectedArtistFilter.value,
+                  activeArtists,
+                  activeAssociates,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -2215,11 +2316,19 @@ class CalendarScreen extends HookConsumerWidget {
     );
   }
 
-  String _filterLabelForValue(String value, List<Employee> activeArtists) {
+  String _filterLabelForValue(
+    String value,
+    List<Employee> activeArtists,
+    List<Employee> activeAssociates,
+  ) {
     if (value == 'all') return 'All Staff';
     if (value == 'unassigned') return 'Not Assigned';
+    if (value == kAssociatesFilter) return 'All Associates';
     for (final artist in activeArtists) {
       if (artist.id == value) return artist.name;
+    }
+    for (final associate in activeAssociates) {
+      if (associate.id == value) return associate.name;
     }
     return 'All Staff';
   }
@@ -2718,15 +2827,22 @@ class CalendarScreen extends HookConsumerWidget {
           color: pillBg,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: pillTextColor,
-            fontSize: compact ? 11 : 12,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: pillTextColor,
+                  fontSize: compact ? 11 : 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            _AssociateBadge(entries: group.bookings, compact: true),
+          ],
         ),
       ),
     );
@@ -2797,6 +2913,65 @@ class CalendarScreen extends HookConsumerWidget {
       42,
       (index) =>
           DateTime(gridStart.year, gridStart.month, gridStart.day + index),
+    );
+  }
+}
+
+enum _BadgeTone { onColor, surface }
+
+/// The "associate on this work" badge on a calendar chip / card / team row. It reads the employee list itself, so a chip only needs to
+/// say which works it stands for. Nothing is drawn when no associate is on them. [only] limits it to one person (the team list in the work
+/// popup); [compact] on a coloured chip is the icon alone (the tight month/week pills); otherwise the icon with "ASSOC." on a coloured chip, or the full word "ASSOCIATE" on a light surface.
+class _AssociateBadge extends ConsumerWidget {
+  const _AssociateBadge({
+    required this.entries,
+    this.only,
+    this.compact = false,
+    this.tone = _BadgeTone.onColor,
+  });
+
+  final List<BookingDisplayEntry> entries;
+  final String? only;
+  final bool compact;
+  final _BadgeTone tone;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final staff = ref.watch(employeesProvider.select((v) => v.value));
+    var ids = associateIdsOf(staff ?? const <Employee>[]);
+    if (only != null) ids = ids.contains(only) ? {only!} : <String>{};
+    final names = associateNamesOn(entries, ids);
+    if (names.isEmpty) return const SizedBox.shrink();
+
+    final onColor = tone == _BadgeTone.onColor;
+    final ink = onColor ? Colors.white : Colors.teal.shade700;
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Tooltip(
+        message: only != null ? 'Associate' : 'Associate: ${names.join(', ')}',
+        child: Container(
+          key: const Key('cal_assoc_badge'),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 3 : 5, vertical: 1.5),
+          decoration: BoxDecoration(
+            color: onColor ? Colors.white.withValues(alpha: 0.24) : Colors.teal.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: onColor ? Colors.white.withValues(alpha: 0.6) : Colors.teal.withValues(alpha: 0.35), width: 0.8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.handshake_outlined, size: compact ? 10 : 11, color: ink),
+              if (!(compact && onColor)) ...[
+                const SizedBox(width: 2),
+                Text(
+                  onColor ? 'ASSOC.' : 'ASSOCIATE',
+                  style: TextStyle(color: ink, fontSize: 8.5, fontWeight: FontWeight.w800, height: 1.1),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -3590,13 +3765,24 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          member.artistName,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: crm.textPrimary,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.artistName,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: crm.textPrimary,
+                                ),
+                              ),
+                            ),
+                            _AssociateBadge(
+                              entries: widget.entries,
+                              only: member.employeeId,
+                              tone: _BadgeTone.surface,
+                            ),
+                          ],
                         ),
                         if (member.role.isNotEmpty || member.roleType.isNotEmpty)
                           Text(

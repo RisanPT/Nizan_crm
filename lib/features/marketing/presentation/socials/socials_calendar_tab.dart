@@ -12,15 +12,6 @@ import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
 enum CalView { month, week, list }
 
-/// What the calendar asks the server for: a window of days (and a platform); the brand comes from the shared filter.
-typedef CalKey = ({String from, String to, String platform});
-
-final socialsWindowProvider = FutureProvider.autoDispose.family<SocialsCalendar, CalKey>((ref, k) {
-  final f = ref.watch(teamFilterProvider);
-  final window = TeamFilter(from: DateTime.parse(k.from), to: DateTime.parse(k.to), brand: f.brand);
-  return ref.watch(marketingSocialsServiceProvider).calendar(window, platform: k.platform);
-}, retry: (_, _) => null);
-
 String _d(DateTime d) => TeamFilter.day(d);
 
 /// Socials → Content Calendar: the month, the week or a list of what is planned and scheduled. The entries ARE the posts (nothing is
@@ -173,10 +164,10 @@ class _MonthGrid extends StatelessWidget {
                   height: 96,
                   margin: const EdgeInsets.all(1.5),
                   padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(color: inMonth ? Mkt.card : Mkt.bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: key == today ? Mkt.violet : Mkt.border)),
+                  decoration: BoxDecoration(color: inMonth ? Mkt.card : Mkt.bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: key == today ? Mkt.primary : Mkt.border)),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
-                      Text('${day.day}', style: mktText(10.5, weight: key == today ? FontWeight.w800 : FontWeight.w500, color: key == today ? Mkt.violet : (inMonth ? Mkt.ink : Mkt.inkSoft))),
+                      Text('${day.day}', style: mktText(10.5, weight: key == today ? FontWeight.w800 : FontWeight.w500, color: key == today ? Mkt.primary : (inMonth ? Mkt.ink : Mkt.inkSoft))),
                       const Spacer(),
                       if (inMonth) InkWell(onTap: () => onAdd(day), child: const Icon(Icons.add_rounded, size: 14, color: Mkt.inkSoft)),
                     ]),
@@ -246,7 +237,7 @@ class _ListView extends ConsumerWidget {
           [
             Text(p.day == null ? '' : DateFormat('d MMM').format(p.day!), style: mktText(12, weight: FontWeight.w700)),
             Row(children: [PostThumb(url: p.thumbUrl, contentType: p.contentType, width: 34, height: 34, radius: 8), const SizedBox(width: 8), Flexible(child: Text(p.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700)))]),
-            Row(children: [Icon(platformIcon(p.platform), size: 14, color: Mkt.violet), const SizedBox(width: 5), Text(platformName(p.platform), style: mktText(12))]),
+            Row(children: [Icon(platformIcon(p.platform), size: 14, color: Mkt.primary), const SizedBox(width: 5), Text(platformName(p.platform), style: mktText(12))]),
             Text(postFormatLabel(p.contentType), style: mktText(12)),
             Text(p.brand == 'kerala' ? 'Kerala' : 'Main', style: mktText(12, color: p.brand == 'kerala' ? Mkt.blue : Mkt.inkSoft)),
             MktChip(postStatusLabel(p.status), color: stageColor(stageKeyOf(p.status))),

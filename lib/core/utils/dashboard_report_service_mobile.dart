@@ -886,6 +886,8 @@ Future<void> downloadLeadsReport({
   String sourceFilter = 'All',
   String searchQuery = '',
   List<CrmUser> users = const [],
+  String? periodLabel,
+  String? fileTag,
 }) async {
   if (_cachedLogoBytes == null) {
     final logoData = await rootBundle.load('assets/images/teamn_logo.png');
@@ -942,7 +944,7 @@ Future<void> downloadLeadsReport({
           ),
           pw.SizedBox(height: 4),
           pw.Text(
-            'Filters applied - Status: $statusFilter | Source: $sourceFilter${searchQuery.isNotEmpty ? " | Search: '$searchQuery'" : ""}',
+            'Filters applied - Status: $statusFilter | Source: $sourceFilter${searchQuery.isNotEmpty ? " | Search: '$searchQuery'" : ""}${periodLabel != null ? " | Dates: $periodLabel" : ""}',
             style: const pw.TextStyle(
               fontSize: 10,
               color: PdfColors.blueGrey600,
@@ -982,7 +984,7 @@ Future<void> downloadLeadsReport({
 
   final bytes = await pdf.save();
   final tempDir = await getTemporaryDirectory();
-  final file = File('${tempDir.path}/leads-report-${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}.pdf');
+  final file = File('${tempDir.path}/leads-report-${fileTag ?? '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}'}.pdf');
   await file.writeAsBytes(bytes);
   await Share.shareXFiles(
     [XFile(file.path)],

@@ -57,7 +57,7 @@ String buildFinancialReportHtml(FinancialAnalystReport r) {
   return '''
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<title>Financial Report · ${_esc(r.month)}</title>
+<title>Financial Report · ${_esc(r.periodText)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; color:#1f2937; margin:26px; font-size:12px; }
@@ -83,7 +83,7 @@ String buildFinancialReportHtml(FinancialAnalystReport r) {
   <div class="brand">
     <div class="logo">N</div>
     <h1>Team N ERP</h1>
-    <div class="sub">Monthly Financial-Analyst Report · ${_esc(r.month)}</div>
+    <div class="sub">${_esc(r.reportTitle)} · ${_esc(r.periodText)}</div>
   </div>
   <hr>
 

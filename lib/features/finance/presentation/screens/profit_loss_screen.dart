@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -319,8 +320,10 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
   }
 
   Future<void> _exportCsv(BuildContext context, PnlReport r) async {
+    // the dates are said in the file, and in its name — two downloads for different dates must not look alike
+    final period = ReportRange(from: _from, to: _to);
     final rows = <List<Object?>>[
-      ['Profit & Loss'],
+      ['Profit & Loss', 'Period: ${period.label}'],
       ['Section', 'Code', 'Account', 'Amount'],
       for (final l in r.income) ['Income', l.code, l.name, csvNum(l.amount)],
       ['', '', 'Total Income', csvNum(r.totalIncome)],
@@ -329,7 +332,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
       [r.netProfit < 0 ? 'Net Loss' : 'Net Profit', '', '', csvNum(r.netProfit)],
     ];
     try {
-      await downloadCsv('profit_and_loss.csv', rows);
+      await downloadCsv('profit_and_loss_${period.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('P&L exported')));

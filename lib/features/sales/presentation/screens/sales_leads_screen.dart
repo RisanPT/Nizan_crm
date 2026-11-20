@@ -13,6 +13,8 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/dashboard_report_service.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import 'package:nizan_crm/features/sales/data/lead.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/lead_cluster_popup.dart';
@@ -22,6 +24,8 @@ import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/widgets/pincode_field.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/features/marketing/services/campaign_service.dart';
+import 'package:nizan_crm/features/marketing/data/market_models.dart';
+import 'package:nizan_crm/features/marketing/services/market_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/services/user_service.dart';
 import 'package:image_picker/image_picker.dart';
@@ -188,6 +192,7 @@ const List<String> kLeadSources = [
   'YouTube',
   'Reference',
   'Walk-in',
+  'Website',
   'Other',
 ];
 
@@ -219,6 +224,7 @@ String coerceLeadSource(String? s) {
   if (lower.contains('youtube')) return 'YouTube';
   if (lower.contains('reference') || lower.contains('referral')) return 'Reference';
   if (lower.contains('walk')) return 'Walk-in';
+  if (RegExp(r'\bweb ?(site|form)\b').hasMatch(lower)) return 'Website';
   return 'Other';
 }
 
@@ -246,6 +252,21 @@ bool isLostReviewer(String? role) =>
 String _fmtDate(DateTime d) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return '${d.day.toString().padLeft(2, '0')}-${months[d.month - 1]}-${d.year}';
+}
+
+/// 120000 → "1,20,000" (the grouping the team reads); paise only when there are some.
+String _fmtBudget(double v) {
+  final whole = v.truncate().toString();
+  final tail = whole.length > 3 ? whole.substring(whole.length - 3) : whole;
+  var head = whole.length > 3 ? whole.substring(0, whole.length - 3) : '';
+  final groups = <String>[];
+  while (head.length > 2) {
+    groups.insert(0, head.substring(head.length - 2));
+    head = head.substring(0, head.length - 2);
+  }
+  if (head.isNotEmpty) groups.insert(0, head);
+  final paise = ((v - v.truncate()) * 100).round();
+  return [...groups, tail].join(',') + (paise == 0 ? '' : '.${paise.toString().padLeft(2, '0')}');
 }
 
 String _fmtDateTime(DateTime d) {
@@ -497,11 +518,23 @@ class SalesLeadsScreen extends HookConsumerWidget {
                 final leads = paginated.items;
 
                 Future<void> exportLeadsReport() async {
+                  // which dates: the month on screen (or all time) to begin with, or any days
+                  final monthOnScreen = selectedMonth.value;
+                  final shownDays = monthOnScreen == 'All' ? ReportRange.all() : monthRange(DateTime.tryParse('$monthOnScreen-01') ?? DateTime.now());
+                  final range = await showReportRangeDialog(
+                    context,
+                    title: 'Export leads for which dates?',
+                    subtitle: 'By the date the lead came in, with the status, source, salesperson and search filters you have set.',
+                    initial: shownDays,
+                    allowAll: true,
+                  );
+                  if (range == null || !context.mounted) return;
                   await _runWithReportLoader(
                     context: context,
                     crmColors: crm,
                     action: () async {
-                      // Fetch all matching leads for the report, ignoring pagination
+                      // Fetch all matching leads for the report, ignoring pagination. The dates are applied here, to the day each lead
+                      // came in, so any days can be asked for — not only a whole month.
                       final allLeadsResponse = await ref.read(leadServiceProvider).getLeads(
                         LeadFilter(
                           page: 1,
@@ -510,16 +543,18 @@ class SalesLeadsScreen extends HookConsumerWidget {
                           status: selectedStatus.value,
                           source: selectedSource.value,
                           salesperson: selectedSalesperson.value,
-                          month: selectedMonth.value,
+                          month: 'All',
                         )
                       );
-                      
+
                       await downloadLeadsReport(
-                        leads: allLeadsResponse.items,
+                        leads: filterByRange(allLeadsResponse.items, (l) => l.leadDate, range),
                         statusFilter: selectedStatus.value,
                         sourceFilter: selectedSource.value,
                         searchQuery: searchQuery.value,
                         users: asyncUsers.value ?? [],
+                        periodLabel: range.label,
+                        fileTag: range.fileTag,
                       );
                     },
                   );
@@ -1067,6 +1102,19 @@ class _LeadForm extends HookConsumerWidget {
     final nameCtrl      = useTextEditingController(text: initialLead?.name ?? pre?.name ?? '');
     final phoneCtrl     = useTextEditingController(text: initialLead?.phone ?? pre?.phone ?? '');
     final alternateCtrl = useTextEditingController(text: initialLead?.alternateNumber ?? '');
+    // Marketing details: where the bride is (Country → City from the marketing list), how to reach her, what she can spend, and where
+    // she came from. All optional; the server checks them and copies the country / city names from the list.
+    final countryId     = useState<String?>((initialLead?.countryId ?? '').isEmpty ? null : initialLead!.countryId);
+    final cityId        = useState<String?>((initialLead?.cityId ?? '').isEmpty ? null : initialLead!.cityId);
+    final whatsappCtrl  = useTextEditingController(text: initialLead?.whatsapp ?? '');
+    final emailCtrl     = useTextEditingController(text: initialLead?.email ?? '');
+    final initialBudget = initialLead?.budget;
+    final budgetCtrl    = useTextEditingController(
+      text: initialBudget == null ? '' : (initialBudget % 1 == 0 ? initialBudget.toInt().toString() : initialBudget.toString()),
+    );
+    final languageCtrl  = useTextEditingController(text: initialLead?.language ?? '');
+    final referralCtrl  = useTextEditingController(text: initialLead?.referralPartner ?? '');
+    final creativeCtrl  = useTextEditingController(text: initialLead?.creative ?? '');
     final initialSrc = initialLead?.source;
     final coercedInitialSrc = initialSrc != null && initialSrc.isNotEmpty
         ? coerceLeadSource(initialSrc)
@@ -1191,6 +1239,11 @@ class _LeadForm extends HookConsumerWidget {
         // Duplicate numbers are refused by the server (one mobile number = one
         // lead, checked across ALL leads); a 409 is explained in the catch below.
 
+        // A budget is read in the chosen country's currency (else the lead's own); it is what the label beside the box shows.
+        final pickedCurrency = ref.read(marketsProvider).asData?.value.country(countryId.value)?.currency ?? '';
+        final budgetCurrency = pickedCurrency.isNotEmpty ? pickedCurrency : (initialLead?.budgetCurrency ?? '');
+        final budgetText = budgetCtrl.text.trim().replaceAll(',', '');
+
         final payload = {
           'name': nameCtrl.text,
           'phone': normalizePhone(phoneCtrl.text),
@@ -1215,6 +1268,17 @@ class _LeadForm extends HookConsumerWidget {
           'leadType': leadTypeCtrl.text,
           'eventType': eventType.value,
           'alternateNumber': normalizePhone(alternateCtrl.text),
+          // Marketing details. The server places the lead in the list, copies the names from it, and refuses anything that does not
+          // look right in plain words (shown below). A blank box clears its field.
+          'countryId': countryId.value,
+          'cityId': cityId.value,
+          'whatsapp': whatsappCtrl.text.trim(),
+          'email': emailCtrl.text.trim(),
+          'budget': budgetText.isEmpty ? null : budgetText,
+          if (budgetText.isNotEmpty && budgetCurrency.isNotEmpty) 'budgetCurrency': budgetCurrency,
+          'language': languageCtrl.text.trim(),
+          'referralPartner': referralCtrl.text.trim(),
+          'creative': creativeCtrl.text.trim(),
           'enquiryDate': enquiryDate.value.toUtc().toIso8601String(),
           'bookedDate': bookedDate.value?.toUtc().toIso8601String(),
 
@@ -1249,6 +1313,14 @@ class _LeadForm extends HookConsumerWidget {
           districtId.value = null;
           districtAuto.value = false;
           alternateCtrl.clear();
+          countryId.value = null;
+          cityId.value = null;
+          whatsappCtrl.clear();
+          emailCtrl.clear();
+          budgetCtrl.clear();
+          languageCtrl.clear();
+          referralCtrl.clear();
+          creativeCtrl.clear();
           remarksCtrl.clear();
           customSourceCtrl.clear();
           leadTypeCtrl.text = 'Individual';
@@ -1544,6 +1616,110 @@ class _LeadForm extends HookConsumerWidget {
         desktopWidth: 180,
       ),
 
+      // The ad creative she came from (e.g. "Reel #17") — with the campaign, it lets revenue be traced back to the creative.
+      responsiveField(
+        TextFormField(
+          key: const Key('lead_creative'),
+          controller: creativeCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Ad / creative (optional)',
+            hintText: 'e.g. Reel #17',
+            prefixIcon: Icon(Icons.movie_creation_outlined),
+          ),
+        ),
+        desktopWidth: 180,
+      ),
+
+      // Who referred her (a person or a partner — free text until the Partner CRM exists)
+      responsiveField(
+        TextFormField(
+          key: const Key('lead_referral'),
+          controller: referralCtrl,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Referred by (optional)',
+            prefixIcon: Icon(Icons.group_add_outlined),
+          ),
+        ),
+        desktopWidth: 180,
+      ),
+
+      // Country → City (the marketing list). Picking a city brings its country; picking another country drops a city that is not in it.
+      responsiveField(
+        Consumer(builder: (_, r, _) {
+          final markets = r.watch(marketsProvider).asData?.value ?? const MarketList();
+          final current = countryId.value;
+          // a country since switched off still shows on the lead that has it
+          final known = current == null || markets.country(current) != null;
+          return DropdownButtonFormField<String?>(
+            key: ValueKey('lead-country-$current-${markets.countries.length}'),
+            initialValue: current,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Country',
+              prefixIcon: Icon(Icons.public_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Not set')),
+              if (!known)
+                DropdownMenuItem<String?>(
+                  value: current,
+                  child: Text(initialLead?.country.isNotEmpty == true ? initialLead!.country : 'Current country'),
+                ),
+              for (final c in markets.countries)
+                DropdownMenuItem<String?>(value: c.id, child: Text(c.name, overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) {
+              countryId.value = v;
+              if (markets.countryOfCity(cityId.value)?.id != v) cityId.value = null;
+            },
+          );
+        }),
+        desktopWidth: 180,
+      ),
+
+      responsiveField(
+        Consumer(builder: (_, r, _) {
+          final markets = r.watch(marketsProvider).asData?.value ?? const MarketList();
+          final country = markets.country(countryId.value);
+          // with a country chosen only its cities are offered; with none, every city (and picking one brings the country)
+          final cities = [
+            for (final c in (country == null ? markets.countries : [country]))
+              for (final k in c.cities) (c, k),
+          ];
+          final current = cityId.value;
+          final known = current == null || markets.city(current) != null;
+          final offered = current == null || !known || cities.any((e) => e.$2.id == current);
+          return DropdownButtonFormField<String?>(
+            key: ValueKey('lead-city-$current-${countryId.value}-${cities.length}'),
+            initialValue: offered ? current : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'City',
+              prefixIcon: Icon(Icons.location_city_outlined),
+            ),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('Not set')),
+              if (!known)
+                DropdownMenuItem<String?>(
+                  value: current,
+                  child: Text(initialLead?.city.isNotEmpty == true ? initialLead!.city : 'Current city'),
+                ),
+              for (final e in cities)
+                DropdownMenuItem<String?>(
+                  value: e.$2.id,
+                  child: Text(country == null ? '${e.$2.name} (${e.$1.name})' : e.$2.name, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: (v) {
+              cityId.value = v;
+              if (v != null) countryId.value = markets.countryOfCity(v)?.id ?? countryId.value;
+            },
+          );
+        }),
+        desktopWidth: 180,
+      ),
+
       // Location
       responsiveField(
         TextFormField(
@@ -1666,6 +1842,68 @@ class _LeadForm extends HookConsumerWidget {
           decoration: const InputDecoration(
             labelText: 'Alternate Number (Optional)',
             prefixIcon: Icon(Icons.phone_forwarded_outlined),
+          ),
+        ),
+        desktopWidth: 180,
+      ),
+
+      // WhatsApp — only when it is not the phone number above
+      responsiveField(
+        TextFormField(
+          key: const Key('lead_whatsapp'),
+          controller: whatsappCtrl,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(
+            labelText: 'WhatsApp (if different)',
+            prefixIcon: Icon(Icons.chat_outlined),
+          ),
+        ),
+        desktopWidth: 180,
+      ),
+
+      // Email
+      responsiveField(
+        TextFormField(
+          key: const Key('lead_email'),
+          controller: emailCtrl,
+          keyboardType: TextInputType.emailAddress,
+          decoration: const InputDecoration(
+            labelText: 'Email (optional)',
+            prefixIcon: Icon(Icons.email_outlined),
+          ),
+        ),
+        desktopWidth: 200,
+      ),
+
+      // Budget — written in the chosen country's currency (the label shows which)
+      responsiveField(
+        Consumer(builder: (_, r, _) {
+          final picked = r.watch(marketsProvider).asData?.value.country(countryId.value)?.currency ?? '';
+          final code = picked.isNotEmpty ? picked : (initialLead?.budgetCurrency ?? '');
+          return TextFormField(
+            key: const Key('lead_budget'),
+            controller: budgetCtrl,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+            decoration: InputDecoration(
+              labelText: 'Budget (${currencySign(code).trim()})',
+              prefixIcon: const Icon(Icons.payments_outlined),
+            ),
+          );
+        }),
+        desktopWidth: 180,
+      ),
+
+      // Language she speaks
+      responsiveField(
+        TextFormField(
+          key: const Key('lead_language'),
+          controller: languageCtrl,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Language (optional)',
+            hintText: 'e.g. Malayalam',
+            prefixIcon: Icon(Icons.translate_outlined),
           ),
         ),
         desktopWidth: 180,
@@ -2011,6 +2249,10 @@ class LeadPrefill {
     this.eventDate,
   });
 }
+
+/// Opens the normal, empty Add Lead form — the same form and checks as the Leads screen's (the Marketing Lead Report's "Add Lead" uses it).
+Future<void> showAddLeadDialog(BuildContext context) =>
+    _showLeadFormSheet(context, title: 'Add Lead', icon: Icons.person_add_alt_1_rounded);
 
 /// Opens the normal Add Lead form, prefilled (e.g. from a quote). Saving goes
 /// through the same checks as a manual lead, including the duplicate-number
@@ -2454,6 +2696,43 @@ class _LeadCardState extends State<_LeadCard> {
                   const SizedBox(height: 6),
                   _InfoRow(icon: Icons.location_on_outlined, label: 'Location', value: lead.location.isNotEmpty ? lead.location : '-'),
                   const SizedBox(height: 6),
+                  // Marketing details — only the ones that were filled in
+                  if (lead.country.isNotEmpty || lead.city.isNotEmpty) ...[
+                    _InfoRow(
+                      icon: Icons.public_outlined,
+                      label: 'Market',
+                      value: [lead.city, lead.country].where((x) => x.isNotEmpty).join(', '),
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  if (lead.whatsapp.isNotEmpty) ...[
+                    _InfoRow(icon: Icons.chat_outlined, label: 'WhatsApp', value: lead.whatsapp),
+                    const SizedBox(height: 6),
+                  ],
+                  if ((lead.email ?? '').isNotEmpty) ...[
+                    _InfoRow(icon: Icons.email_outlined, label: 'Email', value: lead.email!),
+                    const SizedBox(height: 6),
+                  ],
+                  if (lead.budget != null) ...[
+                    _InfoRow(
+                      icon: Icons.payments_outlined,
+                      label: 'Budget',
+                      value: '${currencySign(lead.budgetCurrency)}${_fmtBudget(lead.budget!)}',
+                    ),
+                    const SizedBox(height: 6),
+                  ],
+                  if (lead.language.isNotEmpty) ...[
+                    _InfoRow(icon: Icons.translate_outlined, label: 'Language', value: lead.language),
+                    const SizedBox(height: 6),
+                  ],
+                  if (lead.referralPartner.isNotEmpty) ...[
+                    _InfoRow(icon: Icons.group_add_outlined, label: 'Referred by', value: lead.referralPartner),
+                    const SizedBox(height: 6),
+                  ],
+                  if (lead.creative.isNotEmpty) ...[
+                    _InfoRow(icon: Icons.movie_creation_outlined, label: 'Creative', value: lead.creative),
+                    const SizedBox(height: 6),
+                  ],
                   if (lead.pincode.isNotEmpty || lead.district.isNotEmpty) ...[
                     _InfoRow(
                       icon: Icons.pin_drop_outlined,

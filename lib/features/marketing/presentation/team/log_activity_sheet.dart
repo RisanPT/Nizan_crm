@@ -47,6 +47,13 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
   WorkStatus _status = WorkStatus.completed;
   String? _taskId;
   String? _shootId;
+  String? _campaignId;
+  String? _initiativeId;
+  String? _devProjectId;
+  String? _projectId; // the CRM project picked from the suggestions (typing something else clears it)
+  String? _contentId; // the Socials post the work published
+  String? _groupId; // the category the log counts under
+  bool _groupPicked = false; // the person chose the category themself (a suggestion never overrides that)
   String _shootStage = 'production';
   double _taskProgress = 0;
   bool _saving = false;
@@ -107,6 +114,13 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
     _status = e.status;
     _taskId = e.taskId;
     _shootId = e.shootId;
+    _campaignId = e.campaignId;
+    _initiativeId = e.initiativeId;
+    _devProjectId = e.devProjectId;
+    _projectId = e.projectId;
+    _contentId = e.contentId;
+    _groupId = e.groupId;
+    _groupPicked = e.groupId != null;
     if (e.shootStage != null && e.shootStage!.isNotEmpty) _shootStage = e.shootStage!;
     for (final entry in e.counts.entries) {
       _countCtl(entry.key).text = entry.value == entry.value.roundToDouble() ? entry.value.toInt().toString() : entry.value.toString();
@@ -198,8 +212,14 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
       taskId: _taskId,
       taskProgress: _taskId != null && _status != WorkStatus.completed ? _taskProgress.round() : null,
       shootId: _shootId,
+      campaignId: _campaignId,
+      initiativeId: _initiativeId,
       shootStage: _shootId == null ? null : _shootStage,
       overrideReason: _reason.text,
+      groupId: _groupId,
+      projectId: _projectId,
+      contentId: _contentId,
+      devProjectId: _devProjectId,
     );
     try {
       final warnings = await ref.read(marketingTeamServiceProvider).saveLog(draft, id: widget.editing?.id);
@@ -207,7 +227,8 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.pop(context, true);
-      messenger.showSnackBar(SnackBar(key: const Key('log_saved'), content: Text(warnings.isEmpty ? 'Logged.' : 'Logged. ${warnings.join(' ')}')));
+      final published = _contentId != null && _status == WorkStatus.completed ? ' The post is marked published in Socials.' : '';
+      messenger.showSnackBar(SnackBar(key: const Key('log_saved'), content: Text(warnings.isEmpty ? 'Logged.$published' : 'Logged.$published ${warnings.join(' ')}')));
     } on TeamRefusal catch (r) {
       if (mounted) {
         setState(() {
@@ -270,16 +291,40 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
             const SizedBox(height: 10),
             Wrap(spacing: 6, runSpacing: 4, children: [
               for (final k in ActivityKind.values)
-                ChoiceChip(key: Key('log_kind_${k.wire}'), avatar: Icon(kindIcon(k), size: 15), label: Text(k.label), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
+                ChoiceChip(
+                  key: Key('log_kind_${k.wire}'),
+                  avatar: Icon(kindIcon(k), size: 15),
+                  label: Text(k.label),
+                  selected: _kind == k,
+                  onSelected: (_) => setState(() {
+                    _kind = k;
+                    if (!_groupPicked) _groupId = suggestCategory(k, s.categories) ?? _groupId;
+                  }),
+                ),
             ]),
             const SizedBox(height: 12),
             _field('log_worked_on', _workedOn, 'What did you work on?', errorField: 'workedOn', maxLength: 300),
-            TextField(key: const Key('log_project'), controller: _project, onChanged: (_) => setState(() {}), decoration: const InputDecoration(labelText: 'Which project or client?', border: OutlineInputBorder(), isDense: true)),
+            TextField(
+              key: const Key('log_project'),
+              controller: _project,
+              onChanged: (v) => setState(() {
+                // a picked project stays tied only while the text is still its name
+                if (_projectId != null && s.projects.where((p) => p.id == _projectId).map((p) => p.name).firstOrNull != v.trim()) _projectId = null;
+              }),
+              decoration: InputDecoration(labelText: 'Which project or client?', border: const OutlineInputBorder(), isDense: true, suffixIcon: _projectId == null ? null : const Tooltip(message: 'Tied to the CRM project', child: Icon(Icons.link_rounded, size: 18))),
+            ),
             // projects that match what is being typed — one tap fills it in (anything else typed is kept as it is)
             if (_project.text.trim().isNotEmpty)
               Wrap(spacing: 6, children: [
                 for (final p in s.projects.where((p) => p.name.toLowerCase().contains(_project.text.trim().toLowerCase()) && p.name != _project.text.trim()).take(4))
-                  ActionChip(key: Key('log_project_${p.id}'), label: Text(p.name), onPressed: () => setState(() => _project.text = p.name)),
+                  ActionChip(
+                    key: Key('log_project_${p.id}'),
+                    label: Text(p.name),
+                    onPressed: () => setState(() {
+                      _project.text = p.name;
+                      _projectId = p.id;
+                    }),
+                  ),
               ]),
             const SizedBox(height: 12),
             _field('log_completed', _completed, 'What did you complete?', lines: 2),
@@ -309,7 +354,9 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
                 ],
                 onChanged: (v) => setState(() {
                   _taskId = v;
-                  _taskProgress = (open.where((t) => t.id == v).firstOrNull?.progress ?? 0).toDouble();
+                  final t = open.where((t) => t.id == v).firstOrNull;
+                  _taskProgress = (t?.progress ?? 0).toDouble();
+                  if (!_groupPicked && t?.groupId != null) _groupId = t!.groupId;
                 }),
               ),
               if (_taskId != null && _status != WorkStatus.completed)
@@ -339,6 +386,76 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
                       ChoiceChip(key: Key('log_shoot_stage_${st.$1}'), label: Text(st.$2), selected: _shootStage == st.$1, onSelected: (_) => setState(() => _shootStage = st.$1)),
                   ]),
                 ),
+            ],
+            if (s.campaigns.isNotEmpty || _campaignId != null) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: const Key('log_campaign'),
+                initialValue: s.campaigns.any((x) => x.id == _campaignId) ? _campaignId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'For a campaign? (counts toward the campaign)', border: OutlineInputBorder(), isDense: true),
+                items: [const DropdownMenuItem<String?>(value: null, child: Text('No campaign')), for (final x in s.campaigns) DropdownMenuItem<String?>(value: x.id, child: Text(x.title, overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setState(() => _campaignId = v),
+              ),
+            ],
+            if (s.initiatives.isNotEmpty || _initiativeId != null) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: const Key('log_initiative'),
+                initialValue: s.initiatives.any((x) => x.id == _initiativeId) ? _initiativeId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'For a strategic initiative?', border: OutlineInputBorder(), isDense: true),
+                items: [const DropdownMenuItem<String?>(value: null, child: Text('No initiative')), for (final x in s.initiatives) DropdownMenuItem<String?>(value: x.id, child: Text(x.title, overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setState(() => _initiativeId = v),
+              ),
+            ],
+            if (s.devProjects.isNotEmpty || _devProjectId != null) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: const Key('log_devproject'),
+                initialValue: s.devProjects.any((x) => x.id == _devProjectId) ? _devProjectId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'For a development project?', border: OutlineInputBorder(), isDense: true),
+                items: [const DropdownMenuItem<String?>(value: null, child: Text('No project')), for (final x in s.devProjects) DropdownMenuItem<String?>(value: x.id, child: Text(x.title, overflow: TextOverflow.ellipsis))],
+                onChanged: (v) => setState(() => _devProjectId = v),
+              ),
+            ],
+            if (s.posts.isNotEmpty || _contentId != null) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String?>(
+                key: const Key('log_post'),
+                initialValue: s.posts.any((x) => x.id == _contentId) ? _contentId : null,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Published a Socials post? (logging it completed marks the post published)', border: OutlineInputBorder(), isDense: true),
+                items: [
+                  const DropdownMenuItem<String?>(value: null, child: Text('No post')),
+                  for (final x in s.posts) DropdownMenuItem<String?>(value: x.id, child: Text(postLabel(x), overflow: TextOverflow.ellipsis)),
+                ],
+                onChanged: (v) => setState(() {
+                  _contentId = v;
+                  if (v != null && _kind == ActivityKind.task) {
+                    _kind = ActivityKind.post;
+                    if (!_groupPicked) _groupId = suggestCategory(ActivityKind.post, s.categories) ?? _groupId;
+                  }
+                }),
+              ),
+            ],
+            if (s.categories.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('CATEGORY (WHERE THIS WORK COUNTS ON THE DASHBOARD)', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.6, color: crm.textSecondary)),
+              const SizedBox(height: 6),
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                for (final c in s.categories)
+                  ChoiceChip(
+                    key: Key('log_group_${c.id}'),
+                    label: Text(c.name),
+                    selected: _groupId == c.id,
+                    onSelected: (on) => setState(() {
+                      _groupId = on ? c.id : null;
+                      _groupPicked = on;
+                    }),
+                  ),
+              ]),
             ],
             if (s.groups.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -410,3 +527,26 @@ class _LogActivityFormState extends ConsumerState<LogActivityForm> {
         ),
       );
 }
+
+/// The category a kind of work most likely counts under, by the group's name (a suggestion the person can change): a post → Posting /
+/// Socials, a shoot → Production, a campaign → Ads / Campaigns, a meeting → Coordination, strategy work → Strategies. Null when none fits.
+String? suggestCategory(ActivityKind kind, List<({String id, String name})> categories) {
+  final rx = switch (kind) {
+    ActivityKind.post => RegExp(r'post|social', caseSensitive: false),
+    ActivityKind.shoot => RegExp(r'production|shoot', caseSensitive: false),
+    ActivityKind.campaign => RegExp(r'\bads?\b|campaign', caseSensitive: false),
+    ActivityKind.meeting => RegExp(r'coordinat|meeting', caseSensitive: false),
+    ActivityKind.strategy => RegExp(r'strateg', caseSensitive: false),
+    _ => null,
+  };
+  if (rx == null) return null;
+  return categories.where((c) => rx.hasMatch(c.name)).map((c) => c.id).firstOrNull;
+}
+
+/// "Bridal reel · Instagram reel · 14 Nov" for the post picker (and "· published" for one already out).
+String postLabel(LogPostOption p) => [
+      p.title,
+      [if (p.platform.isNotEmpty) p.platform[0].toUpperCase() + p.platform.substring(1), if (p.contentType.isNotEmpty) p.contentType.replaceAll('_', ' ')].join(' '),
+      if (p.day != null) shortDay(p.day!),
+      if (p.published) 'published',
+    ].where((x) => x.trim().isNotEmpty).join(' · ');

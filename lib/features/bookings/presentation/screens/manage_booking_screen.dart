@@ -6,6 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_booking_care_card.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/booking_content_card.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/core/models/district.dart';
@@ -18,6 +22,8 @@ import 'package:nizan_crm/presentation/common_widgets/reference_images.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
+import 'package:nizan_crm/features/bookings/data/assignment_rules.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/add_associate_dialog.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/services/addon_service_service.dart';
 
@@ -1844,6 +1850,18 @@ class ManageBookingScreen extends HookConsumerWidget {
                 ],
                 24.h,
 
+                // ── CRM care: verified with the client, photos, client health ──
+                if (Access.of(ref.watch(authSessionProvider)).canSeeCrmWork) ...[
+                  CrmBookingCareCard(bookingId: booking.id),
+                  24.h,
+                ],
+
+                // ── Content (Marketing): the shoots linked to this work and what they delivered ──
+                if (Access.of(ref.watch(authSessionProvider)).canManageMarketing) ...[
+                  BookingContentCard(bookingId: booking.id),
+                  24.h,
+                ],
+
                 // ── Artist Assignment ─────────────────────────────────────
                 _buildArtistAssignment(
                   context,
@@ -3112,7 +3130,12 @@ class ManageBookingScreen extends HookConsumerWidget {
                   )
                 else
                   ...assignments.value.map(
-                    (a) => _buildAssignmentBlock(a, crmColors, assignments),
+                    (a) => _buildAssignmentBlock(
+                      a,
+                      crmColors,
+                      assignments,
+                      associateIdsOf(asyncEmployees.value ?? const <Employee>[]),
+                    ),
                   ),
                 // ── POC Selector ──────────────────────────────────────────
                 if (assignments.value
@@ -3197,7 +3220,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                     'TEMPORARY STAFF FOR THIS BOOKING',
                     temporaryStaffCtrl,
                     hint:
-                        'Add temporary hires without storing them in staff management',
+                        'Add temporary hires without storing them in staff management. An outside artist you pay per work? Add them above as an associate.',
                   ),
                   24.h,
                   Container(
@@ -3343,11 +3366,13 @@ class ManageBookingScreen extends HookConsumerWidget {
   Widget _buildAssignmentBlock(
     BookingAssignment lead,
     CrmTheme crmColors,
-    ValueNotifier<List<BookingAssignment>> assignments,
-  ) {
+    ValueNotifier<List<BookingAssignment>> assignments, [
+    Set<String> associateIds = const {},
+  ]) {
     final roleTypeValue = lead.roleType.toLowerCase();
     final isLead = roleTypeValue == 'lead';
     final isDriver = roleTypeValue == 'driver';
+    final isAssociate = associateIds.contains(lead.employeeId);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3362,6 +3387,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? Colors.amber
                     : isDriver
                     ? Colors.green
+                    : isAssociate
+                    ? Colors.teal
                     : Colors.indigo,
                 width: 4,
               ),
@@ -3386,7 +3413,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: (isLead ? Colors.amber : Colors.indigo)
+                          color: (isLead ? Colors.amber : isAssociate ? Colors.teal : Colors.indigo)
                               .withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
@@ -3395,6 +3422,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                               ? 'LEAD'
                               : isDriver
                               ? 'DRIVER'
+                              : isAssociate
+                              ? 'ASSOCIATE'
                               : 'ASSISTANT',
                           style: TextStyle(
                             fontSize: 9,
@@ -3402,6 +3431,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 ? Colors.amber
                                 : isDriver
                                 ? Colors.green
+                                : isAssociate
+                                ? Colors.teal
                                 : Colors.indigo,
                             fontWeight: FontWeight.bold,
                           ),
@@ -3459,29 +3490,13 @@ class ManageBookingScreen extends HookConsumerWidget {
     final currentType = assignmentType.value;
     final isTypeLead = currentType == 'lead';
     final isTypeDriver = currentType == 'driver';
+    // an ASSOCIATE is an outside artist paid per work (no login): they are picked, or added on the spot, under their own chip
+    final isTypeAssociate = currentType == 'associate';
 
-    final selectableStaff = availableStaff
-        .where((employee) {
-          final role = employee.artistRole.toLowerCase();
-          if (isTypeLead) return role == 'artist';
-          if (isTypeDriver) return role == 'driver';
-          return role == 'assistant' || role == 'artist';
-        })
-        .where(
-          (employee) => !assignments.value.any(
-            (assignment) => assignment.employeeId == employee.id,
-          ),
-        )
-        .fold<List<Employee>>([], (items, employee) {
-          final alreadyAdded = items.any((item) => item.id == employee.id);
-          if (!alreadyAdded) {
-            items.add(employee);
-          }
-          return items;
-        });
+    final selectable = selectableStaff(availableStaff, currentType, assignments.value);
 
     final assignDropdownKey = ValueKey(
-      'assign-$currentType-${selectableStaff.map((employee) => employee.id).join(',')}',
+      'assign-$currentType-${selectable.map((employee) => employee.id).join(',')}',
     );
 
     return Container(
@@ -3491,6 +3506,8 @@ class ManageBookingScreen extends HookConsumerWidget {
             ? Colors.amber.withValues(alpha: 0.05)
             : isTypeDriver
             ? Colors.green.withValues(alpha: 0.05)
+            : isTypeAssociate
+            ? Colors.teal.withValues(alpha: 0.05)
             : Colors.indigo.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
@@ -3498,6 +3515,8 @@ class ManageBookingScreen extends HookConsumerWidget {
               ? Colors.amber.withValues(alpha: 0.2)
               : isTypeDriver
               ? Colors.green.withValues(alpha: 0.2)
+              : isTypeAssociate
+              ? Colors.teal.withValues(alpha: 0.2)
               : Colors.indigo.withValues(alpha: 0.2),
         ),
       ),
@@ -3512,6 +3531,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? 'ASSIGN LEAD ARTIST'
                     : isTypeDriver
                     ? 'ADD DRIVER'
+                    : isTypeAssociate
+                    ? 'ADD ASSOCIATE ARTIST'
                     : 'ADD ASSISTANT',
                 style: TextStyle(
                   fontSize: 9,
@@ -3519,6 +3540,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                       ? Colors.amber
                       : isTypeDriver
                       ? Colors.green
+                      : isTypeAssociate
+                      ? Colors.teal
                       : Colors.indigoAccent,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.2,
@@ -3537,6 +3560,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                   _typeChip('DRIVER', 'driver', assignmentType, Colors.green),
                   8.w,
                   _typeChip('ASST', 'assistant', assignmentType, Colors.indigo),
+                  8.w,
+                  _typeChip('ASSOC.', 'associate', assignmentType, Colors.teal),
                 ],
               ),
             ],
@@ -3552,7 +3577,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               onRetry: () => ProviderScope.containerOf(context, listen: false)
                   .invalidate(employeesProvider),
             )
-          else if (selectableStaff.isEmpty)
+          else if (selectable.isEmpty)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -3564,6 +3589,8 @@ class ManageBookingScreen extends HookConsumerWidget {
               child: Text(
                 isTypeLead
                     ? 'No active artists available to assign as lead.'
+                    : isTypeAssociate
+                    ? 'No associates yet — add the first one below.'
                     : 'No active assistants available to add.',
                 style: TextStyle(color: crmColors.textSecondary, fontSize: 12),
               ),
@@ -3573,7 +3600,7 @@ class ManageBookingScreen extends HookConsumerWidget {
               key: assignDropdownKey,
               isExpanded: true,
               initialValue: null,
-              items: selectableStaff
+              items: selectable
                   .map(
                     (employee) => DropdownMenuItem(
                       value: employee.id,
@@ -3589,6 +3616,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? 'Select lead artist…'
                     : isTypeDriver
                     ? 'Select driver…'
+                    : isTypeAssociate
+                    ? 'Select associate…'
                     : 'Select assistant…',
                 crmColors,
               ).copyWith(isDense: true),
@@ -3601,6 +3630,30 @@ class ManageBookingScreen extends HookConsumerWidget {
                 'Role, e.g. Hair / Draping',
                 crmColors,
               ).copyWith(isDense: true),
+            ),
+          ],
+          if (isTypeAssociate) ...[
+            8.h,
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('add_associate'),
+                onPressed: () async {
+                  final r = await showAddAssociateDialog(context);
+                  if (r == null || !context.mounted) return;
+                  final e = r.employee;
+                  // the new (or already known) associate goes straight onto this work's team
+                  if (!assignments.value.any((a) => a.employeeId == e.id)) {
+                    assignments.value = [...assignments.value, assignmentFor(e, 'associate', roleText: roleCtrl.text)];
+                  }
+                  roleCtrl.clear();
+                  if (r.existing) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${e.name} is already on your associates list — added to this work.')));
+                  }
+                },
+                icon: const Icon(Icons.person_add_alt_1_outlined, size: 16),
+                label: const Text('Not on the list? Add a new associate'),
+              ),
             ),
           ],
           // ── Driver mode: show available cars ─────────────────────────
@@ -3676,7 +3729,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: ElevatedButton(
               onPressed: () {
                 if (selectedArtistId.value == null) return;
-                final artist = selectableStaff.cast<Employee?>().firstWhere(
+                final artist = selectable.cast<Employee?>().firstWhere(
                   (employee) => employee?.id == selectedArtistId.value,
                   orElse: () => null,
                 );
@@ -3684,29 +3737,7 @@ class ManageBookingScreen extends HookConsumerWidget {
 
                 assignments.value = [
                   ...assignments.value,
-                  BookingAssignment(
-                    employeeId: artist.id,
-                    artistName: artist.name,
-                    role: isTypeLead
-                        ? 'Lead Artist'
-                        : isTypeDriver
-                        ? 'Driver'
-                        : (roleCtrl.text.trim().isEmpty
-                              ? 'Assistant'
-                              : roleCtrl.text.trim()),
-                    specialization: artist.specialization,
-                    works: artist.works.isNotEmpty
-                        ? artist.works
-                        : [
-                            if (artist.specialization.trim().isNotEmpty)
-                              artist.specialization.trim()
-                            else if (isTypeDriver)
-                              'Driver',
-                          ],
-                    phone: artist.phone,
-                    type: artist.type,
-                    roleType: currentType,
-                  ),
+                  assignmentFor(artist, currentType, roleText: roleCtrl.text),
                 ];
 
                 // After adding a lead → auto-switch to assistant mode
@@ -3723,6 +3754,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? Colors.amber
                     : isTypeDriver
                     ? Colors.green
+                    : isTypeAssociate
+                    ? Colors.teal
                     : Colors.indigo,
                 foregroundColor: isTypeLead ? Colors.black : Colors.white,
                 textStyle: const TextStyle(fontWeight: FontWeight.bold),
@@ -3732,6 +3765,8 @@ class ManageBookingScreen extends HookConsumerWidget {
                     ? 'ASSIGN LEAD ARTIST'
                     : isTypeDriver
                     ? 'ASSIGN DRIVER'
+                    : isTypeAssociate
+                    ? 'ADD ASSOCIATE'
                     : 'ADD ASSISTANT',
               ),
             ),

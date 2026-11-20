@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -23,6 +24,8 @@ import 'package:nizan_crm/features/accounts/controllers/expense_controller.dart'
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import '../../services/upload_service.dart';
 import '../../services/report_service.dart';
+import '../../core/utils/report_range.dart';
+import '../../core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import '../../core/utils/booking_print_service.dart';
 import '../../core/providers/trial_provider.dart';
@@ -39,10 +42,10 @@ import 'package:nizan_crm/features/accounts/presentation/widgets/artist_day_time
 import 'package:nizan_crm/features/accounts/presentation/widgets/expense_allocation_line.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/food_allowance_manager.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/work_costs_tab.dart';
-import 'package:nizan_crm/features/accounts/data/work_cost.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_common.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_overview_view.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_expenses_view.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_list_kit.dart' show priorStretch;
 import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_by_work_view.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_collections_view.dart';
 import 'package:nizan_crm/presentation/common_widgets/paginated_footer.dart';
@@ -223,8 +226,36 @@ class ArtistFinanceScreen extends HookConsumerWidget {
 
     final asyncCollections = ref.watch(financeCollectionsPageProvider(collectionQuery.value));
     final asyncExpenses = ref.watch(financeExpensesPageProvider(expenseQuery.value));
-    final workCostQuery = WorkCostQuery(from: expenseQuery.value.from, to: expenseQuery.value.to);
-    final asyncWorkCosts = (canVerify && useDesktopLayout) ? ref.watch(workCostsPageProvider(workCostQuery)) : null;
+    // The stretch just before the period, only to say "↑ 12% vs Oct" under a total (desktop only,
+    // one row each — just the totals are read).
+    final prior = useDesktopLayout ? priorStretch(period.value, month.value, range.value) : null;
+    final asyncPriorCollections = prior == null
+        ? null
+        : ref.watch(financeCollectionsPageProvider(FinanceQuery(from: prior.from, to: prior.to, limit: 1)));
+    final asyncPriorExpenses = prior == null
+        ? null
+        : ref.watch(financeExpensesPageProvider(FinanceQuery(from: prior.from, to: prior.to, limit: 1)));
+    // The Overview tab reads the period itself — NOT the filters set in the Collections / Expenses
+    // tabs, so filtering a list never changes the overview. Collections: every status (the totals by
+    // status and the newest entries); expenses: what counts (a rejected bill is not spend); and who
+    // collected the most (verified only).
+    final ovFrom = collectionQuery.value.from;
+    final ovTo = collectionQuery.value.to;
+    final asyncOvCollections = useDesktopLayout
+        ? ref.watch(financeCollectionsPageProvider(FinanceQuery(from: ovFrom, to: ovTo, limit: 8)))
+        : null;
+    final asyncOvExpenses = useDesktopLayout
+        ? ref.watch(financeExpensesPageProvider(FinanceQuery(from: ovFrom, to: ovTo, statuses: const {'pending', 'verified'}, limit: 8)))
+        : null;
+    final asyncOvTop = useDesktopLayout
+        ? ref.watch(financeCollectionsPageProvider(FinanceQuery(from: ovFrom, to: ovTo, statuses: const {'verified'}, limit: 1)))
+        : null;
+    final lastOvCollections = useRef<FinancePage<ArtistCollection>?>(null);
+    final lastOvExpenses = useRef<FinancePage<ArtistExpense>?>(null);
+    final lastOvTop = useRef<FinancePage<ArtistCollection>?>(null);
+    if (asyncOvCollections?.hasValue ?? false) lastOvCollections.value = asyncOvCollections!.value;
+    if (asyncOvExpenses?.hasValue ?? false) lastOvExpenses.value = asyncOvExpenses!.value;
+    if (asyncOvTop?.hasValue ?? false) lastOvTop.value = asyncOvTop!.value;
     // The last page that loaded stays on screen while the next one is fetched.
     final lastCollections = useRef<FinancePage<ArtistCollection>?>(null);
     final lastExpenses = useRef<FinancePage<ArtistExpense>?>(null);
@@ -2105,6 +2136,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           modes: kCollectionPayModes,
           initialMode: mode,
           initialDate: initialDate ?? DateTime.now(),
+          // An expense can be approved for LESS than the artist logged; only that comes out of the account.
+          adjustableAmount: !isCollection,
         );
         if (money == null) return; // cancelled
       }
@@ -2763,6 +2796,8 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       return _FinanceEntryCard(
                         title: e.employee?.name ?? 'Unknown Artist',
                         amount: _currency(e.amount),
+                        loggedAmount: e.isReduced ? _currency(e.loggedAmount!) : null,
+                        reducedNote: e.isReduced ? e.approvalNote : '',
                         status: e.status,
                         metadata: metadataStr,
                         note: e.notes.isNotEmpty ? e.notes : null,
@@ -2820,8 +2855,12 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     void openReportDialog() {
       var selectedType = 'summary';
       var selectedFormat = 'pdf';
-      var selectedMonth = DateTime.now().month;
-      var selectedYear = DateTime.now().year;
+      // the dates start as the ones this screen is showing (a month, or the range picked); all time is too wide for a report: this financial year
+      var selectedRange = switch (period.value) {
+        FinancePeriod.month => monthRange(month.value),
+        FinancePeriod.range => range.value == null ? reportRangeFor(ReportPreset.thisMonth, DateTime.now()) : ReportRange(from: range.value!.start, to: range.value!.end),
+        FinancePeriod.all => reportRangeFor(ReportPreset.thisFy, DateTime.now()),
+      };
       var selectedArtist = 'all';
 
       showDialog(
@@ -2843,11 +2882,13 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              'Generate Report',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: crm.textPrimary,
+                            Expanded(
+                              child: Text(
+                                'Generate Report',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: crm.textPrimary,
+                                ),
                               ),
                             ),
                             IconButton(
@@ -3004,7 +3045,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                         ),
                         16.h,
                         Text(
-                          'DATE RANGE / MONTH',
+                          'DATES',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -3013,43 +3054,10 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ),
                         ),
                         8.h,
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<int>(
-                                decoration: const InputDecoration(
-                                  labelText: 'Month',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                ),
-                                initialValue: selectedMonth,
-                                items: List<DropdownMenuItem<int>>.generate(
-                                  12,
-                                  (i) => DropdownMenuItem<int>(
-                                    value: i + 1,
-                                    child: Text(_getMonthName(i + 1), style: const TextStyle(fontSize: 12)),
-                                  ),
-                                ),
-                                onChanged: (v) => dialogSetState(() => selectedMonth = v!),
-                              ),
-                            ),
-                            10.w,
-                            Expanded(
-                              child: DropdownButtonFormField<int>(
-                                decoration: const InputDecoration(
-                                  labelText: 'Year',
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                ),
-                                initialValue: selectedYear,
-                                items: [DateTime.now().year - 1, DateTime.now().year]
-                                    .map<DropdownMenuItem<int>>((y) => DropdownMenuItem<int>(
-                                          value: y,
-                                          child: Text(y.toString(), style: const TextStyle(fontSize: 12)),
-                                        ))
-                                    .toList(),
-                                onChanged: (v) => dialogSetState(() => selectedYear = v!),
-                              ),
-                            ),
-                          ],
+                        ReportRangeTile(
+                          range: selectedRange,
+                          maxDays: kMaxFinanceReportDays,
+                          onChanged: (r) => dialogSetState(() => selectedRange = r),
                         ),
                         if (selectedType == 'artist' || !isScopedToOwn) ...[
                           16.h,
@@ -3086,45 +3094,40 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                           ),
                         ),
                         8.h,
-                        RadioGroup<String>(
-                          groupValue: selectedFormat,
-                          onChanged: (v) => dialogSetState(() => selectedFormat = v!),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('PDF', style: TextStyle(fontSize: 12)),
-                                  value: 'pdf',
-                                  activeColor: crm.primary,
-                                ),
+                        // chips that wrap, so three choices fit a phone-width dialog
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final (value, label, key) in const [
+                              ('pdf', 'PDF', 'reportFormatPdf'),
+                              ('xlsx', 'Excel', 'reportFormatExcel'),
+                              ('csv', 'CSV', 'reportFormatCsv'),
+                            ])
+                              ChoiceChip(
+                                key: Key(key),
+                                label: Text(label),
+                                selected: selectedFormat == value,
+                                onSelected: (_) => dialogSetState(() => selectedFormat = value),
                               ),
-                              Expanded(
-                                child: RadioListTile<String>(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: const Text('CSV', style: TextStyle(fontSize: 12)),
-                                  value: 'csv',
-                                  activeColor: crm.primary,
-                                ),
-                              ),
-                            ],
-                          ),
+                          ],
                         ),
                         24.h,
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
+                        // wraps rather than overflows in a phone-width dialog
+                        Wrap(
+                          alignment: WrapAlignment.end,
+                          spacing: 12,
+                          runSpacing: 8,
                           children: [
                             OutlinedButton(
                               onPressed: () => Navigator.pop(ctx),
                               child: const Text('CANCEL'),
                             ),
-                            12.w,
                             ElevatedButton(
                               onPressed: () async {
                                 try {
                                   await ref.read(reportServiceProvider).downloadFinanceReport(
-                                    month: selectedMonth,
-                                    year: selectedYear,
+                                    range: selectedRange,
                                     employeeId: isScopedToOwn
                                         ? myEmployeeId
                                         : (selectedType == 'artist' ? selectedArtist : 'all'),
@@ -3132,7 +3135,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                   );
                                   if (ctx.mounted) {
                                     Navigator.pop(ctx);
-                                    showToast('✓ Report Generated (${selectedFormat.toUpperCase()})');
+                                    showToast('✓ Report Generated (${selectedFormat == 'xlsx' ? 'EXCEL' : selectedFormat.toUpperCase()})');
                                   }
                                 } catch (e) {
                                   if (ctx.mounted) {
@@ -3189,18 +3192,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
                   ArtistFinanceOverviewView(
-                    collections: collectionData,
-                    expenses: expenseData,
+                    collections: asyncOvCollections?.value ?? lastOvCollections.value,
+                    expenses: asyncOvExpenses?.value ?? lastOvExpenses.value,
+                    topArtists: (asyncOvTop?.value ?? lastOvTop.value)?.summary?.byArtist ?? const [],
+                    previousCollections: asyncPriorCollections?.value?.summary,
+                    previousExpenses: asyncPriorExpenses?.value?.summary,
+                    previousLabel: prior?.label ?? '',
+                    periodText: periodText,
+                    loading: (asyncOvCollections?.isLoading ?? false) || (asyncOvExpenses?.isLoading ?? false),
+                    error: asyncOvCollections?.error ?? asyncOvExpenses?.error,
+                    onRetry: () {
+                      ref.invalidate(financeCollectionsPageProvider);
+                      ref.invalidate(financeExpensesPageProvider);
+                    },
                     onAddCollection: addCollectionDialog,
                     onAddExpense: () => addExpenseDialog(),
-                    onRecordPayout: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Artist Payouts are managed under Operations > Artist Payouts'),
-                          backgroundColor: AfTheme.maroon,
-                        ),
-                      );
-                    },
+                    onRecordPayout: canVerify ? () => context.go('/accounts/artist-payouts') : null,
                     onGenerateReport: openReportDialog,
                     onNavigateTab: (idx) => tabCtrl.animateTo(idx),
                   ),
@@ -3208,8 +3215,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                     data: collectionData,
                     query: collectionQuery.value,
                     onQueryChanged: (q) => collectionQuery.value = q,
-                    artists: artistOptionsFor(null).map((e) => e.name).toList(),
-                    onAddCollection: addCollectionDialog,
+                    artists: isScopedToOwn ? const [] : artistOptionsFor(collectionQuery.value.employeeId),
+                    loading: asyncCollections.isLoading,
+                    error: asyncCollections.hasError && !asyncCollections.isLoading ? asyncCollections.error : null,
+                    onRetry: () => ref.invalidate(financeCollectionsPageProvider),
+                    previous: collectionQuery.value.advancedCount == 0 && collectionQuery.value.search.trim().isEmpty
+                        ? asyncPriorCollections?.value?.summary
+                        : null,
+                    previousLabel: prior?.label ?? '',
                     onExport: openReportDialog,
                     onVerify: (c) => verifyItem(
                       id: c.id,
@@ -3224,7 +3237,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                       isCollection: true,
                       action: 'rejected',
                     ),
-                    onEdit: (c) {},
+                    onEdit: (c) => editCollectionDialog(existing: c),
                     onDelete: (c) => deleteItem(
                       id: c.id,
                       isCollection: true,
@@ -3236,8 +3249,14 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                     data: expenseData,
                     query: expenseQuery.value,
                     onQueryChanged: (q) => expenseQuery.value = q,
-                    artists: artistOptionsFor(null).map((e) => e.name).toList(),
-                    onAddExpense: () => addExpenseDialog(),
+                    artists: isScopedToOwn ? const [] : artistOptionsFor(expenseQuery.value.employeeId),
+                    loading: asyncExpenses.isLoading,
+                    error: asyncExpenses.hasError && !asyncExpenses.isLoading ? asyncExpenses.error : null,
+                    onRetry: () => ref.invalidate(financeExpensesPageProvider),
+                    previous: expenseQuery.value.advancedCount == 0 && expenseQuery.value.search.trim().isEmpty
+                        ? asyncPriorExpenses?.value?.summary
+                        : null,
+                    previousLabel: prior?.label ?? '',
                     onExport: openReportDialog,
                     onApprove: (e) => verifyItem(
                       id: e.id,
@@ -3262,16 +3281,11 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                   ),
                   if (canVerify)
                     ArtistFinanceByWorkView(
-                      data: asyncWorkCosts?.value,
                       from: expenseQuery.value.from,
                       to: expenseQuery.value.to,
-                      artists: artistOptionsFor(null).map((e) => e.name).toList(),
-                      onExport: openReportDialog,
-                      onSearchChanged: (s) {},
-                      onStatusChanged: (s) {},
-                      onArtistChanged: (a) {},
+                      artists: artistOptionsFor(null),
                     ),
-                  _buildPayoutsPlaceholder(),
+                  _buildPayoutsPlaceholder(onOpen: canVerify ? () => context.go('/accounts/artist-payouts') : null),
                   _buildReportsPlaceholder(openReportDialog),
                 ],
               ),
@@ -3729,41 +3743,48 @@ class ArtistFinanceScreen extends HookConsumerWidget {
               ),
             ],
           ),
-          const Spacer(),
-          _buildMonthPickerButton(context, currentMonth, (m) {
-            onSetPeriod(FinancePeriod.month, newMonth: m);
-          }),
-          const SizedBox(width: 12),
-          _buildPeriodPills(context, currentPeriod, currentMonth, currentRange, onSetPeriod),
-          if (activeTabIndex == 2) ...[
-            const SizedBox(width: 14),
-            ElevatedButton.icon(
-              onPressed: onAddExpense,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('+ Add Expense'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AfTheme.maroon,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
-              ),
+          const SizedBox(width: 16),
+          // The controls wrap onto a second line on a narrower window instead of overflowing.
+          Expanded(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                _buildMonthPickerButton(context, currentMonth, (m) {
+                  onSetPeriod(FinancePeriod.month, newMonth: m);
+                }),
+                _buildPeriodPills(context, currentPeriod, currentMonth, currentRange, onSetPeriod),
+                if (activeTabIndex == 2)
+                  ElevatedButton.icon(
+                    onPressed: onAddExpense,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Expense'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AfTheme.maroon,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                  )
+                else if (activeTabIndex == 1)
+                  ElevatedButton.icon(
+                    onPressed: onAddCollection,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Collection'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AfTheme.maroon,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                  ),
+              ],
             ),
-          ] else if (activeTabIndex == 1) ...[
-            const SizedBox(width: 14),
-            ElevatedButton.icon(
-              onPressed: onAddCollection,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('+ Add Collection'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AfTheme.maroon,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                elevation: 0,
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -3829,6 +3850,23 @@ class ArtistFinanceScreen extends HookConsumerWidget {
         currentMonth.year == now.year &&
         currentMonth.month == now.month;
 
+    // The calendar quarter and year the pills stand for — a range is "Quarter" / "Year" only when it
+    // is exactly that, so a hand-picked range (or a past quarter) reads as "Custom".
+    final quarterStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
+    final quarter = DateTimeRange(start: DateTime(now.year, quarterStartMonth, 1), end: DateTime(now.year, quarterStartMonth + 3, 0));
+    final year = DateTimeRange(start: DateTime(now.year, 1, 1), end: DateTime(now.year, 12, 31));
+    bool same(DateTimeRange? a, DateTimeRange b) =>
+        a != null &&
+        a.start.year == b.start.year && a.start.month == b.start.month && a.start.day == b.start.day &&
+        a.end.year == b.end.year && a.end.month == b.end.month && a.end.day == b.end.day;
+    final isRange = currentPeriod == FinancePeriod.range;
+    final isQuarter = isRange && same(currentRange, quarter);
+    final isYear = isRange && same(currentRange, year);
+    final isCustom = isRange && !isQuarter && !isYear;
+    final customLabel = isCustom && currentRange != null
+        ? '${DateFormat('d MMM').format(currentRange.start)} – ${DateFormat('d MMM').format(currentRange.end)}'
+        : 'Custom';
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -3846,23 +3884,22 @@ class ArtistFinanceScreen extends HookConsumerWidget {
           ),
           _periodPill(
             label: 'Quarter',
-            isSelected: currentPeriod == FinancePeriod.range,
-            onTap: () {
-              final now = DateTime.now();
-              final quarterStartMonth = ((now.month - 1) ~/ 3) * 3 + 1;
-              final start = DateTime(now.year, quarterStartMonth, 1);
-              final end = DateTime(now.year, quarterStartMonth + 3, 0);
-              onSetPeriod(FinancePeriod.range, newRange: DateTimeRange(start: start, end: end));
-            },
+            isSelected: isQuarter,
+            onTap: () => onSetPeriod(FinancePeriod.range, newRange: quarter),
           ),
           _periodPill(
             label: 'Year',
+            isSelected: isYear,
+            onTap: () => onSetPeriod(FinancePeriod.range, newRange: year),
+          ),
+          _periodPill(
+            label: 'All Time',
             isSelected: currentPeriod == FinancePeriod.all,
             onTap: () => onSetPeriod(FinancePeriod.all),
           ),
           _periodPill(
-            label: 'Custom',
-            isSelected: false,
+            label: customLabel,
+            isSelected: isCustom,
             onTap: () async {
               final picked = await showDateRangePicker(
                 context: context,
@@ -3915,7 +3952,9 @@ class ArtistFinanceScreen extends HookConsumerWidget {
       (canVerify ? 4 : 3, 'Payouts', Icons.payments_outlined),
       (canVerify ? 5 : 4, 'Reports', Icons.bar_chart_rounded),
     ];
-    return Row(
+    // Wraps onto a second line on a narrow window rather than scrolling or overflowing.
+    return Wrap(
+      runSpacing: 8,
       children: tabs.map((tab) {
         final isSelected = tabCtrl.index == tab.$1;
         return Padding(
@@ -3970,7 +4009,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _buildPayoutsPlaceholder() {
+  Widget _buildPayoutsPlaceholder({VoidCallback? onOpen}) {
     return Center(
       child: AfCard(
         padding: const EdgeInsets.all(32),
@@ -3992,10 +4031,25 @@ class ArtistFinanceScreen extends HookConsumerWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'View and process artist settlements and payouts from the sidebar under:\nOperations > Artist Payouts',
+              'Artist settlements and payouts are processed on their own page.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AfTheme.textSecondary, fontSize: 13),
             ),
+            if (onOpen != null) ...[
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                key: const Key('afOpenPayouts'),
+                onPressed: onOpen,
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Open Artist Payouts'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AfTheme.maroon,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -4555,6 +4609,10 @@ String? _fmtEventRange(DateTime? start, DateTime? end) {
 class _FinanceEntryCard extends StatelessWidget {
   final String title;
   final String amount;
+  /// Set when the approval reduced the amount: what the artist logged (the headline [amount] is
+  /// what was approved), and the reason given, if any.
+  final String? loggedAmount;
+  final String reducedNote;
   final String status;
   final String metadata;
   final String? note;
@@ -4574,6 +4632,8 @@ class _FinanceEntryCard extends StatelessWidget {
   const _FinanceEntryCard({
     required this.title,
     required this.amount,
+    this.loggedAmount,
+    this.reducedNote = '',
     required this.status,
     required this.metadata,
     this.note,
@@ -4792,6 +4852,21 @@ class _FinanceEntryCard extends StatelessWidget {
                   fontSize: 20,
                 ),
               ),
+              // Approved for less than was logged: both numbers, and why.
+              if (loggedAmount != null) ...[
+                2.h,
+                Text(
+                  'Approved amount · logged $loggedAmount',
+                  key: const Key('entryCardLogged'),
+                  style: theme.textTheme.bodySmall?.copyWith(color: crm.warning, fontWeight: FontWeight.w700, fontSize: 11.5),
+                ),
+                if (reducedNote.trim().isNotEmpty)
+                  Text(
+                    reducedNote.trim(),
+                    key: const Key('entryCardReducedNote'),
+                    style: theme.textTheme.bodySmall?.copyWith(color: crm.textSecondary, fontSize: 11.5),
+                  ),
+              ],
               if (note != null && note!.isNotEmpty) ...[
                 8.h,
                 Text(

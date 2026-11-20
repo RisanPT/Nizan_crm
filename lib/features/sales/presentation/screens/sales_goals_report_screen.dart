@@ -11,6 +11,8 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/branded_pdf.dart';
 import 'package:nizan_crm/core/utils/file_saver.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/sales/data/goal_report.dart';
 import 'package:nizan_crm/features/sales/presentation/widgets/goal_period_nav.dart';
 import 'package:nizan_crm/features/sales/services/goal_service.dart';
@@ -62,12 +64,31 @@ class _SalesGoalsReportScreenState extends ConsumerState<SalesGoalsReportScreen>
   DateTime _date = dateOnly(DateTime.now());
   String _basis = 'added';
 
-  GoalQuery get _q => (granularity: _type, date: ymd(_date), basis: _basis);
+  /// Any days the person chose instead of a day / week / month; null = the period above.
+  ReportRange? _range;
+
+  GoalQuery get _q => _range == null ? (granularity: _type, date: ymd(_date), basis: _basis) : goalRangeQuery(_range!, _basis);
+
+  /// What the report is for, in words: the day / week / month, or the days chosen.
+  String _periodText(GoalReport r) =>
+      r.granularity == 'range' ? ReportRange(from: parseYmd(r.start), to: parseYmd(r.end)).label : periodLabel(r.granularity, parseYmd(r.start));
+
+  Future<void> _pickRange() async {
+    final picked = await showReportRangeDialog(
+      context,
+      title: 'Report for which dates?',
+      confirmLabel: 'Show report',
+      initial: _range ?? reportRangeFor(ReportPreset.thisMonth, DateTime.now()),
+      maxDays: 366, // the server builds this one day by day, up to a year
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _range = picked);
+  }
 
   String get _basisText => _basis == 'event' ? 'counted by event / trial date' : 'counted by the date added';
 
   Future<Uint8List> _pdf(GoalReport rep, MtdReport? mtd) async {
-    final period = periodLabel(rep.granularity, parseYmd(rep.start));
+    final period = _periodText(rep);
     final sections = <PdfSection>[
       PdfSection('Target vs actual', ['Metric', 'Actual', 'Target', '% of target'], [
         for (final m in rep.metrics)
@@ -110,7 +131,7 @@ class _SalesGoalsReportScreenState extends ConsumerState<SalesGoalsReportScreen>
         ]),
     ];
     return buildBrandedReportBytes(
-      title: 'Sales Report - ${rep.granularity == 'day' ? 'Day' : rep.granularity == 'week' ? 'Week' : 'Month'}',
+      title: 'Sales Report - ${rep.granularity == 'day' ? 'Day' : rep.granularity == 'week' ? 'Week' : rep.granularity == 'range' ? 'Dates' : 'Month'}',
       subtitle: '$period  |  $_basisText  |  Team N Makeovers',
       sections: sections,
     );
@@ -119,7 +140,7 @@ class _SalesGoalsReportScreenState extends ConsumerState<SalesGoalsReportScreen>
   Future<void> _export(GoalReport rep, MtdReport? mtd, {required bool print}) async {
     try {
       final bytes = await _pdf(rep, mtd);
-      final name = 'sales_report_${rep.granularity}_${rep.start}.pdf';
+      final name = rep.granularity == 'range' ? 'sales_report_${rep.start}_to_${rep.end}.pdf' : 'sales_report_${rep.granularity}_${rep.start}.pdf';
       if (print) {
         await Printing.layoutPdf(onLayout: (_) async => bytes, name: name);
       } else {
@@ -178,9 +199,36 @@ class _SalesGoalsReportScreenState extends ConsumerState<SalesGoalsReportScreen>
               type: _type,
               date: _date,
               basis: _basis,
-              onType: (t) => setState(() => _type = t),
-              onDate: (d) => setState(() => _date = d),
+              onType: (t) => setState(() {
+                _type = t;
+                _range = null;
+              }),
+              onDate: (d) => setState(() {
+                _date = d;
+                _range = null;
+              }),
               onBasis: (b) => setState(() => _basis = b),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('goals_custom_dates'),
+                  style: _range == null ? null : OutlinedButton.styleFrom(side: BorderSide(color: crm.primary), foregroundColor: crm.primary),
+                  onPressed: _pickRange,
+                  icon: const Icon(Icons.date_range_rounded, size: 16),
+                  label: Text(_range == null ? 'Custom dates' : _range!.label),
+                ),
+                if (_range != null)
+                  TextButton(
+                    key: const Key('goals_range_clear'),
+                    onPressed: () => setState(() => _range = null),
+                    child: Text('Back to ${_type == 'day' ? 'the day' : _type == 'week' ? 'the week' : 'the month'}'),
+                  ),
+              ],
             ),
             const SizedBox(height: 16),
             report.when(
@@ -202,7 +250,8 @@ class _SalesGoalsReportScreenState extends ConsumerState<SalesGoalsReportScreen>
 
   Widget _body(CrmTheme crm, GoalReport r) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(periodLabel(r.granularity, parseYmd(r.start)),
+      Text(_periodText(r),
+          key: const Key('goals_period_text'),
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: crm.textSecondary)),
       const SizedBox(height: 10),
       Wrap(spacing: 12, runSpacing: 12, children: [for (final m in r.metrics) _metricCard(crm, m)]),

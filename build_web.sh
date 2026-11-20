@@ -24,7 +24,12 @@ echo ""
 
 flutter build web --release --dart-define-from-file=.env.production "$@"
 
+echo "✓ Build complete in build/web"
+echo "▶ Packaging hostinger_web_build.zip for Hostinger upload..."
+(cd build/web && zip -q -r ../../hostinger_web_build.zip .)
+
 echo ""
-echo "✓ Done. Upload the build/web folder to Netlify."
+echo "✓ Done! All files packaged into: hostinger_web_build.zip"
+echo "  Upload 'hostinger_web_build.zip' to Hostinger File Manager inside public_html and Extract."
 echo "  Tip: after deploying, test in a PRIVATE/incognito window (or hard-refresh"
 echo "  with Ctrl/Cmd+Shift+R) — Flutter's service worker caches the old build."

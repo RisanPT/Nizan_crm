@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 import 'package:nizan_crm/features/marketing/presentation/widgets/kerala_bookings_map.dart';
 
@@ -19,93 +19,89 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final async = ref.watch(marketingInsightsProvider);
     final selectedFy = ref.watch(marketingFyProvider);
     final nowFy = _currentFyStartYear();
 
-    return Scaffold(
-      backgroundColor: crm.background,
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(marketingInsightsProvider),
-        child: ListView(
-          padding:
-              EdgeInsets.fromLTRB(isMobile ? 14 : 24, 18, isMobile ? 14 : 24, 40),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Marketing Analytics',
-                          style: TextStyle(
-                              fontSize: isMobile ? 22 : 27,
-                              fontWeight: FontWeight.w800,
-                              color: crm.textPrimary)),
-                      Text('Timeline · Culture · Location',
-                          style: TextStyle(
-                              fontSize: 12.5, color: crm.textSecondary)),
-                    ],
-                  ),
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(marketingInsightsProvider),
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+            children: [
+              MktHeader(
+                icon: Icons.insights_outlined,
+                title: 'Marketing Analytics',
+                subtitle: 'Timeline · Culture · Location',
+                actions: [_fyDropdown(ref, selectedFy ?? nowFy, nowFy)],
+              ),
+              const SizedBox(height: 14),
+              async.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 60),
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-                _fyDropdown(crm, ref, selectedFy ?? nowFy, nowFy),
-              ],
-            ),
-            16.hg,
-            async.when(
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 60),
-                child: Center(child: CircularProgressIndicator()),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 60),
+                  child: AppErrorView(error: e, onRetry: () => ref.invalidate(marketingInsightsProvider)),
+                ),
+                data: (d) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    MktCard(
+                      title: 'Booking Timeline — Seasonality',
+                      icon: Icons.show_chart_rounded,
+                      subtitle: 'By event date · ${d.totalBookings} bookings this period',
+                      child: _TimelineSection(months: d.byMonth),
+                    ),
+                    const SizedBox(height: 12),
+                    MktCard(
+                      title: 'By Culture / Community',
+                      icon: Icons.diversity_3_outlined,
+                      child: _cultureSection(d.byCulture),
+                    ),
+                    const SizedBox(height: 12),
+                    MktCard(
+                      title: 'Location',
+                      icon: Icons.place_outlined,
+                      subtitle: 'Booking volume across Kerala',
+                      child: _locationSection(isMobile, d),
+                    ),
+                    const SizedBox(height: 12),
+                    MktCard(
+                      title: 'Data Quality — event dates, culture & location',
+                      icon: Icons.fact_check_outlined,
+                      subtitle: 'Completeness across all existing bookings',
+                      child: _coverageSection(context, d.coverage),
+                    ),
+                  ],
+                ),
               ),
-              error: (e, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 60),
-                child: AppErrorView(error: e, onRetry: () => ref.invalidate(marketingInsightsProvider)),
-              ),
-              data: (d) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _card(crm, 'Booking Timeline — Seasonality',
-                      _TimelineSection(crm: crm, months: d.byMonth),
-                      subtitle:
-                          'By event date · ${d.totalBookings} bookings this period'),
-                  14.hg,
-                  _card(crm, 'By Culture / Community',
-                      _cultureSection(crm, d.byCulture)),
-                  14.hg,
-                  _card(
-                    crm,
-                    'Location',
-                    _locationSection(crm, isMobile, d),
-                    subtitle: 'Booking volume across Kerala',
-                  ),
-                  14.hg,
-                  _card(crm, 'Data Quality — event dates, culture & location',
-                      _coverageSection(context, crm, d.coverage),
-                      subtitle: 'Completeness across all existing bookings'),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   // ── Culture: donut + ranked list (with revenue) ──
-  Widget _cultureSection(CrmTheme crm, List<SegmentRow> rows) {
+  Widget _cultureSection(List<SegmentRow> rows) {
     final meaningful = rows
         .where((r) => r.name != 'Not specified' && r.bookings > 0)
         .toList();
     if (meaningful.isEmpty) {
-      return _muted(crm,
-          'No community data yet. Set "Community / Culture" on the Manage Booking screen (or it is inferred from the service) to build this segment.');
+      return const MktEmpty(
+        'No community data yet. Set "Community / Culture" on the Manage Booking screen (or it is inferred from the service) to build this segment.',
+        icon: Icons.diversity_3_outlined,
+        height: 130,
+      );
     }
     final total =
         meaningful.fold<int>(0, (s, r) => s + r.bookings).clamp(1, 1 << 30);
-    final palette = _cultureColors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -122,7 +118,7 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
                   for (var i = 0; i < meaningful.length; i++)
                     PieChartSectionData(
                       value: meaningful[i].bookings.toDouble(),
-                      color: palette[i % palette.length],
+                      color: Mkt.series(i),
                       radius: 20,
                       showTitle: false,
                     ),
@@ -131,27 +127,21 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('$total',
-                      style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: crm.textPrimary)),
-                  Text('bookings',
-                      style:
-                          TextStyle(fontSize: 10, color: crm.textSecondary)),
+                  Text('$total', style: mktText(20, weight: FontWeight.w900)),
+                  Text('bookings', style: mktText(10, color: Mkt.inkSoft)),
                 ],
               ),
             ],
           ),
         ),
         16.wg,
-        Expanded(child: _ranked(crm, meaningful, colored: true)),
+        Expanded(child: _ranked(meaningful, colored: true)),
       ],
     );
   }
 
   // ── Location: Kerala region map + district/pincode ranked (where present) ──
-  Widget _locationSection(CrmTheme crm, bool isMobile, MarketingInsights d) {
+  Widget _locationSection(bool isMobile, MarketingInsights d) {
     final hasDistrict = d.byDistrict.isNotEmpty;
     final hasPincode = d.byPincode.isNotEmpty;
     return Column(
@@ -160,19 +150,17 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
         KeralaBookingsMap(rows: d.byRegion, height: isMobile ? 280 : 340),
         12.hg,
         _cols(isMobile, [
-          _subCard(crm, 'By Region',
-              _ranked(crm, d.byRegion, colored: false)),
+          _subCard('By Region', _ranked(d.byRegion, colored: false)),
           if (hasDistrict)
-            _subCard(crm, 'By District',
-                _ranked(crm, d.byDistrict, colored: false)),
+            _subCard('By District', _ranked(d.byDistrict, colored: false)),
         ]),
         if (hasPincode) ...[
           12.hg,
-          _subCard(crm, 'By Pincode', _ranked(crm, d.byPincode, colored: false)),
+          _subCard('By Pincode', _ranked(d.byPincode, colored: false)),
         ],
         if (!hasDistrict && !hasPincode) ...[
           10.hg,
-          _note(crm,
+          _note(
               'District & pincode were not captured for older imported bookings — these breakdowns fill in as new bookings record them.'),
         ],
       ],
@@ -180,8 +168,7 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
   }
 
   // ── Data-quality / coverage panel ──
-  Widget _coverageSection(
-      BuildContext context, CrmTheme crm, Coverage c) {
+  Widget _coverageSection(BuildContext context, Coverage c) {
     final knownCulture = c.cultureExplicit + c.cultureInferred;
     final cultureTotal =
         (knownCulture + c.cultureUnknown).clamp(1, 1 << 30);
@@ -189,46 +176,42 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _meter(crm, 'Event date', c.eventWithDate, c.eventTotal,
+        _meter('Event date', c.eventWithDate, c.eventTotal,
             detail: c.eventMissing == 0
                 ? 'Every booking has a real event date'
                 : '${c.eventMissing} missing an event date'),
         10.hg,
-        _meter(crm, 'Culture / community', knownCulture, cultureTotal,
+        _meter('Culture / community', knownCulture, cultureTotal,
             detail:
                 'explicit ${c.cultureExplicit} · inferred ${c.cultureInferred} · unknown ${c.cultureUnknown}'),
         10.hg,
-        _meter(crm, 'Location', c.locWithRegion, locTotal,
+        _meter('Location', c.locWithRegion, locTotal,
             detail:
                 'region ${c.locWithRegion} · district ${c.locWithDistrict} · pincode ${c.locWithPincode}'),
         if (c.eventMissing == 0) ...[
           12.hg,
-          _note(crm,
+          _note(
               '✓ Every booking carries a real event date, so the timeline above reflects actual event seasonality — not entry dates.',
               good: true),
         ],
         14.hg,
-        Divider(color: crm.border, height: 1),
+        const Divider(color: Mkt.border, height: 1),
         12.hg,
         if (c.worklist.isEmpty)
-          _note(crm,
-              '✓ No bookings are missing event / culture / location data.',
+          _note('✓ No bookings are missing event / culture / location data.',
               good: true)
         else ...[
-          Text('Needs attention (${c.worklist.length})',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700, color: crm.textPrimary)),
+          Text('Needs attention (${c.worklist.length})', style: mktText(13, weight: FontWeight.w700)),
           6.hg,
-          Text('Tap a booking to open it and fill the missing field.',
-              style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+          Text('Tap a booking to open it and fill the missing field.', style: mktText(11.5, color: Mkt.inkSoft)),
           8.hg,
-          for (final w in c.worklist) _worklistRow(context, crm, w),
+          for (final w in c.worklist) _worklistRow(context, w),
         ],
       ],
     );
   }
 
-  Widget _worklistRow(BuildContext context, CrmTheme crm, CoverageItem w) {
+  Widget _worklistRow(BuildContext context, CoverageItem w) {
     final date = w.bookingDate != null
         ? '${w.bookingDate!.day}/${w.bookingDate!.month}/${w.bookingDate!.year}'
         : 'No date';
@@ -246,90 +229,63 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
                   Text(w.customerName.isEmpty ? 'Unnamed booking' : w.customerName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontWeight: FontWeight.w600, color: crm.textPrimary)),
-                  Text(date,
-                      style:
-                          TextStyle(fontSize: 11, color: crm.textSecondary)),
+                      style: mktText(13, weight: FontWeight.w600)),
+                  4.hg,
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(date, style: mktText(11, color: Mkt.inkSoft)),
+                      for (final m in w.missing) _missChip(m),
+                    ],
+                  ),
                 ],
               ),
             ),
-            8.wg,
-            Wrap(
-              spacing: 4,
-              children: [for (final m in w.missing) _missChip(crm, m)],
-            ),
-            Icon(Icons.chevron_right, size: 18, color: crm.textSecondary),
+            const Icon(Icons.chevron_right, size: 18, color: Mkt.inkSoft),
           ],
         ),
       ),
     );
   }
 
-  Widget _missChip(CrmTheme crm, String key) {
+  Widget _missChip(String key) {
     final label = switch (key) {
       'eventDate' => 'event date',
       'culture' => 'culture',
       'location' => 'location',
       _ => key,
     };
-    const c = Color(0xFFDC2626);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(100),
-      ),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 10, fontWeight: FontWeight.w600, color: c)),
-    );
+    return MktChip(label, color: Mkt.bad);
   }
 
-  Widget _meter(CrmTheme crm, String label, int have, int total,
-      {required String detail}) {
+  Widget _meter(String label, int have, int total, {required String detail}) {
     final pct = total > 0 ? (have / total).clamp(0.0, 1.0) : 0.0;
-    final color = pct >= 0.9
-        ? const Color(0xFF16A34A)
-        : (pct >= 0.5 ? const Color(0xFFF59E0B) : const Color(0xFFDC2626));
+    final color = pct >= 0.9 ? Mkt.good : (pct >= 0.5 ? Mkt.warn : Mkt.bad);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(
-              child: Text(label,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600, color: crm.textPrimary)),
+              child: Text(label, style: mktText(13, weight: FontWeight.w600)),
             ),
-            Text('$have / $total  (${(pct * 100).round()}%)',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: crm.textPrimary)),
+            Text('$have / $total  (${(pct * 100).round()}%)', style: mktText(12, weight: FontWeight.w700)),
           ],
         ),
         6.hg,
-        ClipRRect(
-          borderRadius: BorderRadius.circular(100),
-          child: LinearProgressIndicator(
-            value: pct,
-            minHeight: 9,
-            backgroundColor: crm.border,
-            valueColor: AlwaysStoppedAnimation(color),
-          ),
-        ),
+        MktProgress(pct: (pct * 100).round(), color: color, height: 9, showLabel: false),
         4.hg,
-        Text(detail, style: TextStyle(fontSize: 11, color: crm.textSecondary)),
+        Text(detail, style: mktText(11, color: Mkt.inkSoft)),
       ],
     );
   }
 
   // ── Ranked bars (with revenue subtitle) ──
-  Widget _ranked(CrmTheme crm, List<SegmentRow> rows, {required bool colored}) {
-    if (rows.isEmpty) return _muted(crm, 'No data yet.');
+  Widget _ranked(List<SegmentRow> rows, {required bool colored}) {
+    if (rows.isEmpty) return const MktEmpty('No data yet.', icon: Icons.bar_chart_rounded);
     final max = rows.fold<int>(1, (m, r) => r.bookings > m ? r.bookings : m);
-    final palette = _cultureColors;
     return Column(
       children: [
         for (var i = 0; i < rows.take(8).length; i++)
@@ -342,35 +298,22 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(rows[i].name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              TextStyle(fontSize: 12, color: crm.textPrimary)),
+                      Text(rows[i].name, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12)),
                       if (rows[i].revenue > 0)
-                        Text(_money(rows[i].revenue),
-                            style: TextStyle(
-                                fontSize: 10, color: crm.textSecondary)),
+                        Text(_money(rows[i].revenue), style: mktText(10, color: Mkt.inkSoft)),
                     ],
                   ),
                 ),
                 Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(100),
-                    child: LinearProgressIndicator(
-                      value: (rows[i].bookings / max).clamp(0, 1),
-                      minHeight: 9,
-                      backgroundColor: crm.border,
-                      valueColor: AlwaysStoppedAnimation(colored
-                          ? palette[i % palette.length]
-                          : crm.primary),
-                    ),
+                  child: MktProgress(
+                    pct: (rows[i].bookings / max * 100).round(),
+                    color: colored ? Mkt.series(i) : Mkt.primaryLight,
+                    height: 9,
+                    showLabel: false,
                   ),
                 ),
                 8.wg,
-                Text('${rows[i].bookings}',
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w800)),
+                Text('${rows[i].bookings}', style: mktText(12, weight: FontWeight.w800)),
               ],
             ),
           ),
@@ -379,31 +322,16 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
   }
 
   // ── FY selector ──
-  Widget _fyDropdown(CrmTheme crm, WidgetRef ref, int value, int nowFy) {
+  Widget _fyDropdown(WidgetRef ref, int value, int nowFy) {
     final years = [nowFy, nowFy - 1, nowFy - 2, nowFy - 3];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      decoration: BoxDecoration(
-        color: crm.surface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: crm.border),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: value,
-          isDense: true,
-          items: [
-            for (final y in years)
-              DropdownMenuItem(value: y, child: Text('FY ${_fyLabel(y)}')),
-          ],
-          onChanged: (v) {
-            if (v != null) {
-              ref.read(marketingFyProvider.notifier).state = v;
-              ref.invalidate(marketingInsightsProvider);
-            }
-          },
-        ),
-      ),
+    return MktDropdownPill<int>(
+      value: value,
+      icon: Icons.calendar_today_outlined,
+      options: [for (final y in years) (y, 'FY ${_fyLabel(y)}')],
+      onChanged: (v) {
+        ref.read(marketingFyProvider.notifier).state = v;
+        ref.invalidate(marketingInsightsProvider);
+      },
     );
   }
 
@@ -431,82 +359,36 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
           );
   }
 
-  Widget _card(CrmTheme crm, String title, Widget child, {String? subtitle}) =>
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: crm.border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title,
-                style: TextStyle(
-                    fontWeight: FontWeight.w800, color: crm.textPrimary)),
-            if (subtitle != null) ...[
-              2.hg,
-              Text(subtitle,
-                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
-            ],
-            14.hg,
-            child,
-          ],
-        ),
-      );
-
-  Widget _subCard(CrmTheme crm, String title, Widget child) => Container(
+  Widget _subCard(String title, Widget child) => Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: crm.background,
+          color: Mkt.bg,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: crm.border),
+          border: Border.all(color: Mkt.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: crm.textPrimary)),
+            Text(title, style: mktText(12.5, weight: FontWeight.w700)),
             8.hg,
             child,
           ],
         ),
       );
 
-  Widget _muted(CrmTheme crm, String t) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(t, style: TextStyle(color: crm.textSecondary, fontSize: 13)),
-      );
-
-  Widget _note(CrmTheme crm, String t, {bool good = false}) {
-    final c = good ? const Color(0xFF16A34A) : crm.textSecondary;
+  Widget _note(String t, {bool good = false}) {
+    final c = good ? Mkt.good : Mkt.primary;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: (good ? const Color(0xFF16A34A) : crm.primary)
-            .withValues(alpha: 0.07),
+        color: Mkt.tint(c, 0.08),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(t, style: TextStyle(fontSize: 12, color: c)),
+      child: Text(t, style: mktText(12, color: good ? Mkt.good : Mkt.inkSoft)),
     );
   }
 
   // ── formatting / FY helpers ──
-  static const List<Color> _cultureColors = [
-    Color(0xFF6D5DF6),
-    Color(0xFF0D9488),
-    Color(0xFFF59E0B),
-    Color(0xFFDC2626),
-    Color(0xFF2563EB),
-    Color(0xFFDB2777),
-    Color(0xFF65A30D),
-    Color(0xFF9333EA),
-  ];
-
   static String _money(double v) {
     if (v >= 10000000) return '₹${(v / 10000000).toStringAsFixed(1)}Cr';
     if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
@@ -525,9 +407,8 @@ class MarketingAnalyticsScreen extends ConsumerWidget {
 
 // ── Timeline section: bar chart with Bookings ⇄ Revenue toggle + peak ──
 class _TimelineSection extends StatefulWidget {
-  final CrmTheme crm;
   final List<SegmentRow> months;
-  const _TimelineSection({required this.crm, required this.months});
+  const _TimelineSection({required this.months});
 
   @override
   State<_TimelineSection> createState() => _TimelineSectionState();
@@ -551,14 +432,9 @@ class _TimelineSectionState extends State<_TimelineSection> {
 
   @override
   Widget build(BuildContext context) {
-    final crm = widget.crm;
     final months = widget.months;
     if (months.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text('No bookings in this period.',
-            style: TextStyle(color: crm.textSecondary, fontSize: 13)),
-      );
+      return const MktEmpty('No bookings in this period.', icon: Icons.show_chart_rounded);
     }
 
     var peakIdx = 0;
@@ -576,13 +452,10 @@ class _TimelineSectionState extends State<_TimelineSection> {
               child: Text(
                 'Peak: ${_mLabel(months[peakIdx].name)} · '
                 '${_revenue ? _MoneyFmt.money(months[peakIdx].revenue) : '${months[peakIdx].bookings} bookings'}',
-                style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: crm.textPrimary),
+                style: mktText(12, weight: FontWeight.w600),
               ),
             ),
-            _toggle(crm),
+            _toggle(),
           ],
         ),
         14.hg,
@@ -593,7 +466,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
             maxY: maxV * 1.15,
             barTouchData: BarTouchData(
               touchTooltipData: BarTouchTooltipData(
-                getTooltipColor: (_) => crm.textPrimary,
+                getTooltipColor: (_) => Mkt.ink,
                 getTooltipItem: (group, _, rod, _) {
                   final r = months[group.x];
                   return BarTooltipItem(
@@ -615,11 +488,10 @@ class _TimelineSectionState extends State<_TimelineSection> {
                 },
               ),
             ),
-            gridData: FlGridData(
+            gridData: const FlGridData(
               show: true,
               drawVerticalLine: false,
-              getDrawingHorizontalLine: (_) =>
-                  FlLine(color: crm.border, strokeWidth: 0.6),
+              getDrawingHorizontalLine: _gridLine,
             ),
             borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
@@ -633,7 +505,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
                   reservedSize: 36,
                   getTitlesWidget: (v, _) => Text(
                     _revenue ? _MoneyFmt.compact(v) : v.toInt().toString(),
-                    style: TextStyle(fontSize: 9, color: crm.textSecondary),
+                    style: mktText(9, color: Mkt.inkSoft),
                   ),
                 ),
               ),
@@ -648,8 +520,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
                     return Padding(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text(_mLabel(months[i].name),
-                          style: TextStyle(
-                              fontSize: 8.5, color: crm.textSecondary)),
+                          style: mktText(8.5, color: Mkt.inkSoft)),
                     );
                   },
                 ),
@@ -665,9 +536,7 @@ class _TimelineSectionState extends State<_TimelineSection> {
                       width: 14,
                       borderRadius: const BorderRadius.vertical(
                           top: Radius.circular(4)),
-                      color: i == peakIdx
-                          ? const Color(0xFFF59E0B)
-                          : crm.primary,
+                      color: i == peakIdx ? Mkt.warn : Mkt.primaryLight,
                     ),
                   ],
                 ),
@@ -678,38 +547,16 @@ class _TimelineSectionState extends State<_TimelineSection> {
     );
   }
 
-  Widget _toggle(CrmTheme crm) {
-    Widget seg(String label, bool active, VoidCallback onTap) => GestureDetector(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: active ? crm.primary : Colors.transparent,
-              borderRadius: BorderRadius.circular(100),
-            ),
-            child: Text(label,
-                style: TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                    color: active ? Colors.white : crm.textSecondary)),
-          ),
-        );
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: crm.background,
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: crm.border),
-      ),
-      child: Row(
+  static FlLine _gridLine(double _) => const FlLine(color: Mkt.border, strokeWidth: 0.6);
+
+  Widget _toggle() => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          seg('Bookings', !_revenue, () => setState(() => _revenue = false)),
-          seg('Revenue', _revenue, () => setState(() => _revenue = true)),
+          MktFilterChip(label: 'Bookings', selected: !_revenue, onTap: () => setState(() => _revenue = false)),
+          6.wg,
+          MktFilterChip(label: 'Revenue', selected: _revenue, onTap: () => setState(() => _revenue = true)),
         ],
-      ),
-    );
-  }
+      );
 }
 
 class _MoneyFmt {

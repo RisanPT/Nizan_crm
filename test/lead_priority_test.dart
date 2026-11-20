@@ -5,11 +5,14 @@ import 'package:nizan_crm/core/utils/lead_priority.dart';
 
 void main() {
   group('LeadPriority.of', () {
-    test('resolves the three levels case-insensitively', () {
+    test('resolves the four levels case-insensitively', () {
       expect(LeadPriority.of('Hot').value, 'Hot');
       expect(LeadPriority.of('hot').value, 'Hot');
       expect(LeadPriority.of('COLD').value, 'Cold');
       expect(LeadPriority.of('Warm').value, 'Warm');
+      expect(LeadPriority.of('Nurture').value, 'Nurture');
+      expect(LeadPriority.of(' nurture ').value, 'Nurture');
+      expect(LeadPriority.all.map((p) => p.value), ['Hot', 'Warm', 'Nurture', 'Cold']);
     });
 
     test('defaults to Warm for unknown, empty or null', () {
@@ -20,7 +23,7 @@ void main() {
 
     test('each level has a distinct colour', () {
       final colours = LeadPriority.all.map((p) => p.color).toSet();
-      expect(colours.length, 3);
+      expect(colours.length, 4);
     });
   });
 
@@ -80,6 +83,9 @@ void main() {
     await tester.tap(find.text('Hot'));
     await tester.pumpAndSettle();
     expect(picked, 'Hot');
+    await tester.tap(find.text('Nurture'));
+    await tester.pumpAndSettle();
+    expect(picked, 'Nurture', reason: 'Nurture is a choice on the lead form');
     expect(tester.takeException(), isNull);
   });
 

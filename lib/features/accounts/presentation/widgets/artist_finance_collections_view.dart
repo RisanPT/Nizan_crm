@@ -1,22 +1,38 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:nizan_crm/features/accounts/data/artist_collection.dart';
 import 'package:nizan_crm/features/accounts/data/finance_list.dart';
-import 'artist_finance_common.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_common.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/artist_finance_list_kit.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/finance_list_widgets.dart';
+import 'package:nizan_crm/features/accounts/presentation/widgets/list_common.dart' show NameOption;
 
-class ArtistFinanceCollectionsView extends StatefulWidget {
+/// Desktop Artist Finance → Collections: four totals, then ONE card with the filters across the top
+/// (search · Filters · sort · page size, status chips, what is switched on), the breakdown and the
+/// table. Real data only, and no horizontal scrolling — see [ArtistFinanceExpensesView], which is
+/// built the same way.
+class ArtistFinanceCollectionsView extends StatelessWidget {
   final FinancePage<ArtistCollection>? data;
   final FinanceQuery query;
   final ValueChanged<FinanceQuery> onQueryChanged;
-  final List<String> artists;
-  final VoidCallback onAddCollection;
+
+  /// The artists the list can be narrowed to (empty = an artist sees only their own, no picker).
+  final List<NameOption> artists;
   final VoidCallback onExport;
-  final Function(ArtistCollection) onVerify;
-  final Function(ArtistCollection) onReject;
-  final Function(ArtistCollection) onEdit;
-  final Function(ArtistCollection) onDelete;
-  final Function(String imageUrl) onViewReceipt;
+  final ValueChanged<ArtistCollection> onVerify;
+  final ValueChanged<ArtistCollection> onReject;
+  final ValueChanged<ArtistCollection> onEdit;
+  final ValueChanged<ArtistCollection> onDelete;
+  final ValueChanged<String> onViewReceipt;
   final bool canVerify;
+
+  /// A page is being fetched / failed to load (the last page that did load stays on screen).
+  final bool loading;
+  final Object? error;
+  final VoidCallback? onRetry;
+
+  /// The totals of the period just before this one, for "vs Oct"; null = nothing to compare.
+  final FinanceSummary? previous;
+  final String previousLabel;
 
   const ArtistFinanceCollectionsView({
     super.key,
@@ -24,7 +40,6 @@ class ArtistFinanceCollectionsView extends StatefulWidget {
     required this.query,
     required this.onQueryChanged,
     required this.artists,
-    required this.onAddCollection,
     required this.onExport,
     required this.onVerify,
     required this.onReject,
@@ -32,627 +47,269 @@ class ArtistFinanceCollectionsView extends StatefulWidget {
     required this.onDelete,
     required this.onViewReceipt,
     this.canVerify = true,
+    this.loading = false,
+    this.error,
+    this.onRetry,
+    this.previous,
+    this.previousLabel = 'last period',
   });
 
-  @override
-  State<ArtistFinanceCollectionsView> createState() => _ArtistFinanceCollectionsViewState();
-}
-
-class _ArtistFinanceCollectionsViewState extends State<ArtistFinanceCollectionsView> {
-  late TextEditingController _searchCtrl;
-  String _selectedPaymentMode = 'all';
-  String _selectedArtist = 'all';
-  final Set<String> _selectedStatuses = {'all'};
-  final Set<String> _selectedRowIds = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _searchCtrl = TextEditingController(text: widget.query.search);
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
-  }
-
-  void _applyFilters() {
-    widget.onQueryChanged(widget.query.copyWith(
-      search: _searchCtrl.text.trim(),
-      paymentModes: _selectedPaymentMode == 'all' ? const {} : {_selectedPaymentMode},
-      employeeId: _selectedArtist == 'all' ? null : _selectedArtist,
-      statuses: _selectedStatuses.contains('all') || _selectedStatuses.isEmpty
-          ? const {}
-          : _selectedStatuses,
-      page: 1,
-    ));
-  }
-
-  void _clearFilters() {
-    setState(() {
-      _searchCtrl.clear();
-      _selectedPaymentMode = 'all';
-      _selectedArtist = 'all';
-      _selectedStatuses.clear();
-      _selectedStatuses.add('all');
-    });
-    widget.onQueryChanged(const FinanceQuery(page: 1));
-  }
+  static const _columns = [
+    AfColumn('Date', width: 104),
+    AfColumn('Artist', flex: 3),
+    AfColumn('Client / Booking', flex: 3),
+    AfColumn('Payment', width: 120),
+    AfColumn('Notes', flex: 2),
+    AfColumn('Amount', width: 96, right: true),
+    AfColumn('Status', width: 112),
+    AfColumn('', width: 44),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final summary = widget.data?.summary;
-    final totalCollected = summary?.shownAmount ?? 190750.0;
-    final verifiedTotal = summary?.byStatus['verified']?.amount ?? 123250.0;
-    final verifiedCount = summary?.byStatus['verified']?.count ?? 25;
-    final pendingTotal = summary?.byStatus['pending']?.amount ?? 67500.0;
-    final pendingCount = summary?.byStatus['pending']?.count ?? 7;
-    final rejectedTotal = summary?.byStatus['rejected']?.amount ?? 3250.0;
-    final rejectedCount = summary?.byStatus['rejected']?.count ?? 2;
-
-    final totalCount = widget.data?.totalItems ?? (verifiedCount + pendingCount + rejectedCount);
+    final s = data?.summary;
+    final total = s?.allAmount ?? 0.0;
+    String pct(double part) => '${total > 0 ? (part / total * 100).round() : 0}% of total';
+    final delta = s == null
+        ? null
+        : afDeltaText(current: total, previous: previous?.allAmount, previousLabel: previousLabel, higherIsGood: true);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Row 1: 4 Summary KPI Cards ─────────────────────────────────────
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth > 850;
-              final cards = [
-                AfKpiCard(
-                  icon: Icons.currency_rupee,
-                  iconColor: AfTheme.green,
-                  iconBgColor: AfTheme.greenLight,
-                  title: 'Total Collected',
-                  value: AfTheme.formatCurrency(totalCollected),
-                  subtext: '↑ +12% vs Oct (₹1,70,500)',
-                  subtextColor: AfTheme.green,
-                ),
-                AfKpiCard(
-                  icon: Icons.verified_outlined,
-                  iconColor: AfTheme.green,
-                  iconBgColor: AfTheme.greenLight,
-                  title: 'Verified',
-                  value: AfTheme.formatCurrency(verifiedTotal),
-                  subtext: '$verifiedCount collections',
-                  subtextColor: AfTheme.green,
-                ),
-                AfKpiCard(
-                  icon: Icons.hourglass_empty,
-                  iconColor: AfTheme.yellow,
-                  iconBgColor: AfTheme.yellowLight,
-                  title: 'Pending',
-                  value: AfTheme.formatCurrency(pendingTotal),
-                  subtext: '$pendingCount collections',
-                  subtextColor: AfTheme.yellow,
-                ),
-                AfKpiCard(
-                  icon: Icons.cancel_outlined,
-                  iconColor: AfTheme.red,
-                  iconBgColor: AfTheme.redLight,
-                  title: 'Rejected',
-                  value: AfTheme.formatCurrency(rejectedTotal),
-                  subtext: '$rejectedCount collections',
-                  subtextColor: AfTheme.textSecondary,
-                ),
-              ];
-
-              if (isWide) {
-                return Row(
-                  children: [
-                    for (int i = 0; i < cards.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 14),
-                      Expanded(child: cards[i]),
+          AfKpiRow(
+            cards: [
+              AfKpiCard(
+                icon: Icons.account_balance_wallet_outlined,
+                iconColor: AfTheme.green,
+                iconBgColor: AfTheme.greenLight,
+                title: 'Total Collections',
+                value: AfTheme.formatCurrency(total),
+                subtext: delta?.text ?? (s == null ? null : '${s.allCount} ${s.allCount == 1 ? 'collection' : 'collections'}'),
+                subtextColor: delta?.color ?? AfTheme.textSecondary,
+              ),
+              AfKpiCard(
+                icon: Icons.verified_outlined,
+                iconColor: AfTheme.green,
+                iconBgColor: AfTheme.greenLight,
+                title: 'Verified',
+                value: AfTheme.formatCurrency(s?.status('verified').amount ?? 0),
+                subtext: s == null ? null : '${s.status('verified').count} · ${pct(s.status('verified').amount)}',
+                subtextColor: AfTheme.green,
+              ),
+              AfKpiCard(
+                icon: Icons.hourglass_empty,
+                iconColor: AfTheme.yellow,
+                iconBgColor: AfTheme.yellowLight,
+                title: 'Pending',
+                value: AfTheme.formatCurrency(s?.status('pending').amount ?? 0),
+                subtext: s == null ? null : '${s.status('pending').count} · ${pct(s.status('pending').amount)}',
+                subtextColor: AfTheme.yellow,
+              ),
+              AfKpiCard(
+                icon: Icons.cancel_outlined,
+                iconColor: AfTheme.red,
+                iconBgColor: AfTheme.redLight,
+                title: 'Rejected',
+                value: AfTheme.formatCurrency(s?.status('rejected').amount ?? 0),
+                subtext: s == null ? null : '${s.status('rejected').count} · ${pct(s.status('rejected').amount)}',
+                subtextColor: AfTheme.textSecondary,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          AfListPanel<ArtistCollection>(
+            title: 'Collections',
+            noun: 'collections',
+            data: data,
+            query: query,
+            onQueryChanged: onQueryChanged,
+            loading: loading,
+            error: error,
+            onRetry: onRetry,
+            onExport: onExport,
+            emptyIcon: Icons.payments_outlined,
+            emptyHint: 'Payments the artists collect from clients will appear here.',
+            controls: AfListControls(
+              kind: FinanceKind.collection,
+              query: query,
+              summary: s,
+              onChanged: onQueryChanged,
+              artists: artists,
+              searchHint: 'Search client, artist, service, booking no., notes or amount',
+            ),
+            breakdown: s == null
+                ? null
+                : AfBreakdownTile(
+                    storageKey: 'afCollectionBreakdown',
+                    groups: [
+                      BreakdownGroup(
+                        title: 'By payment mode',
+                        rows: s.byMode,
+                        keyPrefix: 'mode',
+                        labels: kCollectionModeLabels,
+                        isOn: (r) => query.paymentModes.contains(r.key),
+                        onTap: (r) => onQueryChanged(query.refiltered(paymentModes: _toggle(query.paymentModes, r.key))),
+                      ),
+                      if (artists.isNotEmpty)
+                        BreakdownGroup(
+                          title: 'By artist',
+                          rows: s.byArtist,
+                          keyPrefix: 'artist',
+                          isOn: (r) => query.employeeId == r.key,
+                          onTap: (r) => onQueryChanged(query.refiltered(employeeId: query.employeeId == r.key ? null : r.key)),
+                        ),
                     ],
-                  ],
-                );
-              }
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: cards.map((c) => SizedBox(width: 220, child: c)).toList(),
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-
-          // ── Main Section: Left Filter Panel + Right Content Table ───────────
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isDesktop = constraints.maxWidth >= 950;
-              if (isDesktop) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 260,
-                      child: _buildFilterSidebar(verifiedCount, pendingCount, rejectedCount),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: _buildTableCard(totalCount),
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                children: [
-                  _buildFilterSidebar(verifiedCount, pendingCount, rejectedCount),
-                  const SizedBox(height: 18),
-                  _buildTableCard(totalCount),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Left Filter Sidebar ─────────────────────────────────────────────────────
-  Widget _buildFilterSidebar(int verCount, int pendCount, int rejCount) {
-    return AfCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.filter_list, size: 16, color: AfTheme.textPrimary),
-                  SizedBox(width: 6),
-                  Text('Filters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AfTheme.textPrimary)),
-                ],
-              ),
-              InkWell(
-                onTap: _clearFilters,
-                child: const Text('Clear All', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.maroon)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Date Range
-          const Text('Date Range', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-          const SizedBox(height: 6),
-          _dropdownContainer(
-            icon: Icons.calendar_today_outlined,
-            text: widget.query.from != null ? '${widget.query.from} - ${widget.query.to}' : 'Nov 1, 2026 – Nov 30, 2026',
-            onTap: () {},
-          ),
-          const SizedBox(height: 14),
-
-          // Status Checkboxes
-          const Text('Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-          const SizedBox(height: 6),
-          _checkboxItem('Verified ($verCount)', 'verified', _selectedStatuses.contains('verified'), (v) {
-            setState(() {
-              if (v == true) {
-                _selectedStatuses.add('verified');
-              } else {
-                _selectedStatuses.remove('verified');
-              }
-            });
-          }),
-          _checkboxItem('Pending ($pendCount)', 'pending', _selectedStatuses.contains('pending'), (v) {
-            setState(() {
-              if (v == true) {
-                _selectedStatuses.add('pending');
-              } else {
-                _selectedStatuses.remove('pending');
-              }
-            });
-          }),
-          _checkboxItem('Rejected ($rejCount)', 'rejected', _selectedStatuses.contains('rejected'), (v) {
-            setState(() {
-              if (v == true) {
-                _selectedStatuses.add('rejected');
-              } else {
-                _selectedStatuses.remove('rejected');
-              }
-            });
-          }),
-          const SizedBox(height: 14),
-
-          // Payment Mode Dropdown
-          const Text('Payment Mode', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-          const SizedBox(height: 6),
-          _selectDropdown(
-            value: _selectedPaymentMode,
-            items: const [
-              ('all', 'All Payment Modes'),
-              ('upi', 'UPI'),
-              ('cash', 'Cash'),
-              ('bank_transfer', 'Bank Transfer'),
-            ],
-            onChanged: (v) => setState(() => _selectedPaymentMode = v ?? 'all'),
-          ),
-          const SizedBox(height: 14),
-
-          // Artist Dropdown
-          if (widget.canVerify) ...[
-            const Text('Artist', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-            const SizedBox(height: 6),
-            _selectDropdown(
-              value: _selectedArtist,
-              items: [
-                ('all', 'All Artists'),
-                for (final a in widget.artists) (a, a),
-              ],
-              onChanged: (v) => setState(() => _selectedArtist = v ?? 'all'),
-            ),
-            const SizedBox(height: 14),
-          ],
-
-          // Apply Button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: AfTheme.maroon,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.filter_alt_outlined, size: 16),
-              label: const Text('Apply Filters', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              onPressed: _applyFilters,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _checkboxItem(String label, String key, bool checked, ValueChanged<bool?> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: InkWell(
-        onTap: () => onChanged(!checked),
-        borderRadius: BorderRadius.circular(6),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: Checkbox(
-                value: checked,
-                activeColor: AfTheme.maroon,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                onChanged: onChanged,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(label, style: const TextStyle(fontSize: 12, color: AfTheme.textPrimary)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dropdownContainer({required IconData icon, required String text, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AfTheme.border),
-          color: AfTheme.surface,
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 14, color: AfTheme.textSecondary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AfTheme.textPrimary)),
-            ),
-            const Icon(Icons.keyboard_arrow_down, size: 16, color: AfTheme.textSecondary),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _selectDropdown({
-    required String value,
-    required List<(String, String)> items,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AfTheme.border),
-        color: AfTheme.surface,
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: items.any((i) => i.$1 == value) ? value : items.first.$1,
-          isExpanded: true,
-          icon: const Icon(Icons.keyboard_arrow_down, size: 16, color: AfTheme.textSecondary),
-          style: const TextStyle(fontSize: 11, color: AfTheme.textPrimary),
-          onChanged: onChanged,
-          items: items.map((i) {
-            return DropdownMenuItem<String>(
-              value: i.$1,
-              child: Text(i.$2),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  // ── Right Content Table Card ────────────────────────────────────────────────
-  Widget _buildTableCard(int totalCount) {
-    final collections = widget.data?.items ?? [];
-
-    return AfCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Collections ($totalCount)',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AfTheme.textPrimary),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: _searchCtrl,
-                    onSubmitted: (_) => _applyFilters(),
-                    style: const TextStyle(fontSize: 12),
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.search, size: 16, color: AfTheme.textSecondary),
-                      hintText: 'Search collections by artist, client, amount...',
-                      hintStyle: const TextStyle(fontSize: 11, color: AfTheme.textMuted),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 12),
-                      filled: true,
-                      fillColor: AfTheme.background,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AfTheme.border)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AfTheme.border)),
-                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AfTheme.textPrimary,
-                  side: BorderSide(color: AfTheme.border),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                icon: const Icon(Icons.download, size: 14),
-                label: const Text('Export', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                onPressed: widget.onExport,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Collections Table
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowHeight: 40,
-              dataRowMinHeight: 52,
-              dataRowMaxHeight: 56,
-              horizontalMargin: 8,
-              columnSpacing: 18,
-              headingTextStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AfTheme.textSecondary),
-              columns: const [
-                DataColumn(label: Text('')),
-                DataColumn(label: Text('Date ▾')),
-                DataColumn(label: Text('Artist / Collector')),
-                DataColumn(label: Text('Work / Client')),
-                DataColumn(label: Text('Amount')),
-                DataColumn(label: Text('Payment Mode')),
-                DataColumn(label: Text('Status')),
-                DataColumn(label: Text('Actions')),
-              ],
-              rows: collections.map((c) => _buildCollectionRow(c)).toList(),
+            table: (items) => AfTable<ArtistCollection>(
+              columns: _columns,
+              items: items,
+              rowKey: (c) => Key('afCollectionRow_${c.id}'),
+              cells: _cells,
+              card: _card,
             ),
           ),
-          const SizedBox(height: 14),
-
-          _buildPaginationFooter(totalCount),
         ],
       ),
     );
   }
 
-  DataRow _buildCollectionRow(ArtistCollection c) {
-    final isSelected = _selectedRowIds.contains(c.id);
-    final artistName = c.employee?.name ?? 'Artist';
-    final clientName = c.booking?.customerName ?? c.trial?.clientName ?? 'Direct Client';
-    final bNum = c.booking?.bookingNumber ?? c.trial?.trialNumber ?? '';
-    final dateStr = DateFormat('dd MMM yyyy').format(c.date);
-
-    return DataRow(
-      selected: isSelected,
-      onSelectChanged: (v) {
-        setState(() {
-          if (v == true) {
-            _selectedRowIds.add(c.id);
-          } else {
-            _selectedRowIds.remove(c.id);
-          }
-        });
-      },
-      cells: [
-        DataCell(Checkbox(
-          value: isSelected,
-          activeColor: AfTheme.maroon,
-          onChanged: (v) {
-            setState(() {
-              if (v == true) {
-                _selectedRowIds.add(c.id);
-              } else {
-                _selectedRowIds.remove(c.id);
-              }
-            });
-          },
-        )),
-        DataCell(Text(dateStr, style: const TextStyle(fontSize: 11, color: AfTheme.textSecondary))),
-        DataCell(Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AfInitialsAvatar(name: artistName, size: 26),
-            const SizedBox(width: 8),
-            Text(artistName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-          ],
-        )),
-        DataCell(Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(clientName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AfTheme.textPrimary)),
-            if (bNum.isNotEmpty) Text(bNum, style: const TextStyle(fontSize: 10, color: AfTheme.textSecondary)),
-          ],
-        )),
-        DataCell(Text(AfTheme.formatCurrency(c.amount), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AfTheme.textPrimary))),
-        DataCell(Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.payment, size: 12, color: AfTheme.textSecondary),
-            const SizedBox(width: 4),
-            Text(c.paymentMode.toUpperCase(), style: const TextStyle(fontSize: 11, color: AfTheme.textSecondary)),
-          ],
-        )),
-        DataCell(AfStatusBadge(status: c.status)),
-        DataCell(PopupMenuButton<String>(
-          icon: const Icon(Icons.more_horiz, size: 16, color: AfTheme.textSecondary),
-          onSelected: (val) {
-            if (val == 'verify') widget.onVerify(c);
-            if (val == 'reject') widget.onReject(c);
-            if (val == 'receipt' && c.attachmentUrl != null) widget.onViewReceipt(c.attachmentUrl!);
-            if (val == 'edit') widget.onEdit(c);
-            if (val == 'delete') widget.onDelete(c);
-          },
-          itemBuilder: (ctx) => [
-            if (c.attachmentUrl != null && c.attachmentUrl!.isNotEmpty)
-              const PopupMenuItem(value: 'receipt', child: Text('View Attachment')),
-            if (widget.canVerify && c.status == 'pending') ...[
-              const PopupMenuItem(value: 'verify', child: Text('Verify Collection')),
-              const PopupMenuItem(value: 'reject', child: Text('Reject Collection')),
-            ],
-            const PopupMenuItem(value: 'edit', child: Text('Edit')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-        )),
-      ],
-    );
+  static Set<String> _toggle(Set<String> current, String key) {
+    final next = {...current};
+    next.contains(key) ? next.remove(key) : next.add(key);
+    return next;
   }
 
-  Widget _buildPaginationFooter(int totalCount) {
-    final page = widget.data?.page ?? 1;
-    final totalPages = widget.data?.totalPages ?? 1;
-    final limit = widget.query.limit;
+  // ── what a row says ────────────────────────────────────────────────────────
 
-    final start = ((page - 1) * limit) + 1;
-    final end = (page * limit).clamp(1, totalCount > 0 ? totalCount : 20);
+  String _artist(ArtistCollection c) => c.employee?.name ?? 'Artist';
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  String _client(ArtistCollection c) => c.booking?.customerName ?? c.trial?.clientName ?? 'Direct client';
+
+  /// Booking / trial number, and the service for a booking.
+  String _ref(ArtistCollection c) {
+    final b = c.booking;
+    if (b != null) return [if (b.bookingNumber.isNotEmpty) b.bookingNumber, if (b.service.isNotEmpty) b.service].join(' · ');
+    final t = c.trial;
+    return t == null ? '' : [if (t.trialNumber.isNotEmpty) t.trialNumber, 'Trial'].join(' · ');
+  }
+
+  String _mode(ArtistCollection c) => kCollectionModeLabels[c.paymentMode] ?? c.paymentMode;
+
+  List<Widget> _cells(ArtistCollection c) {
+    final ref = _ref(c);
+    final notes = c.notes.trim();
+    return [
+      AfCellText(afDay(c.date), muted: true),
+      Row(
+        children: [
+          AfInitialsAvatar(name: _artist(c), size: 26),
+          const SizedBox(width: 8),
+          Expanded(child: AfCellText(_artist(c), strong: true)),
+        ],
+      ),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AfCellText(_client(c), strong: true),
+          if (ref.isNotEmpty) AfCellText(ref, muted: true),
+        ],
+      ),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.payment, size: 13, color: AfTheme.textSecondary),
+          const SizedBox(width: 5),
+          Flexible(child: AfCellText(_mode(c), muted: true)),
+        ],
+      ),
+      AfCellText(notes.isEmpty ? '—' : notes, muted: true),
+      AfCellText(AfTheme.formatCurrency(c.amount), strong: true),
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AfFit(AfStatusBadge(status: c.status)),
+          if (c.status == 'verified' && (c.verifiedByName ?? '').isNotEmpty) ...[
+            const SizedBox(height: 2),
+            AfCellText('by ${c.verifiedByName}', muted: true),
+          ],
+        ],
+      ),
+      _menu(c),
+    ];
+  }
+
+  Widget _card(ArtistCollection c) {
+    final ref = _ref(c);
+    final notes = c.notes.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Showing $start–$end of $totalCount collections',
-          style: const TextStyle(fontSize: 11, color: AfTheme.textSecondary),
-        ),
         Row(
           children: [
-            const Text('Rows per page', style: TextStyle(fontSize: 11, color: AfTheme.textSecondary)),
+            AfInitialsAvatar(name: _artist(c), size: 30),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AfCellText(_artist(c), strong: true),
+                  AfCellText([_client(c), if (ref.isNotEmpty) ref].join(' · '), muted: true),
+                ],
+              ),
+            ),
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AfTheme.border),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: limit,
-                  isDense: true,
-                  style: const TextStyle(fontSize: 11, color: AfTheme.textPrimary),
-                  items: const [
-                    DropdownMenuItem(value: 10, child: Text('10')),
-                    DropdownMenuItem(value: 20, child: Text('20')),
-                    DropdownMenuItem(value: 50, child: Text('50')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) widget.onQueryChanged(widget.query.copyWith(limit: v, page: 1));
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            IconButton(
-              icon: const Icon(Icons.first_page, size: 16),
-              onPressed: page > 1 ? () => widget.onQueryChanged(widget.query.copyWith(page: 1)) : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.chevron_left, size: 16),
-              onPressed: page > 1 ? () => widget.onQueryChanged(widget.query.copyWith(page: page - 1)) : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 6),
-            for (int p = 1; p <= totalPages; p++) ...[
-              InkWell(
-                onTap: () => widget.onQueryChanged(widget.query.copyWith(page: p)),
-                borderRadius: BorderRadius.circular(4),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: p == page ? AfTheme.maroon : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '$p',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: p == page ? Colors.white : AfTheme.textPrimary,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            IconButton(
-              icon: const Icon(Icons.chevron_right, size: 16),
-              onPressed: page < totalPages ? () => widget.onQueryChanged(widget.query.copyWith(page: page + 1)) : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.last_page, size: 16),
-              onPressed: page < totalPages ? () => widget.onQueryChanged(widget.query.copyWith(page: totalPages)) : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
+            AfCellText(AfTheme.formatCurrency(c.amount), strong: true),
+            _menu(c),
           ],
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            AfCellText(afDay(c.date), muted: true),
+            AfCellText(_mode(c), muted: true),
+            AfStatusBadge(status: c.status),
+          ],
+        ),
+        if (notes.isNotEmpty) ...[const SizedBox(height: 6), AfCellText(notes, muted: true, maxLines: 2)],
       ],
     );
   }
+
+  Widget _menu(ArtistCollection c) => PopupMenuButton<String>(
+        key: Key('afCollectionMenu_${c.id}'),
+        tooltip: 'Actions',
+        padding: EdgeInsets.zero,
+        icon: const Icon(Icons.more_horiz, size: 18, color: AfTheme.textSecondary),
+        onSelected: (v) {
+          switch (v) {
+            case 'receipt':
+              onViewReceipt(c.attachmentUrl!);
+            case 'verify':
+              onVerify(c);
+            case 'reject':
+              onReject(c);
+            case 'edit':
+              onEdit(c);
+            case 'delete':
+              onDelete(c);
+          }
+        },
+        itemBuilder: (_) => [
+          if (c.attachmentUrl != null && c.attachmentUrl!.isNotEmpty) const PopupMenuItem(value: 'receipt', child: Text('View attachment')),
+          if (canVerify && c.status == 'pending') ...const [
+            PopupMenuItem(value: 'verify', child: Text('Verify collection')),
+            PopupMenuItem(value: 'reject', child: Text('Reject collection')),
+          ],
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
+          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+        ],
+      );
 }

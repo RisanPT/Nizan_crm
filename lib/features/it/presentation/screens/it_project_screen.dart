@@ -90,7 +90,7 @@ class ITProjectScreen extends ConsumerWidget {
                       onPlanCreated: () => openTab(ProjectTab.timeline.index),
                     ),
                     icon: Icon(Icons.trending_up_rounded, size: 18, color: crm.primary),
-                    label: const Text('Gantt Plan Wizard', style: TextStyle(fontWeight: FontWeight.w600)),
+                    label: const Text('Gratt Plan Wizard', style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
                   FilledButton.icon(
                     key: const Key('add_task'),

@@ -119,7 +119,15 @@ class _ProjectOverviewState extends ConsumerState<ProjectOverview> {
           ],
           const SizedBox(height: 16),
           // what the project is expected to cost, and where the finance head's approval stands
-          if (p != null && ProjectCostCard.shows(p)) ...[ProjectCostCard(project: p), const SizedBox(height: 16)],
+          if (p != null && ProjectCostCard.shows(p)) ...[
+            ProjectCostCard(
+              project: p,
+              tasks: widget.tasks,
+              // a task is opened from the card to give it a cost
+              onEditTask: (t) async => _refreshIf(await showTaskEditor(context, ref, widget.projectId, existing: t, allTasks: widget.tasks)),
+            ),
+            const SizedBox(height: 16),
+          ],
           // who HR has put on the project, where its requests for more people stand, and the button to ask for more
           if (p != null && p.status != 'proposed') ProjectTeamCard(project: p),
           if (wide && invitations != null)

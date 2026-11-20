@@ -3,7 +3,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 
-import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
@@ -11,16 +10,17 @@ import 'package:nizan_crm/core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/marketing/data/content_item.dart';
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/services/content_service.dart';
 
 // ── Platform styling (shared with the dashboard) ─────────────────────────────
 Color platformColor(String p) => switch (p) {
-      'instagram' => const Color(0xFFC13584),
-      'youtube' => const Color(0xFFD32F2F),
-      'facebook' => const Color(0xFF1877F2),
-      'whatsapp' => const Color(0xFF25D366),
-      'website' => const Color(0xFF00897B),
-      _ => Colors.blueGrey,
+      'instagram' => Mkt.pink,
+      'youtube' => Mkt.bad,
+      'facebook' => Mkt.blue,
+      'whatsapp' => Mkt.good,
+      'website' => Mkt.teal,
+      _ => Mkt.grey,
     };
 
 IconData platformIcon(String p) => switch (p) {
@@ -33,12 +33,12 @@ IconData platformIcon(String p) => switch (p) {
     };
 
 Color contentStatusColor(String s) => switch (s) {
-      'published' => const Color(0xFF2E8B57),
-      'scheduled' => Colors.blue.shade600,
-      'in-progress' => Colors.orange.shade700,
-      'planned' => Colors.indigo.shade400,
-      'cancelled' => Colors.red.shade400,
-      _ => Colors.grey, // idea
+      'published' => Mkt.good,
+      'scheduled' => Mkt.blue,
+      'in-progress' => Mkt.warn,
+      'planned' => Mkt.primaryLight,
+      'cancelled' => Mkt.bad,
+      _ => Mkt.grey, // idea
     };
 
 const _months = [
@@ -54,7 +54,6 @@ class ContentCalendarScreen extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final crm = context.crmColors;
     final now = DateTime.now();
     final monthFocus = useState<DateTime>(DateTime(now.year, now.month, 1));
     final rangeKey = monthGridRange(monthFocus.value);
@@ -73,63 +72,47 @@ class ContentCalendarScreen extends HookConsumerWidget {
       if (picked != null) monthFocus.value = DateTime(picked.year, picked.month, 1);
     }
 
-    return Scaffold(
-      backgroundColor: crm.background,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final ok = await showContentEditor(context, ref, initialDate: now);
-          if (ok == true) refresh(); // the editor already refreshed content + stats
-        },
-        backgroundColor: crm.primary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add),
-        label: const Text('Add Content'),
-      ),
-      body: Column(children: [
-        // Header
-        Container(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-          decoration: BoxDecoration(color: crm.surface, border: Border(bottom: BorderSide(color: crm.border))),
-          child: Row(children: [
-            Icon(Icons.event_note_outlined, color: crm.primary),
-            const SizedBox(width: 10),
-            if (!isMobile)
-              Text('Content Calendar', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: crm.primary)),
-            const Spacer(),
-            IconButton(onPressed: () => goMonth(-1), icon: const Icon(Icons.chevron_left)),
-            InkWell(
-              borderRadius: BorderRadius.circular(8),
-              onTap: pickMonth,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                child: Row(children: [
-                  Text('${_months[monthFocus.value.month - 1]} ${monthFocus.value.year}',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: crm.textPrimary)),
-                  const SizedBox(width: 4),
-                  Icon(Icons.arrow_drop_down, color: crm.textSecondary),
-                ]),
-              ),
+    return MktPage(
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: MktHeader(
+              icon: Icons.event_note_outlined,
+              title: 'Content Calendar',
+              subtitle: 'Plan posts, reels and stories by day',
+              actions: [
+                _NavIcon(icon: Icons.chevron_left, tooltip: 'Previous month', onTap: () => goMonth(-1)),
+                MktPill(label: '${_months[monthFocus.value.month - 1]} ${monthFocus.value.year}', onTap: pickMonth),
+                _NavIcon(icon: Icons.chevron_right, tooltip: 'Next month', onTap: () => goMonth(1)),
+                MktPill(label: 'Today', trailing: false, onTap: () => monthFocus.value = DateTime(now.year, now.month, 1)),
+                MktPill(label: 'Refresh', icon: Icons.refresh, trailing: false, onTap: refresh),
+                MktPrimaryButton(
+                  label: 'Add Content',
+                  onPressed: () async {
+                    final ok = await showContentEditor(context, ref, initialDate: now);
+                    if (ok == true) refresh(); // the editor already refreshed content + stats
+                  },
+                ),
+              ],
             ),
-            IconButton(onPressed: () => goMonth(1), icon: const Icon(Icons.chevron_right)),
-            TextButton(
-              onPressed: () => monthFocus.value = DateTime(now.year, now.month, 1),
-              child: const Text('Today'),
-            ),
-            IconButton(onPressed: refresh, icon: const Icon(Icons.refresh)),
-          ]),
-        ),
-        Expanded(
-          child: async.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => AppErrorView(error: e, onRetry: refresh),
-            data: (items) => _monthGrid(context, ref, crm, monthFocus.value, now, items, isMobile, refresh),
           ),
-        ),
-      ]),
+          const SizedBox(height: 12),
+          Expanded(
+            child: async.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => AppErrorView(error: e, onRetry: refresh),
+              data: (items) => _monthGrid(context, ref, monthFocus.value, now, items, isMobile, refresh),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
-  Widget _monthGrid(BuildContext context, WidgetRef ref, CrmTheme crm, DateTime month,
+  Widget _monthGrid(BuildContext context, WidgetRef ref, DateTime month,
       DateTime now, List<ContentItem> items, bool isMobile, VoidCallback refresh) {
     // Bucket items by local day.
     final byDay = <String, List<ContentItem>>{};
@@ -143,33 +126,34 @@ class ContentCalendarScreen extends HookConsumerWidget {
     const weekdayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(isMobile ? 8 : 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       child: Container(
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: crm.surface,
-          borderRadius: BorderRadius.circular(isMobile ? 14 : 24),
-          border: Border.all(color: crm.border),
+          color: Mkt.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Mkt.border),
         ),
         child: Column(children: [
           Row(
             children: weekdayLabels
                 .map((l) => Expanded(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: isMobile ? 10 : 16),
+                        padding: EdgeInsets.symmetric(vertical: isMobile ? 10 : 14),
                         child: Text(l, textAlign: TextAlign.center,
-                            style: TextStyle(color: crm.textSecondary, fontWeight: FontWeight.w700, letterSpacing: .6, fontSize: isMobile ? 11 : 13)),
+                            style: mktText(isMobile ? 11 : 12, weight: FontWeight.w700, color: Mkt.inkSoft, spacing: .6)),
                       ),
                     ))
                 .toList(),
           ),
-          Divider(height: 1, color: crm.border),
+          const Divider(height: 1, color: Mkt.border),
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: days.length,
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: isMobile ? 0.72 : 1.05,
+              childAspectRatio: isMobile ? 0.5 : 1.05,
             ),
             itemBuilder: (context, index) {
               final day = days[index];
@@ -180,17 +164,17 @@ class ContentCalendarScreen extends HookConsumerWidget {
 
               return Container(
                 decoration: BoxDecoration(
-                  border: Border(
-                    right: BorderSide(color: crm.border),
-                    bottom: BorderSide(color: crm.border),
+                  border: const Border(
+                    right: BorderSide(color: Mkt.border),
+                    bottom: BorderSide(color: Mkt.border),
                   ),
-                  color: inMonth ? crm.surface : crm.background.withValues(alpha: 0.5),
+                  color: inMonth ? Mkt.card : Mkt.bg,
                 ),
                 child: !inMonth
                     ? const SizedBox.shrink()
                     : InkWell(
                         onTap: () async {
-                          await _showDaySheet(context, ref, crm, day, dayItems, refresh);
+                          await _showDaySheet(context, ref, day, dayItems, refresh);
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(3),
@@ -198,25 +182,25 @@ class ContentCalendarScreen extends HookConsumerWidget {
                             Align(
                               alignment: Alignment.topCenter,
                               child: Container(
-                                width: isMobile ? 26 : 34,
-                                height: isMobile ? 26 : 34,
+                                width: isMobile ? 26 : 30,
+                                height: isMobile ? 26 : 30,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: isToday ? crm.primary : Colors.transparent,
+                                  color: isToday ? Mkt.primary : Colors.transparent,
                                 ),
                                 alignment: Alignment.center,
                                 child: Text('${day.day}',
-                                    style: TextStyle(fontSize: isMobile ? 12 : 15, fontWeight: FontWeight.w700,
-                                        color: isToday ? Colors.white : crm.textPrimary)),
+                                    style: mktText(isMobile ? 12 : 13.5, weight: FontWeight.w700,
+                                        color: isToday ? Colors.white : Mkt.ink)),
                               ),
                             ),
                             const SizedBox(height: 4),
-                            ...dayItems.take(maxPills).map((it) => _pill(crm, it, isMobile)),
+                            ...dayItems.take(maxPills).map((it) => _pill(it, isMobile)),
                             if (dayItems.length > maxPills)
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
                                 child: Text('+${dayItems.length - maxPills} more',
-                                    style: TextStyle(fontSize: isMobile ? 8.5 : 10, color: crm.textSecondary, fontWeight: FontWeight.w600)),
+                                    style: mktText(isMobile ? 8.5 : 10, weight: FontWeight.w600, color: Mkt.inkSoft)),
                               ),
                           ]),
                         ),
@@ -229,7 +213,7 @@ class ContentCalendarScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _pill(CrmTheme crm, ContentItem it, bool isMobile) {
+  Widget _pill(ContentItem it, bool isMobile) {
     final c = platformColor(it.platform);
     final published = it.status == 'published';
     return Container(
@@ -246,54 +230,52 @@ class ContentCalendarScreen extends HookConsumerWidget {
         Expanded(
           child: Text(it.title,
               maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: isMobile ? 8.5 : 10.5, fontWeight: FontWeight.w600, color: crm.textPrimary)),
+              style: mktText(isMobile ? 8.5 : 10.5, weight: FontWeight.w600)),
         ),
       ]),
     );
   }
 
-  Future<void> _showDaySheet(BuildContext context, WidgetRef ref, CrmTheme crm,
+  Future<void> _showDaySheet(BuildContext context, WidgetRef ref,
       DateTime day, List<ContentItem> items, VoidCallback refresh) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: crm.surface,
+      backgroundColor: Mkt.card,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Icon(Icons.event_note_outlined, color: crm.primary),
+            const Icon(Icons.event_note_outlined, color: Mkt.primary),
             const SizedBox(width: 8),
-            Text('${_months[day.month - 1]} ${day.day}, ${day.year}',
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            const Spacer(),
-            Text('${items.length} item${items.length == 1 ? '' : 's'}', style: TextStyle(color: crm.textSecondary, fontSize: 13)),
+            Expanded(
+              child: Text('${_months[day.month - 1]} ${day.day}, ${day.year}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(17, weight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 8),
+            Text('${items.length} item${items.length == 1 ? '' : 's'}', style: mktText(13, color: Mkt.inkSoft)),
           ]),
           const SizedBox(height: 12),
           if (items.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text('No content planned for this day.', style: TextStyle(color: crm.textSecondary)),
-            )
+            const MktEmpty('No content planned for this day.', icon: Icons.event_note_outlined, height: 80)
           else
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.5),
               child: SingleChildScrollView(
-                child: Column(children: [for (final it in items) _dayItemTile(context, ctx, ref, crm, it, refresh)]),
+                child: Column(children: [for (final it in items) _dayItemTile(context, ctx, ref, it, refresh)]),
               ),
             ),
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: FilledButton.icon(
+            child: MktPrimaryButton(
               onPressed: () async {
                 Navigator.pop(ctx);
                 final ok = await showContentEditor(context, ref, initialDate: day);
                 if (ok == true) refresh(); // the editor already refreshed content + stats
               },
-              icon: const Icon(Icons.add, size: 18),
-              label: Text('Add content on ${_months[day.month - 1]} ${day.day}'),
+              label: 'Add content on ${_months[day.month - 1]} ${day.day}',
             ),
           ),
         ]),
@@ -301,22 +283,20 @@ class ContentCalendarScreen extends HookConsumerWidget {
     );
   }
 
-  Widget _dayItemTile(BuildContext screenCtx, BuildContext sheetCtx, WidgetRef ref, CrmTheme crm, ContentItem it, VoidCallback refresh) {
+  Widget _dayItemTile(BuildContext screenCtx, BuildContext sheetCtx, WidgetRef ref, ContentItem it, VoidCallback refresh) {
     final c = platformColor(it.platform);
     return Card(
+      elevation: 0,
+      color: Mkt.card,
       margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: crm.border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: Mkt.border)),
       child: ListTile(
         leading: CircleAvatar(backgroundColor: c.withValues(alpha: 0.15), child: Icon(platformIcon(it.platform), color: c, size: 20)),
-        title: Text(it.title, style: const TextStyle(fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(it.title, style: mktText(14, weight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
         subtitle: Text('${platformLabel(it.platform)} · ${contentTypeLabel(it.contentType)}'
             '${it.assignedToName.isEmpty ? '' : ' · ${it.assignedToName}'}',
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: crm.textSecondary, fontSize: 12)),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: contentStatusColor(it.status).withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8)),
-          child: Text(contentStatusLabel(it.status), style: TextStyle(color: contentStatusColor(it.status), fontSize: 10.5, fontWeight: FontWeight.w700)),
-        ),
+            maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12, color: Mkt.inkSoft)),
+        trailing: MktChip(contentStatusLabel(it.status), color: contentStatusColor(it.status)),
         onTap: () async {
           Navigator.pop(sheetCtx);
           final ok = await showContentEditor(screenCtx, ref, existing: it);
@@ -325,6 +305,33 @@ class ContentCalendarScreen extends HookConsumerWidget {
       ),
     );
   }
+}
+
+/// A small square icon button for the header (month back / forward).
+class _NavIcon extends StatelessWidget {
+  const _NavIcon({required this.icon, required this.tooltip, required this.onTap});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Mkt.card,
+          borderRadius: BorderRadius.circular(9),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(9),
+            onTap: onTap,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(9), border: Border.all(color: Mkt.border)),
+              child: Icon(icon, size: 20, color: Mkt.ink),
+            ),
+          ),
+        ),
+      );
 }
 
 // Overload-friendly wrapper so both positional-context and named calls work.
@@ -358,7 +365,6 @@ Future<bool?> showContentEditor(
     isScrollControlled: true,
     builder: (ctx) {
       var busy = false;
-      final crm = ctx.crmColors;
       return StatefulBuilder(builder: (ctx, setSheet) {
         Widget dd(String label, String value, List<String> opts, String Function(String) fmt, ValueChanged<String> onCh) =>
             DropdownButtonFormField<String>(
@@ -374,7 +380,7 @@ Future<bool?> showContentEditor(
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Icon(Icons.post_add_outlined, color: crm.primary),
+                const Icon(Icons.post_add_outlined, color: Mkt.primary),
                 const SizedBox(width: 8),
                 Text(isEdit ? 'Edit content' : 'New content', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
                 const Spacer(),
@@ -401,7 +407,7 @@ Future<bool?> showContentEditor(
                         messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
                       }
                     },
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    icon: const Icon(Icons.delete_outline, color: Mkt.bad),
                   ),
               ]),
               const SizedBox(height: 14),
@@ -458,6 +464,12 @@ Future<bool?> showContentEditor(
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Mkt.maroon,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                  ),
                   onPressed: busy ? null : () async {
                     if (title.text.trim().isEmpty) {
                       messenger.showSnackBar(const SnackBar(content: Text('Please enter a title')));

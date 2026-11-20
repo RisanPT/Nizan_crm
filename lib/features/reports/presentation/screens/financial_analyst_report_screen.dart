@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/reports/data/financial_analyst_report.dart';
 import 'package:nizan_crm/features/reports/services/financial_report_service.dart';
 import 'package:nizan_crm/core/utils/financial_report_service.dart' as export_svc;
@@ -41,8 +43,25 @@ class _FinancialAnalystReportScreenState
   late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month, 1);
   bool _exporting = false;
 
+  /// Any days the person chose instead of a month; null = the month being navigated.
+  ReportRange? _range;
+
   String get _monthKey =>
       '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
+
+  /// What the report is asked for: the chosen days, or the month.
+  String get _key => _range == null ? _monthKey : analystKeyFor(_range!);
+
+  Future<void> _pickDates() async {
+    final picked = await showReportRangeDialog(
+      context,
+      title: 'Report for which dates?',
+      confirmLabel: 'Show report',
+      initial: _range ?? monthRange(_month),
+      lastDate: DateTime(_kMaxReportYear, 12, 31),
+    );
+    if (picked != null) setState(() => _range = picked);
+  }
 
   void _shift(int by) =>
       setState(() => _month = DateTime(_month.year, _month.month + by, 1));
@@ -62,7 +81,7 @@ class _FinancialAnalystReportScreenState
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final async = ref.watch(financialAnalystReportProvider(_monthKey));
+    final async = ref.watch(financialAnalystReportProvider(_key));
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -77,28 +96,62 @@ class _FinancialAnalystReportScreenState
             ),
             child: Row(
               children: [
-                IconButton(
-                  onPressed: () => _shift(-1),
-                  icon: const Icon(Icons.chevron_left),
-                ),
-                Expanded(
-                  child: InkWell(
-                    onTap: _pickMonth,
-                    borderRadius: BorderRadius.circular(8),
+                if (_range == null) ...[
+                  IconButton(
+                    onPressed: () => _shift(-1),
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  Expanded(
+                    child: InkWell(
+                      onTap: _pickMonth,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text('${_months[_month.month - 1]} ${_month.year}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                          Icon(Icons.arrow_drop_down, color: crm.textSecondary),
+                        ],
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _canGoForward ? () => _shift(1) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ] else
+                  Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('${_months[_month.month - 1]} ${_month.year}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        Icon(Icons.arrow_drop_down, color: crm.textSecondary),
+                        Flexible(
+                          child: InkWell(
+                            key: const Key('analyst_range_label'),
+                            onTap: _pickDates,
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              child: Text(_range!.label,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('analyst_range_clear'),
+                          tooltip: 'Back to months',
+                          onPressed: () => setState(() => _range = null),
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
                       ],
                     ),
                   ),
-                ),
                 IconButton(
-                  onPressed: _canGoForward ? () => _shift(1) : null,
-                  icon: const Icon(Icons.chevron_right),
+                  key: const Key('analyst_pick_dates'),
+                  tooltip: 'Choose dates',
+                  onPressed: _pickDates,
+                  icon: Icon(Icons.date_range_rounded, color: _range == null ? crm.textSecondary : crm.primary),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
@@ -132,7 +185,7 @@ class _FinancialAnalystReportScreenState
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => AppErrorView(
                 error: e,
-                onRetry: () => ref.invalidate(financialAnalystReportProvider(_monthKey)),
+                onRetry: () => ref.invalidate(financialAnalystReportProvider(_key)),
               ),
               data: (r) => _ReportBody(report: r, crm: crm),
             ),

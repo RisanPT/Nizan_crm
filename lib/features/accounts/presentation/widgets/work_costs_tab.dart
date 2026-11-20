@@ -46,7 +46,9 @@ String _placed(String mode) => switch (mode) {
   _ => mode,
 };
 
-List<List<String>> workCostExportRows(List<WorkCostRow> works) => [
+/// [unplaced] = the entries not under any work (fuel / travel with no booking chosen…): listed
+/// after the works with the work columns blank and "Not placed" in the Placed column.
+List<List<String>> workCostExportRows(List<WorkCostRow> works, {List<CostLine> unplaced = const []}) => [
   for (final w in works)
     for (final l in w.lines)
       [
@@ -71,6 +73,25 @@ List<List<String>> workCostExportRows(List<WorkCostRow> works) => [
         w.allowance.meals.any((m) => m.allowed != null) ? w.allowance.allowed.toStringAsFixed(2) : '',
         w.allowance.over > 0 ? w.allowance.over.toStringAsFixed(2) : '',
       ],
+  for (final l in unplaced)
+    [
+      '',
+      '',
+      '',
+      l.artist,
+      l.category,
+      l.effectiveMeals.join(' + '),
+      l.at == null ? '' : DateFormat('dd MMM yyyy h:mm a').format(l.at!),
+      l.amount.toStringAsFixed(2),
+      l.status,
+      'Not placed',
+      l.reason,
+      '',
+      '',
+      '',
+      '',
+      '',
+    ],
 ];
 
 /// ACCOUNTS: what each WORK cost over the period shown above — the artists' food placed under the
@@ -157,13 +178,13 @@ class _WorkCostsTabState extends ConsumerState<WorkCostsTab> {
       final all = await ref
           .read(expenseServiceProvider)
           .exportWorkCosts(_query);
-      if (all.items.isEmpty) {
+      if (all.items.isEmpty && all.unplaced.isEmpty) {
         messenger.showSnackBar(
           const SnackBar(content: Text('Nothing to export for this period.')),
         );
         return;
       }
-      final rows = workCostExportRows(all.items);
+      final rows = workCostExportRows(all.items, unplaced: all.unplaced);
       final stamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       if (pdf) {
         await ExportUtils.exportPdf(
@@ -304,6 +325,39 @@ class _WorkCostsTabState extends ConsumerState<WorkCostsTab> {
                   ),
               ],
             ),
+            // What the spend was FOR, kind by kind — fuel, travel, stay… — with what is not on a work.
+            if (workCostCategories.any((c) => c != 'food' && t.all(c) > 0))
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SPEND BY KIND',
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.8, color: crm.textSecondary),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      key: const Key('costsKinds'),
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                    for (final c in workCostCategories)
+                      if (c != 'food' && t.all(c) > 0)
+                        _pill(
+                          crm,
+                          workCostCategoryLabel(c),
+                          rupeesWhole(t.under(c)),
+                          c == 'fuel' ? crm.accent : crm.textSecondary,
+                          Key('costsKind_$c'),
+                          note: t.notUnder(c) > 0 ? '+ ${rupeesWhole(t.notUnder(c))} not on a work' : null,
+                          noteColor: crm.warning,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             if (page.truncated)
               Padding(
                 padding: const EdgeInsets.only(top: 10),
@@ -453,6 +507,12 @@ class _WorkCostsTabState extends ConsumerState<WorkCostsTab> {
           ],
         ),
       ),
+      // Spend that is not under any work — fuel / travel with no booking chosen — so it is
+      // seen and can be chased, not just counted in one "Not placed" number.
+      if (page.unplaced.isNotEmpty && _search.isEmpty)
+        SliverToBoxAdapter(
+          child: _UnplacedBlock(page: page),
+        ),
       if (page.items.isEmpty)
         SliverToBoxAdapter(
           child: Padding(
@@ -520,8 +580,10 @@ class _WorkCostsTabState extends ConsumerState<WorkCostsTab> {
     String label,
     String value,
     Color color,
-    Key key,
-  ) => Container(
+    Key key, {
+    String? note,
+    Color? noteColor,
+  }) => Container(
     key: key,
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
@@ -550,9 +612,159 @@ class _WorkCostsTabState extends ConsumerState<WorkCostsTab> {
             color: crm.textPrimary,
           ),
         ),
+        if (note != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              note,
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: noteColor ?? crm.textSecondary,
+              ),
+            ),
+          ),
       ],
     ),
   );
+}
+
+/// The entries NOT under any work — what they are, who spent them, when, and why they are not
+/// placed — kind by kind in the summary, one line each when opened.
+class _UnplacedBlock extends StatelessWidget {
+  final WorkCostPage page;
+  const _UnplacedBlock({required this.page});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final t = page.totals;
+    final kinds = [
+      for (final c in workCostCategories)
+        if (t.notUnder(c) > 0) '${workCostCategoryLabel(c)} ${rupeesWhole(t.notUnder(c))}',
+    ];
+    final n = t.unplacedCount > page.unplaced.length ? t.unplacedCount : page.unplaced.length;
+    return Container(
+      key: const Key('costsUnplacedList'),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: crm.warning.withValues(alpha: 0.06),
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: crm.warning.withValues(alpha: 0.35)),
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            key: const PageStorageKey<String>('costsUnplacedTile'),
+            initiallyExpanded: page.unplaced.length <= 6,
+            tilePadding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            expandedAlignment: Alignment.centerLeft,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+            leading: Icon(Icons.link_off, color: crm.warning),
+            title: Text(
+              'Not tied to a work · $n ${n == 1 ? 'entry' : 'entries'} · ${rupeesWhole(t.unplaced)}',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+            ),
+            subtitle: Text(
+              kinds.isEmpty ? 'These are not counted under any work.' : kinds.join('  ·  '),
+              style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                child: Text(
+                  'Fuel, travel and stay only count under a work when the artist picks the booking on the expense. Until then they sit here.',
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                ),
+              ),
+              for (final l in page.unplaced) _UnplacedLine(line: l),
+              if (page.unplacedTruncated)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 2),
+                  child: Text(
+                    'Showing the first ${page.unplaced.length} — narrow the period for the rest.',
+                    key: const Key('costsUnplacedTruncated'),
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: crm.warning),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnplacedLine extends StatelessWidget {
+  final CostLine line;
+  const _UnplacedLine({required this.line});
+
+  @override
+  Widget build(BuildContext context) {
+    final crm = context.crmColors;
+    final struck = !line.counted;
+    final when = line.at == null ? '' : DateFormat('d MMM, h:mm a').format(line.at!);
+    final statusColor = switch (line.status) {
+      'verified' => crm.success,
+      'rejected' => crm.destructive,
+      _ => crm.warning,
+    };
+    final detail = [
+      if (when.isNotEmpty) when,
+      if (line.notes.isNotEmpty) line.notes,
+    ].join('  ·  ');
+    return Padding(
+      key: Key('costsUnplacedLine_${line.expenseId}'),
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(costLineIcon(line), size: 18, color: crm.textSecondary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  [workCostCategoryLabel(line.category), if (line.artist.isNotEmpty) line.artist].join('  ·  '),
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    decoration: struck ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                if (detail.isNotEmpty)
+                  Text(detail, style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                if (line.reason.isNotEmpty)
+                  Text(line.reason, style: TextStyle(fontSize: 11.5, color: crm.warning)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                rupeesWhole(line.amount),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  decoration: struck ? TextDecoration.lineThrough : null,
+                ),
+              ),
+              Text(
+                line.status == 'verified' ? 'Approved' : (line.status == 'rejected' ? 'Rejected' : 'Pending'),
+                style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: statusColor),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One work: what it cost, split by kind, opening to the lines behind it.

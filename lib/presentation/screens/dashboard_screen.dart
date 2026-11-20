@@ -14,6 +14,8 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/sales/controllers/lead_controller.dart';
 import '../../core/utils/dashboard_report_service.dart';
+import '../../core/utils/report_range.dart';
+import '../../core/widgets/report_range_dialog.dart';
 import '../../core/utils/responsive_builder.dart';
 import '../../services/employee_service.dart';
 import '../../services/package_service.dart';
@@ -490,6 +492,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         return;
       }
 
+      // which dates: the month on screen to begin with, or any days
+      final screenMonth = monthRange(_selectedMonth);
+      final chosen = await showReportRangeDialog(
+        context,
+        title: 'Download the report for which dates?',
+        initial: screenMonth,
+      );
+      if (chosen == null || !context.mounted) return;
+      final sameAsScreen = chosen == screenMonth;
+
       // Report sales totals skip non-counting bookings — make sure the list is in.
       await ref.read(salesExcludedCreatorsProvider.future);
       if (!context.mounted) return;
@@ -498,13 +510,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         context: context,
         crmColors: crmColors,
         action: () => downloadDashboardReport(
-          month: _selectedMonth,
+          month: sameAsScreen ? _selectedMonth : (chosen.from ?? _selectedMonth),
           bookings: bookings,
           packages: packages,
           employees: employees,
-          leads: leads,
-          collections: collections,
+          // other days: the leads and collections are cut to them too (both ends inclusive), the bookings by the report itself
+          leads: sameAsScreen ? leads : filterByRange(leads, (l) => l.leadDate, chosen),
+          collections: sameAsScreen ? collections : filterByRange(collections, (c) => c.date, chosen),
           reportType: 'executive',
+          startDate: sameAsScreen ? null : chosen.from,
+          endDate: sameAsScreen ? null : chosen.endOfDay,
         ),
       );
     }

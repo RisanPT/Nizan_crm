@@ -5,10 +5,43 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
+import 'package:nizan_crm/features/marketing/services/team_service.dart';
+
+/// "+12%" / "−8%" / "—" (nothing before to compare with) — a growth figure in a table cell.
+String growthText(int? change) => change == null ? '—' : '${change >= 0 ? '+' : '−'}${change.abs()}%';
+Color growthColor(int? change) => change == null || change == 0 ? Mkt.inkSoft : (change > 0 ? Mkt.good : Mkt.bad);
+
+/// The Performance tab as CSV rows: the period's totals with their change, a row per platform with its growth, the best posts and the
+/// day-by-day reach. A figure that cannot be known is left empty, never 0.
+List<List<Object?>> performanceCsvRows(SocialsPerformance p, {required String from, required String to, String platform = 'all'}) {
+  final t = p.totals;
+  String ch(int? c) => c == null ? '' : '$c';
+  return [
+    ['Socials performance', from, to, if (platform != 'all') platformName(platform)],
+    [],
+    ['Figure', 'Value', 'Change vs the period before (%)'],
+    ['Reach', t.reach, ch(t.change['reach'])],
+    ['Impressions', t.impressions, ch(t.change['impressions'])],
+    ['Engagements', t.engagements, ch(t.change['engagements'])],
+    ['Engagement rate (%)', t.engagementRate ?? '', ''],
+    ['Video views', t.videoViews, ch(t.change['videoViews'])],
+    ['Link clicks', t.linkClicks, ch(t.change['linkClicks'])],
+    [],
+    ['Platform', 'Posts', 'Reach', 'Impressions', 'Engagements', 'Engagement rate (%)', 'Posts growth (%)', 'Reach growth (%)', 'Engagements growth (%)'],
+    for (final r in p.platforms) [r.label, r.posts, r.reach, r.impressions, r.engagements, r.er ?? '', ch(r.change['posts']), ch(r.change['reach']), ch(r.change['engagements'])],
+    [],
+    ['Top content', 'Platform', 'Format', 'Views', 'Engagements', 'Link'],
+    for (final x in p.top) [x.title, platformName(x.platform), postFormatLabel(x.contentType), x.views, x.engagements, x.permalink],
+    [],
+    ['Day', 'Reach', 'Impressions'],
+    for (final d in p.trend) [d.day, d.reach, d.impressions],
+  ];
+}
 
 /// Socials → Performance: reach, impressions, engagement, video views and link clicks for the posts that went out in the range —
 /// the numbers typed on each post — with the reach trend, a row per platform, and the best posts.
@@ -21,6 +54,16 @@ class SocialsPerformanceTab extends ConsumerStatefulWidget {
 
 class _SocialsPerformanceTabState extends ConsumerState<SocialsPerformanceTab> {
   String _platform = 'all';
+
+  /// Download the tab as a CSV (the range and platform in view).
+  Future<void> _export(SocialsPerformance p) async {
+    final f = ref.read(teamFilterProvider);
+    try {
+      await downloadCsv('socials-performance-${f.fromDay}-to-${f.toDay}.csv', performanceCsvRows(p, from: f.fromDay, to: f.toDay, platform: _platform));
+    } catch (e) {
+      if (mounted) showErrorSnackBar(context, e);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,13 +85,13 @@ class _SocialsPerformanceTabState extends ConsumerState<SocialsPerformanceTab> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: KeyedSubtree(key: const Key('soc_perf_platform'), child: MktDropdownPill<String>(value: _platform, icon: Icons.public_rounded, options: [('all', 'All Platforms'), for (final pl in kPlatforms) (pl.$1, pl.$2)], onChanged: (v) => setState(() => _platform = v))),
-              ),
+              Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                KeyedSubtree(key: const Key('soc_perf_platform'), child: MktDropdownPill<String>(value: _platform, icon: Icons.public_rounded, options: [('all', 'All Platforms'), for (final pl in kPlatforms) (pl.$1, pl.$2)], onChanged: (v) => setState(() => _platform = v))),
+                OutlinedButton.icon(key: const Key('soc_perf_export'), onPressed: () => _export(p), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Export CSV')),
+              ]),
               const SizedBox(height: 10),
               MktKpiRow(children: [
-                kpi('soc_perf_reach', Icons.groups_outlined, 'Reach', groupedCount(t.reach), 'reach', Mkt.violet),
+                kpi('soc_perf_reach', Icons.groups_outlined, 'Reach', groupedCount(t.reach), 'reach', Mkt.primary),
                 kpi('soc_perf_impr', Icons.visibility_outlined, 'Impressions', groupedCount(t.impressions), 'impressions', Mkt.blue),
                 kpi('soc_perf_eng', Icons.favorite_border_rounded, 'Engagements', groupedCount(t.engagements), 'engagements', Mkt.pink),
                 MktKpiCard(key: const Key('soc_perf_er'), icon: Icons.percent_rounded, value: t.engagementRate == null ? '—' : '${t.engagementRate}%', label: 'Engagement Rate', tint: Mkt.warn),
@@ -99,10 +142,10 @@ class _TrendCard extends StatelessWidget {
                   LineChartBarData(
                     spots: [for (var i = 0; i < t.length; i++) FlSpot(i.toDouble(), t[i].reach.toDouble())],
                     isCurved: true,
-                    color: Mkt.violet2,
+                    color: Mkt.primaryLight,
                     barWidth: 2.5,
                     dotData: const FlDotData(show: true),
-                    belowBarData: BarAreaData(show: true, color: Mkt.violet2.withValues(alpha: 0.12)),
+                    belowBarData: BarAreaData(show: true, color: Mkt.primaryLight.withValues(alpha: 0.12)),
                   ),
                 ],
               )),
@@ -143,19 +186,21 @@ class _PlatformCard extends StatelessWidget {
       child: p.platforms.isEmpty
           ? const MktEmpty('No post went out in this period.', icon: Icons.bar_chart_rounded, height: 120)
           : MktTable(
-              minWidth: 420,
+              minWidth: 500,
               rowHeight: 42,
               rowKeys: [for (final r in p.platforms) Key('soc_perf_row_${r.platform}')],
-              columns: const [MktCol('Platform', flex: 3), MktCol('Posts', width: 48, align: Alignment.center), MktCol('Reach', flex: 2), MktCol('Impressions', flex: 2), MktCol('Engagements', flex: 2), MktCol('ER', width: 52, align: Alignment.centerRight)],
+              columns: const [MktCol('Platform', flex: 3), MktCol('Posts', width: 48, align: Alignment.center), MktCol('Reach', flex: 2), MktCol('Impressions', flex: 2), MktCol('Engagements', flex: 2), MktCol('ER', width: 52, align: Alignment.centerRight), MktCol('Growth', width: 64, align: Alignment.centerRight)],
               rows: [
                 for (final r in p.platforms)
                   [
-                    Row(children: [Icon(platformIcon(r.platform), size: 15, color: Mkt.violet), const SizedBox(width: 6), Text(r.label, style: mktText(12, weight: FontWeight.w700))]),
+                    Row(children: [Icon(platformIcon(r.platform), size: 15, color: Mkt.primary), const SizedBox(width: 6), Text(r.label, style: mktText(12, weight: FontWeight.w700))]),
                     Text('${r.posts}', style: mktText(12)),
                     Text(groupedCount(r.reach), style: mktText(12)),
                     Text(groupedCount(r.impressions), style: mktText(12)),
                     Text(groupedCount(r.engagements), style: mktText(12)),
                     Text(r.er == null ? '—' : '${r.er}%', style: mktText(12, weight: FontWeight.w700)),
+                    // reach against the period before
+                    Tooltip(message: 'Reach against the period before', child: Text(growthText(r.change['reach']), key: Key('soc_perf_growth_${r.platform}'), style: mktText(12, weight: FontWeight.w700, color: growthColor(r.change['reach'])))),
                   ],
               ],
             ),

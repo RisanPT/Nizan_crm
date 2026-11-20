@@ -1,3 +1,4 @@
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -128,15 +129,17 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
   }
 
   Future<void> _exportCsv(BuildContext context, TrialBalance tb) async {
+    // as on a day: said in the file, and in its name
+    final asOn = ReportRange(from: _asOf ?? DateTime.now(), to: _asOf ?? DateTime.now());
     final rows = <List<Object?>>[
-      ['Trial Balance'],
+      ['Trial Balance', 'As on ${asOn.label}'],
       ['Code', 'Account', 'Group', 'Nature', 'Debit', 'Credit'],
       for (final r in tb.rows)
         [r.code, r.name, r.group, r.nature, csvNum(r.closingDebit), csvNum(r.closingCredit)],
       ['', 'TOTAL', '', '', csvNum(tb.totalDebit), csvNum(tb.totalCredit)],
     ];
     try {
-      await downloadCsv('trial_balance.csv', rows);
+      await downloadCsv('trial_balance_${asOn.fileTag}.csv', rows);
       if (context.mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Trial balance exported')));

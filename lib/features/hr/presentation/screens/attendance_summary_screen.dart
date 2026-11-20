@@ -2,7 +2,9 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 
 import '../../../../core/extensions/space_extension.dart';
 import '../../../../core/theme/crm_theme.dart';
@@ -114,29 +116,54 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
           final newHires = _newHiresInMonth(empById.values, month);
 
           // ── Filtered table rows ──────────────────────────────────────────
-          final combined = rows.map((s) => _Row(s, empById[s.employeeId]?.designation ?? '')).toList();
           final q = query.value.trim().toLowerCase();
-          var visible = combined.where((r) {
-            if (deptFilter.value != null && r.s.department != deptFilter.value) return false;
-            if (statusFilter.value == _Filter.present && r.leave) return false;
-            if (statusFilter.value == _Filter.leave && !r.leave) return false;
-            if (q.isNotEmpty &&
-                !r.s.employeeName.toLowerCase().contains(q) &&
-                !r.s.department.toLowerCase().contains(q) &&
-                !r.designation.toLowerCase().contains(q)) {
-              return false;
-            }
-            return true;
-          }).toList();
-          visible.sort((a, b) {
-            if (a.leave != b.leave) return a.leave ? 1 : -1;
-            return b.s.attendancePercent.compareTo(a.s.attendancePercent);
-          });
+          // the filters on screen (department, status, search), applied to any set of summary rows — the table's, or a download's
+          List<_Row> filtered(List<AttendanceSummaryRow> source) {
+            final list = source.map((s) => _Row(s, empById[s.employeeId]?.designation ?? '')).where((r) {
+              if (deptFilter.value != null && r.s.department != deptFilter.value) return false;
+              if (statusFilter.value == _Filter.present && r.leave) return false;
+              if (statusFilter.value == _Filter.leave && !r.leave) return false;
+              if (q.isNotEmpty &&
+                  !r.s.employeeName.toLowerCase().contains(q) &&
+                  !r.s.department.toLowerCase().contains(q) &&
+                  !r.designation.toLowerCase().contains(q)) {
+                return false;
+              }
+              return true;
+            }).toList();
+            list.sort((a, b) {
+              if (a.leave != b.leave) return a.leave ? 1 : -1;
+              return b.s.attendancePercent.compareTo(a.s.attendancePercent);
+            });
+            return list;
+          }
+
+          final visible = filtered(rows);
 
           Future<void> download(bool csv) async {
+            // which dates: the month on screen to begin with, or any days
+            final screenMonth = monthRange(DateTime(month.year, month.month));
+            final range = await showReportRangeDialog(
+              context,
+              title: csv ? 'Download attendance CSV for which dates?' : 'Print / PDF attendance for which dates?',
+              confirmLabel: csv ? 'Download' : 'Continue',
+              initial: screenMonth,
+              lastDate: DateTime.now(),
+            );
+            if (range == null || !context.mounted) return;
             busy.value = true;
             try {
-              final data = _buildReport(month, visible, employeesAsync.asData?.value ?? const []);
+              final emps = employeesAsync.asData?.value ?? const <TimeboxEmployee>[];
+              var report = visible;
+              var label = '${_fullMonths[month.month]} ${month.year}';
+              var hires = _newHiresInMonth(emps, month);
+              if (range != screenMonth) {
+                // other days: ask the server for that stretch, with the filters that are on screen
+                report = filtered(await ref.read(timeboxServiceProvider).getSummary(range.fromIso!, range.toIso!));
+                label = range.label;
+                hires = _newHiresIn(emps, range);
+              }
+              final data = _buildReport(label, hires, report);
               if (csv) {
                 await downloadAttendanceCsv(data);
               } else {
@@ -239,6 +266,16 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
     ));
   }
 
+  /// Staff added to Timebox on a day inside [range].
+  int _newHiresIn(Iterable<TimeboxEmployee> emps, ReportRange range) {
+    var n = 0;
+    for (final e in emps) {
+      final d = DateTime.tryParse(e.createdAt);
+      if (d != null && range.contains(d.toLocal())) n++;
+    }
+    return n;
+  }
+
   int _newHiresInMonth(Iterable<TimeboxEmployee> emps, TimeboxMonth m) {
     var n = 0;
     for (final e in emps) {
@@ -248,25 +285,21 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
     return n;
   }
 
-  AttendanceReportData _buildReport(
-    TimeboxMonth m,
-    List<_Row> visible,
-    List<TimeboxEmployee> emps,
-  ) {
+  AttendanceReportData _buildReport(String periodLabel, int newHires, List<_Row> visible) {
     final present = visible.where((r) => !r.leave).toList();
     final avg = present.isEmpty
         ? 0
         : (present.map((r) => r.s.attendancePercent).reduce((a, b) => a + b) / present.length).round();
     final totalHours = visible.fold<double>(0, (s, r) => s + r.s.hoursWorked);
     return AttendanceReportData(
-      periodLabel: '${_fullMonths[m.month]} ${m.year}',
+      periodLabel: periodLabel,
       modeLabel: 'Timebox',
       totalStaff: visible.length,
       presentCount: present.length,
       leaveCount: visible.length - present.length,
       avgAttendance: avg,
       totalHours: totalHours,
-      newHires: _newHiresInMonth(emps, m),
+      newHires: newHires,
       departments: visible.map((r) => r.s.department).toSet().length,
       rows: visible
           .map((r) => AttendanceReportRow(

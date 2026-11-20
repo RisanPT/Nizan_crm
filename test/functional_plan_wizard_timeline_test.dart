@@ -13,7 +13,7 @@ import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier
 import 'package:nizan_crm/features/it/presentation/screens/widgets/functional_plan_wizard_dialog.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
-// The Gantt Plan Wizard, "Tasks & Ownership": each task can be fixed on the timeline — a start day, an end day and a time of
+// The Gratt Plan Wizard, "Tasks & Ownership": each task can be fixed on the timeline — a start day, an end day and a time of
 // day for each. Pick a start and an end and the length follows (and the other way round); a fixed start is "not before", so an
 // earlier task can still push it later and the row says so; the first sub-task takes over what was fixed on its task;
 // and what is saved carries the dates, and the clock times as exact moments.
@@ -124,7 +124,7 @@ Future<_Repo> _open(WidgetTester tester, _Seed seed) async {
 
 Future<void> _continue(WidgetTester tester, [int times = 1]) async {
   for (var i = 0; i < times; i++) {
-    await tester.tap(find.text('Continue'));
+    await tester.tap(find.byKey(const Key('wizard_next')));
     await tester.pumpAndSettle();
   }
 }
@@ -133,11 +133,22 @@ Future<void> _toTasks(WidgetTester tester) => _continue(tester, 2);
 
 Future<void> _generate(WidgetTester tester) async {
   await _continue(tester); // to the last step
-  await tester.tap(find.text('Generate Gantt Plan'));
+  await tester.tap(find.text('Generate Gratt Plan'));
   await tester.pumpAndSettle();
 }
 
 Finder _k(String key) => find.byKey(Key(key));
+
+/// Opens a task's ⋯ menu and picks the item with [itemKey] (the actions that used to sit on the row live there).
+Future<void> _pick(WidgetTester tester, String taskId, String itemKey) async {
+  await tester.ensureVisible(find.byKey(Key('wizard_menu_$taskId')));
+  await tester.tap(find.byKey(Key('wizard_menu_$taskId')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(Key(itemKey)));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _addSub(WidgetTester tester, String taskId) => _pick(tester, taskId, 'wizard_add_sub_$taskId');
 Finder _in(String key, Finder what) => find.descendant(of: _k(key), matching: what);
 final _fmt = DateFormat('MMM dd, yyyy');
 String _day(DateTime d) => _fmt.format(d);
@@ -448,7 +459,7 @@ void main() {
     testWidgets('a milestone is at one moment: a day and a time, no end', (tester) async {
       await _open(tester, _plan([_task('tk1', days: 1, milestone: true, start: _at(2027, 3, 1))]));
       await _toTasks(tester);
-      expect(find.text('ON'), findsOneWidget);
+      expect(find.text('Milestone'), findsOneWidget); // where its end would be
       expect(_k('wizard_start_date_tk1'), findsOneWidget);
       expect(_k('wizard_end_date_tk1'), findsNothing);
       expect(_k('wizard_end_time_tk1'), findsNothing);
@@ -477,11 +488,10 @@ void main() {
       );
       await _toTasks(tester);
       expect(_k('wizard_start_date_g'), findsNothing);
-      expect(tester.widget<Text>(find.descendant(of: _k('wizard_group_range_g'), matching: find.byType(Text))).data, contains('from its sub-tasks'));
-      expect(
-        tester.widget<Text>(find.descendant(of: _k('wizard_group_range_g'), matching: find.byType(Text))).data,
-        contains('${_day(_from(0))} → ${_day(_from(5))}'),
-      );
+      expect(find.descendant(of: _k('wizard_span_g'), matching: find.text('from sub-tasks')), findsOneWidget);
+      expect(find.descendant(of: _k('wizard_span_g'), matching: find.text('5 days')), findsOneWidget);
+      expect(tester.widget<Text>(_k('wizard_group_start_g')).data, _day(_from(0)));
+      expect(tester.widget<Text>(_k('wizard_group_end_g')).data, _day(_from(5)));
     });
 
     testWidgets('the first sub-task takes over what was fixed on its task, and the task becomes a summary', (tester) async {
@@ -499,9 +509,8 @@ void main() {
         ]),
       );
       await _toTasks(tester);
-      await tester.tap(_k('wizard_add_sub_tk1'));
-      await tester.pumpAndSettle();
-      expect(_k('wizard_group_range_tk1'), findsOneWidget); // the task spans its sub-tasks now
+      await _addSub(tester, 'tk1');
+      expect(_k('wizard_group_start_tk1'), findsOneWidget); // the task spans its sub-tasks now
       expect(_k('wizard_start_date_tk1'), findsNothing);
       expect(_chip(tester, 'wizard_start_date_tsk_1'), 'Mar 01, 2027');
       expect(_chip(tester, 'wizard_end_date_tsk_1'), 'Mar 04, 2027');
@@ -512,10 +521,8 @@ void main() {
     testWidgets('a second sub-task starts with nothing fixed', (tester) async {
       await _open(tester, _plan([_task('tk1', days: 3, start: _at(2027, 3, 1), end: _at(2027, 3, 4))]));
       await _toTasks(tester);
-      await tester.tap(_k('wizard_add_sub_tk1'));
-      await tester.pumpAndSettle();
-      await tester.tap(_k('wizard_add_sub_tk1'));
-      await tester.pumpAndSettle();
+      await _addSub(tester, 'tk1');
+      await _addSub(tester, 'tk1');
       expect(_k('wizard_clear_dates_tsk_2'), findsNothing);
       expect(_in('wizard_start_date_tsk_2', find.text('auto')), findsOneWidget);
     });

@@ -14,11 +14,20 @@ class MoneyChoice {
   final String paymentMode;
   final String paymentRef;
   final DateTime? verifiedAt;
+
+  /// Only when the popup let Accounts change the amount (an artist expense): what they approved,
+  /// which may be less than what was logged. Only this is paid out of the account.
+  final double? approvedAmount;
+
+  /// Why it was approved for less (optional).
+  final String approvalNote;
   const MoneyChoice({
     required this.moneyAccountId,
     required this.paymentMode,
     this.paymentRef = '',
     this.verifiedAt,
+    this.approvedAmount,
+    this.approvalNote = '',
   });
 
   Map<String, dynamic> toJson() => {
@@ -26,6 +35,8 @@ class MoneyChoice {
         'paymentMode': paymentMode,
         'paymentRef': paymentRef,
         if (verifiedAt != null) 'verifiedAt': verifiedAt!.toIso8601String(),
+        if (approvedAmount != null) 'approvedAmount': approvedAmount,
+        if (approvalNote.isNotEmpty) 'approvalNote': approvalNote,
       };
 }
 
@@ -76,8 +87,23 @@ const kPurchasePayModes = <PayModeOption>[
 
 bool _isCashMode(String m) => m == 'cash' || m == 'petty_cash';
 
+String _rupees(double v) => NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: v % 1 == 0 ? 0 : 2).format(v);
+
+/// What was typed in the "Approved amount" box, checked against what was logged.
+/// [value] is the amount when it is acceptable, [error] says what is wrong otherwise.
+({double? value, String? error}) checkApprovedAmount(String typed, double logged) {
+  final n = double.tryParse(typed.trim().replaceAll(',', ''));
+  if (n == null) return (value: null, error: 'Enter the amount you are approving');
+  final v = (n * 100).round() / 100;
+  if (v <= 0) return (value: null, error: 'Must be more than ₹0 — reject the expense to pay nothing');
+  if (v > logged) return (value: null, error: "Can't be more than the ${_rupees(logged)} that was logged");
+  return (value: v, error: null);
+}
+
 /// The approval popup: choose mode + Bank/Cash account before approving.
 /// [moneyIn] = true for income (collections), false for spending.
+/// [adjustableAmount]: [amount] is what was LOGGED, and the popup asks for the approved amount too
+/// (up to what was logged) — only that is paid out of the account. Used for artist expenses.
 /// Returns null when cancelled. When no account is linked to a ledger yet,
 /// returns a choice with an empty [MoneyChoice.moneyAccountId] if the user
 /// approves anyway (the server then keeps its old cash/bank rule).
@@ -90,6 +116,7 @@ Future<MoneyChoice?> showMoneyAccountPicker(
   String initialMode = '',
   DateTime? initialDate,
   String approveLabel = 'Approve',
+  bool adjustableAmount = false,
 }) {
   return showDialog<MoneyChoice>(
     context: context,
@@ -101,6 +128,7 @@ Future<MoneyChoice?> showMoneyAccountPicker(
       initialMode: initialMode,
       initialDate: initialDate,
       approveLabel: approveLabel,
+      adjustableAmount: adjustableAmount,
     ),
   );
 }
@@ -114,8 +142,10 @@ class _MoneyAccountDialog extends ConsumerStatefulWidget {
     required this.initialMode,
     this.initialDate,
     required this.approveLabel,
+    this.adjustableAmount = false,
   });
 
+  final bool adjustableAmount;
   final String title;
   final double amount;
   final bool moneyIn;
@@ -133,6 +163,13 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
   late DateTime _approvedDate;
   String? _accountId;
   final _ref = TextEditingController();
+  late final _approved = TextEditingController(text: widget.amount % 1 == 0 ? widget.amount.toStringAsFixed(0) : widget.amount.toStringAsFixed(2));
+  final _note = TextEditingController();
+
+  ({double? value, String? error}) get _check => checkApprovedAmount(_approved.text, widget.amount);
+
+  /// What will be paid: the approved amount when it can be set and is acceptable, else what was logged.
+  double get _payable => widget.adjustableAmount ? (_check.value ?? widget.amount) : widget.amount;
 
   @override
   void initState() {
@@ -146,6 +183,8 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
   @override
   void dispose() {
     _ref.dispose();
+    _approved.dispose();
+    _note.dispose();
     super.dispose();
   }
 
@@ -172,7 +211,9 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final async = ref.watch(bankAccountsProvider);
-    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(widget.amount);
+    final money = _rupees(_payable);
+    final check = _check;
+    final reduced = widget.adjustableAmount && check.value != null && check.value! < widget.amount;
 
     return AlertDialog(
       backgroundColor: crm.surface,
@@ -197,6 +238,10 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
                     widget.moneyIn ? '$money received — where did it land?' : '$money paid — which account paid it?',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: crm.textPrimary),
                   ),
+                  if (widget.adjustableAmount) ...[
+                    const SizedBox(height: 14),
+                    _amountBlock(crm, check, reduced),
+                  ],
                   const SizedBox(height: 14),
                   Text('Approved date', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                   const SizedBox(height: 6),
@@ -312,7 +357,7 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: crm.success),
-          onPressed: async.isLoading
+          onPressed: async.isLoading || (widget.adjustableAmount && check.value == null)
               ? null
               : () {
                   final hasAccounts = _ordered(async.value?.accounts ?? const []).isNotEmpty;
@@ -324,12 +369,82 @@ class _MoneyAccountDialogState extends ConsumerState<_MoneyAccountDialog> {
                       paymentMode: _mode,
                       paymentRef: _ref.text.trim(),
                       verifiedAt: _approvedDate,
+                      approvedAmount: widget.adjustableAmount ? check.value : null,
+                      approvalNote: reduced ? _note.text.trim() : '',
                     ),
                   );
                 },
           child: Text(widget.approveLabel),
         ),
       ],
+    );
+  }
+
+  /// "Logged ₹1,517" and the box for the amount being approved, with what that means for the account.
+  Widget _amountBlock(CrmTheme crm, ({double? value, String? error}) check, bool reduced) {
+    final less = reduced ? widget.amount - check.value! : 0.0;
+    return Container(
+      key: const Key('approveAmountBlock'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: crm.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.primary.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Logged by the artist', style: TextStyle(fontSize: 12, color: crm.textSecondary))),
+              Text(
+                _rupees(widget.amount),
+                key: const Key('approveLoggedAmount'),
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: crm.textPrimary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            key: const Key('approvedAmountField'),
+            controller: _approved,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: 'Approved amount *',
+              prefixText: '₹ ',
+              border: const OutlineInputBorder(),
+              isDense: true,
+              errorText: check.error,
+              errorMaxLines: 2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (check.error == null)
+            Text(
+              reduced
+                  ? '${_rupees(less)} less than logged — only ${_rupees(check.value!)} comes out of the account.'
+                  : 'Approved in full — ${_rupees(widget.amount)} comes out of the account.',
+              key: const Key('approveAmountHint'),
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: reduced ? crm.warning : crm.success),
+            ),
+          if (reduced) ...[
+            const SizedBox(height: 10),
+            TextField(
+              key: const Key('approvalNoteField'),
+              controller: _note,
+              maxLength: 300,
+              maxLines: 2,
+              minLines: 1,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional — the artist can see it)',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

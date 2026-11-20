@@ -8,8 +8,11 @@ import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/rupees.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
+import 'package:nizan_crm/features/it/domain/models/it_task_model.dart';
+import 'package:nizan_crm/features/it/domain/task_cost.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_spend_widgets.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/task_cost_widgets.dart';
 
 export 'package:nizan_crm/core/utils/rupees.dart';
 
@@ -264,8 +267,14 @@ class _ProjectCostFieldsState extends State<ProjectCostFields> {
 /// What a project's cost looks like on its page: where it stands, the amounts (for those who may see them), the
 /// breakdown, Finance's note and the changes — and the actions that person may take.
 class ProjectCostCard extends ConsumerWidget {
-  const ProjectCostCard({super.key, required this.project});
+  const ProjectCostCard({super.key, required this.project, this.tasks = const [], this.onEditTask});
   final Project project;
+
+  /// The project's tasks, so the card can list what each is planned to cost (money: shown only to those who may see the cost).
+  final List<ITTaskModel> tasks;
+
+  /// Opens a task (to give it a cost) — for those who may set costs. Null = the lines are read-only.
+  final ValueChanged<ITTaskModel>? onEditTask;
 
   /// A project from before costs existed has nothing to say about it — unless this person can set one.
   static bool shows(Project p) => !(p.costStatus == 'none' && !(p.cost != null && p.access.canEditCost));
@@ -321,6 +330,27 @@ class ProjectCostCard extends ConsumerWidget {
               ),
             ),
           );
+        }
+        // what the project's tasks add up to, against the budget (money: only those who may see it get this)
+        if (cost.taskPlan != null && cost.taskPlan!.hasTasks) {
+          bodyLines.add(const SizedBox(height: 10));
+          bodyLines.add(TaskPlanBlock(plan: cost.taskPlan!));
+          // …and the tasks behind it, one line each: which have a cost and which have none (tap one to give it a cost)
+          final lines = taskCostLinesOf(tasks, ownerDepartment: p.targetDepartment);
+          if (lines.isNotEmpty) {
+            bodyLines.add(const SizedBox(height: 10));
+            bodyLines.add(
+              TaskCostList(
+                lines: lines,
+                onTap: p.access.canEditCost && onEditTask != null
+                    ? (line) {
+                        final task = tasks.where((t) => t.id == line.id).firstOrNull;
+                        if (task != null) onEditTask!(task);
+                      }
+                    : null,
+              ),
+            );
+          }
         }
         if (cost.plan.isNotEmpty) {
           bodyLines.add(const SizedBox(height: 6));
@@ -390,6 +420,10 @@ class ProjectCostCard extends ConsumerWidget {
               requested: cost?.budget ?? 0,
               approvedBudget: cost?.approvedBudget ?? 0,
               changeReason: cost?.changes.firstOrNull?.reason ?? '',
+              taskPlanned: cost?.taskPlan?.planned ?? 0,
+              taskUnpriced: cost?.taskPlan?.unpriced ?? 0,
+              taskCount: cost?.taskPlan?.leaves ?? 0,
+              taskLines: taskCostLinesOf(tasks, ownerDepartment: p.targetDepartment),
             );
             if (result != null) ref.refreshData.projects();
           },
@@ -559,6 +593,15 @@ Future<Project?> showCostDecisionDialog(
   String department = '',
   double approvedBudget = 0,
   String changeReason = '',
+
+  /// What the project's tasks add up to (and how many leaf tasks still have no cost), when known — the plan behind the request.
+  double taskPlanned = 0,
+  int taskUnpriced = 0,
+
+  /// How many tasks the plan has in all, and the tasks themselves (the biggest cost first) — what the finance head is deciding on.
+  int taskCount = 0,
+  List<TaskCostLine> taskLines = const [],
+  int taskLinesMore = 0,
 }) {
   var approve = true;
   final amount = TextEditingController(text: requested == requested.roundToDouble() ? requested.round().toString() : requested.toString());
@@ -596,6 +639,29 @@ Future<Project?> showCostDecisionDialog(
                       padding: const EdgeInsets.only(top: 4),
                       child: Text('Reason given: $changeReason', style: const TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic)),
                     ),
+                  if (taskPlanned > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'The tasks add up to ${rupees(taskPlanned)}${taskUnpriced > 0 ? ' ($taskUnpriced still have no cost)' : ''}.',
+                        key: const Key('cost_dialog_task_plan'),
+                        style: const TextStyle(fontSize: 12.5),
+                      ),
+                    )
+                  else if (taskCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '${taskCount == 1 ? 'The task has' : 'None of the $taskCount tasks has'} a cost yet, so there is no task plan to check this against.',
+                        key: const Key('cost_dialog_no_task_costs'),
+                        style: const TextStyle(fontSize: 12.5),
+                      ),
+                    ),
+                  if (taskLines.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: TaskCostList(lines: taskLines, more: taskLinesMore, initialShown: 4),
+                    ),
                   const SizedBox(height: 12),
                   SegmentedButton<bool>(
                     showSelectedIcon: false,
@@ -620,6 +686,16 @@ Future<Project?> showCostDecisionDialog(
                       ),
                       onChanged: (_) => setD(() {}),
                     ),
+                    // approving less than the tasks add up to leaves the plan over the budget: say so before it is done
+                    if (given != null && taskPlanned > given + 0.004)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'The tasks add up to ${rupees(taskPlanned)} — more than the ${rupees(given)} you are approving. The plan would be over the budget.',
+                          key: const Key('cost_dialog_under_plan'),
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                        ),
+                      ),
                     const SizedBox(height: 10),
                   ],
                   TextField(

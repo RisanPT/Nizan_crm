@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/crm_theme.dart';
+
+import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 
 /// Color for a 1-25 Weekly Growth Score (red → amber → green).
 Color marketingScoreColor(int score) {
-  if (score >= 18) return const Color(0xFF2E7D32); // strong
-  if (score >= 10) return const Color(0xFFB8860B); // moderate
-  if (score >= 4) return const Color(0xFFE65100); // low
-  return const Color(0xFF9E9E9E); // dormant
+  if (score >= 18) return Mkt.good; // strong
+  if (score >= 10) return Mkt.warn; // moderate
+  if (score >= 4) return Mkt.bad; // low
+  return Mkt.grey; // dormant
 }
 
 /// A rounded "score / 25" badge.
@@ -19,29 +20,16 @@ class ScoreBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = marketingScoreColor(score);
     return Container(
-      padding: EdgeInsets.symmetric(
-          horizontal: large ? 14 : 10, vertical: large ? 8 : 5),
+      padding: EdgeInsets.symmetric(horizontal: large ? 14 : 10, vertical: large ? 8 : 5),
       decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.withValues(alpha: 0.5)),
+        color: Mkt.tint(c),
+        borderRadius: BorderRadius.circular(large ? 12 : 20),
+        border: Border.all(color: Mkt.tint(c, 0.4)),
       ),
       child: RichText(
         text: TextSpan(children: [
-          TextSpan(
-            text: '$score',
-            style: TextStyle(
-                color: c,
-                fontSize: large ? 22 : 15,
-                fontWeight: FontWeight.w800),
-          ),
-          TextSpan(
-            text: ' /25',
-            style: TextStyle(
-                color: c.withValues(alpha: 0.7),
-                fontSize: large ? 12 : 10,
-                fontWeight: FontWeight.w700),
-          ),
+          TextSpan(text: '$score', style: mktText(large ? 22 : 14, weight: FontWeight.w800, color: c)),
+          TextSpan(text: ' /25', style: mktText(large ? 12 : 10, weight: FontWeight.w700, color: c.withValues(alpha: 0.7))),
         ]),
       ),
     );
@@ -55,29 +43,18 @@ class MovementChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final crm = context.crmColors;
     if (movement == null) {
-      return Text('new',
-          style: TextStyle(
-              color: crm.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700));
+      return Text('new', style: mktText(11, weight: FontWeight.w700, color: Mkt.inkSoft));
     }
     final m = movement!;
-    final Color c = m > 0
-        ? const Color(0xFF2E7D32)
-        : (m < 0 ? const Color(0xFFD32F2F) : crm.textSecondary);
-    final IconData icon = m > 0
-        ? Icons.arrow_upward
-        : (m < 0 ? Icons.arrow_downward : Icons.remove);
+    final Color c = m > 0 ? Mkt.good : (m < 0 ? Mkt.bad : Mkt.inkSoft);
+    final IconData icon = m > 0 ? Icons.arrow_upward : (m < 0 ? Icons.arrow_downward : Icons.remove);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 13, color: c),
         const SizedBox(width: 2),
-        Text('${m.abs()}',
-            style:
-                TextStyle(color: c, fontSize: 12, fontWeight: FontWeight.w800)),
+        Text('${m.abs()}', style: mktText(12, weight: FontWeight.w800, color: c)),
       ],
     );
   }

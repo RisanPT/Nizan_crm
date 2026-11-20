@@ -184,6 +184,7 @@ class EmployeeService {
     String? emergencyContactName,
     String? emergencyContactRelation,
     String? emergencyContactPhone,
+    bool? isAssociate,
     bool? epfApplicable,
     bool? esiApplicable,
     String? uan,
@@ -245,6 +246,7 @@ class EmployeeService {
           },
         'timeboxEmployeeId': ?timeboxEmployeeId,
         'timeboxName': ?timeboxName,
+        'isAssociate': ?isAssociate,
       };
 
       if (profileImage != null) {
@@ -258,6 +260,22 @@ class EmployeeService {
       return Employee.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'save employee');
+    }
+  }
+
+  /// Adds an outside associate artist while assigning a work (Operations) — or finds the one already on that phone number.
+  /// POST /employees/associates: creates an outsource artist with no login and no payroll. [existing] = the number was already an associate.
+  Future<({Employee employee, bool existing})> addAssociate({required String name, String phone = '', String specialization = ''}) async {
+    try {
+      final response = await _dio.post('/employees/associates', data: {
+        'name': name.trim(),
+        if (phone.trim().isNotEmpty) 'phone': phone.trim(),
+        if (specialization.trim().isNotEmpty) 'specialization': specialization.trim(),
+      });
+      final body = Map<String, dynamic>.from(response.data as Map);
+      return (employee: Employee.fromJson(Map<String, dynamic>.from(body['employee'] as Map)), existing: body['existing'] == true);
+    } catch (e) {
+      throw AppException(e, action: 'add the associate');
     }
   }
 

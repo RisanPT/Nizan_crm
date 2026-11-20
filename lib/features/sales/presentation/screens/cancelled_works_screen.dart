@@ -6,6 +6,8 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/utils/cancelled_works_report_service.dart';
+import 'package:nizan_crm/core/utils/report_range.dart';
+import 'package:nizan_crm/core/widgets/report_range_dialog.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
@@ -63,14 +65,30 @@ class CancelledWorksScreen extends HookConsumerWidget {
             filtered.fold<double>(0, (s, b) => s + b.advanceAmount);
 
         Future<void> exportReport() async {
-          if (isExporting.value || filtered.isEmpty) return;
+          if (isExporting.value || cancelled.isEmpty) return;
+          // which dates: the financial year on screen (or all time) to begin with, or any days (by the day the work was to start)
+          final onScreen = financialYearLabelRange(selectedFy.value) ?? ReportRange.all();
+          final range = await showReportRangeDialog(
+            context,
+            title: 'Download cancelled works for which dates?',
+            subtitle: 'By the day the work was to start.',
+            initial: onScreen,
+            allowAll: true,
+          );
+          if (range == null || !context.mounted) return;
+          final sameAsScreen = range == onScreen;
+          final rows = sameAsScreen ? filtered : filterByRange(cancelled, (b) => b.serviceStart, range);
+          if (rows.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No cancelled works for ${range.label}.')));
+            return;
+          }
           isExporting.value = true;
           try {
             await printCancelledWorksReport(
-              filtered,
-              periodLabel: selectedFy.value == 'All'
-                  ? 'All time'
-                  : selectedFy.value,
+              rows,
+              periodLabel: sameAsScreen
+                  ? (selectedFy.value == 'All' ? 'All time' : selectedFy.value)
+                  : range.label,
             );
           } catch (e) {
             if (context.mounted) showErrorSnackBar(context, e);
@@ -186,8 +204,7 @@ class CancelledWorksScreen extends HookConsumerWidget {
   Widget _exportButton(ValueNotifier<bool> isExporting, List<Booking> filtered,
           Future<void> Function() onExport) =>
       FilledButton.icon(
-        onPressed:
-            isExporting.value || filtered.isEmpty ? null : () => onExport(),
+        onPressed: isExporting.value ? null : () => onExport(),
         icon: isExporting.value
             ? const SizedBox(
                 width: 16,

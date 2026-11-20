@@ -7,6 +7,11 @@ import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mod
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/crm/data/crm_models.dart';
+import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
+import 'package:nizan_crm/features/crm/services/crm_service.dart';
 
 class BookingRequestsScreen extends ConsumerStatefulWidget {
   const BookingRequestsScreen({super.key});
@@ -20,6 +25,8 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   final Set<String> _selectedIds = <String>{};
   bool _bulkSaving = false;
   String? _activeBookingId;
+  // CRM: whose requests to show — all | mine | unassigned
+  String _ownerFilter = 'all';
 
   Future<void> _updateStatus(Booking booking, String status) async {
     await ref
@@ -118,6 +125,37 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
     final crmColors = context.crmColors;
     final isMobile = ResponsiveBuilder.isMobile(context);
     final asyncBookings = ref.watch(bookingProvider);
+    // The CRM team sees who owns each request (and the head hands them out). Other roles see the screen as before.
+    final crmOn = Access.of(ref.watch(authSessionProvider)).canSeeCrmWork;
+    final owners = crmOn ? ref.watch(crmBookingOwnersProvider).value : null;
+    final crmMe = crmOn ? ref.watch(crmMeProvider).value : null;
+    bool keepForOwner(Booking b) {
+      if (owners == null || _ownerFilter == 'all') return true;
+      final o = owners[b.id];
+      if (_ownerFilter == 'unassigned') return o != null && !o.isAssigned;
+      return o != null && o.ownerId == crmMe?.userId;
+    }
+
+    Widget? ownerTag(Booking b) {
+      if (owners == null) return null;
+      final o = owners[b.id];
+      if (o == null) return (crmMe?.seesTeam ?? true) ? null : const CrmOwnerChip(name: 'Another member');
+      if (o.isAssigned) return CrmOwnerChip(key: Key('crmOwner_${b.id}'), name: o.ownerName);
+      return Wrap(
+        spacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          CrmOwnerChip(key: Key('crmOwner_${b.id}'), name: '', assigned: false),
+          if (crmMe != null && crmMe.canWrite && !crmMe.canAssign)
+            TextButton(
+              key: Key('crmTakeBooking_${b.id}'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+              onPressed: () => crmAssign(context, ref, [o], crmMe.userId),
+              child: const Text('Take it'),
+            ),
+        ],
+      );
+    }
 
     return SelectionArea(
       child: asyncBookings.when(
@@ -130,6 +168,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
         final pendingBookings =
             bookings
                 .where((booking) => booking.status.toLowerCase() == 'pending')
+                .where(keepForOwner)
                 .toList()
               ..sort((a, b) => a.serviceStart.compareTo(b.serviceStart));
         final pendingEntries = pendingBookings
@@ -241,6 +280,38 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                 ],
               ),
             isMobile ? 16.h : 24.h,
+            if (owners != null) ...[
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (final (k, l) in const [('all', 'All requests'), ('mine', 'Mine'), ('unassigned', 'Not assigned')])
+                    ChoiceChip(
+                      key: Key('crmRequestsFilter_$k'),
+                      label: Text(l),
+                      selected: _ownerFilter == k,
+                      onSelected: (_) => setState(() {
+                        _ownerFilter = k;
+                        _selectedIds.clear();
+                      }),
+                    ),
+                  if ((crmMe?.canAssign ?? false) && _selectedIds.isNotEmpty)
+                    FilledButton.tonalIcon(
+                      key: const Key('crmAssignRequests'),
+                      icon: const Icon(Icons.person_add_alt_1_outlined, size: 18),
+                      label: Text('Assign to… (${_selectedIds.length})'),
+                      onPressed: () async {
+                        final owner = await showCrmAssignDialog(context, count: _selectedIds.length);
+                        if (owner == null || !context.mounted) return;
+                        final ok = await crmAssign(context, ref, [for (final id in _selectedIds) CrmQueueItem(type: 'booking', id: id)], owner);
+                        if (ok && mounted) setState(_selectedIds.clear);
+                      },
+                    ),
+                ],
+              ),
+              14.h,
+            ],
             if (isMobile && pendingEntries.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 16),
@@ -322,6 +393,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                     final booking = pendingEntries[index];
                     return _MobileBookingRequestCard(
                       booking: booking,
+                      ownerTag: ownerTag(booking.booking),
                       selected: _selectedIds.contains(booking.booking.id),
                       onSelected: (selected) {
                         setState(() {
@@ -427,6 +499,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                                 color: crmColors.textSecondary,
                                               ),
                                             ),
+                                            if (ownerTag(booking.booking) case final tag?) ...[6.h, tag],
                                           ],
                                         ),
                                       ),
@@ -652,6 +725,9 @@ class _MobileBookingRequestCard extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onReject;
 
+  /// Who on the CRM team owns the request (CRM logins only).
+  final Widget? ownerTag;
+
   static const _pending = Color(0xFFB45309);
   static const _accept = Color(0xFF15803D);
   static const _reject = Color(0xFFB91C1C);
@@ -663,6 +739,7 @@ class _MobileBookingRequestCard extends StatelessWidget {
     required this.onReview,
     required this.onAccept,
     required this.onReject,
+    this.ownerTag,
   });
 
   @override
@@ -752,6 +829,7 @@ class _MobileBookingRequestCard extends StatelessWidget {
                             style: TextStyle(
                                 color: crmColors.textSecondary, fontSize: 12.5),
                           ),
+                          if (ownerTag != null) ...[6.h, ownerTag!],
                         ],
                       ),
                     ),

@@ -3,23 +3,26 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // The Marketing ERP's design system — the look of the marketing team's UX document ("Marketing ERP: UX design and requirements"):
-// a warm, light page; white rounded cards with a hairline border; a violet accent for tabs, links and charts; the maroon of the brand for
+// a warm, light page; white rounded cards with a hairline border; a burgundy accent for tabs, links and charts; the maroon of the brand for
 // the sidebar and the main button; pastel icon tiles; small, quiet type. Every Marketing screen is built from these pieces so they read
 // as one product.
 
 class Mkt {
   Mkt._();
 
-  static const violet = Color(0xFF5B3FD9);
-  static const violet2 = Color(0xFF7C5CE8);
-  static const violetSoft = Color(0xFFEDE8FB);
-  static const bg = Color(0xFFF7F4FA);
+  // The Team N brand, the same burgundy, warm ground and hairlines as the rest of the app (core/theme/app_theme.dart), so Marketing
+  // reads as part of one product rather than a separate purple one.
+  static const primary = Color(0xFF601A29); // brand maroon: buttons, active tabs, links, icons
+  static const primaryLight = Color(0xFF8F2E43); // the lighter burgundy for charts, accents and hover
+  static const primarySoft = Color(0xFFF6E9EC); // a very light burgundy tint for selected rows and pills
+  static const bg = Color(0xFFF5F3EF);
   static const card = Colors.white;
-  static const border = Color(0xFFE9E3F1);
-  static const ink = Color(0xFF2A1A24);
-  static const inkSoft = Color(0xFF7B6F82);
-  static const maroon = Color(0xFF5A1030);
-  static const maroonDeep = Color(0xFF3F0B22);
+  static const border = Color(0xFFECE6DE);
+  static const ink = Color(0xFF1C1A19);
+  static const inkSoft = Color(0xFF7A7068);
+  static const maroon = primary; // the brand maroon again, the colour of the filled buttons
+  static const sidebarTop = Color(0xFF3E111B); // the sidebar, top: deep burgundy
+  static const maroonDeep = Color(0xFF320D15); // the sidebar, bottom: the colour of the main menu
 
   static const good = Color(0xFF22A06B);
   static const bad = Color(0xFFE5484D);
@@ -30,7 +33,7 @@ class Mkt {
   static const grey = Color(0xFF9AA0A6);
 
   /// Chart / legend colours by position, so a chart and its legend always agree.
-  static const palette = <Color>[violet2, blue, good, warn, pink, teal, grey];
+  static const palette = <Color>[primaryLight, blue, good, warn, pink, teal, grey];
   static Color series(int i) => palette[i % palette.length];
 
   static Color tint(Color c, [double a = 0.12]) => c.withValues(alpha: a);
@@ -86,10 +89,10 @@ class MktHeader extends StatelessWidget {
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: Mkt.violetSoft,
+            color: Mkt.primarySoft,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: Icon(icon, color: Mkt.violet, size: 22),
+          child: Icon(icon, color: Mkt.primary, size: 22),
         ),
         const SizedBox(width: 12),
         Flexible(
@@ -328,7 +331,7 @@ class MktTabSpec {
   final IconData icon;
 }
 
-/// The row of pill tabs under the header: even-width pills with an icon, the open one filled in violet.
+/// The row of pill tabs under the header: even-width pills with an icon, the open one filled in burgundy.
 class MktTabPills extends StatelessWidget {
   const MktTabPills({
     super.key,
@@ -353,7 +356,7 @@ class MktTabPills extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           gradient: on
-              ? const LinearGradient(colors: [Mkt.violet, Mkt.violet2])
+              ? const LinearGradient(colors: [Mkt.primary, Mkt.primaryLight])
               : null,
           color: on ? null : Mkt.card,
           borderRadius: BorderRadius.circular(10),
@@ -361,7 +364,7 @@ class MktTabPills extends StatelessWidget {
           boxShadow: on
               ? [
                   BoxShadow(
-                    color: Mkt.violet.withValues(alpha: 0.28),
+                    color: Mkt.primary.withValues(alpha: 0.28),
                     blurRadius: 10,
                     offset: const Offset(0, 3),
                   ),
@@ -428,7 +431,7 @@ class MktTabPills extends StatelessWidget {
 
 // ── cards ────────────────────────────────────────────────────────────────────
 
-/// A white rounded card: a small violet icon, a bold title, a "View All →" link on the right, then the content.
+/// A white rounded card: a small burgundy icon, a bold title, a "View All →" link on the right, then the content.
 class MktCard extends StatelessWidget {
   const MktCard({
     super.key,
@@ -441,7 +444,7 @@ class MktCard extends StatelessWidget {
     this.linkKey,
     this.trailing,
     this.padding = const EdgeInsets.fromLTRB(14, 12, 14, 14),
-    this.iconColor = Mkt.violet,
+    this.iconColor = Mkt.primary,
   });
   final String title;
   final String? subtitle;
@@ -466,7 +469,7 @@ class MktCard extends StatelessWidget {
       border: Border.all(color: Mkt.border),
       boxShadow: [
         BoxShadow(
-          color: Mkt.violet.withValues(alpha: 0.035),
+          color: Mkt.primary.withValues(alpha: 0.035),
           blurRadius: 14,
           offset: const Offset(0, 4),
         ),
@@ -522,7 +525,7 @@ class MktCard extends StatelessWidget {
                       style: mktText(
                         11.5,
                         weight: FontWeight.w700,
-                        color: Mkt.violet,
+                        color: Mkt.primary,
                       ),
                     ),
                   ),
@@ -546,7 +549,7 @@ class MktKpiCard extends StatelessWidget {
     required this.label,
     this.note,
     this.good,
-    this.tint = Mkt.violet,
+    this.tint = Mkt.primary,
     this.spark,
     this.onTap,
   });
@@ -598,12 +601,13 @@ class MktKpiCard extends StatelessWidget {
                 ),
                 Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: mktText(
                     11,
                     weight: FontWeight.w600,
                     color: Mkt.inkSoft,
+                    height: 1.15,
                   ),
                 ),
                 // the change line shrinks to fit the card instead of being cut ("↑ +200% vs last week")
@@ -671,7 +675,7 @@ class MktSparkline extends StatelessWidget {
   const MktSparkline({
     super.key,
     required this.values,
-    this.color = Mkt.violet,
+    this.color = Mkt.primary,
   });
   final List<double> values;
   final Color color;
@@ -707,7 +711,7 @@ class MktChip extends StatelessWidget {
   const MktChip(
     this.text, {
     super.key,
-    this.color = Mkt.violet,
+    this.color = Mkt.primary,
     this.solid = false,
     this.icon,
   });
@@ -754,7 +758,7 @@ class MktAvatar extends StatelessWidget {
   final double size;
 
   static const _tints = <Color>[
-    Color(0xFF7C5CE8),
+    Mkt.primaryLight,
     Color(0xFF3B82F6),
     Color(0xFF22A06B),
     Color(0xFFE05D9A),
@@ -1050,7 +1054,7 @@ class MktTimelineItem {
     required this.time,
     required this.title,
     this.subtitle = '',
-    this.color = Mkt.violet,
+    this.color = Mkt.primary,
     this.key,
   });
   final String time;
@@ -1231,7 +1235,7 @@ class MktGrid extends StatelessWidget {
   );
 }
 
-/// A rounded toggle for filtering a list by kind or status: violet-tinted when on.
+/// A rounded toggle for filtering a list by kind or status: burgundy-tinted when on.
 class MktFilterChip extends StatelessWidget {
   const MktFilterChip({
     super.key,
@@ -1252,9 +1256,9 @@ class MktFilterChip extends StatelessWidget {
     child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: selected ? Mkt.violetSoft : Mkt.card,
+        color: selected ? Mkt.primarySoft : Mkt.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: selected ? Mkt.violet : Mkt.border),
+        border: Border.all(color: selected ? Mkt.primary : Mkt.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1264,7 +1268,7 @@ class MktFilterChip extends StatelessWidget {
             style: mktText(
               12,
               weight: selected ? FontWeight.w800 : FontWeight.w600,
-              color: selected ? Mkt.violet : Mkt.ink,
+              color: selected ? Mkt.primary : Mkt.ink,
             ),
           ),
           if (count != null) ...[
@@ -1274,7 +1278,7 @@ class MktFilterChip extends StatelessWidget {
               style: mktText(
                 11,
                 weight: FontWeight.w700,
-                color: selected ? Mkt.violet : Mkt.inkSoft,
+                color: selected ? Mkt.primary : Mkt.inkSoft,
               ),
             ),
           ],

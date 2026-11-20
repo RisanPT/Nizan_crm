@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/features/marketing/data/portfolio_models.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/shoot_board.dart' show displayImageUrl;
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
 
 // The small pieces every Creative Portfolio tab is built from.
@@ -10,7 +11,7 @@ Color shootStatusColor(String s) => switch (s) {
       'completed' => Mkt.good,
       'in_production' => Mkt.warn,
       'post_production' => Mkt.blue,
-      'pre_production' => Mkt.violet2,
+      'pre_production' => Mkt.primaryLight,
       'cancelled' => Mkt.bad,
       _ => Mkt.grey,
     };
@@ -29,10 +30,10 @@ class ShootCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = Container(width: size, height: size, color: Mkt.tint(Mkt.violet, 0.12), child: Icon(Icons.videocam_outlined, size: size * 0.45, color: Mkt.violet));
+    final fallback = Container(width: size, height: size, color: Mkt.tint(Mkt.primary, 0.12), child: Icon(Icons.videocam_outlined, size: size * 0.45, color: Mkt.primary));
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: url.isEmpty ? fallback : Image.network(url, width: size, height: size, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback, loadingBuilder: (_, child, p) => p == null ? child : fallback),
+      child: url.isEmpty ? fallback : Image.network(displayImageUrl(url), width: size, height: size, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback, loadingBuilder: (_, child, p) => p == null ? child : fallback),
     );
   }
 }
@@ -51,9 +52,9 @@ class MilestoneStepper extends StatelessWidget {
         Expanded(
           child: Column(children: [
             Row(children: [
-              Expanded(child: Container(height: 2, color: i == 0 ? Colors.transparent : (milestones[i - 1].done ? Mkt.violet : Mkt.border))),
+              Expanded(child: Container(height: 2, color: i == 0 ? Colors.transparent : (milestones[i - 1].done ? Mkt.primary : Mkt.border))),
               _dot(milestones[i], milestones[i].key == current),
-              Expanded(child: Container(height: 2, color: i == milestones.length - 1 ? Colors.transparent : (milestones[i].done ? Mkt.violet : Mkt.border))),
+              Expanded(child: Container(height: 2, color: i == milestones.length - 1 ? Colors.transparent : (milestones[i].done ? Mkt.primary : Mkt.border))),
             ]),
             const SizedBox(height: 4),
             FittedBox(fit: BoxFit.scaleDown, child: Text(milestones[i].label, key: Key('milestone_${milestones[i].key}'), style: mktText(10.5, weight: milestones[i].done || milestones[i].key == current ? FontWeight.w800 : FontWeight.w500, color: milestones[i].done || milestones[i].key == current ? Mkt.ink : Mkt.inkSoft))),
@@ -64,8 +65,8 @@ class MilestoneStepper extends StatelessWidget {
   }
 
   Widget _dot(Milestone m, bool now) {
-    if (m.done) return Container(width: 20, height: 20, decoration: const BoxDecoration(color: Mkt.violet, shape: BoxShape.circle), child: const Icon(Icons.check_rounded, size: 13, color: Colors.white));
-    return Container(width: 20, height: 20, decoration: BoxDecoration(color: Mkt.card, shape: BoxShape.circle, border: Border.all(color: now ? Mkt.violet : Mkt.border, width: now ? 4 : 2)));
+    if (m.done) return Container(width: 20, height: 20, decoration: const BoxDecoration(color: Mkt.primary, shape: BoxShape.circle), child: const Icon(Icons.check_rounded, size: 13, color: Colors.white));
+    return Container(width: 20, height: 20, decoration: BoxDecoration(color: Mkt.card, shape: BoxShape.circle, border: Border.all(color: now ? Mkt.primary : Mkt.border, width: now ? 4 : 2)));
   }
 }
 
@@ -81,7 +82,7 @@ class ProgressRing extends StatelessWidget {
         width: size,
         height: size,
         child: Stack(alignment: Alignment.center, children: [
-          SizedBox(width: size, height: size, child: CircularProgressIndicator(value: pct.clamp(0, 100) / 100, strokeWidth: 6, backgroundColor: Mkt.tint(Mkt.violet, 0.12), valueColor: const AlwaysStoppedAnimation(Mkt.violet))),
+          SizedBox(width: size, height: size, child: CircularProgressIndicator(value: pct.clamp(0, 100) / 100, strokeWidth: 6, backgroundColor: Mkt.tint(Mkt.primary, 0.12), valueColor: const AlwaysStoppedAnimation(Mkt.primary))),
           Column(mainAxisSize: MainAxisSize.min, children: [Text('$pct%', key: const Key('shoot_progress_pct'), style: mktText(size * 0.24, weight: FontWeight.w800)), Text(label, style: mktText(size * 0.13, color: Mkt.inkSoft))]),
         ]),
       );

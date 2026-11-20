@@ -4,8 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/features/finance/utils/csv_export.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/team/log_activity_sheet.dart';
 import 'package:nizan_crm/features/marketing/presentation/team/team_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
@@ -38,7 +40,7 @@ class TeamOverviewTab extends ConsumerWidget {
               label: 'Team Members',
               note: k.membersJoined > 0 ? '↑ +${k.membersJoined} this month' : null,
               good: k.membersJoined > 0 ? true : null,
-              tint: Mkt.violet,
+              tint: Mkt.primary,
             ),
             MktKpiCard(
               key: const Key('team_kpi_completed'),
@@ -59,7 +61,7 @@ class TeamOverviewTab extends ConsumerWidget {
               good: k.pendingBlocked == 0 ? null : false,
               tint: Mkt.warn,
             ),
-            MktKpiCard(key: const Key('team_kpi_activity'), icon: Icons.bolt_rounded, value: pctText(k.activityRate), label: 'Team Activity Rate', tint: Mkt.violet2),
+            MktKpiCard(key: const Key('team_kpi_activity'), icon: Icons.bolt_rounded, value: pctText(k.activityRate), label: 'Team Activity Rate', tint: Mkt.primaryLight),
             MktKpiCard(key: const Key('team_kpi_ontime'), icon: Icons.verified_outlined, value: pctText(k.onTimeDelivery), label: 'On-time Delivery', tint: Mkt.teal),
           ];
 
@@ -68,6 +70,12 @@ class TeamOverviewTab extends ConsumerWidget {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
             children: [
+              const ActivityLoggingStrip(),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(key: const Key('team_overview_export'), onPressed: () => downloadCsv('marketing-team-overview.csv', overviewCsv(o)), icon: const Icon(Icons.download_rounded, size: 16), label: const Text('Export CSV')),
+              ),
               MktKpiRow(children: tiles),
               const SizedBox(height: 12),
               MktGrid(
@@ -100,9 +108,95 @@ class TeamOverviewTab extends ConsumerWidget {
 Color _stateColor(String s) => switch (s) {
   'Active' => Mkt.good,
   'On Shoot' => Mkt.warn,
+  'Work From Home' => Mkt.teal,
   'On Leave' => Mkt.blue,
   _ => Mkt.grey,
 };
+
+/// The Overview as a CSV (pure, so it can be checked): the headline figures, the member table, the workload, the categories and the deadlines.
+List<List<Object?>> overviewCsv(TeamOverview o) {
+  String pct(int? v) => v == null ? '' : '$v';
+  final k = o.kpis;
+  return [
+    ['Section', 'Item', 'Value', 'Detail'],
+    ['Headline', 'Team members', k.members, ''],
+    ['Headline', 'Tasks completed', k.tasksCompleted, k.tasksCompletedChange == null ? '' : '${k.tasksCompletedChange}% vs the period before'],
+    ['Headline', 'In progress', k.inProgress, ''],
+    ['Headline', 'Pending / blocked', k.pendingBlocked, ''],
+    ['Headline', 'Team activity rate %', pct(k.activityRate), ''],
+    ['Headline', 'On-time delivery %', pct(k.onTimeDelivery), ''],
+    for (final m in o.members) ['Member', m.name, '${m.completed} of ${m.tasks} done', '${m.role}${m.role.isEmpty ? '' : ' · '}${m.state}'],
+    for (final w in o.workload) ['Workload', w.group, w.count, '${w.pct}%'],
+    for (final c in o.progressByCategory) ['Category progress', c.group, '${c.completed} of ${c.total}', '${c.pct}%'],
+    ['Attendance', 'Present', o.attendance.present, o.attendance.day],
+    ['Attendance', 'On shoot', o.attendance.onShoot, o.attendance.day],
+    ['Attendance', 'Work from home', o.attendance.wfh, o.attendance.day],
+    ['Attendance', 'On leave', o.attendance.onLeave, o.attendance.day],
+    ['Attendance', 'Not in', o.attendance.absent, o.attendance.day],
+    for (final d in o.deadlines) ['Deadline', d.title, d.dueDate, [d.project, d.assignee].where((x) => x.isNotEmpty).join(' · ')],
+  ];
+}
+
+/// The questions the Log Activity form asks (the document's "Activity Logging (Foundation)").
+const kLogQuestions = ['What did you work on?', 'Which project or client?', 'What did you complete?', 'What is still pending?', 'Next priority', 'Time spent', 'Status', 'Counts', 'Links'];
+
+/// The "Activity Logging (Foundation)" strip: the questions every log answers, the Log Daily Activity button — and, for a team member, how
+/// they are working today (Office / On Shoot / Work From Home), which the attendance board reads.
+class ActivityLoggingStrip extends ConsumerWidget {
+  const ActivityLoggingStrip({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = TeamFilter.day(DateTime.now());
+    final setup = ref.watch(logSetupProvider((date: today, memberId: null))).maybeWhen(data: (s) => s, orElse: () => null);
+    final mode = setup?.workMode;
+    Future<void> setMode(WorkMode? m) async {
+      try {
+        await ref.read(marketingTeamServiceProvider).setWorkMode(m);
+        refreshTeam(ref);
+      } on TeamRefusal catch (r) {
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(r.message)));
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      }
+    }
+
+    return Container(
+      key: const Key('team_logging_strip'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Mkt.primarySoft, borderRadius: BorderRadius.circular(14), border: Border.all(color: Mkt.tint(Mkt.primary, 0.25))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        LayoutBuilder(builder: (context, box) {
+          final title = Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.edit_note_rounded, size: 20, color: Mkt.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text('Activity Logging (Foundation)', style: mktText(14, weight: FontWeight.w800)),
+                Text('Log it once — the dashboards, the EOD and the reports all read it.', style: mktText(11.5, color: Mkt.inkSoft)),
+              ]),
+            ),
+          ]);
+          final button = MktPrimaryButton(key: const Key('team_log_daily'), label: 'Log Daily Activity', icon: Icons.edit_calendar_outlined, onPressed: () => showLogActivity(context));
+          return box.maxWidth >= 600
+              ? Row(children: [Expanded(child: title), const SizedBox(width: 10), button])
+              : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [title, const SizedBox(height: 8), button]);
+        }),
+        const SizedBox(height: 10),
+        Wrap(spacing: 6, runSpacing: 6, children: [
+          for (final q in kLogQuestions) ActionChip(key: Key('team_log_q_${kLogQuestions.indexOf(q)}'), label: Text(q, style: mktText(11.5)), backgroundColor: Mkt.card, side: const BorderSide(color: Mkt.border), onPressed: () => showLogActivity(context)),
+        ]),
+        if (setup != null && setup.self) ...[
+          const SizedBox(height: 10),
+          Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            Text('Today I am working:', style: mktText(12, weight: FontWeight.w700, color: Mkt.inkSoft)),
+            for (final m in WorkMode.values) MktFilterChip(key: Key('team_strip_mode_${m.wire}'), label: m.label, selected: mode == m, onTap: () => setMode(mode == m ? null : m)),
+          ]),
+        ],
+      ]),
+    );
+  }
+}
 
 /// A stable colour for a role / category word, so the same role is always the same pill.
 Color _wordColor(String w) => Mkt.series(w.codeUnits.fold<int>(0, (s, u) => s + u));
@@ -342,7 +436,7 @@ class _TrendCard extends StatelessWidget {
                             for (var i = 0; i < t.length; i++)
                               BarChartGroupData(
                                 x: i,
-                                barRods: [BarChartRodData(toY: t[i].completed.toDouble(), color: Mkt.violet2, width: t.length > 14 ? 5 : 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(5)))],
+                                barRods: [BarChartRodData(toY: t[i].completed.toDouble(), color: Mkt.primaryLight, width: t.length > 14 ? 5 : 16, borderRadius: const BorderRadius.vertical(top: Radius.circular(5)))],
                               ),
                           ],
                         ),
@@ -393,7 +487,7 @@ class _TrendCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Wrap(spacing: 16, children: [legendDot(Mkt.violet2, 'Tasks Completed'), legendDot(Mkt.blue, 'Activity Rate', line: true)]),
+                Wrap(spacing: 16, children: [legendDot(Mkt.primaryLight, 'Tasks Completed'), legendDot(Mkt.blue, 'Activity Rate', line: true)]),
               ],
             ),
     );
@@ -428,7 +522,7 @@ class _AttendanceCard extends StatelessWidget {
     );
     return MktCard(
       title: 'Team Attendance & Availability',
-      subtitle: a.day.isEmpty ? null : shortDay(a.day),
+      subtitle: a.day.isEmpty ? null : '${shortDay(a.day)}${a.timebox.live ? ' · from Timebox' : ' · from the CRM'}',
       icon: Icons.event_available_outlined,
       link: onSeeAll == null ? null : 'View All',
       onLink: onSeeAll,
@@ -440,6 +534,8 @@ class _AttendanceCard extends StatelessWidget {
               Expanded(child: tile('Present', a.present, Mkt.good, Icons.person_outline)),
               const SizedBox(width: 8),
               Expanded(child: tile('On Shoot', a.onShoot, Mkt.warn, Icons.videocam_outlined)),
+              const SizedBox(width: 8),
+              Expanded(child: KeyedSubtree(key: const Key('team_strip_wfh'), child: tile('WFH', a.wfh, Mkt.teal, Icons.home_work_outlined))),
             ],
           ),
           const SizedBox(height: 8),

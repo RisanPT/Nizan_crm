@@ -194,6 +194,35 @@ class Access {
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
   bool get canSeeCEOReport => has('reports', role.canSeeCEOReport);
 
+  /// The Associate Works report: Operations (CRM), the artist head, Accounts and the owners. Sales and artists do not see it (the server
+  /// refuses them too). Operations sees the works; only Accounts and the owners also see the fees.
+  bool get canSeeAssociateWorks =>
+      isFullAccess ||
+      isCeo ||
+      role == AppRole.crm ||
+      role == AppRole.accounts ||
+      canSeeArtistHead;
+
+  /// Converting the old free-text "temporary staff" names into associates (it rewrites many bookings at once): Operations (CRM), managers and
+  /// admins — the server enforces the same list.
+  bool get canConvertTempStaff => isFullAccess || role == AppRole.crm;
+
+  /// On the CRM (Client Relations) team: a CRM member or the CRM Head.
+  bool get isCrmTeam => role == AppRole.crm;
+
+  /// The CRM Head: the crm_manager role ("CRM Head"), or a CRM login marked as the department's head. Assigns the team's work and
+  /// sees everyone's figures (the server decides the same way — backend utils/crmAccess.js).
+  bool get isCrmHead => role == AppRole.crm && (roleKey == 'crm_manager' || isDepartmentHead);
+
+  /// The CRM Head's dashboard (team figures, assigning work, reports): the head, management, and the leaders (read-only).
+  bool get canSeeCrmDashboard => isFullAccess || isCeo || isCrmHead;
+
+  /// The CRM work screens (my work, cases): the CRM team, plus everyone who sees the dashboard.
+  bool get canSeeCrmWork => isCrmTeam || canSeeCrmDashboard;
+
+  /// May hand CRM work to a team member (or move it): the CRM Head and management. The leaders read only.
+  bool get canAssignCrmWork => isFullAccess || isCrmHead;
+
   /// Artist Head dashboard — only the dedicated artist_head role, or an artist flagged
   /// as also-head.
   bool get canSeeArtistHead =>

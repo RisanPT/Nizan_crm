@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
@@ -10,9 +11,11 @@ import 'package:nizan_crm/features/marketing/data/team_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/team/team_widgets.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
 
-enum TaskView { list, kanban, calendar }
+enum TaskView { list, project, kanban, calendar }
 
-/// Team Dashboard → Tasks & Deliverables: the team's tasks as a list, a kanban or a calendar — one set of records, three views.
+/// Team Dashboard → Tasks & Deliverables: the team's tasks as a list, by project, a kanban or a calendar — one set of records, four views.
+/// Everyone's, My Tasks, or the ones I assigned; for the shared date range (open now, done in it, or due in it) and brand. A Coordinations
+/// request given to a member is one of their tasks too (marked, and changed in Coordinations).
 class TeamTasksTab extends ConsumerStatefulWidget {
   const TeamTasksTab({super.key});
 
@@ -36,8 +39,10 @@ class _TeamTasksTabState extends ConsumerState<TeamTasksTab> {
         loading: () => ListView(children: const [SizedBox(height: 200), Center(child: CircularProgressIndicator())]),
         error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => refreshTeam(ref))]),
         data: (list) {
+          final scope = ref.watch(teamTaskScopeProvider);
           var items = list.items.where((t) => (_status == null || t.status == _status) && (_priority == 'all' || t.priority == _priority)).toList();
           if (_search.trim().isNotEmpty) items = items.where((t) => t.title.toLowerCase().contains(_search.trim().toLowerCase())).toList();
+          final fromCoord = list.counts['requests'] ?? 0;
           return ListView(
             key: const Key('team_tasks_list'),
             physics: const AlwaysScrollableScrollPhysics(),
@@ -45,23 +50,34 @@ class _TeamTasksTabState extends ConsumerState<TeamTasksTab> {
             children: [
               MktCard(
                 title: 'Tasks & Deliverables',
-                subtitle: '${list.counts['all'] ?? 0} in all · ${items.length} shown',
+                subtitle: '${list.counts['all'] ?? 0} in all · ${items.length} shown${fromCoord > 0 ? ' · $fromCoord from Coordinations' : ''}',
                 icon: Icons.checklist_rtl_rounded,
                 trailing: MktPrimaryButton(key: const Key('team_task_new'), label: 'New task', onPressed: () => showTaskEditor(context, ref)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [
+                        for (final sc in TaskScope.values)
+                          Padding(padding: const EdgeInsets.only(right: 6), child: MktFilterChip(key: Key('team_task_scope_${sc.wire}'), label: sc.label, selected: scope == sc, onTap: () => ref.read(teamTaskScopeProvider.notifier).state = sc)),
+                      ]),
+                    ),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 10,
                       runSpacing: 8,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        DashSegmented<TaskView>(
-                          keyPrefix: 'team_task_view',
-                          dense: true,
-                          options: const [(TaskView.list, 'List'), (TaskView.kanban, 'Kanban'), (TaskView.calendar, 'Calendar')],
-                          value: _view,
-                          onChanged: (v) => setState(() => _view = v),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DashSegmented<TaskView>(
+                            keyPrefix: 'team_task_view',
+                            dense: true,
+                            options: const [(TaskView.list, 'List'), (TaskView.kanban, 'Kanban'), (TaskView.calendar, 'Calendar'), (TaskView.project, 'By project')],
+                            value: _view,
+                            onChanged: (v) => setState(() => _view = v),
+                          ),
                         ),
                         SizedBox(
                           width: 220,
@@ -75,7 +91,7 @@ class _TeamTasksTabState extends ConsumerState<TeamTasksTab> {
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(vertical: 10),
                               enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.border)),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.violet)),
+                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Mkt.primary)),
                             ),
                           ),
                         ),
@@ -110,6 +126,7 @@ class _TeamTasksTabState extends ConsumerState<TeamTasksTab> {
                     else
                       switch (_view) {
                         TaskView.list => _TaskList(items: items, ref: ref),
+                        TaskView.project => _ByProject(items: items, ref: ref),
                         TaskView.kanban => _Kanban(items: items),
                         TaskView.calendar => _TaskCalendar(items: items, month: _month, onMonth: (m) => setState(() => _month = m)),
                       },
@@ -125,13 +142,16 @@ class _TeamTasksTabState extends ConsumerState<TeamTasksTab> {
 }
 
 class _TaskList extends StatelessWidget {
-  const _TaskList({required this.items, required this.ref});
+  const _TaskList({required this.items, required this.ref, this.narrow = false});
   final List<TeamTask> items;
   final WidgetRef ref;
 
+  /// Cards even on a laptop (the By project view lists short groups).
+  final bool narrow;
+
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 900;
+    final wide = !narrow && MediaQuery.sizeOf(context).width >= 900;
     if (wide) {
       return MktTable(
         minWidth: 640,
@@ -155,7 +175,10 @@ class _TaskList extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(t.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(13, weight: FontWeight.w700)),
+                    Row(children: [
+                      Flexible(child: Text(t.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(13, weight: FontWeight.w700))),
+                      if (t.isRequest) const Padding(padding: EdgeInsets.only(left: 6), child: _kCoordChip),
+                    ]),
                     Text([if (t.projectLabel.isNotEmpty) t.projectLabel, if (t.isDeliverable) 'Deliverable'].join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(11, color: Mkt.inkSoft)),
                   ],
                 ),
@@ -202,6 +225,7 @@ class _TaskList extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(t.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(13.5, weight: FontWeight.w700)),
+                          if (t.isRequest) const Padding(padding: EdgeInsets.only(top: 2, bottom: 2), child: _kCoordChip),
                           Text(
                             [if (t.projectLabel.isNotEmpty) t.projectLabel, if (t.assignee.isNotEmpty) t.assignee, if (t.dueDate != null) 'due ${shortDay(t.dueDate!)}', if (t.isDeliverable) 'Deliverable'].join(' · '),
                             maxLines: 2,
@@ -368,13 +392,79 @@ class _TaskCalendar extends ConsumerWidget {
   }
 }
 
-/// The task form: a new task, or [task] to change. A manager can give it to anyone; a member's own tasks are theirs.
+/// The task form: a new task, or [task] to change. A manager can give it to anyone; a member's own tasks are theirs. A Coordinations
+/// request is not changed here: it says so and opens Coordinations, where it lives.
 Future<void> showTaskEditor(BuildContext context, WidgetRef ref, {TeamTask? task}) {
+  if (task != null && task.isRequest) return showRequestTask(context, task);
   final form = _TaskForm(task: task);
   if (MediaQuery.sizeOf(context).width >= 700) {
     return showDialog<void>(context: context, builder: (_) => Dialog(child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: form)));
   }
   return showModalBottomSheet<void>(context: context, isScrollControlled: true, useSafeArea: true, showDragHandle: true, builder: (_) => Padding(padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom), child: form));
+}
+
+/// A Coordinations request on the task list: what it is, and the way to Coordinations to change it.
+Future<void> showRequestTask(BuildContext context, TeamTask t) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        key: const Key('team_request_dialog'),
+        title: Text(t.title),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('A Coordinations request${t.projectLabel.isEmpty ? '' : ' (${t.projectLabel})'}${t.assignee.isEmpty ? '' : ', given to ${t.assignee}'}.', style: mktText(13)),
+          const SizedBox(height: 6),
+          Text([t.status.label, if (t.dueDate != null) 'due ${shortDay(t.dueDate!)}', '${t.progress}%'].join(' · '), style: mktText(12, color: Mkt.inkSoft)),
+          const SizedBox(height: 10),
+          Text('It is changed and closed in Coordinations; the Team Dashboard counts it from there.', style: mktText(12, color: Mkt.inkSoft)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Close')),
+          FilledButton(
+            key: const Key('team_request_open'),
+            onPressed: () {
+              Navigator.pop(c);
+              GoRouter.maybeOf(context)?.go(t.link ?? '/marketing/coordinations?tab=requests');
+            },
+            child: const Text('Open in Coordinations'),
+          ),
+        ],
+      ),
+    );
+
+/// The chip a Coordinations request carries on the task list.
+const _kCoordChip = MktChip('Coordination', color: Mkt.primaryLight, icon: Icons.hub_outlined);
+
+/// Tasks grouped by their project or client, each with how many are done.
+class _ByProject extends StatelessWidget {
+  const _ByProject({required this.items, required this.ref});
+  final List<TeamTask> items;
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String, List<TeamTask>>{};
+    for (final t in items) {
+      groups.putIfAbsent(t.projectLabel.trim().isEmpty ? '(no project)' : t.projectLabel.trim(), () => []).add(t);
+    }
+    final keys = groups.keys.toList()..sort((a, b) => a == '(no project)' ? 1 : b == '(no project)' ? -1 : groups[b]!.length.compareTo(groups[a]!.length));
+    return Column(
+      key: const Key('team_tasks_by_project'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final k in keys) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 6),
+            child: Row(children: [
+              const Icon(Icons.folder_open_outlined, size: 16, color: Mkt.primary),
+              const SizedBox(width: 6),
+              Expanded(child: Text(k, key: Key('team_project_group_$k'), style: mktText(13, weight: FontWeight.w800))),
+              Text('${groups[k]!.where((t) => t.status == WorkStatus.completed).length} of ${groups[k]!.length} done', style: mktText(11.5, color: Mkt.inkSoft)),
+            ]),
+          ),
+          _TaskList(items: groups[k]!, ref: ref, narrow: true),
+        ],
+      ],
+    );
+  }
 }
 
 class _TaskForm extends ConsumerStatefulWidget {
@@ -397,6 +487,9 @@ class _TaskFormState extends ConsumerState<_TaskForm> {
   late bool _deliverable = widget.task?.isDeliverable ?? false;
   late String? _due = widget.task?.dueDate;
   String? _assignee;
+  String? _initiative;
+  String? _devProject;
+  String? _group;
   bool _saving = false;
   String? _error;
 
@@ -404,6 +497,9 @@ class _TaskFormState extends ConsumerState<_TaskForm> {
   void initState() {
     super.initState();
     _assignee = widget.task?.assigneeId;
+    _initiative = widget.task?.initiativeId;
+    _devProject = widget.task?.devProjectId;
+    _group = widget.task?.groupId;
   }
 
   @override
@@ -441,6 +537,9 @@ class _TaskFormState extends ConsumerState<_TaskForm> {
         'isDeliverable': _deliverable,
         'dueDate': _due,
         'assigneeId': ?_assignee,
+        'initiativeId': _initiative,
+        'devProjectId': _devProject,
+        'groupId': _group,
       }, id: widget.task?.id);
       refreshTeam(ref);
       if (mounted) Navigator.pop(context);
@@ -494,6 +593,17 @@ class _TaskFormState extends ConsumerState<_TaskForm> {
         TextField(key: const Key('team_task_desc'), controller: _desc, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Details', border: OutlineInputBorder(), isDense: true)),
         const SizedBox(height: 10),
         TextField(key: const Key('team_task_project'), controller: _project, decoration: const InputDecoration(labelText: 'Project or client', border: OutlineInputBorder(), isDense: true)),
+        if (setup.maybeWhen(data: (s) => s.categories.isNotEmpty, orElse: () => false)) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String?>(
+            key: const Key('team_task_group'),
+            initialValue: setup.maybeWhen(data: (s) => s.categories.any((c) => c.id == _group), orElse: () => false) ? _group : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Category (where it counts on the dashboard)', border: OutlineInputBorder(), isDense: true),
+            items: [const DropdownMenuItem<String?>(value: null, child: Text('None (Others)')), for (final c in setup.maybeWhen(data: (s) => s.categories, orElse: () => const <({String id, String name})>[])) DropdownMenuItem<String?>(value: c.id, child: Text(c.name))],
+            onChanged: (v) => setState(() => _group = v),
+          ),
+        ],
         if (members.length > 1) ...[
           const SizedBox(height: 10),
           DropdownButtonFormField<String?>(
@@ -502,6 +612,28 @@ class _TaskFormState extends ConsumerState<_TaskForm> {
             decoration: const InputDecoration(labelText: 'Assigned to', border: OutlineInputBorder(), isDense: true),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('Myself')), for (final m in members) DropdownMenuItem<String?>(value: m.id, child: Text(m.name))],
             onChanged: (v) => setState(() => _assignee = v),
+          ),
+        ],
+        if (setup.maybeWhen(data: (s) => s.initiatives.isNotEmpty || _initiative != null, orElse: () => false)) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String?>(
+            key: const Key('team_task_initiative'),
+            initialValue: setup.maybeWhen(data: (s) => s.initiatives.any((x) => x.id == _initiative), orElse: () => false) ? _initiative : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Strategic initiative (its progress counts this task)', border: OutlineInputBorder(), isDense: true),
+            items: [const DropdownMenuItem<String?>(value: null, child: Text('None')), for (final x in setup.maybeWhen(data: (s) => s.initiatives, orElse: () => const <({String id, String title})>[])) DropdownMenuItem<String?>(value: x.id, child: Text(x.title, overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() => _initiative = v),
+          ),
+        ],
+        if (setup.maybeWhen(data: (s) => s.devProjects.isNotEmpty || _devProject != null, orElse: () => false)) ...[
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String?>(
+            key: const Key('team_task_devproject'),
+            initialValue: setup.maybeWhen(data: (s) => s.devProjects.any((x) => x.id == _devProject), orElse: () => false) ? _devProject : null,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Development project (its progress counts this task)', border: OutlineInputBorder(), isDense: true),
+            items: [const DropdownMenuItem<String?>(value: null, child: Text('None')), for (final x in setup.maybeWhen(data: (s) => s.devProjects, orElse: () => const <({String id, String title})>[])) DropdownMenuItem<String?>(value: x.id, child: Text(x.title, overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() => _devProject = v),
           ),
         ],
         const SizedBox(height: 12),

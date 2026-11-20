@@ -30,10 +30,13 @@ class ClientChatApiService {
   Future<List<ClientConversation>> getConversations({
     String status = 'all',
     String search = '',
+    String assignee = '',
   }) async {
     try {
       final qp = <String, dynamic>{};
       if (status.isNotEmpty && status != 'all') qp['status'] = status;
+      // me | unassigned (the server knows who "me" is)
+      if (assignee.isNotEmpty) qp['assignee'] = assignee;
       if (search.trim().isNotEmpty) qp['search'] = search.trim();
       final res = await _dio.get('/chat/conversations',
           queryParameters: qp.isEmpty ? null : qp);
@@ -134,21 +137,24 @@ final clientChatApiServiceProvider = Provider<ClientChatApiService>(
 class ClientChatFilter {
   final String status; // all | open | closed
   final String search;
-  const ClientChatFilter({this.status = 'all', this.search = ''});
+  final String assignee; // '' (anyone) | me | unassigned
+  const ClientChatFilter({this.status = 'all', this.search = '', this.assignee = ''});
 
-  ClientChatFilter copyWith({String? status, String? search}) =>
+  ClientChatFilter copyWith({String? status, String? search, String? assignee}) =>
       ClientChatFilter(
         status: status ?? this.status,
         search: search ?? this.search,
+        assignee: assignee ?? this.assignee,
       );
 
   @override
   bool operator ==(Object other) =>
       other is ClientChatFilter &&
       other.status == status &&
-      other.search == search;
+      other.search == search &&
+      other.assignee == assignee;
   @override
-  int get hashCode => Object.hash(status, search);
+  int get hashCode => Object.hash(status, search, assignee);
 }
 
 final clientChatFilterProvider =
@@ -159,5 +165,5 @@ final clientConversationsProvider =
   final f = ref.watch(clientChatFilterProvider);
   return ref
       .watch(clientChatApiServiceProvider)
-      .getConversations(status: f.status, search: f.search);
+      .getConversations(status: f.status, search: f.search, assignee: f.assignee);
 });

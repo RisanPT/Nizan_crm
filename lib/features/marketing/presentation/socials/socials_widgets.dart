@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:nizan_crm/features/marketing/data/socials_models.dart';
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/media/media_link.dart';
 
 // The small pieces every Socials tab is built from.
 
@@ -17,7 +18,7 @@ String stageKeyOf(String status) => switch (status) {
 
 Color stageColor(String stage) => switch (stage) {
       'published' => Mkt.good,
-      'scheduled' => Mkt.violet2,
+      'scheduled' => Mkt.primaryLight,
       'producing' => Mkt.warn,
       'in_review' => Mkt.blue,
       'cancelled' => Mkt.bad,
@@ -65,7 +66,7 @@ String platformName(String p) => kPlatforms.firstWhere((e) => e.$1 == p, orElse:
 Color formatColor(String t) => switch (t) {
       'reel' => Mkt.pink,
       'trial_reel' => Mkt.warn,
-      'story' => Mkt.violet2,
+      'story' => Mkt.primaryLight,
       'carousel' || 'post' || 'image' => Mkt.blue,
       'collab' => Mkt.teal,
       'video' => Mkt.bad,
@@ -119,8 +120,26 @@ class AssetThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = asset.media == 'video' ? Mkt.pink : (asset.media == 'design' ? Mkt.violet2 : (asset.media == 'document' ? Mkt.grey : Mkt.blue));
-    final icon = asset.media == 'video' ? Icons.play_circle_outline_rounded : (asset.media == 'document' ? Icons.description_outlined : (asset.media == 'design' ? Icons.palette_outlined : Icons.image_outlined));
+    final link = MediaLink.parse(asset.url);
+    // a Dropbox FOLDER (an artist's footage) is shown as a folder — never as a video that will not play
+    if (link.isFolder && asset.thumbUrl.isEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          key: const Key('asset_folder_thumb'),
+          height: height,
+          width: double.infinity,
+          color: Mkt.tint(Mkt.blue, 0.10),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.folder_rounded, size: height < 90 ? 28 : 44, color: Mkt.blue),
+            if (height >= 90) Padding(padding: const EdgeInsets.only(top: 4), child: Text('Dropbox folder', style: mktText(11.5, weight: FontWeight.w700, color: Mkt.blue))),
+          ]),
+        ),
+      );
+    }
+    final video = asset.media == 'video' || link.canPlayInline;
+    final c = video ? Mkt.pink : (asset.media == 'design' ? Mkt.primaryLight : (asset.media == 'document' ? Mkt.grey : Mkt.blue));
+    final icon = video ? Icons.play_circle_outline_rounded : (asset.media == 'document' ? Icons.description_outlined : (asset.media == 'design' ? Icons.palette_outlined : Icons.image_outlined));
     final fallback = Container(height: height, width: double.infinity, color: Mkt.tint(c, 0.12), child: Icon(icon, size: 36, color: c));
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
