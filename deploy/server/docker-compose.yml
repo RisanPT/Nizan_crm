@@ -1,0 +1,31 @@
+# The CRM web app on the shared VPS, beside TeamN Chat and Weddesy.
+# Copy this file to /root/nizan-crm/docker-compose.yml (that folder holds only
+# this file; the server never clones the repo). Deploys go through
+# /usr/local/bin/crm-deploy, never `docker compose pull` by hand.
+#
+# Rules of the shared server that this file keeps:
+#   • no published ports. TeamN's Caddy owns 80/443 and reaches this over its
+#     network by the name nizan-crm-web
+#   • a unique name, never `app`, `caddy` or `web`
+#   • limits, log rotation and a restart policy
+
+name: nizancrm
+
+services:
+  nizan-crm-web:
+    image: ghcr.io/risanpt/nizan_crm-web:latest
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    expose: ["80"]
+    mem_limit: 64m
+    cpus: 0.25
+    networks:
+      teamn_web: { aliases: [nizan-crm-web] }
+
+networks:
+  teamn_web:
+    external: true
+    name: whatapp_api_app_default   # TeamN's network, where its Caddy lives

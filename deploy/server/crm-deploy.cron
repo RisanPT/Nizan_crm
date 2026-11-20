@@ -1,0 +1,4 @@
+# Install as /etc/cron.d/crm-deploy (root:root, 0644). Puts each new build of
+# main live within ~2 minutes of GitHub finishing it. Silent when nothing is
+# new; everything it does is in /var/log/crm-deploy.log.
+*/2 * * * * root /usr/local/bin/crm-deploy auto >/dev/null 2>&1

@@ -1,0 +1,22 @@
+# The CRM's site blocks for TeamN's Caddyfile, added in two steps. Each is
+# added only AFTER its name points at 187.127.179.74 (an A record), and
+# straight away after: Caddy then gets the certificate within seconds. Added
+# before, its certificate attempts fail and back off for minutes to hours.
+# Reload, never restart:
+#   cd ~/whatapp_api_app && docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+
+# Step 1: the site, at its new address.
+erp.teamnmakeovers.com {
+	encode gzip
+	# A deploy swaps the container in about a second; Caddy waits for it
+	# instead of showing an error to anyone loading the page right then.
+	reverse_proxy nizan-crm-web:80 {
+		lb_try_duration 10s
+	}
+}
+
+# Step 2, once the new address works: the old one (until then on Netlify)
+# sends every link and bookmark to the same page on the new address.
+crm.teamnmakeovers.com {
+	redir https://erp.teamnmakeovers.com{uri} permanent
+}
