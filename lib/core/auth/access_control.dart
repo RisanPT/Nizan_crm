@@ -60,6 +60,12 @@ class Access {
   bool has(String key, bool fallback) {
     if (isFullAccess) return true;
     if (_usesFallback) return fallback;
+    if (key == 'consultations' || key == 'stylist') {
+      return role == AppRole.stylist ||
+          granted.contains('consultations') ||
+          granted.contains('stylist') ||
+          granted.any((k) => k.startsWith('consultations.') || k.startsWith('stylist.'));
+    }
     return granted.contains(key) || granted.any((k) => k.startsWith('$key.'));
   }
 
@@ -73,7 +79,15 @@ class Access {
     if (isFullAccess) return true;
     final dot = subKey.indexOf('.');
     final parent = dot == -1 ? subKey : subKey.substring(0, dot);
+    final child = dot == -1 ? '' : subKey.substring(dot + 1);
     if (_usesFallback) return _parentFallback(parent);
+    if (parent == 'consultations' || parent == 'stylist') {
+      if (role == AppRole.stylist || granted.contains('consultations') || granted.contains('stylist')) {
+        return true;
+      }
+      return granted.contains(subKey) ||
+          (child.isNotEmpty && (granted.contains('consultations.$child') || granted.contains('stylist.$child')));
+    }
     if (granted.contains(parent)) return true;
     return granted.contains(subKey);
   }
@@ -117,6 +131,9 @@ class Access {
         return role.canSeePlanning;
       case 'leave':
         return role.canSeeLeaveRequests;
+      case 'consultations':
+      case 'stylist':
+        return role == AppRole.stylist;
       default:
         return false;
     }
@@ -133,28 +150,35 @@ class Access {
   bool get canSeeBookings => has('bookings', role.canSeeBookings);
   bool get canSeeTrials => has('trials', role.canSeeBookings);
 
-  // Stylist consultations. A new module with no AppRole matrix entry, so it is
-  // driven purely by the granted 'consultations' permission (admin/manager see
-  // it via the isFullAccess bypass); permission-less legacy roles don't get it.
-  bool get canSeeConsultations => has('consultations', false);
+  // Stylist / consultations module. Accessible via 'stylist' or 'consultations'
+  // permission, or by any user with role 'stylist' / 'stylist_lead'.
+  bool get canSeeConsultations =>
+      role == AppRole.stylist ||
+      roleKey == 'stylist' ||
+      roleKey == 'stylist_lead' ||
+      has('consultations', role == AppRole.stylist) ||
+      has('stylist', role == AppRole.stylist);
 
   /// Consultation notes, preferences and next steps — the sensitive part of a
   /// consultation. Server-side redaction is the real gate; this hides the UI.
-  bool get canSeeConsultationNotes => canSeeSub('consultations.notes');
+  bool get canSeeConsultationNotes =>
+      canSeeSub('consultations.notes') || canSeeSub('stylist.notes');
 
   /// Stylist dashboard / reports.
-  bool get canSeeConsultationReports => canSeeSub('consultations.reports');
+  bool get canSeeConsultationReports =>
+      canSeeSub('consultations.reports') || canSeeSub('stylist.reports');
   bool get canSeeServices => has('services', role.canSeeServices);
   bool get canSeeStaff => has('staff', role.canSeeStaff);
   bool get canSeeSales => has('sales', role.canSeeSales);
-  bool get canSeeFinance => has('finance', role.canSeeFinance);
+  bool get canSeeFinance => isFullAccess || isCeo || has('finance', role.canSeeFinance);
   // isFullAccess bypass so a brand-new section is never invisible to admin /
   // manager before the `company_finance` key has been granted to their role.
   bool get canSeeCompanyFinance =>
-      isFullAccess || has('company_finance', role.canSeeCompanyFinance);
+      isFullAccess || isCeo || has('company_finance', role.canSeeCompanyFinance);
   bool get canSeeCompanyReports =>
-      isFullAccess || has('company_reports', role.canSeeCompanyReports);
-  bool get canSeePayables => has('payables', role.canSeePayables);
+      isFullAccess || isCeo || has('company_reports', role.canSeeCompanyReports);
+  bool get canSeePayables =>
+      isFullAccess || isCeo || has('payables', role.canSeePayables);
 
   /// The HR role (owner decision 2026-11-16): manages staff logins, approvals
   /// and the leave desk on top of its Staff / HR module.
@@ -197,6 +221,21 @@ class Access {
   /// The CEO login: sees the whole company and changes nothing but its decisions (the server enforces it —
   /// backend middleware/ceoGuard.js). This flag only tidies the screens: it never grants anything.
   bool get isCeo => role == AppRole.ceo;
+
+  /// The Executive Director login — the CEO's rules and screens, a second leader (see [isCeo]).
+  bool get isExecutiveDirector => isCeo && roleKey == 'executive_director';
+
+  /// How the leader's role reads on screen: "CEO" or "Executive Director".
+  String get leadershipTitle => isExecutiveDirector ? 'Executive Director' : 'CEO';
+
+  /// A leadership login looks and decides; the server refuses every other write, so screens hide their write controls from it.
+  bool get isViewOnly => isCeo;
+
+  /// May change the status of an entry in the manual decisions log: the leaders and the administrators (not Accounts).
+  bool get canSettleDecisionLog => isCeo || roleKey == 'admin' || roleKey == 'manager';
+
+  /// May change the Decision rules (what needs the CEO / Executive Director): an administrator or a leader — never a manager.
+  bool get canEditDecisionRules => roleKey == 'admin' || isCeo;
 
   /// The CEO home (decisions inbox + company at a glance): the CEO, or full-access management who want to see what the CEO sees.
   bool get canSeeCeoHome => isFullAccess || isCeo || has('ceo', false);

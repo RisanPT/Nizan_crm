@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/routing/app_router.dart' show isRouteAllowed;
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/month_end.dart';
@@ -206,7 +208,8 @@ class _MonthEndReviewScreenState extends ConsumerState<MonthEndReviewScreen> {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: crm.textPrimary)),
             children: [
               ...children,
-              if (detailRoute != null) ...[
+              // a link to a screen this login may not open (the ledger, for the CEO / Executive Director) is not offered
+              if (detailRoute != null && isRouteAllowed(detailRoute, ref.read(effectiveAccessProvider))) ...[
                 8.h,
                 Align(
                   alignment: Alignment.centerLeft,

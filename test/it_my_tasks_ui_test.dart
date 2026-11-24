@@ -46,6 +46,8 @@ void main() {
         severity: ITSeverity.p1,
         percentComplete: 100,
         dueDate: DateTime(2026, 9, 14),
+        assigneeId: 'EMP-001',
+        assigneeName: 'Muhammed Risan',
       ),
       ITTask(
         id: 't2',
@@ -57,6 +59,8 @@ void main() {
         severity: ITSeverity.p2,
         percentComplete: 0,
         dueDate: DateTime(2026, 11, 13),
+        assigneeId: 'EMP-001',
+        assigneeName: 'Muhammed Risan',
       ),
     ];
 
@@ -87,5 +91,94 @@ void main() {
     final pendingTextWidget = tester.widget<Text>(find.text('Car owners Meeting'));
     expect(pendingTextWidget.style?.color, isNot(const Color(0xFF059669)));
     expect(pendingTextWidget.style?.decoration, isNull);
+
+    // Verify Assignee column in header and rows
+    expect(find.text('Assignee'), findsWidgets);
+    expect(find.text('Muhammed Risan'), findsWidgets);
+  });
+
+  testWidgets('ITMyTasksScreen tabs filter correctly and empty state handles unassigned user', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final tasks = [
+      ITTask(
+        id: 't1',
+        title: 'Task for other developer',
+        projectId: 'p1',
+        projectName: 'ERP',
+        description: 'Backend API fix',
+        status: ITTaskStatus.inProgress,
+        severity: ITSeverity.p2,
+        percentComplete: 50,
+        dueDate: DateTime(2026, 11, 20),
+        assigneeId: 'EMP-OTHER',
+        assigneeName: 'Jane Doe',
+      ),
+      ITTask(
+        id: 't2',
+        title: 'Task for Muhammed Risan',
+        projectId: 'p2',
+        projectName: 'South Expansion',
+        description: 'Delhi Launch',
+        status: ITTaskStatus.todo,
+        severity: ITSeverity.p1,
+        percentComplete: 0,
+        dueDate: DateTime(2026, 11, 25),
+        assigneeId: 'EMP-001',
+        assigneeName: 'Muhammed Risan',
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp(tasks));
+    await tester.pumpAndSettle();
+
+    // Default tab is Assigned to Me: should show only t2, not t1
+    expect(find.text('Task for Muhammed Risan'), findsOneWidget);
+    expect(find.text('Task for other developer'), findsNothing);
+
+    // Tap "All Tasks" tab in the bottom tab bar
+    await tester.tap(find.text('All Tasks').last);
+    await tester.pumpAndSettle();
+
+    // Now both tasks should be visible
+    expect(find.text('Task for Muhammed Risan'), findsOneWidget);
+    expect(find.text('Task for other developer'), findsOneWidget);
+  });
+
+  testWidgets('ITMyTasksScreen shows helpful empty state when user has no assigned tasks', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    final tasks = [
+      ITTask(
+        id: 't1',
+        title: 'Unassigned Backlog Item',
+        projectId: 'p1',
+        projectName: 'ERP',
+        description: 'General task',
+        status: ITTaskStatus.todo,
+        severity: ITSeverity.p3,
+        percentComplete: 0,
+        assigneeId: '',
+        assigneeName: '',
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp(tasks));
+    await tester.pumpAndSettle();
+
+    // On Assigned to Me tab, should show empty state with helper
+    expect(find.text('No tasks assigned to you'), findsOneWidget);
+    expect(find.text('View All Tasks'), findsOneWidget);
+
+    // Tap "View All Tasks"
+    await tester.tap(find.text('View All Tasks'));
+    await tester.pumpAndSettle();
+
+    // Now should be on All Tasks and display the backlog item
+    expect(find.text('Unassigned Backlog Item'), findsOneWidget);
   });
 }

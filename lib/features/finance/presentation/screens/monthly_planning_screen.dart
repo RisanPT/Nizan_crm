@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/finance/data/month_end.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/month_year_picker.dart';
@@ -125,6 +127,7 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    final viewOnly = Access.of(ref.watch(authSessionProvider)).isViewOnly;
     final async = ref.watch(monthlyTargetProvider(_key));
     // Populate fields once per month load.
     async.whenData((t) {
@@ -165,7 +168,10 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
               ),
             ]),
             18.h,
-            SizedBox(
+            if (viewOnly)
+              Text('You can look at the plan; changing it is for the finance team.', key: const Key('plan_view_only'), style: TextStyle(color: crm.textSecondary))
+            else
+              SizedBox(
               height: 48,
               child: FilledButton.icon(
                 onPressed: _saving ? null : _save,
@@ -301,6 +307,7 @@ class _MonthlyPlanningScreenState extends ConsumerState<MonthlyPlanningScreen> {
               ),
             ]),
           ),
+        if (!Access.of(ref.read(authSessionProvider)).isViewOnly)
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(

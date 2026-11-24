@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/auth/app_role.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/accounts/controllers/work_profit_controller.dart';
 import 'package:nizan_crm/features/accounts/data/accounts_dashboard_summary.dart';
 import 'package:nizan_crm/features/accounts/data/work_profit.dart';
 import 'package:nizan_crm/features/ceo/data/ceo_inbox.dart';
+import 'package:nizan_crm/features/ceo/data/decision_models.dart';
 import 'package:nizan_crm/features/ceo/presentation/screens/ceo_home_screen.dart';
 import 'package:nizan_crm/features/ceo/services/ceo_service.dart';
+import 'package:nizan_crm/features/ceo/services/decision_service.dart';
 import 'package:nizan_crm/features/dashboard/controllers/dashboard_analytics_provider.dart';
 import 'package:nizan_crm/features/dashboard/data/dashboard_analytics.dart';
 import 'package:nizan_crm/features/dashboard/presentation/widgets/dashboard_widgets.dart' show kDashBad, kDashGood;
@@ -24,20 +30,96 @@ import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/features/it/services/okr_service.dart';
 import 'package:nizan_crm/features/marketing/services/marketing_insights_service.dart';
 
-// The CEO's home: what needs a decision, what is waiting with the team, and the company at a glance. Each card loads and
-// fails on its own.
+// The leadership home: what needs a decision (real cards), what is stuck with the team, what was decided, and the company at a
+// glance. Each section loads and fails on its own.
 
-CeoInbox _inbox() => CeoInbox.fromJson({
+/// One request as the server sends it.
+Map<String, dynamic> _req(
+  String id, {
+  String kind = 'spend_expense',
+  String title = 'Studio ring lights',
+  num? amount = 80000,
+  String status = 'pending',
+  bool canDecide = true,
+  bool checked = true,
+  Map<String, dynamic>? decision,
+  String? deferredUntil,
+}) =>
+    {
+      'id': id,
+      'kind': kind,
+      'status': status,
+      'open': status == 'pending' || status == 'deferred',
+      'title': title,
+      'subtitle': 'Lights & Co',
+      'department': 'Sales',
+      'amount': amount,
+      'requestedBy': {'id': 'u1', 'name': 'Saleem', 'role': 'sales'},
+      'requestedAt': '2026-11-09T10:00:00.000Z',
+      if (checked) 'checkedBy': {'id': 'u2', 'name': 'Dev', 'role': 'accounts', 'label': 'Accounts'},
+      if (checked) 'checkedAt': '2026-11-09T12:00:00.000Z',
+      'checkNote': checked ? 'Bills match' : '',
+      'waitingDays': 3,
+      'deferredUntil': deferredUntil,
+      'decision': decision,
+      'summary': [
+        {'label': 'Vendor', 'value': 'Lights & Co'}
+      ],
+      'attachments': [],
+      'canDecide': canDecide && (status == 'pending' || status == 'deferred'),
+    };
+
+CeoInbox _inbox({List<Map<String, dynamic>>? preview, int logOpen = 1, List<Map<String, dynamic>>? recent}) => CeoInbox.fromJson({
       'needsYou': 3,
       'withTeam': 7,
       'oldestTeamDays': 9,
       'items': [
-        {'key': 'project_proposals', 'owner': 'you', 'label': 'Project proposals to decide', 'count': 2, 'oldestDays': 3, 'route': '/projects'},
-        {'key': 'ceo_decisions', 'owner': 'you', 'label': 'Open CEO decisions', 'count': 1, 'amount': 800000, 'oldestDays': 1, 'route': '/ceo/decisions'},
+        {'key': 'decision_requests', 'owner': 'you', 'label': 'Checked by the team, waiting for your decision', 'count': 2, 'oldestDays': 3, 'route': '/ceo/decisions'},
+        {'key': 'ceo_decisions', 'owner': 'you', 'label': 'Open CEO decisions', 'count': logOpen, 'route': '/ceo/decisions'},
         {'key': 'hr_approvals', 'owner': 'team', 'label': 'HR approvals (leave, claims, revisions)', 'withWhom': 'HR / managers', 'count': 5, 'oldestDays': 9},
         {'key': 'admin_expenses', 'owner': 'team', 'label': 'Department expenses', 'withWhom': 'Accounts', 'count': 2, 'amount': 1200, 'oldestDays': 1, 'route': '/accounts/dashboard'},
       ],
+      'decisions': {
+        'open': 2,
+        'pending': 2,
+        'deferred': 0,
+        'byKind': {'spend_expense': 1, 'hiring_plan': 1},
+        'oldestDays': 3,
+        'preview': preview ??
+            [
+              _req('r1'),
+              _req('r2', kind: 'hiring_plan', title: 'Senior Stylist × 3', amount: null),
+            ],
+      },
+      'recent': recent ??
+          [
+            _req('d1', title: 'New van', status: 'approved', canDecide: false, decision: {'by': {'id': 'u9', 'name': 'Anita', 'role': 'ceo'}, 'at': '2026-11-10T09:00:00.000Z', 'note': 'Go'}),
+          ],
+      'log': {'open': logOpen},
     });
+
+/// Records what the leader did, instead of calling a server.
+class _FakeDecisions extends DecisionService {
+  _FakeDecisions() : super(Dio());
+  final calls = <({String id, DecisionAction action, String note, DateTime? until})>[];
+  DecisionConflict? refuse;
+
+  @override
+  Future<DecisionRequest> decide(String id, DecisionAction action, {String note = '', DateTime? until}) async {
+    if (refuse != null) throw refuse!;
+    calls.add((id: id, action: action, note: note, until: until));
+    return DecisionRequest.fromJson(_req(id, status: action == DecisionAction.approve ? 'approved' : 'rejected', canDecide: false));
+  }
+
+  @override
+  Future<DecisionRequest> one(String id) async => DecisionRequest.fromJson({..._req(id), 'history': [
+        {'action': 'requested', 'at': '2026-11-09T10:00:00.000Z', 'by': {'name': 'Saleem'}, 'note': ''},
+        {'action': 'checked', 'at': '2026-11-09T12:00:00.000Z', 'by': {'name': 'Dev'}, 'note': 'Bills match'},
+      ]});
+
+  @override
+  Future<DecisionQueue> queue(DecisionFilter f, {String? cursor}) async => const DecisionQueue(items: []);
+}
 
 List<CeoSignal> _signals() => [
       CeoSignal.fromJson({'key': 'low_stock', 'label': 'Products at or below their stock threshold', 'value': 12, 'severity': 'alert'}),
@@ -120,6 +202,9 @@ List<OKRModel> _okrs() => [
     ];
 
 class _Data {
+  int inboxLoads = 0;
+  _FakeDecisions? fake;
+  Access? access;
   CeoInbox? inbox;
   List<CeoSignal>? signals;
   bool signalsFail = false;
@@ -141,7 +226,12 @@ Future<void> _pump(
   addTearDown(tester.view.reset);
   final d = data ?? _Data(inbox: _inbox(), signals: _signals(), work: _work());
   final overrides = <Override>[
-    ceoInboxProvider.overrideWith((ref) async => d.inbox ?? _inbox()),
+    decisionServiceProvider.overrideWithValue(d.fake ?? _FakeDecisions()),
+    if (d.access != null) effectiveAccessProvider.overrideWithValue(d.access!),
+    ceoInboxProvider.overrideWith((ref) async {
+      d.inboxLoads++;
+      return d.inbox ?? _inbox();
+    }),
     ceoSignalsProvider.overrideWith((ref) async => d.signalsFail ? throw Exception('boom') : (d.signals ?? _signals())),
     accountsDashboardSummaryProvider.overrideWith((ref, key) async => _summary()),
     monthEndReviewProvider.overrideWith((ref, key) async => d.reviewFail ? throw Exception('review down') : _review(pct: d.targetPct)),
@@ -163,7 +253,7 @@ Future<void> _pump(
             routerConfig: GoRouter(routes: [
               GoRoute(path: '/', builder: (_, _) => home),
               GoRoute(path: '/projects', builder: (_, _) => const Scaffold(body: Text('PROJECTS SCREEN'))),
-              GoRoute(path: '/ceo/decisions', builder: (_, _) => const Scaffold(body: Text('DECISIONS SCREEN'))),
+              GoRoute(path: '/ceo/decisions', builder: (_, state) => Scaffold(body: Text('DECISIONS SCREEN ${state.uri.queryParameters['tab'] ?? 'waiting'}'))),
               GoRoute(path: '/accounts/dashboard', builder: (_, _) => const Scaffold(body: Text('ACCOUNTS SCREEN'))),
               GoRoute(path: '/marketing/insights', builder: (_, _) => const Scaffold(body: Text('INSIGHTS SCREEN'))),
               GoRoute(path: '/accounts/work-profit', builder: (_, _) => const Scaffold(body: Text('WORK PROFIT SCREEN'))),
@@ -223,82 +313,270 @@ void main() {
   });
 
   group('needs your decision', () {
-    testWidgets('the CEO\'s own decisions, with how many and how old; the team\'s separately, with who has them', (tester) async {
+    testWidgets('each thing the team has checked is a card: what, how much, who asked, who verified it — with the three choices on it', (tester) async {
       await _pump(tester);
       expect(find.text('Needs your decision'), findsOneWidget);
-      expect(find.text('Project proposals to decide'), findsOneWidget);
-      expect(find.text('Open CEO decisions'), findsOneWidget);
-      expect(_text(tester, find.descendant(of: _k('ceo_count_project_proposals'), matching: find.byType(Text))), '2');
-      expect(find.textContaining('oldest 3 days'), findsOneWidget);
-      expect(find.textContaining('₹8.0L'), findsOneWidget); // the capex decision's amount
+      expect(_k('ceo_decision_r1'), findsOneWidget);
+      expect(find.text('Studio ring lights'), findsOneWidget);
+      expect(_text(tester, _k('ceo_decision_amount_r1')), '₹80,000');
+      expect(find.text('Senior Stylist × 3'), findsOneWidget);
+      expect(_k('ceo_decision_amount_r2'), findsNothing, reason: 'a hiring plan has no amount');
+      expect(find.text('Verified by Accounts (Dev)'), findsNWidgets(2));
+      expect(find.text('Asked by Saleem · 3 d'), findsNWidgets(2));
+      expect(find.textContaining('Bills match'), findsNWidgets(2));
+      for (final id in ['r1', 'r2']) {
+        expect(_k('ceo_approve_$id'), findsOneWidget);
+        expect(_k('ceo_reject_$id'), findsOneWidget);
+        expect(_k('ceo_defer_$id'), findsOneWidget);
+      }
+      expect(_text(tester, _k('ceo_needs_count')), '3');
+      expect(find.textContaining('The longest has waited 3 days'), findsOneWidget);
+    });
 
+    testWidgets('a proposal nobody has checked says nothing about verification', (tester) async {
+      await _pump(tester, data: _Data(inbox: _inbox(preview: [_req('p1', kind: 'project_proposal', title: 'Open Bangalore', checked: false, amount: null)]), signals: _signals(), work: _work()));
+      expect(find.text('Open Bangalore'), findsOneWidget);
+      expect(_k('ceo_verified_p1'), findsNothing);
+    });
+
+    testWidgets('approving: a note is optional; the decision is sent and confirmed', (tester) async {
+      final fake = _FakeDecisions();
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = fake);
+      await tester.tap(_k('ceo_approve_r1'));
+      await tester.pumpAndSettle();
+      expect(_k('ceo_note_field'), findsOneWidget);
+      await tester.tap(_k('ceo_note_submit')); // no note typed
+      await tester.pumpAndSettle();
+      expect(fake.calls.single.id, 'r1');
+      expect(fake.calls.single.action, DecisionAction.approve);
+      expect(fake.calls.single.note, '');
+      expect(_k('ceo_decision_done'), findsOneWidget);
+    });
+
+    testWidgets('after a decision (and after losing a race) the desk is read again, so the card is replaced by what really happened', (tester) async {
+      final d = _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = _FakeDecisions();
+      await _pump(tester, data: d);
+      final before = d.inboxLoads;
+      await tester.tap(_k('ceo_approve_r1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_k('ceo_note_submit'));
+      await tester.pumpAndSettle();
+      expect(d.inboxLoads, greaterThan(before));
+      final lost = _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = (_FakeDecisions()..refuse = const DecisionConflict(code: 'ALREADY_DECIDED', message: 'Already rejected by Dev'));
+      await _pump(tester, data: lost);
+      final beforeLost = lost.inboxLoads;
+      await tester.tap(_k('ceo_approve_r1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_k('ceo_note_submit'));
+      await tester.pumpAndSettle();
+      expect(lost.inboxLoads, greaterThan(beforeLost));
+    });
+
+    testWidgets('rejecting needs a reason: the button stays off until there is one, and the quick reasons fill it in', (tester) async {
+      final fake = _FakeDecisions();
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = fake);
+      await tester.tap(_k('ceo_reject_r1'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<FilledButton>(_k('ceo_note_submit')).onPressed, isNull);
+      await tester.enterText(_k('ceo_note_field'), 'no');
+      await tester.pump();
+      expect(tester.widget<FilledButton>(_k('ceo_note_submit')).onPressed, isNull, reason: '2 characters is not a reason');
+      await tester.tap(_k('ceo_reason_0'));
+      await tester.pump();
+      expect(tester.widget<FilledButton>(_k('ceo_note_submit')).onPressed, isNotNull);
+      await tester.tap(_k('ceo_note_submit'));
+      await tester.pumpAndSettle();
+      expect(fake.calls.single.action, DecisionAction.reject);
+      expect(fake.calls.single.note, 'Not in the budget');
+    });
+
+    testWidgets('backing out of the sheet decides nothing', (tester) async {
+      final fake = _FakeDecisions();
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = fake);
+      await tester.tap(_k('ceo_reject_r1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_k('ceo_note_cancel'));
+      await tester.pumpAndSettle();
+      expect(fake.calls, isEmpty);
+    });
+
+    testWidgets('deferring: tomorrow by default, or a week; the date goes with the decision', (tester) async {
+      final fake = _FakeDecisions();
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = fake);
+      await tester.tap(_k('ceo_defer_r1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_k('ceo_defer_week'));
+      await tester.pump();
+      await tester.tap(_k('ceo_note_submit'));
+      await tester.pumpAndSettle();
+      final call = fake.calls.single;
+      expect(call.action, DecisionAction.defer);
+      final days = call.until!.difference(DateTime.now()).inDays;
+      expect(days, inInclusiveRange(6, 7));
+    });
+
+    testWidgets('the other leader decided first: the message says who, and what — nothing is recorded twice', (tester) async {
+      final fake = _FakeDecisions()
+        ..refuse = const DecisionConflict(
+          code: 'ALREADY_DECIDED',
+          message: 'Already approved by Dev (Executive Director): “Fine”',
+          decision: DecisionOutcome(by: DecisionPerson(name: 'Dev', role: 'executive_director'), note: 'Fine'),
+        );
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..fake = fake);
+      await tester.tap(_k('ceo_approve_r1'));
+      await tester.pumpAndSettle();
+      await tester.tap(_k('ceo_note_submit'));
+      await tester.pumpAndSettle();
+      expect(fake.calls, isEmpty);
+      expect(_k('ceo_decision_done'), findsNothing);
+      expect(find.textContaining('Already approved by Dev (Executive Director)'), findsOneWidget);
+    });
+
+    testWidgets('tapping a card opens what the team attached and its history', (tester) async {
+      await _pump(tester);
+      await tester.tap(_k('ceo_decision_open_r1'));
+      await tester.pumpAndSettle();
+      expect(_k('ceo_detail_title'), findsOneWidget);
+      expect(find.text('Lights & Co'), findsWidgets);
+      expect(find.textContaining('Asked by Saleem'), findsWidgets);
+      expect(find.textContaining('Checked by Dev'), findsOneWidget);
+      expect(_k('ceo_detail_approve'), findsOneWidget);
+    });
+
+    testWidgets('a decision put off to a later date is marked, and not offered as a new one', (tester) async {
+      final later = DateTime.now().add(const Duration(days: 4)).toIso8601String();
+      await _pump(tester, data: _Data(inbox: _inbox(preview: [_req('r1', status: 'deferred', deferredUntil: later), _req('r2', title: 'Second')]), signals: _signals(), work: _work()));
+      expect(_k('ceo_decision_r1'), findsNothing);
+      expect(_k('ceo_decision_r2'), findsOneWidget);
+    });
+
+    testWidgets('your own decisions log is one line with a count, linking to it', (tester) async {
+      await _pump(tester, withRoutes: true);
+      expect(find.text('1 open entry in your decisions log'), findsOneWidget);
+      await tester.ensureVisible(_k('ceo_log_open'));
+      await tester.tap(_k('ceo_log_open'));
+      await tester.pumpAndSettle();
+      expect(find.text('DECISIONS SCREEN log'), findsOneWidget);
+    });
+
+    testWidgets('"See all" goes to the Decisions screen', (tester) async {
+      await _pump(tester, withRoutes: true);
+      await tester.ensureVisible(_k('ceo_see_all_decisions'));
+      await tester.tap(_k('ceo_see_all_decisions'));
+      await tester.pumpAndSettle();
+      expect(find.text('DECISIONS SCREEN waiting'), findsOneWidget);
+    });
+
+    testWidgets('nothing waiting for the leader: says so, kindly', (tester) async {
+      await _pump(tester, data: _Data(inbox: CeoInbox.fromJson({'items': [], 'needsYou': 0, 'withTeam': 0, 'oldestTeamDays': 0}), signals: _signals(), work: _work()));
+      expect(_k('ceo_nothing_for_you'), findsOneWidget);
+      expect(find.text('Waiting with the team'), findsNothing);
+    });
+  });
+
+  group('waiting with the team', () {
+    testWidgets('what other people are handling, with who has it and how long', (tester) async {
+      await _pump(tester);
       expect(find.text('Waiting with the team'), findsOneWidget);
-      expect(find.textContaining('The longest has waited 9 days'), findsOneWidget);
-      expect(find.textContaining('with HR / managers'), findsOneWidget);
+      expect(find.textContaining('The longest has waited 9 days'), findsWidgets);
+      expect(find.textContaining('with HR / managers'), findsWidgets);
       expect(find.textContaining('with Accounts'), findsOneWidget);
-      expect(find.textContaining('oldest 9 days'), findsOneWidget);
+      expect(find.textContaining('oldest 9 days'), findsWidgets);
     });
 
     testWidgets('an approval that has waited 3 days or more is picked out in amber; a fresh one is not', (tester) async {
       await _pump(tester);
-      Color? chip(String key) => (tester.widget<Container>(_k('ceo_count_$key')).decoration as BoxDecoration).color;
-      // HR approvals: 9 days. Department expenses: 1 day.
+      // (the stuck ones are listed twice — under "Needs attention" and under the team — both are amber)
+      Color? chip(String key) => (tester.widgetList<Container>(_k('ceo_count_$key')).first.decoration as BoxDecoration).color;
       expect(chip('hr_approvals')!.toARGB32() & 0x00FFFFFF, 0xB7791F);
       expect(chip('admin_expenses')!.toARGB32() & 0x00FFFFFF, isNot(0xB7791F));
     });
 
-    testWidgets('a decision with a screen is a link; an approval nobody on the CEO login can open is not', (tester) async {
+    testWidgets('an approval with a screen is a link; one nobody on this login can open is not', (tester) async {
       await _pump(tester);
-      expect(_k('ceo_item_project_proposals'), findsOneWidget);
-      expect(_k('ceo_item_ceo_decisions'), findsOneWidget);
       expect(_k('ceo_item_admin_expenses'), findsOneWidget);
-      expect(_k('ceo_item_hr_approvals'), findsNothing); // no route: just shown, so a stuck approval is seen
+      expect(_k('ceo_item_hr_approvals'), findsNothing);
     });
 
-    testWidgets('nothing waiting for the CEO: says so, kindly', (tester) async {
-      await _pump(tester, data: _Data(inbox: CeoInbox.fromJson({'items': [], 'needsYou': 0, 'withTeam': 0, 'oldestTeamDays': 0})));
-      expect(_k('ceo_nothing_for_you'), findsOneWidget);
-      expect(find.text('Waiting with the team'), findsNothing);
+    testWidgets('the stuck ones (3 days or more) are also in "Needs attention"', (tester) async {
+      await _pump(tester);
+      expect(find.text('Needs attention'), findsOneWidget);
+      expect(find.text('HR approvals (leave, claims, revisions)'), findsNWidgets(2)); // the attention list and the team list
+      expect(find.text('Department expenses'), findsOneWidget, reason: 'waited 1 day: only in the team list, not "Needs attention"');
+    });
+  });
+
+  group('recently decided', () {
+    testWidgets('the last decisions, by whichever leader, with who and when', (tester) async {
+      await _pump(tester);
+      expect(find.text('Recently decided'), findsOneWidget);
+      expect(find.text('New van'), findsOneWidget);
+      expect(find.textContaining('Anita (CEO) · 10 Nov'), findsOneWidget);
     });
 
-    testWidgets('tapping a decision opens its screen', (tester) async {
-      await _pump(tester, withRoutes: true);
-      await tester.tap(_k('ceo_item_project_proposals'));
-      await tester.pumpAndSettle();
-      expect(find.text('PROJECTS SCREEN'), findsOneWidget);
+    testWidgets('nothing decided yet: no empty box', (tester) async {
+      await _pump(tester, data: _Data(inbox: _inbox(recent: []), signals: _signals(), work: _work()));
+      expect(find.text('Recently decided'), findsNothing);
+    });
+  });
+
+  group('the header', () {
+    testWidgets('says who is signed in: the Executive Director sees that title, the CEO theirs', (tester) async {
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..access = const Access(AppRole.ceo, {}, roleKey: 'executive_director'));
+      expect(find.text('Executive Director'), findsOneWidget);
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..access = const Access(AppRole.ceo, {}, roleKey: 'ceo'));
+      expect(find.text('CEO'), findsOneWidget);
     });
 
-    testWidgets('…and the CEO Decisions one goes to the decisions log', (tester) async {
-      await _pump(tester, withRoutes: true);
-      await tester.tap(_k('ceo_item_ceo_decisions'));
-      await tester.pumpAndSettle();
-      expect(find.text('DECISIONS SCREEN'), findsOneWidget);
+    testWidgets('says when it was last updated', (tester) async {
+      await _pump(tester);
+      expect(_k('ceo_updated'), findsOneWidget);
+    });
+  });
+
+  group('the pulse', () {
+    testWidgets('revenue, profit, cash and what clients owe — four numbers, each a link', (tester) async {
+      await _pump(tester);
+      for (final k in ['revenue', 'profit', 'cash', 'owed']) {
+        expect(_k('ceo_pulse_$k'), findsOneWidget, reason: k);
+      }
+      expect(find.descendant(of: _k('ceo_pulse_revenue'), matching: find.text('₹8.2L')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_revenue'), matching: find.text('82% of target')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_profit'), matching: find.text('₹2.1L')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_cash'), matching: find.text('₹24.5L')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_owed'), matching: find.text('₹6.4L')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_owed'), matching: find.text('₹2.1L overdue')), findsOneWidget);
+    });
+
+    testWidgets('a source that is down shows a dash in its tile; the others still show', (tester) async {
+      await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..reviewFail = true, someSourceIsDown: true);
+      expect(find.descendant(of: _k('ceo_pulse_revenue'), matching: find.text('—')), findsOneWidget);
+      expect(find.descendant(of: _k('ceo_pulse_cash'), matching: find.text('₹24.5L')), findsOneWidget);
     });
   });
 
   group('money', () {
-    testWidgets('revenue and profit against their targets, runway, cash and what is owed', (tester) async {
+    testWidgets('runway and what is overdue (revenue, profit, cash and what is owed are in the pulse, not repeated here)', (tester) async {
       await _pump(tester);
       expect(find.text('Money'), findsOneWidget);
-      expect(find.text('₹8.2L'), findsWidgets); // revenue (also on the sales card)
-      expect(find.textContaining('82% of ₹10.0L target'), findsOneWidget);
-      expect(find.text('₹2.1L'), findsWidgets); // profit (and the overdue figure shares the format)
-      expect(find.textContaining('70% of ₹3.0L target'), findsOneWidget);
       expect(find.text('9.8 mo'), findsOneWidget);
       expect(find.textContaining('burn ₹2.5L/mo'), findsOneWidget);
-      expect(find.text('₹24.5L'), findsOneWidget); // cash + bank
-      expect(find.text('₹6.4L'), findsOneWidget); // clients owe
       expect(find.text('Over 90 days'), findsOneWidget);
       expect(find.textContaining('chase these first'), findsOneWidget);
+      expect(find.text('We owe'), findsOneWidget);
+      expect(find.text('Cash + bank'), findsNothing, reason: 'it is in the pulse');
+      expect(find.text('CASH + BANK'), findsOneWidget, reason: 'only as the pulse tile');
+      expect(find.text('CLIENTS OWE'), findsOneWidget);
+      expect(find.text('Clients owe'), findsNothing);
     });
 
     testWidgets('under target part-way through the month is not red; once the target is reached it is green', (tester) async {
       Color colourOf(String text) => tester.widget<Text>(find.text(text)).style!.color!;
       await _pump(tester);
-      expect(colourOf('82% of ₹10.0L target'), isNot(kDashBad));
-      expect(colourOf('82% of ₹10.0L target'), isNot(kDashGood));
+      expect(colourOf('82% of target'), isNot(kDashBad));
+      expect(colourOf('82% of target'), isNot(kDashGood));
       await _pump(tester, data: _Data(inbox: _inbox(), signals: _signals(), work: _work())..targetPct = 104);
-      expect(colourOf('104% of ₹10.0L target'), kDashGood);
+      expect(colourOf('104% of target'), kDashGood);
     });
 
     testWidgets('the works that lose money, worst first, and how many in all', (tester) async {
@@ -377,8 +655,8 @@ void main() {
     testWidgets('the watch list, worst first, with how each moved; an alert is red', (tester) async {
       await _pump(tester);
       expect(find.text('Watch list'.toUpperCase()), findsOneWidget);
-      expect(find.text('Products at or below their stock threshold'), findsOneWidget);
-      final dot = tester.widget<Container>(_k('ceo_signal_dot_low_stock'));
+      expect(find.text('Products at or below their stock threshold'), findsNWidgets(2)); // under "Needs attention" and in the list
+      final dot = tester.widgetList<Container>(_k('ceo_signal_dot_low_stock')).last;
       expect((dot.decoration as BoxDecoration).color, const Color(0xFFB42318));
       expect(find.textContaining('−3 on before'), findsOneWidget); // cancellations 2 vs 5
       expect(_k('ceo_signal_nps'), findsOneWidget); // has a screen
@@ -455,17 +733,11 @@ void main() {
       final d = _Data(inbox: _inbox(), signals: _signals(), work: _work());
       await _pump(tester, data: d);
       expect(find.text('Hire a trainer'), findsNothing);
-      d.inbox = CeoInbox.fromJson({
-        'needsYou': 1,
-        'withTeam': 0,
-        'oldestTeamDays': 0,
-        'items': [
-          {'key': 'ceo_decisions', 'owner': 'you', 'label': 'Hire a trainer', 'count': 1, 'route': '/ceo/decisions'}
-        ],
-      });
+      d.inbox = _inbox(preview: [_req('r9', kind: 'hiring_plan', title: 'Hire a trainer', amount: null)]);
       await tester.tap(_k('ceo_refresh'));
       await tester.pumpAndSettle();
       expect(find.text('Hire a trainer'), findsOneWidget);
+      expect(find.text('Studio ring lights'), findsNothing);
     });
   });
 }

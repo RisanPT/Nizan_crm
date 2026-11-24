@@ -170,55 +170,6 @@ class CeoInboxRow extends StatelessWidget {
   }
 }
 
-class CeoInboxCards extends StatelessWidget {
-  const CeoInboxCards({super.key, required this.inbox});
-  final CeoInbox inbox;
-
-  @override
-  Widget build(BuildContext context) {
-    final crm = context.crmColors;
-    final mine = inbox.mine;
-    final team = inbox.team;
-    final nothing = Row(children: [
-      const Icon(Icons.check_circle_outline_rounded, color: kDashGood, size: 20),
-      const SizedBox(width: 8),
-      Expanded(child: Text('Nothing is waiting for your decision.', key: const Key('ceo_nothing_for_you'), style: TextStyle(color: crm.textSecondary, fontSize: 13))),
-    ]);
-
-    Widget list(List<CeoInboxItem> items) => Column(children: [
-          for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: crm.border.faded(1.5)),
-            CeoInboxRow(item: items[i]),
-          ],
-        ]);
-
-    Widget count(int n, Color c) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-          decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
-          child: Text('$n', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: c)),
-        );
-
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      CeoCard(
-        title: 'Needs your decision',
-        icon: Icons.gavel_rounded,
-        badge: inbox.needsYou > 0 ? count(inbox.needsYou, crm.primary) : null,
-        child: mine.isEmpty ? nothing : list(mine),
-      ),
-      if (team.isNotEmpty) ...[
-        const SizedBox(height: 14),
-        CeoCard(
-          title: 'Waiting with the team',
-          subtitle: inbox.oldestTeamDays >= 3 ? 'The longest has waited ${inbox.oldestTeamDays} days' : 'Approvals other people are handling',
-          icon: Icons.hourglass_bottom_rounded,
-          badge: count(inbox.withTeam, inbox.oldestTeamDays >= 3 ? kCeoWatch : crm.textSecondary),
-          child: list(team),
-        ),
-      ],
-    ]);
-  }
-}
-
 // ── the watch list ───────────────────────────────────────────────────────────
 
 class CeoSignalRow extends StatelessWidget {

@@ -657,7 +657,9 @@ Future<Project?> showCostDecisionDialog(
                             .read(projectServiceProvider)
                             .decideCost(id, approve: approve, approvedAmount: approve ? given : null, note: note.text);
                         if (ctx.mounted) Navigator.pop(ctx, saved);
-                        messenger.showSnackBar(SnackBar(content: Text(approve ? 'Cost approved' : 'Sent back to the project manager')));
+                        // still pending after approving: the increase is above the limit, so the CEO / Executive Director decide
+                        final held = approve && saved.costStatus == 'pending';
+                        messenger.showSnackBar(SnackBar(content: Text(held ? 'Checked. The CEO / Executive Director will decide on this cost.' : (approve ? 'Cost approved' : 'Sent back to the project manager'))));
                       } catch (e) {
                         setD(() => busy = false);
                         messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/it/domain/models/okr_model.dart';
@@ -96,6 +98,8 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
+    // the CEO / Executive Director look; the server refuses every change from them, so no way to start one is offered
+    final viewOnly = Access.of(ref.watch(authSessionProvider)).isViewOnly;
     final asyncOkrs = ref.watch(projectOKRsNotifierProvider(widget.projectId));
     final employees = ref.watch(projectEmployeesProvider(widget.projectId));
 
@@ -178,7 +182,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                         onChanged: (v) => setState(() => _searchQuery = v.trim()),
                       ),
                     );
-                    final newButton = FilledButton.icon(
+                    final Widget newButton = viewOnly ? const SizedBox.shrink() : FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: crm.primary,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -210,7 +214,7 @@ class _ITOkrViewState extends ConsumerState<ITOkrView> {
                       children: [
                         modes,
                         const SizedBox(width: 8),
-                        IconButton(icon: const Icon(Icons.add_circle_outline, size: 18), tooltip: 'Add Objective', onPressed: () => _openEditor()),
+                        if (!viewOnly) IconButton(icon: const Icon(Icons.add_circle_outline, size: 18), tooltip: 'Add Objective', onPressed: () => _openEditor()),
                         const Spacer(),
                         SizedBox(width: 180, child: search),
                         const SizedBox(width: 10),

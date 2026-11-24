@@ -38,7 +38,7 @@ Project _p(
 }) => Project.fromJson({
   '_id': id,
   'name': 'Project $id',
-  if (cost != null) 'cost': cost,
+  'cost': ?cost,
   if (cost != null) 'costStatus': 'approved',
   'status': status,
   'targetDepartment': dept,

@@ -53,6 +53,12 @@ class _RolesPermissionsScreenState
         if (_selectedRoleId != selected.id) {
           _selectedRoleId = selected.id;
           _draft = selected.permissions.toSet();
+          if (_draft.contains('consultations')) _draft.add('stylist');
+          if (_draft.contains('stylist')) _draft.add('consultations');
+          for (final sub in ['calendar', 'notes', 'reports', 'clients', 'today']) {
+            if (_draft.contains('consultations.$sub')) _draft.add('stylist.$sub');
+            if (_draft.contains('stylist.$sub')) _draft.add('consultations.$sub');
+          }
         }
 
         final list = _roleList(roles, selected, crm);
@@ -276,8 +282,15 @@ class _RolesPermissionsScreenState
               const Spacer(),
               if (dirty)
                 TextButton(
-                  onPressed: () =>
-                      setState(() => _draft = role.permissions.toSet()),
+                  onPressed: () => setState(() {
+                    _draft = role.permissions.toSet();
+                    if (_draft.contains('consultations')) _draft.add('stylist');
+                    if (_draft.contains('stylist')) _draft.add('consultations');
+                    for (final sub in ['calendar', 'notes', 'reports', 'clients', 'today']) {
+                      if (_draft.contains('consultations.$sub')) _draft.add('stylist.$sub');
+                      if (_draft.contains('stylist.$sub')) _draft.add('consultations.$sub');
+                    }
+                  }),
                   child: const Text('Reset'),
                 ),
               8.w,
@@ -469,9 +482,16 @@ class _RolesPermissionsScreenState
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final perms = _draft.toSet();
+      if (perms.contains('stylist')) perms.add('consultations');
+      if (perms.contains('consultations')) perms.add('stylist');
+      for (final sub in ['calendar', 'notes', 'reports', 'clients', 'today']) {
+        if (perms.contains('stylist.$sub')) perms.add('consultations.$sub');
+        if (perms.contains('consultations.$sub')) perms.add('stylist.$sub');
+      }
       await ref
           .read(roleServiceProvider)
-          .updateRole(role.id, permissions: _draft.toList());
+          .updateRole(role.id, permissions: perms.toList());
       ref.refreshData.roles();
       messenger.showSnackBar(
         SnackBar(content: Text('${role.label} permissions updated.')),

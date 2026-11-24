@@ -425,7 +425,14 @@ class CeoDecision {
   final double amount;
   final DateTime? dueDate;
 
+  /// Who settled it, when, and why — kept when an entry is reopened (the server keeps the history).
+  final String decidedByName, decisionNote;
+  final DateTime? decidedAt;
+
   const CeoDecision({
+    this.decidedByName = '',
+    this.decisionNote = '',
+    this.decidedAt,
     this.id = '',
     required this.month,
     required this.year,
@@ -451,6 +458,9 @@ class CeoDecision {
         owner: j['owner'] as String? ?? '',
         amount: _d(j['amount']),
         dueDate: DateTime.tryParse(j['dueDate']?.toString() ?? '')?.toLocal(),
+        decidedByName: j['decidedByName'] as String? ?? '',
+        decisionNote: j['decisionNote'] as String? ?? '',
+        decidedAt: DateTime.tryParse(j['decidedAt']?.toString() ?? '')?.toLocal(),
       );
 
   Map<String, dynamic> toJson() => {

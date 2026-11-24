@@ -236,8 +236,9 @@ class _AdministrativeExpensesScreenState
     }
     try {
       final service = ref.read(adminExpenseServiceProvider);
+      AdminExpense updated;
       try {
-        await service.verifyAdminExpense(expense.id, status, money: money);
+        updated = await service.verifyAdminExpense(expense.id, status, money: money);
       } catch (e) {
         // Taking its project past the budget the finance head approved: only the finance head may approve it, and says why.
         final over = OverBudgetRefusal.of(e);
@@ -245,14 +246,18 @@ class _AdministrativeExpensesScreenState
         if (!mounted) return;
         final reason = await showOverBudgetDialog(context, over);
         if (reason == null) return;
-        await service.verifyAdminExpense(expense.id, status, money: money, overBudgetReason: reason);
+        updated = await service.verifyAdminExpense(expense.id, status, money: money, overBudgetReason: reason);
       }
       ref.refreshData.expenses();
+      // Approved but still pending: it is above the limit set in Decision rules — Accounts' approval was the check, and it now
+      // waits for the CEO / Executive Director.
+      final held = status == 'approved' && updated.status == 'pending';
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Expense marked as $status'),
-            backgroundColor: status == 'approved' ? Colors.green : Colors.red,
+            key: held ? const Key('expense_sent_to_leadership') : null,
+            content: Text(held ? 'Checked. It is above the limit, so it waits for the CEO / Executive Director to decide.' : 'Expense marked as $status'),
+            backgroundColor: held ? const Color(0xFFB7791F) : (status == 'approved' ? Colors.green : Colors.red),
           ),
         );
       }

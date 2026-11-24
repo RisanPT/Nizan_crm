@@ -27,16 +27,16 @@ class ITMyTasksScreen extends ConsumerStatefulWidget {
 enum _TopViewMode { overview, allTasks, byProject, byPriority, byStatus }
 enum _Timeframe { monthly, quarterly, yearly }
 
-enum _Tab { all, assignedToMe, createdByMe, watching }
+enum _Tab { assignedToMe, all, createdByMe, watching }
 
-enum _SortField { title, project, priority, dueDate, progress, status }
+enum _SortField { title, project, assignee, priority, dueDate, progress, status }
 
 class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTickerProviderStateMixin {
   _TopViewMode _topViewMode = _TopViewMode.overview;
   _Timeframe _timeframe = _Timeframe.monthly;
   DateTime _selectedMonth = DateTime(2026, 11, 1);
 
-  _Tab _tab = _Tab.all;
+  _Tab _tab = _Tab.assignedToMe;
   _SortField _sortField = _SortField.dueDate;
   bool _sortAsc = true;
   String _searchQuery = '';
@@ -383,8 +383,11 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
 
     final today = DateTime.now();
     final todayMidnight = DateTime(today.year, today.month, today.day);
-    final myEmployeeId = ref.read(authSessionProvider)?.employeeId ?? '';
-    final myName = ref.read(authSessionProvider)?.name ?? '';
+    final session = ref.read(authSessionProvider);
+    final myUserId = session?.userId.trim() ?? '';
+    final myEmployeeId = session?.employeeId.trim() ?? '';
+    final myName = (session?.name ?? '').toLowerCase().trim();
+    final myEmail = (session?.email ?? '').toLowerCase().trim();
 
     bool isDone(ITTask t) => t.isCompleted || t.status == ITTaskStatus.closed || t.status == ITTaskStatus.deployed;
     bool isOverdue(ITTask t) => !isDone(t) && t.deadline != null && t.deadline!.isBefore(todayMidnight);
@@ -400,13 +403,33 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
     final completed = leaves.where(isDone).length;
     final overdue = leaves.where((t) => isOverdue(t) || (!isDone(t) && !isActiveWork(t))).length;
 
-    bool isAssigned(ITTask t) => myEmployeeId.isEmpty || t.assigneeId.isEmpty || t.assigneeId == myEmployeeId;
-    bool isCreated(ITTask t) =>
-        (myName.isNotEmpty && t.activityLogs.any((a) => a.authorName.toLowerCase() == myName.toLowerCase())) ||
-        leaves.indexOf(t) < math.min(4, leaves.length);
+    bool isAssigned(ITTask t) {
+      final aid = t.assigneeId.trim();
+      final aname = t.assigneeName.toLowerCase().trim();
+      if (myEmployeeId.isNotEmpty && aid == myEmployeeId) return true;
+      if (myUserId.isNotEmpty && aid == myUserId) return true;
+      if (myName.isNotEmpty && aname.isNotEmpty) {
+        if (aname == myName || aname.contains(myName) || myName.contains(aname)) return true;
+      }
+      if (myEmail.isNotEmpty && aname.isNotEmpty && aname == myEmail) return true;
+      return false;
+    }
+
+    bool isCreated(ITTask t) {
+      if (myName.isNotEmpty) {
+        return t.activityLogs.any((a) {
+          final author = a.authorName.toLowerCase().trim();
+          return author == myName || author.contains(myName) || myName.contains(author);
+        });
+      }
+      return false;
+    }
+
     bool isWatching(ITTask t) =>
-        (t.ticketType == ITTicketType.bug || t.severity == ITSeverity.p1 || t.severity == ITSeverity.p0) ||
-        leaves.indexOf(t) < math.min(2, leaves.length);
+        !isAssigned(t) &&
+        (t.ticketType == ITTicketType.bug ||
+            t.severity == ITSeverity.p0 ||
+            t.severity == ITSeverity.p1);
 
     // Filter by tab
     List<ITTask> tabFiltered = switch (_tab) {
@@ -443,6 +466,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
       int cmp = switch (_sortField) {
         _SortField.title => a.title.compareTo(b.title),
         _SortField.project => a.projectName.compareTo(b.projectName),
+        _SortField.assignee => a.assigneeName.compareTo(b.assigneeName),
         _SortField.priority => a.severity.index.compareTo(b.severity.index),
         _SortField.dueDate => () {
             if (a.deadline == null && b.deadline == null) return 0;
@@ -502,7 +526,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
 
           // ── Table or Grid View ──────────────────────────────────────────────
           if (tabFiltered.isEmpty)
-            _empty(crm)
+            _empty(crm, isAssignedTab: _tab == _Tab.assignedToMe, totalLeaves: leaves.length)
           else
             _listView ? _tableView(crm, tabFiltered) : _gridView(crm, tabFiltered),
         ],
@@ -1204,7 +1228,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
       ),
       clipBehavior: Clip.antiAlias,
       child: LayoutBuilder(builder: (ctx, box) {
-        final w = math.max(1060.0, box.maxWidth.isFinite ? box.maxWidth : 1060.0);
+        final w = math.max(1160.0, box.maxWidth.isFinite ? box.maxWidth : 1160.0);
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
@@ -1273,17 +1297,19 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
           ),
         ),
         // Task
-        SizedBox(width: 310, child: sortable('Task', _SortField.title)),
+        SizedBox(width: 290, child: sortable('Task', _SortField.title)),
         // Project
         SizedBox(width: 120, child: sortable('Project', _SortField.project)),
+        // Assignee
+        SizedBox(width: 140, child: sortable('Assignee', _SortField.assignee)),
         // Priority
-        SizedBox(width: 100, child: sortable('Priority', _SortField.priority)),
+        SizedBox(width: 95, child: sortable('Priority', _SortField.priority)),
         // Due date
-        SizedBox(width: 130, child: sortable('Due Date', _SortField.dueDate)),
+        SizedBox(width: 125, child: sortable('Due Date', _SortField.dueDate)),
         // Progress
-        SizedBox(width: 160, child: sortable('Progress', _SortField.progress)),
+        SizedBox(width: 150, child: sortable('Progress', _SortField.progress)),
         // Status
-        SizedBox(width: 130, child: sortable('Status', _SortField.status)),
+        SizedBox(width: 125, child: sortable('Status', _SortField.status)),
         // Actions
         const SizedBox(width: 40),
       ]),
@@ -1319,7 +1345,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
             ),
             // Task title + subtitle
             SizedBox(
-              width: 310,
+              width: 290,
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
                 Text(
                   t.title,
@@ -1334,36 +1360,9 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
                 ),
                 const SizedBox(height: 2),
                 Builder(builder: (_) {
-                  String sub = t.description;
-                  final tLower = t.title.toLowerCase();
-                  if (tLower.contains('hr')) {
-                    sub = 'Fix the reported issue in HR module';
-                  } else if (tLower.contains('map')) {
-                    sub = 'Provide map access to the required users';
-                  } else if (tLower.contains('login')) {
-                    sub = 'Objective: —';
-                  } else if (tLower.contains('hiring') || tLower.contains('car owners') || tLower.contains('expansion') || tLower.contains('delhi')) {
-                    sub = 'Objective: Soft Launch In Delhi';
-                  } else if (tLower.contains('discovery') || tLower.contains('planning')) {
-                    sub = 'Functional phase for Management';
-                  } else if (tLower.contains('go-live') || tLower.contains('sign-off')) {
-                    sub = 'Objective: —';
-                  } else if (sub.isEmpty || sub.startsWith('From TKT-')) {
-                    if (tLower.contains('location')) {
-                      sub = 'Update logic to auto-change location in first and second look';
-                    } else if (tLower.contains('advance payment') || tLower.contains('income')) {
-                      sub = 'Add advance payment entry in Income module';
-                    } else if (tLower.contains('calendar')) {
-                      sub = 'Resolve calendar sync issue';
-                    } else if (tLower.contains('cash flow')) {
-                      sub = 'Generate and validate the cash flow statement';
-                    } else if (tLower.contains('gstr') || tLower.contains('tds')) {
-                      sub = 'Implement GSTR-3B and TDS summary reports';
-                    } else if (t.ticketKey.isNotEmpty) {
-                      sub = 'From ${t.ticketKey}';
-                    } else {
-                      sub = 'Project task item';
-                    }
+                  String sub = t.description.trim();
+                  if (sub.isEmpty) {
+                    sub = t.ticketKey.isNotEmpty ? '${t.ticketKey} · ${t.projectName}' : (t.projectName.isNotEmpty ? t.projectName : 'Project task item');
                   }
                   return Text(
                     sub,
@@ -1401,14 +1400,45 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
                 ),
               ]),
             ),
+            // Assignee
+            SizedBox(
+              width: 140,
+              child: Row(children: [
+                CircleAvatar(
+                  radius: 11,
+                  backgroundColor: t.assigneeName.isNotEmpty ? crm.primary.withValues(alpha: 0.15) : crm.border.withValues(alpha: 0.6),
+                  child: Text(
+                    t.assigneeName.isNotEmpty ? t.assigneeName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: t.assigneeName.isNotEmpty ? crm.primary : crm.textSecondary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    t.assigneeName.isNotEmpty ? t.assigneeName : 'Unassigned',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: t.assigneeName.isNotEmpty ? crm.textPrimary : crm.textSecondary.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
             // Priority badge
             SizedBox(
-              width: 100,
+              width: 95,
               child: _priorityBadge(crm, t.severity),
             ),
             // Due date
             SizedBox(
-              width: 130,
+              width: 125,
               child: Row(children: [
                 Icon(
                   Icons.calendar_today_outlined,
@@ -1432,7 +1462,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
             ),
             // Progress bar + %
             SizedBox(
-              width: 160,
+              width: 150,
               child: Row(children: [
                 Expanded(
                   child: ClipRRect(
@@ -1458,7 +1488,7 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
               ]),
             ),
             // Status pill
-            SizedBox(width: 130, child: _statusMenu(crm, t)),
+            SizedBox(width: 125, child: _statusMenu(crm, t)),
             // Row actions
             SizedBox(
               width: 40,
@@ -1603,18 +1633,22 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
             ]),
           ),
       ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: fg.withValues(alpha: 0.18)),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: fg.withValues(alpha: 0.18)),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 13, color: fg),
+            const SizedBox(width: 4.5),
+            Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg)),
+          ]),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 13, color: fg),
-          const SizedBox(width: 4.5),
-          Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: fg)),
-        ]),
       ),
     );
   }
@@ -1691,7 +1725,9 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
 
   // ── Empty State ────────────────────────────────────────────────────────────
 
-  Widget _empty(CrmTheme crm) => Padding(
+  Widget _empty(CrmTheme crm, {bool isAssignedTab = false, int totalLeaves = 0}) {
+    if (isAssignedTab && _activeFilterCount == 0 && _searchQuery.isEmpty) {
+      return Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1702,32 +1738,70 @@ class _ITMyTasksScreenState extends ConsumerState<ITMyTasksScreen> with SingleTi
                 color: crm.primary.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.task_alt_outlined, size: 34, color: crm.primary.withValues(alpha: 0.6)),
+              child: Icon(Icons.assignment_ind_outlined, size: 34, color: crm.primary),
             ),
             const SizedBox(height: 14),
-            Text('No tasks found',
+            Text('No tasks assigned to you',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: crm.textPrimary)),
             const SizedBox(height: 6),
-            Text('No tasks match the active filters or search.',
-                style: TextStyle(fontSize: 13, color: crm.textSecondary)),
-            if (_activeFilterCount > 0 || _searchQuery.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _searchController.clear();
-                    _searchQuery = '';
-                    _filterProjectId = null;
-                    _filterSeverity = null;
-                    _filterStatus = null;
-                  });
-                },
-                child: const Text('Clear all filters'),
+            Text(
+              totalLeaves > 0
+                  ? 'You currently have no tasks assigned. Switch to All Tasks to view the project backlog.'
+                  : 'There are no active tasks in your accessible projects right now.',
+              style: TextStyle(fontSize: 13, color: crm.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            if (totalLeaves > 0) ...[
+              const SizedBox(height: 16),
+              FilledButton.tonalIcon(
+                onPressed: () => setState(() => _tab = _Tab.all),
+                icon: const Icon(Icons.list_alt, size: 16),
+                label: const Text('View All Tasks'),
               ),
             ],
           ]),
         ),
       );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: crm.primary.withValues(alpha: 0.08),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.task_alt_outlined, size: 34, color: crm.primary.withValues(alpha: 0.6)),
+          ),
+          const SizedBox(height: 14),
+          Text('No tasks found',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: crm.textPrimary)),
+          const SizedBox(height: 6),
+          Text('No tasks match the active filters or search.',
+              style: TextStyle(fontSize: 13, color: crm.textSecondary)),
+          if (_activeFilterCount > 0 || _searchQuery.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _searchController.clear();
+                  _searchQuery = '';
+                  _filterProjectId = null;
+                  _filterSeverity = null;
+                  _filterStatus = null;
+                });
+              },
+              child: const Text('Clear all filters'),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
 
   // ── Filter Dialog ──────────────────────────────────────────────────────────
 

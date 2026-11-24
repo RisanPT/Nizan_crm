@@ -196,9 +196,7 @@ class ArtistPayoutsScreen extends ConsumerWidget {
               children: [
                 if (p.status == 'pending')
                   TextButton.icon(
-                    onPressed: () => _run(context, ref,
-                        () => ref.read(artistPayoutServiceProvider).approvePayout(p.id),
-                        'Approved'),
+                    onPressed: () => _approve(context, ref, p),
                     icon: const Icon(Icons.done, size: 16),
                     label: const Text('Approve'),
                   ),
@@ -482,6 +480,19 @@ class ArtistPayoutsScreen extends ConsumerWidget {
     await _run(context, ref, () async {
       await ref.read(artistPayoutServiceProvider).deletePayout(p.id);
     }, 'Payout removed');
+  }
+
+  /// Approve a payout. One above the limit set in Decision rules stays pending: this approval is the check, and it waits for the
+  /// CEO / Executive Director before it can be paid.
+  Future<void> _approve(BuildContext context, WidgetRef ref, ArtistPayout p) async {
+    try {
+      final updated = await ref.read(artistPayoutServiceProvider).approvePayout(p.id);
+      ref.refreshData.payouts();
+      if (!context.mounted) return;
+      _snack(context, updated.status == 'pending' ? 'Checked. It is above the limit, so it waits for the CEO / Executive Director before it can be paid.' : 'Approved');
+    } catch (e) {
+      if (context.mounted) showErrorSnackBar(context, e);
+    }
   }
 
   Future<void> _run(BuildContext context, WidgetRef ref,
