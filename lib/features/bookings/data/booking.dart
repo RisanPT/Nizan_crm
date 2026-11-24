@@ -1,4 +1,5 @@
 ﻿import 'package:nizan_crm/core/config/sales_rules.dart' as rules;
+import 'package:nizan_crm/features/bookings/data/driver_day.dart';
 
 class BookingAssignment {
   final String employeeId;
@@ -588,6 +589,10 @@ class Booking {
   /// booking is saved as completed. Not persisted; used to append the link to
   /// the completion WhatsApp message.
   final String reviewUrl;
+  /// Transient: what the server did to the artist's other works that day when
+  /// this save assigned / changed / removed the driver (one driver per artist
+  /// per day). Only on the booking a save returns; not persisted, not sent.
+  final DriverDayResult? driverDay;
   /// 4-digit verification OTP generated for artists/assistants to share with the driver.
   final String? artistTripOtp;
   /// Timestamp when the driver successfully verified the OTP and started the trip.
@@ -595,6 +600,10 @@ class Booking {
   /// Set by the server: whether this booking counts toward sales totals.
   /// Null when the server predates this field (falls back to the local rule).
   final bool? serverCountsTowardSales;
+  /// Accounts' check on the advance: '' (not tracked), pending, verified, rejected.
+  final String advanceStatus;
+  /// Edits made through "Edit advance", oldest first. Read-only (never sent).
+  final List<AdvanceChange> advanceHistory;
 
   const Booking({
     required this.id,
@@ -663,10 +672,13 @@ class Booking {
     this.outfitLooks = const [],
     this.createdByName = '',
     this.reviewUrl = '',
+    this.driverDay,
     this.serverCountsTowardSales,
     this.createdBy = '',
     this.artistTripOtp,
     this.artistOtpVerifiedAt,
+    this.advanceStatus = '',
+    this.advanceHistory = const [],
   });
 
   /// Returns true if this booking falls on the given calendar date.
@@ -1092,6 +1104,7 @@ class Booking {
       outfitLooks: _parseOutfitLooks(json),
       createdByName: json['createdByName'] as String? ?? '',
       reviewUrl: json['reviewUrl'] as String? ?? '',
+      driverDay: DriverDayResult.fromJson(json['driverDay']),
       serverCountsTowardSales: json['countsTowardSales'] as bool?,
       createdBy: json['createdBy'] is Map
           ? (json['createdBy']['_id'] as String? ?? '')
@@ -1100,6 +1113,11 @@ class Booking {
       artistOtpVerifiedAt: json['artistOtpVerifiedAt'] != null
           ? DateTime.tryParse(json['artistOtpVerifiedAt'] as String)?.toLocal()
           : null,
+      advanceStatus: json['advanceStatus'] as String? ?? '',
+      advanceHistory: ((json['advanceHistory'] as List?) ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(AdvanceChange.fromJson)
+          .toList(),
     );
   }
 
@@ -1235,8 +1253,11 @@ class Booking {
     String? createdByName,
     String? createdBy,
     String? reviewUrl,
+    DriverDayResult? driverDay,
     String? artistTripOtp,
     DateTime? artistOtpVerifiedAt,
+    String? advanceStatus,
+    List<AdvanceChange>? advanceHistory,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -1308,11 +1329,42 @@ class Booking {
       createdByName: createdByName ?? this.createdByName,
       createdBy: createdBy ?? this.createdBy,
       reviewUrl: reviewUrl ?? this.reviewUrl,
+      // Transient: only the copy a save returns carries it (never an old result).
+      driverDay: driverDay,
       serverCountsTowardSales: serverCountsTowardSales,
       artistTripOtp: artistTripOtp ?? this.artistTripOtp,
       artistOtpVerifiedAt: artistOtpVerifiedAt ?? this.artistOtpVerifiedAt,
+      advanceStatus: advanceStatus ?? this.advanceStatus,
+      advanceHistory: advanceHistory ?? this.advanceHistory,
     );
   }
+}
+
+/// One correction made through "Edit advance" (server: Booking.advanceHistory).
+class AdvanceChange {
+  const AdvanceChange({
+    required this.from,
+    required this.to,
+    this.reason = '',
+    this.changedByName = '',
+    this.changedAt,
+  });
+
+  final double from;
+  final double to;
+  final String reason;
+  final String changedByName;
+  final DateTime? changedAt;
+
+  factory AdvanceChange.fromJson(Map<String, dynamic> json) => AdvanceChange(
+        from: (json['from'] as num?)?.toDouble() ?? 0,
+        to: (json['to'] as num?)?.toDouble() ?? 0,
+        reason: json['reason'] as String? ?? '',
+        changedByName: json['changedByName'] as String? ?? '',
+        changedAt: json['changedAt'] is String
+            ? DateTime.tryParse(json['changedAt'] as String)?.toLocal()
+            : null,
+      );
 }
 
 /// Parses `outfitLooks` from JSON, falling back to migrating the legacy

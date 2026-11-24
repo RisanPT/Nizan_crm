@@ -14,9 +14,12 @@ class ApprovalService {
     return raw.map((e) => ApprovalRequest.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<List<ApprovalRequest>> inbox() async {
+  /// `module: 'leave'` → pending leave approvals for the leave desk (leave is
+  /// not in the general inbox).
+  Future<List<ApprovalRequest>> inbox({String? module}) async {
     try {
-      final res = await _dio.get('/approvals/inbox');
+      final res = await _dio.get('/approvals/inbox',
+          queryParameters: {'module': ?module});
       return _list(res.data);
     } catch (e) {
       throw AppException(e, action: 'load approvals inbox');
@@ -66,6 +69,9 @@ final approvalServiceProvider =
 
 final approvalInboxProvider =
     FutureProvider<List<ApprovalRequest>>((ref) => ref.watch(approvalServiceProvider).inbox());
+
+final leaveInboxProvider = FutureProvider<List<ApprovalRequest>>(
+    (ref) => ref.watch(approvalServiceProvider).inbox(module: 'leave'));
 
 final myApprovalsProvider =
     FutureProvider<List<ApprovalRequest>>((ref) => ref.watch(approvalServiceProvider).mine());

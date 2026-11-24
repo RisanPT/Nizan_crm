@@ -12,6 +12,8 @@ import 'package:nizan_crm/features/hr/lms/service/lms_service.dart';
 import 'package:nizan_crm/features/hr/lms/presentation/widgets/training_modules_tabs.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
+import 'package:nizan_crm/features/hr/shared/hr_departments.dart';
+import 'package:nizan_crm/features/hr/lms/utils/orientation_plan_pdf.dart';
 
 /// Redesigned HR Learning & Orientation screen matching HRMS_Design.html (#s-training).
 /// Includes:
@@ -20,17 +22,6 @@ import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 /// 3. Course catalogue & Enrolment LMS.
 /// 4. Role Skill Matrix & development plans.
 
-const kCompanyDepartments = <String>[
-  'Technology & Systems (IT)',
-  'Bridal Styling',
-  'Academy & Training',
-  'Studio & Services Ops',
-  'Sales & Marketing',
-  'Finance & Accounts',
-  'HR & People Operations',
-  'Fleet & Logistics',
-  'Executive / Governance',
-];
 
 IconData hrDepartmentIcon(String d) {
   final name = d.toLowerCase();
@@ -1126,6 +1117,11 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                             tooltip: 'Edit 7-Day Syllabus',
                             onPressed: () => _editPlanDialog(context, ref, plan),
                           ),
+                          IconButton(
+                            icon: Icon(Icons.delete_outline, size: 16, color: crm.destructive),
+                            tooltip: 'Delete plan',
+                            onPressed: () => _deletePlan(context, ref, plan),
+                          ),
                         ],
                       ],
                     ),
@@ -1417,9 +1413,15 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Document exported / ready for printing!')));
-                      Navigator.of(ctx).pop();
+                    onPressed: () async {
+                      // Real PDF + print dialog (it used to only show a message).
+                      try {
+                        await printOrientationPlan(plan);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                        }
+                      }
                     },
                     icon: const Icon(Icons.print_outlined, size: 16),
                     label: const Text('Print / Export PDF'),
@@ -1499,18 +1501,38 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
     }
   }
 
+  Future<void> _deletePlan(BuildContext context, WidgetRef ref, OrientationPlan plan) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete orientation plan?'),
+        content: Text('"${plan.roleTitle}" will be removed. Orientations already running keep their own days.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(lmsServiceProvider).deleteOrientationPlan(plan.id);
+      ref.invalidate(orientationPlansProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"${plan.roleTitle}" deleted')));
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+
   Future<void> _editPlanDialog(BuildContext context, WidgetRef ref, OrientationPlan? plan) async {
     final crm = widget.crm;
     final isNew = plan == null;
     final roleCtrl = TextEditingController(text: plan?.roleTitle ?? '');
-    String initialDept = plan?.department.trim() ?? 'Technology & Systems (IT)';
-    if (initialDept == 'Technology & Systems' || initialDept == 'IT' || initialDept.isEmpty) {
-      initialDept = 'Technology & Systems (IT)';
-    }
-    if (!kCompanyDepartments.contains(initialDept)) {
-      initialDept = 'Technology & Systems (IT)';
-    }
-    String selectedDept = initialDept;
+    // Real departments; the plan's own department is kept, never reset.
+    final deptOptions = hrDepartmentOptions(await readHrDepartments(ref), current: plan?.department ?? '');
+    String selectedDept = hrDepartmentValue(deptOptions, plan?.department ?? '');
+    if (!context.mounted) return;
     final trainerCtrl = TextEditingController(text: plan?.trainerName ?? 'Department Lead');
     final overviewCtrl = TextEditingController(text: plan?.overview ?? '');
 
@@ -1533,12 +1555,14 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                   Text('Department (Hierarchy):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: crm.textPrimary)),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedDept,
+                    initialValue: selectedDept.isEmpty ? null : selectedDept,
+                    isExpanded: true,
+                    hint: const Text('Choose department'),
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
-                    items: kCompanyDepartments.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+                    items: deptOptions.map((d) => DropdownMenuItem(value: d, child: Text(d, overflow: TextOverflow.ellipsis))).toList(),
                     onChanged: (v) => setDlg(() => selectedDept = v ?? selectedDept),
                   ),
                   const SizedBox(height: 12),
@@ -1566,6 +1590,12 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
     );
 
     if (ok == true && roleCtrl.text.trim().isNotEmpty) {
+      if (selectedDept.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a department')));
+        }
+        return;
+      }
       try {
         final body = {
           'roleTitle': roleCtrl.text.trim(),
@@ -1878,14 +1908,10 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
     final descCtrl = TextEditingController(text: c?.description ?? "");
     final roleCtrl = TextEditingController(text: c?.targetRole ?? "");
     String cat = c?.category ?? "skills";
-    String initialDept = c?.department.trim() ?? "Technology & Systems (IT)";
-    if (initialDept == "Technology & Systems" || initialDept == "IT" || initialDept.isEmpty) {
-      initialDept = "Technology & Systems (IT)";
-    }
-    if (!kCompanyDepartments.contains(initialDept)) {
-      initialDept = "Technology & Systems (IT)";
-    }
-    String selectedDept = initialDept;
+    // Real departments; the course's own department is kept, never reset.
+    final deptOptions = hrDepartmentOptions(await readHrDepartments(ref), current: c?.department ?? '');
+    String selectedDept = hrDepartmentValue(deptOptions, c?.department ?? '');
+    if (!context.mounted) return;
     final durCtrl = TextEditingController(text: c != null ? "${c.durationHours}" : "8");
 
     final ok = await showDialog<bool>(
@@ -1903,9 +1929,11 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
                   TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: "Course Title")),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    initialValue: selectedDept,
-                    decoration: const InputDecoration(labelText: "Department (Hierarchy)"),
-                    items: kCompanyDepartments.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
+                    initialValue: selectedDept.isEmpty ? null : selectedDept,
+                    isExpanded: true,
+                    hint: const Text("Choose department"),
+                    decoration: const InputDecoration(labelText: "Department"),
+                    items: deptOptions.map((k) => DropdownMenuItem(value: k, child: Text(k, overflow: TextOverflow.ellipsis))).toList(),
                     onChanged: (v) => setDlg(() => selectedDept = v ?? selectedDept),
                   ),
                   const SizedBox(height: 12),
@@ -1938,6 +1966,12 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
     );
 
     if (ok == true && titleCtrl.text.trim().isNotEmpty) {
+      if (selectedDept.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please choose a department")));
+        }
+        return;
+      }
       final body = {
         "title": titleCtrl.text.trim(),
         "description": descCtrl.text.trim(),

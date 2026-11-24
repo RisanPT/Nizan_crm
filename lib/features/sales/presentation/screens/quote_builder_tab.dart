@@ -15,10 +15,12 @@ import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/core/models/spot_invoice.dart';
 import 'package:nizan_crm/core/widgets/whatsapp_send_buttons.dart';
+import 'package:nizan_crm/services/addon_service_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 
@@ -72,9 +74,17 @@ class _Pkg {
     final profile = _profiles[key];
     final (prose, bullets) = _splitDescription(s.description);
     final features = <String, Object>{};
-    if (profile != null) {
-      for (var i = 0; i < _featureLabels.length; i++) {
-        features[_featureLabels[i]] = profile.$3[i];
+    // Inclusions set in Services (or built in for known packages). A row
+    // with no value is "not included" (—), never "Ask us".
+    final inc = s.effectiveQuoteInclusions;
+    if (inc != null) {
+      features[QuoteInclusions.techniqueLabel] = inc.technique.isEmpty ? false : inc.technique;
+      features[QuoteInclusions.productsLabel] = inc.products.isEmpty ? false : inc.products;
+      for (final label in QuoteInclusions.checks) {
+        features[label] = inc.included.contains(label);
+      }
+      for (final extra in inc.included) {
+        features.putIfAbsent(extra, () => true);
       }
     }
     for (final b in bullets) {
@@ -115,6 +125,9 @@ class _Addon {
   final double? price;
   final bool perPerson;
   final List<String> includedIn;
+
+  /// True when the add-on comes from Services → Add-on services.
+  final bool fromServices;
   const _Addon(
     this.id,
     this.name,
@@ -122,43 +135,96 @@ class _Addon {
     this.price, {
     this.perPerson = false,
     this.includedIn = const [],
+    this.fromServices = false,
   });
+
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'note': note, 'price': price, 'perPerson': perPerson};
+
+  factory _Addon.fromJson(Map<String, dynamic> m, {bool fromServices = false}) => _Addon(
+        m['id'] as String? ?? 'c_${DateTime.now().microsecondsSinceEpoch}',
+        m['name'] as String? ?? '',
+        m['note'] as String? ?? '',
+        (m['price'] as num?)?.toDouble(),
+        perPerson: m['perPerson'] == true,
+        fromServices: fromServices,
+      );
 }
 
-/// Inclusion rows for the packages we know in detail (see [_profiles]).
-const _featureLabels = [
-  'Makeup technique',
-  'Products used',
-  'Professional lenses & lashes',
-  'Advanced bridal hairstyling',
-  'Hair extensions, when required',
-  'Professional saree draping',
-  'Fully bespoke artistry & styling direction',
-  'Dedicated pre-wedding styling consultations',
-  'Optional offline styling support',
-  'Personalised bridal styling & finishing',
-];
+String _addonKey(String name) => name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+
+/// The add-on picker list: active Services add-ons first, then the quote's
+/// own add-ons ([_addons]) that Services doesn't already have.
+///
+/// A quote add-on whose name matches a Services one is listed once, as the
+/// Services one (its name, price and description), but keeps the quote
+/// add-on's id and its per-person / free-with-package rules — so saved
+/// drafts and on-device price overrides that use that id still apply.
+/// Other Services add-ons get the id `svc_<Services id>`.
+///
+/// [saved] are Services add-ons remembered in the draft; one that is
+/// selected but no longer active in Services (deactivated or deleted) is
+/// still listed from that copy, so a saved quote doesn't lose it.
+List<_Addon> _mergeAddons(
+  List<AddonService> services,
+  Map<String, _Addon> saved,
+  bool Function(String id) selected,
+) {
+  final standard = {for (final a in _addons) _addonKey(a.name): a};
+  final out = <_Addon>[];
+  final names = <String>{};
+  for (final s in services) {
+    if (s.status != 'active') continue;
+    final key = _addonKey(s.name);
+    if (key.isEmpty || !names.add(key)) continue;
+    final std = standard[key];
+    final desc = s.description.trim();
+    out.add(_Addon(
+      std?.id ?? 'svc_${s.id}',
+      s.name.trim(),
+      desc.isNotEmpty ? desc : (std?.note ?? ''),
+      s.price > 0 ? s.price : null,
+      perPerson: std?.perPerson ?? false,
+      includedIn: std?.includedIn ?? const [],
+      fromServices: true,
+    ));
+  }
+  final ids = {for (final a in out) a.id};
+  for (final a in saved.values) {
+    if (!ids.contains(a.id) && selected(a.id) && names.add(_addonKey(a.name))) {
+      out.add(a);
+    }
+  }
+  return [
+    ...out,
+    for (final a in _addons)
+      if (!names.contains(_addonKey(a.name))) a,
+  ];
+}
 
 /// Extra detail for Services packages, matched by name (lower-case):
-/// (technique, fallback blurb, values for [_featureLabels]). Any other
-/// package is quoted from its own Services description.
-const Map<String, (String, String, List<Object>)> _profiles = {
+/// (technique label, fallback blurb). Their "What's Included" values are
+/// [QuoteInclusions.builtInFor] until set in Services. Any other package is
+/// quoted from its own Services description and inclusions.
+const Map<String, (String, String)> _profiles = {
   'platinum': (
     'HD Makeup',
     'A luxurious HD bridal makeup experience combining premium makeup artistry with elegant styling and attention to detail.',
-    ['HD', 'Premium, skin-friendly', true, true, true, false, false, false, false, false],
   ),
   'airbrush': (
     'Airbrush Makeup',
     'A refined, flawless finish with professional airbrush artistry. Lightweight and seamless, and it photographs beautifully.',
-    ['Airbrush', 'Premium & high-end', true, true, true, true, false, false, false, false],
   ),
   'team n royal': (
     'Bespoke Airbrush',
     'A personalised package for brides who want an elevated, bespoke experience, with full airbrush artistry.',
-    ['Airbrush', 'Exclusive luxury', true, true, true, true, true, true, true, true],
   ),
 };
+
+/// Advance shown on the quote: 15% of the quoted package price.
+const _advanceShare = 0.15;
+String _advanceFor(double? price) =>
+    price == null ? 'Advance 15%' : 'Advance ${_inr((price * _advanceShare).roundToDouble())}';
 
 
 // includedIn holds Services package names (lower-case).
@@ -281,6 +347,13 @@ class _Quote {
   double get programAddons => lines.fold(
       0.0, (s, l) => s + (l.amount == null || freeInProgram(l.addon) ? 0 : l.amount!));
   double get programGrandTotal => max(0, programTotal + programAddons + travel - discount);
+
+  /// Single-day quote with add-ons but no package ticked (add-ons only).
+  bool get addonsOnly => !multi && pkgs.isEmpty && lines.isNotEmpty;
+
+  /// Add-ons only: the priced add-ons (on-request ones are left out).
+  double get addonsTotal => lines.fold(0.0, (s, l) => s + (l.amount ?? 0));
+  double get addonsGrandTotal => max(0, addonsTotal + travel - discount);
 
   /// "18 Apr – 22 Apr 2027" for the programme's dated days.
   String get programSpan {
@@ -407,8 +480,15 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
   /// Services added by the sales team for this quote (beyond the standard list).
   List<_Addon> _customAddons = [];
 
-  /// Standard add-ons followed by this quote's custom ones.
-  List<_Addon> get _allAddons => [..._addons, ..._customAddons];
+  /// Services add-ons then the quote's own list (see [_mergeAddons]),
+  /// refreshed on every build.
+  List<_Addon> _listedAddons = _addons;
+
+  /// Services add-ons this draft selected, as last seen (see [_mergeAddons]).
+  Map<String, _Addon> _savedSvcAddons = {};
+
+  /// Listed add-ons followed by this quote's custom ones.
+  List<_Addon> get _allAddons => [..._listedAddons, ..._customAddons];
 
   /// Price-list overrides saved on this device. A key mapped to null means
   /// "price on request"; a missing key means "use the default".
@@ -470,18 +550,15 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     final custom = d['customAddons'] as List?;
     if (custom != null) {
       _customAddons = [
-        for (final x in custom)
-          () {
-            final m = (x as Map).cast<String, dynamic>();
-            return _Addon(
-              m['id'] as String? ?? 'c_${DateTime.now().microsecondsSinceEpoch}',
-              m['name'] as String? ?? '',
-              m['note'] as String? ?? '',
-              (m['price'] as num?)?.toDouble(),
-              perPerson: m['perPerson'] == true,
-            );
-          }(),
+        for (final x in custom) _Addon.fromJson((x as Map).cast<String, dynamic>()),
       ];
+    }
+    final svc = d['svcAddons'] as List?;
+    if (svc != null) {
+      final saved = [
+        for (final x in svc) _Addon.fromJson((x as Map).cast<String, dynamic>(), fromServices: true),
+      ];
+      _savedSvcAddons = {for (final a in saved) a.id: a};
     }
     final addons = d['addons'] as Map<String, dynamic>?;
     if (addons != null) {
@@ -514,9 +591,12 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       'rec': _rec,
       'multi': _multi,
       'days': [for (final d in _days) d.toJson()],
-      'customAddons': [
-        for (final a in _customAddons)
-          {'id': a.id, 'name': a.name, 'note': a.note, 'price': a.price, 'perPerson': a.perPerson},
+      'customAddons': [for (final a in _customAddons) a.toJson()],
+      // Selected Services-only add-ons, so the quote keeps them if they are
+      // later deactivated or deleted in Services.
+      'svcAddons': [
+        for (final a in _listedAddons)
+          if (a.id.startsWith('svc_') && _sel[a.id]?.on == true) a.toJson(),
       ],
       'no': _no,
       'addons': _sel.map((k, v) => MapEntry(k, {'on': v.on, 'qty': v.qty})),
@@ -724,7 +804,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     l.addAll(['*TEAM N MAKEOVERS*', '_Bridal Makeup Quote · ${q.no}_', '']);
     if (q.name.isNotEmpty) l.add('Dear ${q.name},');
     l.addAll([
-      'Thank you for your enquiry! Here are our bridal packages'
+      'Thank you for your enquiry! Here ${q.addonsOnly ? 'is your quote' : 'are our bridal packages'}'
           '${q.date != null ? ' for your ${q.event.isEmpty ? 'event' : q.event.toLowerCase()} on ${_fmtDate(q.date!)}' : ''}'
           '${q.venue.isNotEmpty ? ' at ${q.venue}' : ''}:',
       '',
@@ -755,6 +835,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       for (final p in q.pkgs) {
         l.add('${p.name}: *${_inr(q.totals[p.id]!.total)}*');
       }
+      if (q.addonsOnly) l.add('*${_inr(q.addonsGrandTotal)}*');
       if (q.onRequest) l.add('_Items on request are priced during consultation._');
       l.add('');
     }
@@ -846,8 +927,26 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       widget.onCreateInvoice(q.name, q.phone, district?.id, lines);
       return;
     }
+    if (q.addonsOnly) {
+      // No package: invoice just the priced add-ons.
+      final lines = <SpotInvoiceLine>[
+        for (final l in q.lines)
+          if (l.amount != null)
+            SpotInvoiceLine(label: l.qty > 1 ? '${l.addon.name} × ${l.qty}' : l.addon.name, amount: l.amount!),
+      ];
+      if (lines.isEmpty) {
+        _showToast('Add a price to an add-on first (all are on request)');
+        return;
+      }
+      widget.onCreateInvoice(q.name, q.phone, district?.id, [
+        ...lines,
+        if (q.travel > 0) SpotInvoiceLine(label: 'Travel / location', amount: q.travel),
+        if (q.discount > 0) SpotInvoiceLine(label: 'Discount', amount: -q.discount),
+      ]);
+      return;
+    }
     if (q.pkgs.isEmpty) return;
-    final pkg = q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first);
+    final pkg =q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first);
     final lines = <SpotInvoiceLine>[
       SpotInvoiceLine(
         label: '${pkg.name}${pkg.tech.isNotEmpty ? ' · ${pkg.tech}' : ''}',
@@ -914,6 +1013,8 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       r.add('Total: ${_inr(q.programGrandTotal)}');
     } else if (q.pkgs.isNotEmpty) {
       r.add('Total: ${[for (final p in q.pkgs) '${p.name} ${_inr(q.totals[p.id]!.total)}'].join(' / ')}');
+    } else if (q.addonsOnly) {
+      r.add('Total (add-ons only): ${_inr(q.addonsGrandTotal)}');
     }
     if (q.advance > 0) r.add('Advance quoted: ${_inr(q.advance)}');
 
@@ -943,6 +1044,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       _multi = false;
       _days = [];
       _customAddons = [];
+      _savedSvcAddons = {};
       _sel = {};
       _no = null;
       _districtId = null;
@@ -978,6 +1080,7 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
       builder: (ctx) => _PriceListDialog(
         pal: pal,
         catalog: _catalog,
+        addons: _listedAddons,
         prices: () => _prices(defaults),
         onChanged: (id, v) => _setOverride(id, v, defaults),
         onRestore: () {
@@ -995,6 +1098,11 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
     final pal = Theme.of(context).brightness == Brightness.dark ? _Pal.dark : _Pal.light;
     _pkgsAsync = ref.watch(packagesProvider);
     _catalog = [for (final s in _pkgsAsync.value ?? const <ServicePackage>[]) _Pkg.from(s)];
+    _listedAddons = _mergeAddons(
+      ref.watch(addonServicesProvider).value ?? const <AddonService>[],
+      _savedSvcAddons,
+      (id) => _sel[id]?.on == true,
+    );
     final districts = ref.watch(districtsProvider).value ?? const <District>[];
     final district = _selectedDistrict(districts);
     final defaults = _defaultPrices(district);
@@ -1328,11 +1436,15 @@ class _QuoteBuilderTabState extends ConsumerState<QuoteBuilderTab> {
           pal: pal,
           label: q.multi
               ? 'Create invoice (${q.program.length}-day program)'
-              : q.pkgs.isEmpty
-                  ? 'Create invoice'
-                  : 'Create invoice (${q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first).name})',
+              : q.addonsOnly
+                  ? 'Create invoice (add-ons only)'
+                  : q.pkgs.isEmpty
+                      ? 'Create invoice'
+                      : 'Create invoice (${q.pkgs.firstWhere((p) => p.id == q.rec, orElse: () => q.pkgs.first).name})',
           icon: Icons.receipt_long_rounded,
-          onTap: (q.multi ? q.program.isEmpty : q.pkgs.isEmpty) ? null : () => _createInvoice(q, district),
+          onTap: (q.multi ? q.program.isEmpty : q.pkgs.isEmpty && !q.addonsOnly)
+              ? null
+              : () => _createInvoice(q, district),
         ),
         const SizedBox(height: 8),
         // Customer took a quote first: turn it into a lead without retyping.
@@ -1755,7 +1867,7 @@ class _PkgOption extends StatelessWidget {
                     Text(
                       [
                         if (pkg.tech.isNotEmpty) pkg.tech,
-                        'Advance ${_inr(pkg.erp.advanceAmount)}',
+                        _advanceFor(price),
                         if (districtPrice) 'district price',
                       ].join(' · '),
                       style: TextStyle(fontSize: 12, color: pal.muted),
@@ -2014,12 +2126,14 @@ class _Btn extends StatelessWidget {
 class _PriceListDialog extends StatefulWidget {
   final _Pal pal;
   final List<_Pkg> catalog;
+  final List<_Addon> addons;
   final Map<String, double?> Function() prices;
   final void Function(String id, double? value) onChanged;
   final VoidCallback onRestore;
   const _PriceListDialog({
     required this.pal,
     required this.catalog,
+    required this.addons,
     required this.prices,
     required this.onChanged,
     required this.onRestore,
@@ -2037,7 +2151,7 @@ class _PriceListDialogState extends State<_PriceListDialog> {
     String t(double? v) => v == null ? '' : v.round().toString();
     return {
       for (final x in widget.catalog) x.id: TextEditingController(text: t(p[x.id])),
-      for (final a in _addons) a.id: TextEditingController(text: t(p[a.id])),
+      for (final a in widget.addons) a.id: TextEditingController(text: t(p[a.id])),
     };
   }
 
@@ -2055,7 +2169,15 @@ class _PriceListDialogState extends State<_PriceListDialog> {
     final rows = [
       for (final p in widget.catalog)
         (p.id, p.name, [if (p.tech.isNotEmpty) p.tech, 'Services price ${_inr(p.erp.price)}'].join(' · ')),
-      for (final a in _addons) (a.id, a.name, a.perPerson ? 'per person' : ''),
+      for (final a in widget.addons)
+        (
+          a.id,
+          a.name,
+          [
+            if (a.fromServices) 'Services price ${a.price == null ? 'on request' : _inr(a.price!)}',
+            if (a.perPerson) 'per person',
+          ].join(' · '),
+        ),
     ];
     return Dialog(
       backgroundColor: pal.surface,
@@ -2188,14 +2310,15 @@ class _QuoteSheet extends StatelessWidget {
                       _title(display, 'Your Programme',
                           '${q.program.length} event${q.program.length == 1 ? '' : 's'} · ${q.programSpan}'),
                       _programTable(),
-                    ] else if (q.pkgs.isEmpty)
-                      const Padding(
+                    ] else if (q.pkgs.isEmpty) ...[
+                      if (q.lines.isEmpty)
+                        const Padding(
                         padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Text('Select the packages to quote in the builder.',
+                        child: Text('Select the packages or add-ons to quote in the builder.',
                             textAlign: TextAlign.center,
                             style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: _sMuted)),
-                      )
-                    else ...[
+                        ),
+                    ] else ...[
                       _title(display, 'Bridal Makeup Packages', 'Choose the experience that suits your style'),
                       _cards(display, forPdf ? false : c.maxWidth < 760),
                     ],
@@ -2209,10 +2332,22 @@ class _QuoteSheet extends StatelessWidget {
                       _title(display, 'Add-ons & Guest Services'),
                       _addonsTable(),
                     ],
-                    if (q.multi || q.pkgs.isNotEmpty) ...[
+                    if (q.multi || q.pkgs.isNotEmpty || q.addonsOnly) ...[
                       const SizedBox(height: 28),
-                      _title(display, 'Your Total', q.multi ? 'for the whole programme' : 'per package option'),
-                      q.multi ? _programTotalsTable() : _totalsTable(),
+                      _title(
+                        display,
+                        'Your Total',
+                        q.multi
+                            ? 'for the whole programme'
+                            : q.addonsOnly
+                                ? 'for the services above'
+                                : 'per package option',
+                      ),
+                      q.multi
+                          ? _programTotalsTable()
+                          : q.addonsOnly
+                              ? _addonsTotalsTable()
+                              : _totalsTable(),
                     ],
                     if (q.onRequest)
                       const Padding(
@@ -2386,7 +2521,7 @@ class _QuoteSheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text((p.tech.isNotEmpty ? p.tech : 'Advance ${_inr(p.erp.advanceAmount)} to book').toUpperCase(),
+                Text((p.tech.isNotEmpty ? p.tech : '${_advanceFor(price)} to book').toUpperCase(),
                     style: const TextStyle(fontSize: 11.5, letterSpacing: 1.15, color: _sMuted)),
                 const SizedBox(height: 8),
                 Text(p.name, style: display.copyWith(fontSize: 28, height: 1, letterSpacing: 1.12, color: _wine)),
@@ -2575,6 +2710,27 @@ class _QuoteSheet extends StatelessWidget {
     );
   }
 
+  /// Add-ons only (no package): one total for the selected services.
+  Widget _addonsTotalsTable() {
+    const sub = TextStyle(color: _sHead);
+    const disc = TextStyle(color: _sOk);
+    const tot = TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.white);
+    List<Widget> row(String label, String value, TextStyle s) =>
+        [Text(label, style: s), Text(value, textAlign: TextAlign.right, style: s)];
+    return _table(
+      header: const ['', 'Amount'],
+      align: const [TextAlign.left, TextAlign.right],
+      widths: const {0: FlexColumnWidth(2), 1: FlexColumnWidth(1)},
+      lastIsTotal: true,
+      rows: [
+        row('Add-ons & guests', _inr(q.addonsTotal), sub),
+        if (q.travel > 0) row('Travel / location', _inr(q.travel), sub),
+        if (q.discount > 0) row('Discount', '− ${_inr(q.discount)}', disc),
+        row('Total', _inr(q.addonsGrandTotal), tot),
+      ],
+    );
+  }
+
   Set<int> _recCols() => {
     for (var i = 0; i < q.pkgs.length; i++)
       if (q.pkgs[i].id == q.rec) i + 1,
@@ -2605,12 +2761,8 @@ class _QuoteSheet extends StatelessWidget {
           [
             Text(label),
             for (final p in q.pkgs)
-              // A package with no inclusion details shows "Ask us" rather than
-              // a misleading "not included".
-              switch (p.features.isEmpty ? null : (p.features[label] ?? false)) {
-                null => const Text('Ask us',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12.5, fontStyle: FontStyle.italic, color: _sMuted)),
+              // Ticked in Services = ✓; not set = —.
+              switch (p.features[label] ?? false) {
                 true => const Text('✓', textAlign: TextAlign.center, style: TextStyle(color: _sOk, fontWeight: FontWeight.w700)),
                 false => const Text('—', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFFC9B6BA))),
                 final v => Text('$v', textAlign: TextAlign.center),

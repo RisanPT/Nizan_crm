@@ -209,7 +209,9 @@ class DataRefresh {
 
   void reviews() => _all(_inv, [
         reviewsProvider,
+        notSubmittedReviewsProvider,
         reviewAnalyticsProvider,
+        reviewInsightsProvider,
         artistReviewPerformanceProvider,
       ]);
 

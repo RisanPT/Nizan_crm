@@ -65,9 +65,12 @@ class PackageService {
     required String description,
     required List<RegionalPrice> regionPrices,
     required List<DistrictPrice> districtPrices,
+    /// Sent only when given, so other edits leave saved inclusions as they are.
+    QuoteInclusions? quoteInclusions,
   }) async {
     try {
       final payload = {
+        if (quoteInclusions != null) 'quoteInclusions': quoteInclusions.toJson(),
         if (id != null && id.isNotEmpty) 'id': id,
         'name': name,
         'price': price,

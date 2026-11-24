@@ -247,7 +247,7 @@ Future<Uint8List> buildGstInvoicePdfBytes(Booking booking) async {
               child: pw.Image(logo, fit: pw.BoxFit.contain),
             ),
           pw.SizedBox(height: 6),
-          pw.Text('TEAM N ERP', style: st(17, color: _maroon, b: true, spacing: 0.5)),
+          pw.Text('TEAM N MAKEOVERS', style: st(17, color: _maroon, b: true, spacing: 0.5)),
           pw.SizedBox(height: 2),
           pw.Text('GST INVOICE', style: st(8, color: _muted, spacing: 0.5)),
           pw.SizedBox(height: 12),
@@ -294,7 +294,7 @@ Future<Uint8List> buildGstInvoicePdfBytes(Booking booking) async {
           ]),
           pw.SizedBox(),
           card('COMPANY DETAILS', [
-            pw.Text('TEAM N ERP', style: st(12, color: _maroon, b: true)),
+            pw.Text('TEAM N MAKEOVERS', style: st(12, color: _maroon, b: true)),
             pw.SizedBox(height: 4),
             pw.Text('Kozhikode Kerala 673014\nIndia', style: st(9.5, color: PdfColor.fromInt(0xFF1F2937), spacing: 0)),
             pw.SizedBox(height: 6),

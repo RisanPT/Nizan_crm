@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/leave/data/leave_models.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 
 class LeaveService {
   final Dio _dio;
@@ -25,13 +26,19 @@ class LeaveService {
   }
 
   /// Whether the caller may edit leave types / holidays (HR-wide users only).
-  Future<bool> canEditMaster() async {
+  Future<bool> canEditMaster() async => (await _access())['canEdit'] == true;
+
+  /// Leave desk (admin + hr role): sees everyone's leave requests and
+  /// approves/rejects them. The server decides.
+  Future<bool> canDecide() async => (await _access())['canDecide'] == true;
+
+  Future<Map> _access() async {
     try {
       final res = await _dio.get('/leave/types/access');
       final data = res.data;
-      return data is Map && data['canEdit'] == true;
+      return data is Map ? data : const {};
     } catch (_) {
-      return false;
+      return const {};
     }
   }
 
@@ -188,37 +195,80 @@ class LeaveService {
       throw AppException(e, action: 'load comp-offs');
     }
   }
+
+  /// Re-send an approved/rejected Timebox leave's decision to Timebox.
+  /// Returns true when Timebox accepted it.
+  Future<bool> retryCallback(String id) async {
+    try {
+      final res = await _dio.post('/leave/$id/retry-callback');
+      final data = res.data;
+      return data is Map && data['result'] is Map && data['result']['sent'] == true;
+    } catch (e) {
+      throw AppException(e, action: 'send the decision to Timebox');
+    }
+  }
 }
+
 
 final leaveServiceProvider =
     Provider<LeaveService>((ref) => LeaveService(ref.watch(dioProvider)));
 
+/// The signed-in user. Every leave provider watches it, so logging in as
+/// someone else reloads leave data and access instead of showing the last
+/// user's cached lists.
+String? _who(Ref ref) => ref.watch(authSessionProvider.select((s) => s?.userId));
+
 /// Selected year across the Leave screen.
 final leaveYearProvider = StateProvider<int>((ref) => DateTime.now().year);
 
-final leaveTypesProvider =
-    FutureProvider<List<LeaveType>>((ref) => ref.watch(leaveServiceProvider).getTypes());
+/// When the Leave screen last reloaded its data (drives "Updated … ago").
+final leaveLastSyncProvider = StateProvider<DateTime?>((ref) => null);
+
+final leaveTypesProvider = FutureProvider<List<LeaveType>>((ref) {
+  _who(ref);
+  return ref.watch(leaveServiceProvider).getTypes();
+});
 
 /// True for HR-wide users, who may edit leave types and holidays.
-final leaveMasterAccessProvider =
-    FutureProvider<bool>((ref) => ref.watch(leaveServiceProvider).canEditMaster());
+final leaveMasterAccessProvider = FutureProvider<bool>((ref) {
+  _who(ref);
+  return ref.watch(leaveServiceProvider).canEditMaster();
+});
+
+/// Leave desk: admin + hr role. Sees everyone's leave and decides it.
+final leaveDeskAccessProvider = FutureProvider<bool>((ref) {
+  _who(ref);
+  return ref.watch(leaveServiceProvider).canDecide();
+});
 
 final myLeaveProvider = FutureProvider<List<LeaveRequest>>((ref) async {
+  _who(ref);
   final y = ref.watch(leaveYearProvider);
   return ref.watch(leaveServiceProvider).getMyLeave(year: y);
 });
 
 final myBalancesProvider = FutureProvider<List<LeaveBalance>>((ref) async {
+  _who(ref);
   final y = ref.watch(leaveYearProvider);
   return ref.watch(leaveServiceProvider).getBalances(year: y);
 });
 
+/// One employee's balances (leave desk: shown next to a pending request).
+final employeeBalancesProvider =
+    FutureProvider.family<List<LeaveBalance>, String>((ref, employeeId) async {
+  _who(ref);
+  final y = ref.watch(leaveYearProvider);
+  return ref.watch(leaveServiceProvider).getBalances(employeeId: employeeId, year: y);
+});
+
 final leaveRequestsProvider = FutureProvider<List<LeaveRequest>>((ref) async {
+  _who(ref);
   final y = ref.watch(leaveYearProvider);
   return ref.watch(leaveServiceProvider).getRequests(year: y);
 });
 
 final holidaysProvider = FutureProvider<List<Holiday>>((ref) async {
+  _who(ref);
   final y = ref.watch(leaveYearProvider);
   return ref.watch(leaveServiceProvider).getHolidays(year: y);
 });

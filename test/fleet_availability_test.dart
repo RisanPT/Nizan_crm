@@ -13,6 +13,7 @@ import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/data/driver_day.dart';
 import 'package:nizan_crm/features/fleet/controllers/fleet_availability_controller.dart';
 import 'package:nizan_crm/features/fleet/controllers/vehicle_controller.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_availability.dart';
@@ -173,12 +174,18 @@ AppException _conflictError({
 
 /// A bookings store that records every save and fails them as scripted.
 class _FakeBookings extends BookingNotifier {
-  _FakeBookings(this.list, {this.script});
+  _FakeBookings(this.list, {this.script, this.dayScript, this.driverDay});
   final List<Booking> list;
-  final calls = <({String driverId, String vehicleId, bool confirm})>[];
+  final calls = <({String driverId, String vehicleId, bool confirm, bool confirmDay})>[];
 
   /// Called with `confirm`; return an error to fail that save, or null to let it through.
   final Object? Function(bool confirm)? script;
+
+  /// The same for the one-driver-per-artist-day question (called with `confirmDay`).
+  final Object? Function(bool confirmDay)? dayScript;
+
+  /// What the server says it did to the artist's other works that day.
+  final DriverDayResult? driverDay;
 
   @override
   FutureOr<List<Booking>> build() => list;
@@ -187,15 +194,17 @@ class _FakeBookings extends BookingNotifier {
   Future<Booking> updateBooking(
     Booking booking, {
     bool confirmFleetConflict = false,
+    bool confirmDriverDay = false,
   }) async {
     calls.add((
       driverId: booking.driverId,
       vehicleId: booking.vehicleId,
       confirm: confirmFleetConflict,
+      confirmDay: confirmDriverDay,
     ));
-    final err = script?.call(confirmFleetConflict);
+    final err = script?.call(confirmFleetConflict) ?? dayScript?.call(confirmDriverDay);
     if (err != null) throw err;
-    return booking;
+    return booking.copyWith(driverDay: driverDay);
   }
 }
 
@@ -565,6 +574,143 @@ void main() {
       await t.tap(find.byKey(const Key('fleetConflictAssign')));
       await t.pumpAndSettle();
       expect(result, isA<AppException>());
+    });
+
+    // ── One driver per artist per day ──────────────────────────────────
+    AppException dayConflict() {
+      final ro = RequestOptions(path: '/bookings/b1');
+      return AppException(
+        DioException(
+          requestOptions: ro,
+          type: DioExceptionType.badResponse,
+          response: Response(
+            requestOptions: ro,
+            statusCode: 409,
+            data: {
+              'code': 'DRIVER_DAY_CONFLICT',
+              'message': 'One driver covers all of the artist\'s works in a day.',
+              'driverName': 'Ravi',
+              'works': [
+                {
+                  'bookingId': 'b2',
+                  'bookingNumber': 'BK-2',
+                  'customerName': 'Anu',
+                  'serviceStart': '2026-11-20T06:30:00.000Z',
+                  'day': '2026-11-20',
+                  'label': '#BK-2 · Anu',
+                  'currentDriverName': 'Sajan',
+                },
+              ],
+            },
+          ),
+        ),
+        action: 'update booking',
+      );
+    }
+
+    final dayResult = DriverDayResult.fromJson({
+      'driverName': 'Ravi',
+      'removed': false,
+      'assigned': [
+        {'bookingId': 'b2', 'label': '#BK-2 · Anu', 'day': '2026-11-20', 'previousDriverName': 'Sajan'},
+        {'bookingId': 'b3', 'label': '#BK-3 · Mini', 'day': '2026-11-20'},
+      ],
+      'skipped': [
+        {'bookingId': 'b4', 'label': '#BK-4 · Rasha', 'day': '2026-11-20', 'reason': 'multi_day'},
+      ],
+      'warnings': [],
+    })!;
+
+    test('the 409 DRIVER_DAY_CONFLICT is recognised; a FLEET_CONFLICT is not one', () {
+      final c = DriverDayConflict.of(dayConflict())!;
+      expect(c.driverName, 'Ravi');
+      expect(c.works.single.label, '#BK-2 · Anu');
+      expect(c.works.single.driverName, 'Sajan');
+      expect(DriverDayConflict.of(_conflictError()), isNull);
+      expect(FleetConflict.of(dayConflict()), isNull);
+    });
+
+    test('an empty or missing driverDay in the response means nothing to show', () {
+      expect(DriverDayResult.fromJson(null), isNull);
+      expect(DriverDayResult.fromJson({'assigned': [], 'skipped': [], 'warnings': []}), isNull);
+      expect(Booking.fromJson({..._booking().toJson(), '_id': 'b1', 'driverDay': null}).driverDay, isNull);
+    });
+
+    testWidgets(
+      'her other work has another driver: asked "move it too?", then saved again WITH that confirmation',
+      (t) async {
+        final store = _FakeBookings(
+          [_booking()],
+          dayScript: (confirmDay) => confirmDay ? null : dayConflict(),
+          driverDay: dayResult,
+        );
+        Object? result;
+        await t.pumpWidget(app(store, (r) => result = r));
+        await t.tap(find.text('save'));
+        await t.pumpAndSettle();
+        expect(find.byKey(const Key('driverDayConflictDialog')), findsOneWidget);
+        expect(find.textContaining('#BK-2 · Anu', findRichText: true), findsOneWidget);
+        expect(find.textContaining('Driver now: Sajan', findRichText: true), findsOneWidget);
+        expect(store.calls, hasLength(1));
+        await t.tap(find.byKey(const Key('driverDayConflictMove')));
+        await t.pumpAndSettle();
+        expect(store.calls.map((c) => c.confirmDay), [false, true]);
+        // …and then what was done is shown.
+        expect(find.byKey(const Key('driverDayResultDialog')), findsOneWidget);
+        await t.tap(find.byKey(const Key('driverDayResultOk')));
+        await t.pumpAndSettle();
+        expect(result, isA<Booking>());
+      },
+    );
+
+    testWidgets('"Cancel" on the driver-day question: nothing more is sent, the answer is null', (t) async {
+      final store = _FakeBookings([_booking()], dayScript: (confirmDay) => confirmDay ? null : dayConflict());
+      Object? result = 'unset';
+      await t.pumpWidget(app(store, (r) => result = r));
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('driverDayConflictCancel')));
+      await t.pumpAndSettle();
+      expect(result, isNull);
+      expect(store.calls, hasLength(1));
+    });
+
+    testWidgets('a fleet clash and then a driver-day question: both asked, the last save carries both', (t) async {
+      final store = _FakeBookings(
+        [_booking()],
+        script: (confirm) => confirm ? null : _conflictError(),
+        dayScript: (confirmDay) => confirmDay ? null : dayConflict(),
+      );
+      await t.pumpWidget(app(store, (_) {}));
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('fleetConflictAssign')));
+      await t.pumpAndSettle();
+      await t.tap(find.byKey(const Key('driverDayConflictMove')));
+      await t.pumpAndSettle();
+      expect(store.calls.map((c) => (c.confirm, c.confirmDay)), [(false, false), (true, false), (true, true)]);
+    });
+
+    testWidgets('after the save, the works that also got the driver and the ones left alone are listed', (t) async {
+      final store = _FakeBookings([_booking()], driverDay: dayResult);
+      await t.pumpWidget(app(store, (_) {}));
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      expect(find.text('Driver set for the whole day'), findsOneWidget);
+      expect(find.textContaining('Also assigned to Ravi'), findsOneWidget);
+      expect(find.textContaining('#BK-2 · Anu', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Was: Sajan', findRichText: true), findsOneWidget);
+      expect(find.textContaining('#BK-3 · Mini', findRichText: true), findsOneWidget);
+      expect(find.text('Not changed:'), findsOneWidget);
+      expect(find.textContaining('runs over several days', findRichText: true), findsOneWidget);
+    });
+
+    testWidgets('no other works that day: no dialog after the save', (t) async {
+      final store = _FakeBookings([_booking()]);
+      await t.pumpWidget(app(store, (_) {}));
+      await t.tap(find.text('save'));
+      await t.pumpAndSettle();
+      expect(find.byKey(const Key('driverDayResultDialog')), findsNothing);
     });
   });
 

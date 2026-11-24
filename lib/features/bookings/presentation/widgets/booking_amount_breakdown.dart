@@ -152,11 +152,24 @@ class BookingAmounts {
 /// advance, collections and balance. Used by Invoices & Bookings quick view
 /// and the Accounts invoice detail.
 class BookingAmountBreakdown extends StatelessWidget {
-  const BookingAmountBreakdown({super.key, required this.booking});
+  const BookingAmountBreakdown({super.key, required this.booking, this.onEditAdvance});
   final Booking booking;
+
+  /// Shows a pencil on the advance line when set (see
+  /// EditableBookingAmountBreakdown, which sets it for allowed roles).
+  final VoidCallback? onEditAdvance;
 
   static final NumberFormat _inr =
       NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+
+  /// "Edited ₹3,000 → ₹5,000 by Anu on 20 Nov 2026: client paid more".
+  static String _advanceChangeNote(AdvanceChange c, int count) {
+    final by = c.changedByName.isNotEmpty ? ' by ${c.changedByName}' : '';
+    final on = c.changedAt != null ? ' on ${DateFormat('d MMM yyyy').format(c.changedAt!)}' : '';
+    final why = c.reason.isNotEmpty ? ': ${c.reason}' : '';
+    final more = count > 1 ? ' ($count edits)' : '';
+    return 'Advance edited ${_inr.format(c.from)} → ${_inr.format(c.to)}$by$on$why$more';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +188,7 @@ class BookingAmountBreakdown extends StatelessWidget {
         );
 
     Widget line(String label, double amount,
-            {String detail = '', bool bold = false, Color? color, String prefix = ''}) =>
+            {String detail = '', bool bold = false, Color? color, String prefix = '', Widget? trailing}) =>
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
@@ -201,6 +214,7 @@ class BookingAmountBreakdown extends StatelessWidget {
                       fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
                       fontSize: bold ? 15 : 13.5,
                       color: color ?? crm.textPrimary)),
+              ?trailing,
             ],
           ),
         );
@@ -260,8 +274,28 @@ class BookingAmountBreakdown extends StatelessWidget {
               detail: [
                 if (b.paymentMode.isNotEmpty) b.paymentMode,
                 if (a.advance <= 0) 'No advance recorded',
+                if (a.advance > 0 && b.advanceStatus == 'pending') 'Awaiting Accounts verification',
+                if (a.advance > 0 && b.advanceStatus == 'rejected') 'Rejected by Accounts',
               ].join(' · '),
-              color: a.advance > 0 ? crm.success : crm.textSecondary),
+              color: a.advance > 0 ? crm.success : crm.textSecondary,
+              trailing: onEditAdvance == null
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: InkWell(
+                        onTap: onEditAdvance,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Tooltip(
+                          message: 'Edit advance',
+                          child: Padding(
+                            padding: const EdgeInsets.all(3),
+                            child: Icon(Icons.edit_outlined, size: 16, color: crm.primary),
+                          ),
+                        ),
+                      ),
+                    )),
+          if (b.advanceHistory.isNotEmpty)
+            note(_advanceChangeNote(b.advanceHistory.last, b.advanceHistory.length)),
           line('Collected after event', a.collected,
               detail: 'Verified collections',
               color: a.collected > 0 ? crm.success : crm.textSecondary),

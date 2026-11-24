@@ -50,7 +50,8 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
     final isMobile = ResponsiveBuilder.isMobile(context);
     final session = ref.watch(authSessionProvider);
     final role = session?.role ?? '';
-    final isAdmin = role == 'admin' || role == 'manager';
+    // HR (role `hr`) evaluates everyone, like admin / manager.
+    final isAdmin = role == 'admin' || role == 'manager' || role.trim().toLowerCase() == 'hr';
     final isHead = session?.isDepartmentHead ?? false;
     final canManage = isAdmin || isHead;
 

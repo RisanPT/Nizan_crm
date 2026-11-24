@@ -8,6 +8,10 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/ess/service/ess_service.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/services/role_service.dart';
+import 'package:nizan_crm/features/hr/recruitment/data/recruitment_models.dart';
+import 'package:nizan_crm/features/hr/recruitment/service/recruitment_service.dart';
 
 /// HR Employee Logins — provision self-service (ESS) accounts. Each invite
 /// creates (or refreshes) a login and emails a one-time set-password link; no
@@ -130,10 +134,97 @@ class _HrLoginsScreenState extends ConsumerState<HrLoginsScreen> {
     );
   }
 
+  /// Login roles this requester may hand out (mirrors the backend rule:
+  /// admin → any; manager → any but admin; hr → any but admin / manager / CEO;
+  /// anyone else → self-service only).
+  bool _mayGrant(String requester, String key) {
+    if (key == 'employee') return true;
+    switch (requester) {
+      case 'admin':
+        return true;
+      case 'manager':
+        return key != 'admin';
+      case 'hr':
+        return !const ['admin', 'manager', 'ceo'].contains(key);
+      default:
+        return false;
+    }
+  }
+
+  /// Asks which login role to give, pre-selecting the CRM role linked to the
+  /// employee's HRMS job role. Returns null when cancelled.
+  Future<String?> _pickLoginRole(Employee e) async {
+    final requester = (ref.read(authSessionProvider)?.role ?? '').trim().toLowerCase();
+    List<AppRoleRecord> roles = const [];
+    List<JobRole> jobRoles = const [];
+    try {
+      roles = await ref.read(rolesProvider.future);
+    } catch (_) {}
+    try {
+      jobRoles = await ref.read(jobRolesProvider.future);
+    } catch (_) {}
+    final options = roles.where((r) => r.active && _mayGrant(requester, r.key)).toList();
+    if (!options.any((r) => r.key == 'employee')) {
+      options.insert(0, const AppRoleRecord(
+        id: '', key: 'employee', label: 'Employee (Self-service)', permissions: [],
+        homeRoute: '/hr/home', isSystem: true, active: true, userCount: 0,
+      ));
+    }
+    final jobRole = jobRoles.where((j) => j.id == e.jobRoleId).firstOrNull;
+    final linked = jobRole?.crmRoleKey ?? '';
+    String selected = options.any((r) => r.key == linked) ? linked : 'employee';
+    if (!mounted) return null;
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text('Invite ${e.name}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selected,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Login role', border: OutlineInputBorder(), isDense: true),
+                items: options
+                    .map((r) => DropdownMenuItem(value: r.key, child: Text(r.label, overflow: TextOverflow.ellipsis)))
+                    .toList(),
+                onChanged: (v) => setLocal(() => selected = v ?? 'employee'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                jobRole == null
+                    ? 'No HRMS job role linked to this employee.'
+                    : linked.isEmpty
+                        ? 'Job role "${jobRole.designation}" has no CRM login role set.'
+                        : options.any((r) => r.key == linked)
+                            ? 'Pre-selected from job role "${jobRole.designation}".'
+                            : 'Job role "${jobRole.designation}" links "$linked", which you cannot grant.',
+                style: const TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'An existing login keeps its current role.',
+                style: TextStyle(fontSize: 11.5),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(selected), child: const Text('Send invite')),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _invite(Employee e) async {
+    final role = await _pickLoginRole(e);
+    if (role == null || !mounted) return;
     setState(() => _busy.add(e.id));
     try {
-      final res = await ref.read(essServiceProvider).provision(e.id);
+      final res = await ref.read(essServiceProvider).provision(e.id, role: role);
       if (!mounted) return;
       if (res.emailSent) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:nizan_crm/core/models/blocked_date.dart' show dayString;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
@@ -40,7 +41,7 @@ class SlotService {
   Future<void> setDay({required DateTime date, required int morning, required int evening}) async {
     try {
       await _dio.put('/slots/day', data: {
-        'date': date.toIso8601String(),
+        'date': dayString(date),
         'morning': morning,
         'evening': evening,
       });
@@ -52,7 +53,7 @@ class SlotService {
   /// Remove a day's override (revert to the default).
   Future<void> clearDay(DateTime date) async {
     try {
-      await _dio.delete('/slots/day', queryParameters: {'date': date.toIso8601String()});
+      await _dio.delete('/slots/day', queryParameters: {'date': dayString(date)});
     } catch (e) {
       throw AppException(e, action: 'reset the day');
     }

@@ -206,6 +206,10 @@ class JobRole {
   final String designation;
   final String shortTitle;
   final String dept;
+  /// Department in the HR Departments master (null on older roles).
+  final String? departmentId;
+  /// Settings → Roles key a hire into this job gets as their CRM login ('' = self-service).
+  final String crmRoleKey;
   final String band;
   final int tier;
   final String? parentId;
@@ -227,6 +231,8 @@ class JobRole {
     this.designation = '',
     this.shortTitle = '',
     this.dept = '',
+    this.departmentId,
+    this.crmRoleKey = '',
     this.band = 'L3',
     this.tier = 5,
     this.parentId,
@@ -254,6 +260,10 @@ class JobRole {
       designation: j['designation'] as String? ?? '',
       shortTitle: j['shortTitle'] as String? ?? (j['designation'] as String? ?? ''),
       dept: j['dept'] as String? ?? '',
+      departmentId: j['departmentId'] is Map
+          ? (j['departmentId']['_id'] as String?)
+          : (j['departmentId'] as String?),
+      crmRoleKey: j['crmRoleKey'] as String? ?? '',
       band: j['band'] as String? ?? 'L3',
       tier: _i(j['tier']) == 0 ? 5 : _i(j['tier']),
       parentId: j['parentId'] as String?,

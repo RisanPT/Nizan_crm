@@ -1,0 +1,1099 @@
+{
+  "sections": {
+    "hero": {
+      "label": "Hero (top of home page)",
+      "page": "home",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Title",
+          "maxLength": 60
+        },
+        "subtitle": {
+          "type": "textarea",
+          "label": "Subtitle",
+          "maxLength": 200
+        },
+        "ctaLabel": {
+          "type": "text",
+          "label": "Button text",
+          "maxLength": 30
+        },
+        "imageDesktop": {
+          "type": "image",
+          "label": "Background (desktop)",
+          "rule": "heroDesktop",
+          "upload": {
+            "key": "heroDesktop",
+            "label": "Hero background (desktop)",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png",
+              ".webp"
+            ],
+            "maxBytes": 5242880,
+            "minWidth": 1600,
+            "minHeight": 900,
+            "ratio": [
+              1.6,
+              1.9
+            ],
+            "shape": "Landscape, about 16:9",
+            "hint": "JPG, PNG, WebP · max 5 MB · at least 1600 × 900 px · Landscape, about 16:9"
+          }
+        },
+        "imageMobile": {
+          "type": "image",
+          "label": "Background (mobile)",
+          "rule": "heroMobile",
+          "upload": {
+            "key": "heroMobile",
+            "label": "Hero background (mobile)",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png",
+              ".webp"
+            ],
+            "maxBytes": 4194304,
+            "minWidth": 1080,
+            "minHeight": 1920,
+            "ratio": [
+              0.5,
+              0.62
+            ],
+            "shape": "Portrait, about 9:16",
+            "hint": "JPG, PNG, WebP · max 4 MB · at least 1080 × 1920 px · Portrait, about 9:16"
+          }
+        },
+        "stats": {
+          "type": "list",
+          "label": "Counters",
+          "maxItems": 3,
+          "fields": {
+            "value": {
+              "type": "number",
+              "label": "Number",
+              "min": 0,
+              "max": 1000000,
+              "required": true
+            },
+            "suffix": {
+              "type": "text",
+              "label": "After number (e.g. +)",
+              "maxLength": 3
+            },
+            "label": {
+              "type": "text",
+              "label": "Label",
+              "maxLength": 30,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "availabilityStrip": {
+      "label": "Open dates strip",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 40
+        },
+        "ctaLabel": {
+          "type": "text",
+          "label": "Button text",
+          "maxLength": 30
+        }
+      }
+    },
+    "intro": {
+      "label": "Introduction",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "body": {
+          "type": "textarea",
+          "label": "Text",
+          "maxLength": 400
+        },
+        "image": {
+          "type": "image",
+          "label": "Photo",
+          "rule": "portrait",
+          "upload": {
+            "key": "portrait",
+            "label": "Portrait photo",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/webp"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".webp"
+            ],
+            "maxBytes": 3145728,
+            "minWidth": 900,
+            "minHeight": 1125,
+            "ratio": [
+              0.74,
+              0.86
+            ],
+            "shape": "Portrait, 4:5",
+            "hint": "JPG, WebP · max 3 MB · at least 900 × 1125 px · Portrait, 4:5"
+          }
+        },
+        "highlights": {
+          "type": "list",
+          "label": "Highlights",
+          "maxItems": 3,
+          "fields": {
+            "label": {
+              "type": "text",
+              "label": "Title",
+              "maxLength": 30,
+              "required": true
+            },
+            "text": {
+              "type": "textarea",
+              "label": "Text",
+              "maxLength": 160,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "recentBrides": {
+      "label": "Recent brides",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        }
+      }
+    },
+    "packagesPreview": {
+      "label": "Packages preview",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        }
+      }
+    },
+    "about": {
+      "label": "About Feeniya",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "quote": {
+          "type": "textarea",
+          "label": "Quote",
+          "maxLength": 200
+        },
+        "body": {
+          "type": "textarea",
+          "label": "Text",
+          "maxLength": 800
+        },
+        "portrait": {
+          "type": "image",
+          "label": "Portrait",
+          "rule": "portrait",
+          "upload": {
+            "key": "portrait",
+            "label": "Portrait photo",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/webp"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".webp"
+            ],
+            "maxBytes": 3145728,
+            "minWidth": 900,
+            "minHeight": 1125,
+            "ratio": [
+              0.74,
+              0.86
+            ],
+            "shape": "Portrait, 4:5",
+            "hint": "JPG, WebP · max 3 MB · at least 900 × 1125 px · Portrait, 4:5"
+          }
+        },
+        "stats": {
+          "type": "list",
+          "label": "Facts",
+          "maxItems": 3,
+          "fields": {
+            "number": {
+              "type": "text",
+              "label": "Number / word",
+              "maxLength": 12,
+              "required": true
+            },
+            "label": {
+              "type": "text",
+              "label": "Label",
+              "maxLength": 30,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "howItWorks": {
+      "label": "How it works",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "steps": {
+          "type": "list",
+          "label": "Steps",
+          "maxItems": 6,
+          "fields": {
+            "title": {
+              "type": "text",
+              "label": "Step title",
+              "maxLength": 40,
+              "required": true
+            },
+            "text": {
+              "type": "textarea",
+              "label": "Step text",
+              "maxLength": 200,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "faq": {
+      "label": "FAQ",
+      "page": "home",
+      "fields": {
+        "eyebrow": {
+          "type": "text",
+          "label": "Small heading",
+          "maxLength": 40
+        },
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "items": {
+          "type": "list",
+          "label": "Questions",
+          "maxItems": 20,
+          "fields": {
+            "question": {
+              "type": "text",
+              "label": "Question",
+              "maxLength": 120,
+              "required": true
+            },
+            "answer": {
+              "type": "textarea",
+              "label": "Answer",
+              "maxLength": 600,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "packagesPage": {
+      "label": "Packages page",
+      "page": "packages",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "intro": {
+          "type": "textarea",
+          "label": "Intro text",
+          "maxLength": 300
+        },
+        "comparison": {
+          "type": "list",
+          "label": "Comparison table rows",
+          "maxItems": 12,
+          "fields": {
+            "feature": {
+              "type": "text",
+              "label": "Feature",
+              "maxLength": 60,
+              "required": true
+            },
+            "values": {
+              "type": "keyedText",
+              "label": "Value per package",
+              "maxLength": 80
+            }
+          }
+        },
+        "guarantees": {
+          "type": "list",
+          "label": "Why brides trust us",
+          "maxItems": 6,
+          "fields": {
+            "title": {
+              "type": "text",
+              "label": "Title",
+              "maxLength": 40,
+              "required": true
+            },
+            "text": {
+              "type": "textarea",
+              "label": "Text",
+              "maxLength": 200,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "policies": {
+      "label": "Policies",
+      "page": "policies",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Heading",
+          "maxLength": 80
+        },
+        "lastUpdated": {
+          "type": "text",
+          "label": "Last updated (e.g. 16 Nov 2026)",
+          "maxLength": 30
+        },
+        "sections": {
+          "type": "list",
+          "label": "Policy sections",
+          "maxItems": 20,
+          "fields": {
+            "heading": {
+              "type": "text",
+              "label": "Heading",
+              "maxLength": 80,
+              "required": true
+            },
+            "body": {
+              "type": "textarea",
+              "label": "Text",
+              "maxLength": 3000,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "contact": {
+      "label": "Contact & Footer",
+      "page": "global",
+      "fields": {
+        "phone": {
+          "type": "phone",
+          "label": "Phone"
+        },
+        "whatsapp": {
+          "type": "phone",
+          "label": "WhatsApp number"
+        },
+        "email": {
+          "type": "email",
+          "label": "Email"
+        },
+        "address": {
+          "type": "textarea",
+          "label": "Studio address",
+          "maxLength": 300
+        },
+        "mapUrl": {
+          "type": "url",
+          "label": "Google Maps link",
+          "maxLength": 500
+        },
+        "hours": {
+          "type": "text",
+          "label": "Opening hours",
+          "maxLength": 100
+        },
+        "instagramUrl": {
+          "type": "url",
+          "label": "Instagram",
+          "maxLength": 200
+        },
+        "facebookUrl": {
+          "type": "url",
+          "label": "Facebook",
+          "maxLength": 200
+        },
+        "youtubeUrl": {
+          "type": "url",
+          "label": "YouTube",
+          "maxLength": 200
+        },
+        "logo": {
+          "type": "image",
+          "label": "Logo",
+          "rule": "logo",
+          "upload": {
+            "key": "logo",
+            "label": "Logo",
+            "mimeTypes": [
+              "image/png",
+              "image/webp"
+            ],
+            "extensions": [
+              ".png",
+              ".webp"
+            ],
+            "maxBytes": 1048576,
+            "minWidth": 300,
+            "minHeight": 100,
+            "ratio": null,
+            "shape": "Transparent background",
+            "hint": "PNG, WebP · max 1 MB · at least 300 × 100 px · Transparent background"
+          }
+        },
+        "logoWhite": {
+          "type": "image",
+          "label": "Logo (white, for dark backgrounds)",
+          "rule": "logo",
+          "upload": {
+            "key": "logo",
+            "label": "Logo",
+            "mimeTypes": [
+              "image/png",
+              "image/webp"
+            ],
+            "extensions": [
+              ".png",
+              ".webp"
+            ],
+            "maxBytes": 1048576,
+            "minWidth": 300,
+            "minHeight": 100,
+            "ratio": null,
+            "shape": "Transparent background",
+            "hint": "PNG, WebP · max 1 MB · at least 300 × 100 px · Transparent background"
+          }
+        }
+      }
+    },
+    "seoHome": {
+      "label": "SEO — Home page",
+      "page": "home",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seoPackages": {
+      "label": "SEO — Packages page",
+      "page": "packages",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seoPortfolio": {
+      "label": "SEO — Portfolio page",
+      "page": "portfolio",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seoBook": {
+      "label": "SEO — Book page",
+      "page": "book",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seoContact": {
+      "label": "SEO — Contact page",
+      "page": "contact",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seoPolicies": {
+      "label": "SEO — Policies page",
+      "page": "policies",
+      "fields": {
+        "title": {
+          "type": "text",
+          "label": "Meta title (Google result + browser tab, ~50–60 characters)",
+          "maxLength": 70
+        },
+        "description": {
+          "type": "textarea",
+          "label": "Meta description (Google snippet, ~140–160 characters)",
+          "maxLength": 160
+        },
+        "keywords": {
+          "type": "text",
+          "label": "Keywords (comma separated)",
+          "maxLength": 200
+        },
+        "shareTitle": {
+          "type": "text",
+          "label": "Title when shared on WhatsApp / Facebook (optional)",
+          "maxLength": 90
+        },
+        "shareDescription": {
+          "type": "textarea",
+          "label": "Description when shared (optional)",
+          "maxLength": 200
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image when this page is shared (optional)",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        }
+      }
+    },
+    "seo": {
+      "label": "SEO & sharing",
+      "page": "global",
+      "fields": {
+        "siteTitle": {
+          "type": "text",
+          "label": "Browser tab / Google title",
+          "maxLength": 70
+        },
+        "siteDescription": {
+          "type": "textarea",
+          "label": "Google description",
+          "maxLength": 160
+        },
+        "shareImage": {
+          "type": "image",
+          "label": "Image shown when the link is shared",
+          "rule": "shareImage",
+          "upload": {
+            "key": "shareImage",
+            "label": "Social share image",
+            "mimeTypes": [
+              "image/jpeg",
+              "image/png"
+            ],
+            "extensions": [
+              ".jpg",
+              ".jpeg",
+              ".png"
+            ],
+            "maxBytes": 2097152,
+            "minWidth": 1200,
+            "minHeight": 630,
+            "ratio": [
+              1.85,
+              1.97
+            ],
+            "shape": "Landscape, 1.91:1 (1200 × 630)",
+            "hint": "JPG, PNG · max 2 MB · at least 1200 × 630 px · Landscape, 1.91:1 (1200 × 630)"
+          }
+        },
+        "favicon": {
+          "type": "image",
+          "label": "Favicon",
+          "rule": "favicon",
+          "upload": {
+            "key": "favicon",
+            "label": "Favicon",
+            "mimeTypes": [
+              "image/png"
+            ],
+            "extensions": [
+              ".png"
+            ],
+            "maxBytes": 204800,
+            "minWidth": 512,
+            "minHeight": 512,
+            "ratio": [
+              1,
+              1
+            ],
+            "shape": "Square",
+            "hint": "PNG · max 200 KB · at least 512 × 512 px · Square"
+          }
+        }
+      }
+    }
+  },
+  "gallery": {
+    "categories": [
+      {
+        "key": "makeup",
+        "label": "Bridal Makeup"
+      },
+      {
+        "key": "hair",
+        "label": "Hairstyling"
+      },
+      {
+        "key": "styling",
+        "label": "Styling"
+      },
+      {
+        "key": "events",
+        "label": "Reception & Events"
+      }
+    ],
+    "upload": {
+      "key": "gallery",
+      "label": "Portfolio / gallery photo",
+      "mimeTypes": [
+        "image/jpeg",
+        "image/webp"
+      ],
+      "extensions": [
+        ".jpg",
+        ".jpeg",
+        ".webp"
+      ],
+      "maxBytes": 4194304,
+      "minWidth": 800,
+      "minHeight": 1200,
+      "ratio": [
+        0.6,
+        0.85
+      ],
+      "shape": "Portrait, 4:5 or 2:3",
+      "hint": "JPG, WebP · max 4 MB · at least 800 × 1200 px · Portrait, 4:5 or 2:3"
+    }
+  },
+  "packageFields": {
+    "show": {
+      "type": "boolean",
+      "label": "Show on website"
+    },
+    "sortOrder": {
+      "type": "number",
+      "label": "Order on website",
+      "min": 0,
+      "max": 999
+    },
+    "tagline": {
+      "type": "text",
+      "label": "Tagline",
+      "maxLength": 100
+    },
+    "description": {
+      "type": "textarea",
+      "label": "Website description",
+      "maxLength": 400
+    },
+    "idealFor": {
+      "type": "textarea",
+      "label": "Ideal for",
+      "maxLength": 200
+    },
+    "features": {
+      "type": "textList",
+      "label": "What's included",
+      "maxItems": 12,
+      "maxLength": 120
+    },
+    "durationLabel": {
+      "type": "text",
+      "label": "Duration (e.g. 4 hours)",
+      "maxLength": 30
+    },
+    "highlighted": {
+      "type": "boolean",
+      "label": "Mark as most popular"
+    },
+    "priceFrom": {
+      "type": "boolean",
+      "label": "Show price as \"from\""
+    },
+    "coverImage": {
+      "type": "image",
+      "label": "Cover image",
+      "rule": "packageCover",
+      "upload": {
+        "key": "packageCover",
+        "label": "Package cover",
+        "mimeTypes": [
+          "image/jpeg",
+          "image/webp"
+        ],
+        "extensions": [
+          ".jpg",
+          ".jpeg",
+          ".webp"
+        ],
+        "maxBytes": 3145728,
+        "minWidth": 1200,
+        "minHeight": 900,
+        "ratio": [
+          1.25,
+          1.42
+        ],
+        "shape": "Landscape, 4:3",
+        "hint": "JPG, WebP · max 3 MB · at least 1200 × 900 px · Landscape, 4:3"
+      }
+    }
+  },
+  "addonFields": {
+    "show": {
+      "type": "boolean",
+      "label": "Show on website"
+    },
+    "sortOrder": {
+      "type": "number",
+      "label": "Order on website",
+      "min": 0,
+      "max": 999
+    },
+    "description": {
+      "type": "textarea",
+      "label": "Website description",
+      "maxLength": 200
+    }
+  }
+}

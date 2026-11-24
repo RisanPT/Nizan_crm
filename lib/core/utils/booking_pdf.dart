@@ -133,7 +133,7 @@ Future<Uint8List> buildBookingPdfBytes(
                 ),
               pw.SizedBox(height: 8),
               pw.Text(
-                'TEAM N ERP',
+                'TEAM N MAKEOVERS',
                 style: pw.TextStyle(
                   fontSize: 22,
                   fontWeight: pw.FontWeight.bold,

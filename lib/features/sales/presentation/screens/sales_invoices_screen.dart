@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/widgets/date_pickers.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
-import 'package:nizan_crm/features/bookings/presentation/widgets/booking_amount_breakdown.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/edit_advance_dialog.dart';
 import 'package:nizan_crm/features/sales/utils/second_look.dart';
 import 'package:nizan_crm/core/config/sales_rules.dart';
 import '../../../../core/models/trial.dart';
@@ -1897,7 +1897,7 @@ class _QuickViewSidePanel extends StatelessWidget {
                 8.h,
                 // Full money picture: packages, add-ons, discount, advance,
                 // collections and balance.
-                BookingAmountBreakdown(booking: booking),
+                EditableBookingAmountBreakdown(booking: booking),
                 if (booking.culture.isNotEmpty || booking.phone.isNotEmpty) ...[
                   16.h,
                   if (booking.phone.isNotEmpty) _DetailRow('Phone', booking.phone, crmColors),

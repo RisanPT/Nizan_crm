@@ -264,12 +264,54 @@ List<ShiftAssignment> _assignments() => [
 
 // ── Pumps ───────────────────────────────────────────────────────────────────
 
-Future<void> _pumpLeave(WidgetTester tester, Size size) => _pump(tester, size, const HrLeaveScreen(), [
-      leaveMasterAccessProvider.overrideWith((ref) async => true),
+/// Requests around today so Overview (today / this week / queue) and the
+/// calendar have something to draw: one on leave today, one later this week,
+/// two pending (one from Timebox) and a Timebox decision that failed to send.
+List<LeaveRequest> _liveRequests() {
+  final t = DateTime.now();
+  String d(int offset) => DateTime.utc(t.year, t.month, t.day + offset, 12).toIso8601String();
+  Map<String, dynamic> base(String id, String emp, String name, String status, int from, int to) => {
+        '_id': id,
+        'employeeId': {'_id': emp, 'name': name, 'department': _longDept},
+        'leaveTypeId': 'lt1',
+        'leaveTypeName': 'Casual Leave (Paid, Monthly Credit)',
+        'fromDate': d(from),
+        'toDate': d(to),
+        'days': (to - from + 1).toDouble(),
+        'reason': 'Family function at native place in Thrissur followed by travel for my sister\'s wedding',
+        'status': status,
+        'approvalId': 'ap-$id',
+        'createdAt': d(-2),
+      };
+  return [
+    LeaveRequest.fromJson(base('x1', 'e1', _longName, 'approved', 0, 1)),
+    LeaveRequest.fromJson({...base('x2', 'e2', 'Fathima Liya M', 'approved', 2, 2), 'halfDay': 'first'}),
+    LeaveRequest.fromJson({
+      ...base('x3', 'e3', 'Yadhu Krishna', 'pending', 1, 1),
+      'externalSource': 'timebox',
+      'externalRequestId': 3,
+    }),
+    LeaveRequest.fromJson(base('x4', 'e0', 'Admin', 'pending', 5, 6)),
+    LeaveRequest.fromJson({
+      ...base('x5', 'e2', 'Fathima Liya M', 'rejected', -9, -8),
+      'externalSource': 'timebox',
+      'externalRequestId': 2,
+      'callbackStatus': 'failed',
+    }),
+    ..._requests(),
+  ];
+}
+
+Future<void> _pumpLeave(WidgetTester tester, Size size, {bool desk = true}) =>
+    _pump(tester, size, const HrLeaveScreen(), [
+      leaveDeskAccessProvider.overrideWith((ref) async => desk),
+      leaveMasterAccessProvider.overrideWith((ref) async => desk),
       myBalancesProvider.overrideWith((ref) async => _balances()),
+      employeeBalancesProvider.overrideWith((ref, id) async => _balances()),
       myLeaveProvider.overrideWith((ref) async => _requests()),
-      leaveRequestsProvider.overrideWith((ref) async => _requests()),
+      leaveRequestsProvider.overrideWith((ref) async => _liveRequests()),
       approvalInboxProvider.overrideWith((ref) async => []),
+      leaveInboxProvider.overrideWith((ref) async => []),
       holidaysProvider.overrideWith((ref) async => _holidays()),
       leaveTypesProvider.overrideWith((ref) async => _types()),
     ]);
@@ -296,17 +338,48 @@ void main() {
 
   for (final (label, size) in [('desktop 1440', _desktop), ('phone 390', _phone)]) {
     group(label, () {
-      testWidgets('leave: every tab and dialog lays out without overflow', (tester) async {
+      testWidgets('leave desk: every tab and dialog lays out without overflow', (tester) async {
         await _pumpLeave(tester, size);
-        _ok(tester, 'My Leave tab');
-        await _tapAndCheck(tester, find.text('Apply for leave'), 'Apply dialog');
+        _ok(tester, 'Overview tab');
+        expect(find.text('Waiting for decision'), findsWidgets);
+        // Side column sits below the queue on a phone (lazily built).
+        if (size == _desktop) expect(find.text('Not sent to Timebox'), findsOneWidget);
+        expect(find.text('Apply for leave'), findsNothing); // applied in Timebox only
+        // Reject dialog autofocuses its reason field (blinking cursor never
+        // settles), so pump a fixed time instead of pumpAndSettle.
+        await tester.ensureVisible(find.text('Reject').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Reject').first);
+        await tester.pump(const Duration(milliseconds: 600));
+        _ok(tester, 'Reject dialog');
+        expect(find.text('Keep pending'), findsOneWidget);
+        await tester.tap(find.text('Keep pending'));
+        await tester.pump(const Duration(milliseconds: 600));
+
+        for (final tab in ['Requests', 'Calendar', 'My leave', 'Settings']) {
+          await _tapAndCheck(tester, find.text(tab).first, '$tab tab');
+        }
+        await _tapAndCheck(tester, find.text('Casual Leave (Paid, Monthly Credit) (CL-MONTHLY)'), 'Edit leave type dialog');
+        await _closeDialog(tester);
+        await _tapAndCheck(tester, find.text('Add').first, 'Add holiday dialog');
         await _closeDialog(tester);
 
-        for (final tab in ['Requests', 'Holidays', 'Leave Types']) {
-          await _tapAndCheck(tester, find.widgetWithText(Tab, tab), '$tab tab');
-        }
-        await _tapAndCheck(tester, find.byTooltip('Edit').first, 'Edit leave type dialog');
-        await _closeDialog(tester);
+        // Requests filters.
+        await _tapAndCheck(tester, find.text('Requests').first, 'Requests tab again');
+        await _tapAndCheck(tester, find.textContaining('All ').first, 'All status filter');
+        // Calendar: open a day with people off.
+        await _tapAndCheck(tester, find.text('Calendar').first, 'Calendar tab again');
+        await _tapAndCheck(tester, find.text('Today'), 'Calendar today');
+      });
+
+      testWidgets('leave: employee sees only their own leave', (tester) async {
+        await _pumpLeave(tester, size, desk: false);
+        _ok(tester, 'My leave view');
+        expect(find.text('Overview'), findsNothing);
+        expect(find.text('Requests'), findsNothing);
+        expect(find.text('Upcoming'), findsOneWidget);
+        expect(find.textContaining('Apply for or cancel leave in Timebox'), findsOneWidget);
+        expect(find.text('Apply for leave'), findsNothing);
       });
 
       testWidgets('offboarding: list, cards and certificate dialog', (tester) async {

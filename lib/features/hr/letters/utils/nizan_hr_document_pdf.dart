@@ -1297,20 +1297,21 @@ Future<Uint8List> generateHrLetterPdf({
   String? employeeEmail,
   String? employeePhone,
   double? baseSalary,
+  double? basicSalary,
+  double? hra,
+  double? allowances,
 }) async {
   final title = letterTypeLabel(letter.type).toUpperCase();
   final isOffer = letter.type == 'offer';
 
+  // Salary table (2026-11-24): only the components actually on record. The old
+  // code invented a 50% Basic / 25% HRA / 25% Special split of the gross.
   List<SalaryComponentItem>? salaryComponents;
   if (baseSalary != null && baseSalary > 0 && (isOffer || letter.type == 'salary_certificate')) {
-    final basic = (baseSalary * 0.50).roundToDouble();
-    final hra = (baseSalary * 0.25).roundToDouble();
-    final special = baseSalary - (basic + hra);
-
     salaryComponents = [
-      SalaryComponentItem(label: 'Basic Salary', monthly: basic),
-      SalaryComponentItem(label: 'House Rent Allowance (HRA)', monthly: hra),
-      SalaryComponentItem(label: 'Special Allowance', monthly: special),
+      if ((basicSalary ?? 0) > 0) SalaryComponentItem(label: 'Basic Salary', monthly: basicSalary!),
+      if ((hra ?? 0) > 0) SalaryComponentItem(label: 'House Rent Allowance (HRA)', monthly: hra!),
+      if ((allowances ?? 0) > 0) SalaryComponentItem(label: 'Allowances', monthly: allowances!),
       SalaryComponentItem(label: 'TOTAL GROSS SALARY', monthly: baseSalary, isHeaderOrTotal: true),
     ];
   }

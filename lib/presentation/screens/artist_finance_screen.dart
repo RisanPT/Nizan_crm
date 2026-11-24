@@ -1693,7 +1693,7 @@ class ArtistFinanceScreen extends HookConsumerWidget {
                                           ScaffoldMessenger.of(context).showSnackBar(
                                             SnackBar(
                                               key: const Key('teamLimitSnack'),
-                                              duration: const Duration(seconds: 8),
+                                              duration: const Duration(seconds: 5),
                                               backgroundColor: crm.destructive,
                                               behavior: SnackBarBehavior.floating,
                                               content: Text(

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/booking_amount_breakdown.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/edit_advance_dialog.dart';
 import 'package:nizan_crm/core/models/trial.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/providers/trial_provider.dart';
@@ -1337,7 +1338,14 @@ class _AccountsInvoicesScreenState extends ConsumerState<AccountsInvoicesScreen>
                   if (!isTrial) ...[
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 800),
-                      child: BookingAmountBreakdown(booking: b),
+                      child: EditableBookingAmountBreakdown(
+                        booking: b,
+                        onChanged: (saved) {
+                          if (mounted && _selectedInvoice?.id == saved.id) {
+                            setState(() => _selectedInvoice = saved);
+                          }
+                        },
+                      ),
                     ),
                     const SizedBox(height: 20),
                   ],

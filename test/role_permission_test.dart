@@ -114,4 +114,25 @@ void _salesManagerRoleTests() {
       expect(landingRouteFor(withDashboard), '/');
     });
   });
+
+  group('Leave Management route', () {
+    test('an HR role without the leave permission can open it', () {
+      // e.g. a custom HR role granted only the Staff / HR module.
+      expect(isRouteAllowed('/hr/leave', const Access(AppRole.crm, {'staff'})), isTrue);
+      expect(isRouteAllowed('/hr/leave', const Access(AppRole.sales, {'dashboard'})), isTrue);
+      expect(isRouteAllowed('/hr/leave', const Access(AppRole.admin, {})), isTrue);
+    });
+  });
+
+  group('hr role', () {
+    test('opens Employee Logins and Approvals', () {
+      const hr = Access(AppRole.unknown, {'calendar', 'staff', 'fleet', 'trials'}, roleKey: 'hr');
+      expect(hr.isHrRole, isTrue);
+      expect(isRouteAllowed('/hr/logins', hr), isTrue);
+      expect(isRouteAllowed('/hr/approvals', hr), isTrue);
+      expect(isRouteAllowed('/hr/evaluation', hr), isTrue);
+      const other = Access(AppRole.unknown, {'staff'}, roleKey: 'executive_coordinator');
+      expect(isRouteAllowed('/hr/logins', other), isFalse);
+    });
+  });
 }

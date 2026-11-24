@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/utils/phone_utils.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/booking_date_picker.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -133,8 +134,10 @@ class AddBookingScreen extends HookConsumerWidget {
       days.value = next;
     }
 
-    Future<DateTime?> pickEventDate(DateTime initial) => showDatePicker(
-      context: context,
+    // Blocked dates (HR → Slot Capacity) are greyed out.
+    Future<DateTime?> pickEventDate(DateTime initial) => showWorkDatePicker(
+      context,
+      ref,
       initialDate: initial,
       // Bridal dates are booked 1–2+ years ahead; older dates allowed for
       // legacy entries — same window as the edit screen.
@@ -202,6 +205,9 @@ class AddBookingScreen extends HookConsumerWidget {
         ..showSnackBar(
           SnackBar(
             content: Text('Removed ${_longDate(removed.date)}'),
+            // With an action Flutter keeps a snackbar open forever unless told otherwise.
+            persist: false,
+            duration: const Duration(seconds: 5),
             action: SnackBarAction(
               label: 'Undo',
               onPressed: () => setDays([...days.value, removed]),

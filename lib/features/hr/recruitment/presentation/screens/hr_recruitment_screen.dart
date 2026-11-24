@@ -12,6 +12,9 @@ import 'package:nizan_crm/features/hr/recruitment/data/recruitment_models.dart';
 import 'package:nizan_crm/features/hr/recruitment/service/recruitment_service.dart';
 import 'package:nizan_crm/features/hr/recruitment/utils/recruitment_file_import.dart';
 import 'package:nizan_crm/features/hr/letters/utils/nizan_hr_document_pdf.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
+import 'package:nizan_crm/features/hr/shared/hr_departments.dart';
+import 'package:nizan_crm/services/role_service.dart';
 
 String _fmt(DateTime? d) {
   if (d == null) return '';
@@ -104,24 +107,13 @@ Color _bandColor(String band) {
 
 Widget _chip(String text, Color c) => hrStatusChip(text, c);
 
-const kRecruitmentDepartments = <String>[
-  'Bridal Styling',
-  'Academy',
-  'Studio Ops',
-  'Studio & Services Ops',
-  'Finance & Accounts',
-  'Technology & Systems (IT)',
-  'Fleet',
-  'Executive / Governance',
-];
-
 String resolveDepartmentForRole({
   required String roleTitle,
   String? jobPostId,
   List<JobPost> posts = const [],
   List<JobRole> roles = const [],
   List<HiringPlan> plans = const [],
-  String fallback = 'Bridal Styling',
+  String fallback = '',
 }) {
   if (jobPostId != null && jobPostId.isNotEmpty) {
     final p = posts.where((x) => x.id == jobPostId).firstOrNull;
@@ -142,61 +134,8 @@ String resolveDepartmentForRole({
   final matchPlan = plans.where((p) => p.designation.trim().toLowerCase() == normalized).firstOrNull;
   if (matchPlan != null && matchPlan.department.isNotEmpty) return matchPlan.department;
 
-  // 4. Keyword heuristic based on organizational structure
-  if (normalized.contains('dev-ops') ||
-      normalized.contains('devops') ||
-      normalized.contains('tech') ||
-      normalized.contains('system') ||
-      normalized.contains('engineer') ||
-      normalized.contains('developer') ||
-      normalized.contains('software') ||
-      normalized.contains('it ') ||
-      normalized == 'it') {
-    return 'Technology & Systems (IT)';
-  }
-  if (normalized.contains('bridal') ||
-      normalized.contains('makeup') ||
-      normalized.contains('stylist') ||
-      normalized.contains('drape') ||
-      normalized.contains('hair')) {
-    return 'Bridal Styling';
-  }
-  if (normalized.contains('academy') ||
-      normalized.contains('trainer') ||
-      normalized.contains('faculty') ||
-      normalized.contains('principal') ||
-      normalized.contains('instructor')) {
-    return 'Academy';
-  }
-  if (normalized.contains('fleet') ||
-      normalized.contains('driver') ||
-      normalized.contains('transport') ||
-      normalized.contains('vehicle')) {
-    return 'Fleet';
-  }
-  if (normalized.contains('finance') ||
-      normalized.contains('account') ||
-      normalized.contains('billing') ||
-      normalized.contains('audit') ||
-      normalized.contains('tax') ||
-      normalized.contains('cfo')) {
-    return 'Finance & Accounts';
-  }
-  if (normalized.contains('studio') ||
-      normalized.contains('service') ||
-      normalized.contains('salon') ||
-      normalized.contains('ops') ||
-      normalized.contains('coordinator')) {
-    return 'Studio Ops';
-  }
-  if (normalized.contains('director') ||
-      normalized.contains('ceo') ||
-      normalized.contains('coo') ||
-      normalized.contains('board') ||
-      normalized.contains('executive')) {
-    return 'Executive / Governance';
-  }
-
+  // No keyword guessing (2026-11-24): an unknown title gets no department, so
+  // HR picks a real one instead of an invented 'Bridal Styling' / 'Executive'.
   return fallback;
 }
 
@@ -1571,17 +1510,22 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
         error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => ref.invalidate(jobRolesProvider))]),
         data: (allRoles) {
           if (allRoles.isEmpty) {
+            final canManage = ref.watch(canManageJobRolesProvider);
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('No organizational roles configured yet.'),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: widget.onNewRole,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Role & Analysis'),
-                  ),
+                  Text(canManage
+                      ? 'No job roles yet. Add the roles that exist in the office.'
+                      : 'No job roles yet. HR adds the roles that exist in the office.'),
+                  if (canManage) ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: widget.onNewRole,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Role & Analysis'),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -1666,17 +1610,19 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  FilledButton.icon(
-                    onPressed: widget.onNewRole,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('New Role', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: widget.crm.primary,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  if (ref.watch(canManageJobRolesProvider)) ...[
+                    const SizedBox(width: 10),
+                    FilledButton.icon(
+                      onPressed: widget.onNewRole,
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('New Role', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: widget.crm.primary,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
 
@@ -2289,6 +2235,27 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
             ),
           ],
 
+          const SizedBox(height: 12),
+          Builder(builder: (_) {
+            final crmLabel = role.crmRoleKey.isEmpty
+                ? 'Employee self-service only'
+                : ((ref.watch(rolesProvider).asData?.value ?? const <AppRoleRecord>[])
+                        .where((r) => r.key == role.crmRoleKey)
+                        .firstOrNull
+                        ?.label ??
+                    role.crmRoleKey);
+            return Row(
+              children: [
+                Icon(Icons.vpn_key_outlined, size: 14, color: widget.crm.textSecondary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text('CRM login role for hires: $crmLabel',
+                      style: TextStyle(fontSize: 11.5, color: widget.crm.textSecondary)),
+                ),
+              ],
+            );
+          }),
+
           const SizedBox(height: 18),
 
           // CTAs
@@ -2307,20 +2274,57 @@ class _JobRolesHierarchyTabState extends ConsumerState<_JobRolesHierarchyTab> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: () => widget.onEditRole(role),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              if (ref.watch(canManageJobRolesProvider)) ...[
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => widget.onEditRole(role),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
                 ),
-                child: const Text('Edit', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5)),
-              ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Delete role',
+                  onPressed: () => _confirmDeleteRole(role),
+                  icon: Icon(Icons.delete_outline, color: widget.crm.destructive),
+                ),
+              ],
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteRole(JobRole role) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete job role?'),
+        content: Text(
+          '"${role.designation}" will be removed from Job Roles and the role pickers. '
+          'Employees already hired into it keep their records.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(recruitmentServiceProvider).deleteJobRole(role.id);
+      if (!mounted) return;
+      setState(() => _selectedRoleId = null);
+      ref.invalidate(jobRolesProvider);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"${role.designation}" deleted')));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+      }
+    }
   }
 }
 
@@ -4464,9 +4468,9 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
   late final TextEditingController _exp;
   late final TextEditingController _comp;
 
-  String _dept = 'Bridal Styling';
+  String _dept = '';
   String _type = 'Full-time';
-  String _selectedReporting = 'Studio Operations Head';
+  String _selectedReporting = '';
   bool _busy = false;
 
   @override
@@ -4479,7 +4483,7 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
     _openings = TextEditingController(text: p != null ? '${p.openings}' : (r != null ? '${r.headcount}' : '2'));
     _selectedReporting = p != null && p.reportingLine.isNotEmpty
         ? p.reportingLine
-        : (r != null && r.reportsTo.isNotEmpty ? r.reportsTo : 'Studio Operations Head');
+        : (r != null && r.reportsTo.isNotEmpty ? r.reportsTo : '');
     _justification = TextEditingController(text: p?.businessJustification ?? '');
     _jd = TextEditingController(
       text: p?.jobDescription ?? (r != null ? '${r.purpose}\n\nKey Responsibilities:\n${r.responsibilities.join('\n')}' : ''),
@@ -4516,6 +4520,10 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a designation title')));
       return;
     }
+    if (_dept.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a department')));
+      return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -4550,40 +4558,25 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
     final rolesAsync = ref.watch(jobRolesProvider);
     final roles = rolesAsync.asData?.value ?? [];
 
-    // Distinct list of hierarchy reporting manager options
-    final reportingOptions = <String>[
-      'Studio Operations Head',
-      'Head of Bridal',
-      'Academy Head (Principal)',
-      'IT Head',
-      'Finance Head',
-      'Chief Operating Officer (COO)',
-      'Chief Technology Officer (CTO)',
-      'Chief Financial Officer (CFO)',
-      'Chief Executive Officer (CEO)',
-      'Board of Directors / Apex',
-    ];
-
+    // Reporting line: the job roles HR added, then the CRM roles (Settings →
+    // Roles). '' = not set. No invented CTO / CFO / Board options.
+    final crmRoles = ref.watch(rolesProvider).asData?.value ?? const <AppRoleRecord>[];
+    final reportingOptions = <String>[''];
     for (final role in roles) {
       if (role.designation.isNotEmpty && !reportingOptions.contains(role.designation)) {
         reportingOptions.add(role.designation);
       }
     }
-
+    for (final r in crmRoles) {
+      if (r.active && r.label.isNotEmpty && !reportingOptions.contains(r.label)) reportingOptions.add(r.label);
+    }
     if (_selectedReporting.isNotEmpty && !reportingOptions.contains(_selectedReporting)) {
-      reportingOptions.insert(0, _selectedReporting);
+      reportingOptions.insert(1, _selectedReporting);
     }
 
-    const depts = [
-      'Bridal Styling',
-      'Academy',
-      'Studio Ops',
-      'Studio & Services Ops',
-      'Finance & Accounts',
-      'Technology & Systems (IT)',
-      'Fleet',
-      'Executive / Governance',
-    ];
+    // Real departments; the plan's own department is always kept.
+    final depts = hrDepartmentOptions(ref.watch(departmentsProvider).asData?.value ?? const [], current: _dept);
+    final deptValue = hrDepartmentValue(depts, _dept);
 
     return Dialog(
       backgroundColor: crm.surface,
@@ -4652,7 +4645,8 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                                       if (match.competencies.isNotEmpty) _comp.text = match.competencies.join(', ');
                                       if (match.reportsTo.isNotEmpty) _selectedReporting = match.reportsTo;
                                     } else {
-                                      _dept = resolveDepartmentForRole(roleTitle: roleTitle, roles: roles);
+                                      final guess = resolveDepartmentForRole(roleTitle: roleTitle, roles: roles);
+                                      if (guess.isNotEmpty) _dept = guess;
                                     }
                                   });
                                 },
@@ -4664,7 +4658,7 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                       ),
                       onChanged: (val) {
                         final autoDept = resolveDepartmentForRole(roleTitle: val, roles: roles);
-                        if (autoDept != _dept) {
+                        if (autoDept.isNotEmpty && autoDept != _dept) {
                           setState(() => _dept = autoDept);
                         }
                       },
@@ -4674,14 +4668,15 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            key: ValueKey('hiring_plan_dept_$_dept'),
-                            initialValue: depts.contains(_dept) ? _dept : depts.first,
+                            key: ValueKey('hiring_plan_dept_${_dept}_${depts.length}'),
+                            initialValue: deptValue.isEmpty ? null : deptValue,
+                            hint: const Text('Choose department', style: TextStyle(fontSize: 13)),
                             isExpanded: true,
                             dropdownColor: crm.surface,
                             style: TextStyle(fontSize: 13, color: crm.textPrimary),
-                            decoration: const InputDecoration(labelText: 'Department (Auto-linked)', border: OutlineInputBorder(), isDense: true),
+                            decoration: const InputDecoration(labelText: 'Department *', border: OutlineInputBorder(), isDense: true),
                             items: depts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: TextStyle(fontSize: 13, color: crm.textPrimary)))).toList(),
-                            onChanged: (v) => setState(() => _dept = v ?? 'Bridal Styling'),
+                            onChanged: (v) => setState(() => _dept = v ?? _dept),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -4712,10 +4707,8 @@ class _HiringPlanDialogState extends ConsumerState<_HiringPlanDialog> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            key: ValueKey('hiring_plan_reporting_$_selectedReporting'),
-                            initialValue: reportingOptions.contains(_selectedReporting)
-                                ? _selectedReporting
-                                : (reportingOptions.isNotEmpty ? reportingOptions.first : null),
+                            key: ValueKey('hiring_plan_reporting_${_selectedReporting}_${reportingOptions.length}'),
+                            initialValue: reportingOptions.contains(_selectedReporting) ? _selectedReporting : '',
                             isExpanded: true,
                             dropdownColor: crm.surface,
                             style: TextStyle(fontSize: 13, color: crm.textPrimary),
@@ -4862,7 +4855,12 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
   late final TextEditingController _skills;
   late final TextEditingController _comp;
 
-  String _dept = 'Bridal Styling';
+  /// Department from the HR Departments master (id), and its name as a fallback
+  /// for roles saved before departments were linked.
+  String? _departmentId;
+  String _dept = '';
+  /// Settings → Roles key a hire into this job gets as their login ('' = self-service).
+  String _crmRoleKey = '';
   int _tier = 5;
   String _band = 'L3';
   bool _busy = false;
@@ -4885,6 +4883,8 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
 
     if (r != null) {
       _dept = r.dept;
+      _departmentId = r.departmentId;
+      _crmRoleKey = r.crmRoleKey;
       _tier = r.tier;
       _band = r.band;
     }
@@ -4912,17 +4912,28 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a designation title')));
       return;
     }
+    if ((_departmentId ?? '').isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a department')));
+      return;
+    }
 
     setState(() => _busy = true);
     try {
       final skillNames = _skills.text.split(',').map((s) => s.trim()).filter((s) => s.isNotEmpty).toList();
+      final reportsTo = _reportsTo.text.trim();
+      // Link the hierarchy to the job role it reports to, when it is one.
+      final parent = (ref.read(jobRolesProvider).asData?.value ?? const <JobRole>[])
+          .where((x) => x.designation == reportsTo && x.id != widget.existing?.id)
+          .firstOrNull;
       final body = {
         'designation': desigText,
         'shortTitle': _shortTitle.text.trim().isNotEmpty ? _shortTitle.text.trim() : desigText,
-        'dept': _dept,
+        'departmentId': _departmentId,
+        'crmRoleKey': _crmRoleKey,
         'tier': _tier,
         'band': _band,
-        'reportsTo': _reportsTo.text.trim(),
+        'reportsTo': reportsTo,
+        'parentId': parent?.id,
         'headcount': int.tryParse(_headcount.text.trim()) ?? 1,
         'purpose': _purpose.text.trim(),
         'responsibilities': _resp.text.split('\n').map((s) => s.trim()).filter((s) => s.isNotEmpty).toList(),
@@ -4949,40 +4960,40 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
     final rolesAsync = ref.watch(jobRolesProvider);
     final allRoles = rolesAsync.asData?.value ?? [];
 
-    final reportsToOptions = <String>[
-      'Studio Operations Head',
-      'Head of Bridal',
-      'IT Head',
-      'Finance Head',
-      'Academy Head (Principal)',
-      'Chief Operating Officer (COO)',
-      'Chief Technology Officer (CTO)',
-      'Chief Financial Officer (CFO)',
-      'Chief Executive Officer (CEO)',
-      'Board of Directors / Apex',
-    ];
+    // Real departments (HR Departments master) and the CRM roles (Settings → Roles).
+    final departments = (ref.watch(departmentsProvider).asData?.value ?? const [])
+        .where((d) => d.active || d.id == _departmentId)
+        .toList();
+    final crmRoles = (ref.watch(rolesProvider).asData?.value ?? const <AppRoleRecord>[])
+        .where((r) => r.active || r.key == _crmRoleKey)
+        .toList();
+    // A role saved before departments were linked: match its department by name.
+    if ((_departmentId ?? '').isEmpty && _dept.isNotEmpty) {
+      final byName = departments.where((d) => d.name.toLowerCase() == _dept.toLowerCase()).firstOrNull;
+      if (byName != null) _departmentId = byName.id;
+    }
+    final deptValue = departments.any((d) => d.id == _departmentId) ? _departmentId : null;
+    final crmValue = _crmRoleKey.isEmpty || crmRoles.any((r) => r.key == _crmRoleKey) ? _crmRoleKey : '';
 
+    // Reports To: the job roles HR has added, then the existing CRM roles.
+    // '' = top of the hierarchy (reports to no one).
+    final reportsToOptions = <String>[''];
     for (final r in allRoles) {
+      if (r.id == widget.existing?.id) continue;
       if (r.designation.isNotEmpty && !reportsToOptions.contains(r.designation)) {
         reportsToOptions.add(r.designation);
+      }
+    }
+    for (final r in crmRoles) {
+      if (r.label.isNotEmpty && !reportsToOptions.contains(r.label)) {
+        reportsToOptions.add(r.label);
       }
     }
 
     final curReportsTo = _reportsTo.text.trim();
     if (curReportsTo.isNotEmpty && !reportsToOptions.contains(curReportsTo)) {
-      reportsToOptions.insert(0, curReportsTo);
+      reportsToOptions.insert(1, curReportsTo);
     }
-
-    const depts = [
-      'Bridal Styling',
-      'Academy',
-      'Studio Ops',
-      'Studio & Services Ops',
-      'Finance & Accounts',
-      'Technology & Systems (IT)',
-      'Fleet',
-      'Executive / Governance',
-    ];
 
     return Dialog(
       backgroundColor: crm.surface,
@@ -5028,10 +5039,21 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            initialValue: depts.contains(_dept) ? _dept : depts.first,
-                            decoration: const InputDecoration(labelText: 'Department', border: OutlineInputBorder(), isDense: true),
-                            items: depts.map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13)))).toList(),
-                            onChanged: (v) => setState(() => _dept = v ?? 'Bridal Styling'),
+                            key: ValueKey('role_def_dept_${deptValue ?? ''}_${departments.length}'),
+                            initialValue: deptValue,
+                            isExpanded: true,
+                            decoration: const InputDecoration(labelText: 'Department *', border: OutlineInputBorder(), isDense: true),
+                            hint: const Text('Choose department', style: TextStyle(fontSize: 13)),
+                            items: departments
+                                .map((d) => DropdownMenuItem(
+                                      value: d.id,
+                                      child: Text(d.name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                                    ))
+                                .toList(),
+                            onChanged: (v) => setState(() {
+                              _departmentId = v;
+                              _dept = departments.where((d) => d.id == v).firstOrNull?.name ?? '';
+                            }),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -5067,10 +5089,8 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            key: ValueKey('role_def_reports_to_$curReportsTo'),
-                            initialValue: reportsToOptions.contains(curReportsTo)
-                                ? curReportsTo
-                                : (reportsToOptions.isNotEmpty ? reportsToOptions.first : null),
+                            key: ValueKey('role_def_reports_to_${curReportsTo}_${reportsToOptions.length}'),
+                            initialValue: reportsToOptions.contains(curReportsTo) ? curReportsTo : '',
                             isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Reports To (Hierarchy)', border: OutlineInputBorder(), isDense: true),
                             items: reportsToOptions.map((p) {
@@ -5078,7 +5098,8 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
                               final meta = match != null ? ' (Tier ${match.tier})' : '';
                               return DropdownMenuItem<String>(
                                 value: p,
-                                child: Text('$p$meta', style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                                child: Text(p.isEmpty ? '— None (top of hierarchy) —' : '$p$meta',
+                                    style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
                               );
                             }).toList(),
                             onChanged: (v) {
@@ -5098,6 +5119,29 @@ class _RoleDefDialogState extends ConsumerState<_RoleDefDialog> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      key: ValueKey('role_def_crm_${crmValue}_${crmRoles.length}'),
+                      initialValue: crmValue,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'CRM login role (Settings → Roles)',
+                        helperText: 'Pre-selected when HR invites a person hired into this job',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                      items: [
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('Employee self-service only', style: TextStyle(fontSize: 13)),
+                        ),
+                        ...crmRoles.where((r) => r.key != 'employee').map((r) => DropdownMenuItem<String>(
+                              value: r.key,
+                              child: Text(r.label, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+                            )),
+                      ],
+                      onChanged: (v) => setState(() => _crmRoleKey = v ?? ''),
                     ),
                     const SizedBox(height: 12),
                     TextField(controller: _purpose, maxLines: 2, decoration: const InputDecoration(labelText: 'Role Purpose', border: OutlineInputBorder())),
@@ -5169,7 +5213,7 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
   late final TextEditingController _title;
   late final TextEditingController _openings;
   late final TextEditingController _desc;
-  String _selectedDept = 'Bridal Styling';
+  String _selectedDept = '';
   bool _deptInitialized = false;
   String _type = 'full-time';
   String _status = 'open';
@@ -5209,6 +5253,10 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please provide a job title')));
       return;
     }
+    if (_selectedDept.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose a department')));
+      return;
+    }
     setState(() => _busy = true);
     try {
       await ref.read(recruitmentServiceProvider).saveJobPost(
@@ -5238,18 +5286,18 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
     final plans = ref.watch(hiringPlansProvider).asData?.value ?? [];
 
     if (!_deptInitialized && _title.text.trim().isNotEmpty) {
-      _selectedDept = resolveDepartmentForRole(
+      final guess = resolveDepartmentForRole(
         roleTitle: _title.text.trim(),
         roles: roles,
         plans: plans,
       );
+      if (guess.isNotEmpty) _selectedDept = guess;
       _deptInitialized = true;
     }
 
-    final deptOptions = <String>[...kRecruitmentDepartments];
-    if (_selectedDept.isNotEmpty && !deptOptions.contains(_selectedDept)) {
-      deptOptions.insert(0, _selectedDept);
-    }
+    // Real departments; the record's own department is always kept.
+    final deptOptions = hrDepartmentOptions(ref.watch(departmentsProvider).asData?.value ?? const [], current: _selectedDept);
+    final deptValue = hrDepartmentValue(deptOptions, _selectedDept);
 
     void onRoleSelected(String roleTitle) {
       _title.text = roleTitle;
@@ -5258,7 +5306,7 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
         roles: roles,
         plans: plans,
       );
-      setState(() => _selectedDept = autoDept);
+      if (autoDept.isNotEmpty) setState(() => _selectedDept = autoDept);
     }
 
     return Dialog(
@@ -5342,25 +5390,26 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
                       ),
                       onChanged: (val) {
                         final autoDept = resolveDepartmentForRole(roleTitle: val, roles: roles, plans: plans);
-                        if (autoDept != _selectedDept) {
+                        if (autoDept.isNotEmpty && autoDept != _selectedDept) {
                           setState(() => _selectedDept = autoDept);
                         }
                       },
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      key: ValueKey('job_post_dept_$_selectedDept'),
-                      initialValue: _selectedDept,
+                      key: ValueKey('job_post_dept_${_selectedDept}_${deptOptions.length}'),
+                      initialValue: deptValue.isEmpty ? null : deptValue,
+                      hint: const Text('Choose department', style: TextStyle(fontSize: 13)),
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Department (Auto-linked from Role) *',
+                        labelText: 'Department *',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: deptOptions
                           .map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13))))
                           .toList(),
-                      onChanged: (v) => setState(() => _selectedDept = v ?? 'Bridal Styling'),
+                      onChanged: (v) => setState(() => _selectedDept = v ?? _selectedDept),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -5813,7 +5862,7 @@ class _OfferDialogState extends ConsumerState<_OfferDialog> {
   late final TextEditingController _hra;
   late final TextEditingController _incentive;
   late final TextEditingController _incentiveNote;
-  String _selectedDept = 'Bridal Styling';
+  String _selectedDept = '';
   bool _deptInitialized = false;
   DateTime? _joining;
   String _status = 'sent';
@@ -5891,6 +5940,7 @@ class _OfferDialogState extends ConsumerState<_OfferDialog> {
 
     if (!_deptInitialized) {
       _selectedDept = resolveDepartmentForRole(
+        fallback: _selectedDept,
         roleTitle: widget.candidate.jobTitle,
         jobPostId: widget.candidate.jobPostId,
         posts: posts,
@@ -5900,10 +5950,9 @@ class _OfferDialogState extends ConsumerState<_OfferDialog> {
       _deptInitialized = true;
     }
 
-    final deptOptions = <String>[...kRecruitmentDepartments];
-    if (_selectedDept.isNotEmpty && !deptOptions.contains(_selectedDept)) {
-      deptOptions.insert(0, _selectedDept);
-    }
+    // Real departments; the record's own department is always kept.
+    final deptOptions = hrDepartmentOptions(ref.watch(departmentsProvider).asData?.value ?? const [], current: _selectedDept);
+    final deptValue = hrDepartmentValue(deptOptions, _selectedDept);
 
     void onRoleSelected(String roleTitle) {
       _designation.text = roleTitle;
@@ -5921,7 +5970,7 @@ class _OfferDialogState extends ConsumerState<_OfferDialog> {
         roles: roles,
         plans: plans,
       );
-      setState(() => _selectedDept = autoDept);
+      if (autoDept.isNotEmpty) setState(() => _selectedDept = autoDept);
     }
 
     return Dialog(
@@ -6012,25 +6061,26 @@ class _OfferDialogState extends ConsumerState<_OfferDialog> {
                           roles: roles,
                           plans: plans,
                         );
-                        if (autoDept != _selectedDept) {
+                        if (autoDept.isNotEmpty && autoDept != _selectedDept) {
                           setState(() => _selectedDept = autoDept);
                         }
                       },
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      key: ValueKey('offer_dept_$_selectedDept'),
-                      initialValue: _selectedDept,
+                      key: ValueKey('offer_dept_${_selectedDept}_${deptOptions.length}'),
+                      initialValue: deptValue.isEmpty ? null : deptValue,
+                      hint: const Text('Choose department', style: TextStyle(fontSize: 13)),
                       isExpanded: true,
                       decoration: const InputDecoration(
-                        labelText: 'Department (Auto-linked from Role)',
+                        labelText: 'Department',
                         border: OutlineInputBorder(),
                         isDense: true,
                       ),
                       items: deptOptions
                           .map((d) => DropdownMenuItem(value: d, child: Text(d, style: const TextStyle(fontSize: 13))))
                           .toList(),
-                      onChanged: (v) => setState(() => _selectedDept = v ?? 'Bridal Styling'),
+                      onChanged: (v) => setState(() => _selectedDept = v ?? _selectedDept),
                     ),
                     const SizedBox(height: 12),
                     TextField(

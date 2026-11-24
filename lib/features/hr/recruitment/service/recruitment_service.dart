@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/recruitment/data/recruitment_models.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 
 class RecruitmentService {
   final Dio _dio;
@@ -154,7 +155,7 @@ class RecruitmentService {
     try {
       await _dio.delete('/recruitment/roles/$id');
     } catch (e) {
-      throw AppException(e, action: 'archive job role');
+      throw AppException(e, action: 'delete the job role');
     }
   }
 
@@ -262,5 +263,12 @@ final candidatesProvider = FutureProvider<List<Candidate>>((ref) => ref.watch(re
 final offersProvider = FutureProvider<List<Offer>>((ref) => ref.watch(recruitmentServiceProvider).getOffers());
 
 final jobRolesProvider = FutureProvider<List<JobRole>>((ref) => ref.watch(recruitmentServiceProvider).getJobRoles());
+
+/// Job roles are HR-owned master data: only `admin` and `hr` logins add, edit or
+/// delete them (the backend enforces the same rule).
+final canManageJobRolesProvider = Provider<bool>((ref) {
+  final role = (ref.watch(authSessionProvider)?.role ?? '').trim().toLowerCase();
+  return role == 'admin' || role == 'hr';
+});
 
 final hiringPlansProvider = FutureProvider<List<HiringPlan>>((ref) => ref.watch(recruitmentServiceProvider).getHiringPlans());

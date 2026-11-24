@@ -278,3 +278,87 @@ class TeamNCandidate {
         clientIsOwn: json['clientIsOwn'] as bool? ?? false,
       );
 }
+
+/// A Team N Royal package booking (the package includes a stylist), from
+/// GET /api/stylist-clients/royal-bookings: upcoming and not cancelled. A
+/// stylist takes one as a client in one tap; every detail fills in from the
+/// booking.
+class RoyalBooking {
+  final String bookingId;
+  final String leadId;
+  final String bookingNumber;
+  final String name;
+  final String phone;
+  final String district;
+  final String venue;
+  final String status;
+  final String packageName;
+  final List<DateTime> eventDates;
+  final DateTime? nextEventDay;
+  final List<String> artistNames;
+
+  /// Set when a client file already exists for this booking.
+  final String clientId;
+  final String stylistName;
+  final bool clientIsOwn;
+
+  const RoyalBooking({
+    this.bookingId = '',
+    this.leadId = '',
+    this.bookingNumber = '',
+    this.name = '',
+    this.phone = '',
+    this.district = '',
+    this.venue = '',
+    this.status = '',
+    this.packageName = '',
+    this.eventDates = const [],
+    this.nextEventDay,
+    this.artistNames = const [],
+    this.clientId = '',
+    this.stylistName = '',
+    this.clientIsOwn = false,
+  });
+
+  bool get hasClient => clientId.isNotEmpty;
+
+  /// Same shape the "add a Team N client" flow uses, so creation is shared.
+  TeamNCandidate toCandidate() => TeamNCandidate(
+        leadId: leadId,
+        bookingId: bookingId,
+        name: name,
+        phone: phone,
+        eventDate: nextEventDay,
+        bookingNumber: bookingNumber,
+        clientId: clientId,
+        clientIsOwn: clientIsOwn,
+      );
+
+  static DateTime? _day(dynamic raw) {
+    final s = (raw ?? '').toString();
+    final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(s);
+    if (m == null) return null;
+    return DateTime(int.parse(m[1]!), int.parse(m[2]!), int.parse(m[3]!));
+  }
+
+  factory RoyalBooking.fromJson(Map<String, dynamic> json) => RoyalBooking(
+        bookingId: _id(json['bookingId']),
+        leadId: _id(json['leadId']),
+        bookingNumber: json['bookingNumber'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        phone: json['phone'] as String? ?? '',
+        district: json['district'] as String? ?? '',
+        venue: json['venue'] as String? ?? '',
+        status: json['status'] as String? ?? '',
+        packageName: json['packageName'] as String? ?? '',
+        eventDates: ((json['eventDates'] as List?) ?? const [])
+            .map(_day)
+            .whereType<DateTime>()
+            .toList(),
+        nextEventDay: _day(json['nextEventDay']),
+        artistNames: ((json['artistNames'] as List?) ?? const []).map((e) => e.toString()).toList(),
+        clientId: _id(json['clientId']),
+        stylistName: json['stylistName'] as String? ?? '',
+        clientIsOwn: json['clientIsOwn'] as bool? ?? false,
+      );
+}

@@ -19,6 +19,18 @@ class Review {
   final DateTime? autoSentAt;
   final String autoSendError;
 
+  // Booking link + contact, for resending from the Reviews screen.
+  final String bookingId;
+  final String customerPhone;
+  final String reviewUrl; // pending reviews only
+  final int manualSendCount;
+  final DateTime? lastManualSentAt;
+
+  // Form engagement (reported by the form page once it loads on the client's
+  // phone). answeredCount = furthest question reached.
+  final DateTime? openedAt, lastOpenedAt;
+  final int openCount, answeredCount, totalQuestions;
+
   // Bride answers
   final int overall, makeup, hair, saree;
   final Map<String, int> teamBehaviour;
@@ -58,6 +70,16 @@ class Review {
     this.autoSendStatus = '',
     this.autoSentAt,
     this.autoSendError = '',
+    this.bookingId = '',
+    this.customerPhone = '',
+    this.reviewUrl = '',
+    this.manualSendCount = 0,
+    this.lastManualSentAt,
+    this.openedAt,
+    this.lastOpenedAt,
+    this.openCount = 0,
+    this.answeredCount = 0,
+    this.totalQuestions = 0,
     this.overall = 0,
     this.makeup = 0,
     this.hair = 0,
@@ -88,6 +110,34 @@ class Review {
   });
 
   bool get isSubmitted => status == 'submitted';
+
+  /// The link reached the client (sent by staff or the automatic send).
+  bool get wasSent => manualSentAt != null || autoSendStatus == 'sent';
+
+  /// When the link was last sent, by either route.
+  DateTime? get lastSentAt {
+    final candidates = [
+      lastManualSentAt,
+      manualSentAt,
+      if (autoSendStatus == 'sent') autoSentAt,
+    ].whereType<DateTime>().toList()
+      ..sort();
+    return candidates.isEmpty ? null : candidates.last;
+  }
+
+  /// Where a not-submitted client got to: notOpened | opened | started.
+  String get engagement {
+    if (answeredCount > 0) return 'started';
+    if (openedAt != null) return 'opened';
+    return 'notOpened';
+  }
+
+  /// Short label for the engagement badge.
+  String get engagementLabel => switch (engagement) {
+        'started' => 'Stopped at $answeredCount/${totalQuestions > 0 ? totalQuestions : 12}',
+        'opened' => openCount > 1 ? 'Opened $openCount× · no answers' : 'Opened · no answers',
+        _ => 'Not opened',
+      };
 
   /// One line on how the review link was sent, for a pending review; empty
   /// when nothing has happened yet.
@@ -148,6 +198,16 @@ class Review {
         autoSendStatus: (j['autoSendStatus'] ?? '').toString(),
         autoSentAt: _date(j['autoSentAt']),
         autoSendError: (j['autoSendError'] ?? '').toString(),
+        bookingId: (j['booking'] is Map ? j['booking']['_id'] : j['booking'] ?? '').toString(),
+        customerPhone: (j['customerPhone'] ?? '').toString(),
+        reviewUrl: (j['reviewUrl'] ?? '').toString(),
+        manualSendCount: _i(j['manualSendCount']),
+        lastManualSentAt: _date(j['lastManualSentAt']),
+        openedAt: _date(j['openedAt']),
+        lastOpenedAt: _date(j['lastOpenedAt']),
+        openCount: _i(j['openCount']),
+        answeredCount: _i(j['answeredCount']),
+        totalQuestions: _i(j['totalQuestions']),
         overall: _i(j['overall']),
         makeup: _i(j['makeup']),
         hair: _i(j['hair']),

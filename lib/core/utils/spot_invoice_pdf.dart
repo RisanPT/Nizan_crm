@@ -90,7 +90,7 @@ Future<Uint8List> buildSpotQuotationPdfBytes(SpotInvoiceData data) async {
                         fontSize: 26)),
               ),
               pw.SizedBox(height: 6),
-              pw.Text('TEAM N ERP',
+              pw.Text('TEAM N MAKEOVERS',
                   style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -191,7 +191,7 @@ Future<Uint8List> buildSpotQuotationPdfBytes(SpotInvoiceData data) async {
               style: pw.TextStyle(fontSize: 9, color: muted)),
           pw.Spacer(),
           pw.Center(
-            child: pw.Text('Team N ERP — Quotation',
+            child: pw.Text('Team N Makeovers — Quotation',
                 style: pw.TextStyle(fontSize: 8, color: muted)),
           ),
         ],

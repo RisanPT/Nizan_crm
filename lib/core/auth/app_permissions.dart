@@ -132,6 +132,14 @@ const List<AppFeature> kAppFeatures = [
     AppSubFeature('marketing.campaigns', 'Campaigns & ROI'),
     AppSubFeature('marketing.leads_report', 'Leads Report'),
   ]),
+  // Mirrors the backend `website` key (Team N Website — the public site CMS).
+  AppFeature('website', 'Team N Website', 'Public website pages, gallery and packages',
+      Icons.language_outlined, subs: [
+    AppSubFeature('website.content', 'Pages & Sections'),
+    AppSubFeature('website.gallery', 'Portfolio Gallery'),
+    AppSubFeature('website.packages', 'Packages on Website'),
+    AppSubFeature('website.enquiries', 'Website Enquiries'),
+  ]),
   AppFeature('fleet', 'Fleet', 'Vehicles, drivers and fuel',
       Icons.local_shipping_outlined, subs: [
     AppSubFeature('fleet.assignments', 'Assignments'),
