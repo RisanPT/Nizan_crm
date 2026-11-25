@@ -99,6 +99,15 @@ class LmsService {
     }
   }
 
+  /// Deletes a plan (HR only). Orientations already running keep their days.
+  Future<void> deleteOrientationPlan(String id) async {
+    try {
+      await _dio.delete('/lms/orientations/plans/$id');
+    } catch (e) {
+      throw AppException(e, action: 'delete the orientation plan');
+    }
+  }
+
   Future<List<OrientationAssignment>> getActiveOrientations() async {
     try {
       final res = await _dio.get('/lms/orientations/active');

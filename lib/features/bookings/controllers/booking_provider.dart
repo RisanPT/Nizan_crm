@@ -5,6 +5,7 @@ import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:nizan_crm/features/bookings/services/booking_service.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/data/driver_day.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
@@ -287,6 +288,7 @@ class BookingNotifier extends _$BookingNotifier {
       if (ref.mounted) {
         state = AsyncData([...state.value ?? [], createdBooking]);
         _refreshDependents();
+        await _reloadDriverDayWorks(service, createdBooking.driverDay);
       }
       return createdBooking;
     } catch (_) {
@@ -296,7 +298,34 @@ class BookingNotifier extends _$BookingNotifier {
     }
   }
 
-  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false, bool confirmArtistConflict = false, Map<String, dynamic>? extraBody}) async {
+  /// The artist's other works that day which the server gave the same driver / vehicle (one
+  /// driver per artist per day) are fetched again, so every list shows their new driver.
+  Future<void> _reloadDriverDayWorks(BookingService service, DriverDayResult? driverDay) async {
+    final ids = {for (final w in driverDay?.assigned ?? const <DriverDayWork>[]) w.bookingId}
+      ..removeWhere((id) => id.isEmpty);
+    if (ids.isEmpty) return;
+    final fresh = <String, Booking>{};
+    for (final id in ids) {
+      try {
+        fresh[id] = await service.getBookingById(id);
+      } catch (_) {
+        // Not fatal: the list catches up on its next load.
+      }
+    }
+    if (!ref.mounted || fresh.isEmpty) return;
+    state = AsyncData([
+      for (final existing in state.value ?? const <Booking>[])
+        fresh[existing.id] ?? existing,
+    ]);
+  }
+
+  Future<Booking> updateBooking(
+    Booking booking, {
+    bool confirmFleetConflict = false,
+    bool confirmDriverDay = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
+  }) async {
     final service = ref.read(bookingServiceProvider);
     final previousState = state;
     final currentBookings = state.value ?? [];
@@ -314,7 +343,13 @@ class BookingNotifier extends _$BookingNotifier {
       // transient reviewUrl (returned when a booking is saved as completed),
       // which we merge onto the local booking so the completion WhatsApp
       // message can carry the review link.
-      final serverBooking = await service.updateBooking(booking, confirmFleetConflict: confirmFleetConflict, confirmArtistConflict: confirmArtistConflict, extraBody: extraBody);
+      final serverBooking = await service.updateBooking(
+        booking,
+        confirmFleetConflict: confirmFleetConflict,
+        confirmDriverDay: confirmDriverDay,
+        confirmArtistConflict: confirmArtistConflict,
+        extraBody: extraBody,
+      );
       final merged = booking.copyWith(reviewUrl: serverBooking.reviewUrl);
       if (ref.mounted) {
         // Re-apply local booking to make sure state is consistent
@@ -323,8 +358,10 @@ class BookingNotifier extends _$BookingNotifier {
             if (existing.id == booking.id) merged else existing,
         ]);
         _refreshDependents(bookingId: booking.id);
+        await _reloadDriverDayWorks(service, serverBooking.driverDay);
       }
-      return merged;
+      // The caller shows which of the artist's other works got the driver too.
+      return merged.copyWith(driverDay: serverBooking.driverDay);
     } catch (_) {
       if (ref.mounted) {
         // Roll the optimistic edit back. Deliberately NOT AsyncError: one
@@ -359,6 +396,40 @@ class BookingNotifier extends _$BookingNotifier {
       // made the UI report "deleted successfully" while the booking remained.
       rethrow;
     }
+  }
+
+  /// Edit advance: saves the corrected advance on the server, then swaps the
+  /// returned booking into the cache and refreshes every list that shows it.
+  Future<Booking> updateAdvance(
+    String bookingId, {
+    double? amount,
+    Map<int, double>? itemAmounts,
+    required String reason,
+  }) async {
+    final service = ref.read(bookingServiceProvider);
+    var updated = await service.updateAdvance(
+      bookingId,
+      amount: amount,
+      itemAmounts: itemAmounts,
+      reason: reason,
+    );
+    // The edit endpoint returns the raw record; the normal read adds the
+    // server-computed fields (e.g. countsTowardSales) the lists rely on.
+    try {
+      updated = await service.getBookingById(bookingId);
+    } catch (_) {
+      // Saved already — the raw record is good enough until the next load.
+    }
+    if (ref.mounted) {
+      final current = state.value;
+      if (current != null) {
+        state = AsyncData([
+          for (final b in current) b.id == updated.id ? updated : b,
+        ]);
+      }
+      _refreshDependents(bookingId: updated.id);
+    }
+    return updated;
   }
 
   /// Everything `ref.refreshData.bookings()` refreshes EXCEPT this notifier:

@@ -117,6 +117,14 @@ class LeaveRequest {
   final String approvalId;
   final String decisionNote;
   final DateTime? decidedAt;
+  /// 'timebox' for requests sent in by Timebox, '' for ones made in the CRM.
+  final String source;
+  final int? externalRequestId;
+  /// Timebox decision callback: none | pending | delivered | failed.
+  final String callbackStatus;
+  final DateTime? createdAt;
+
+  bool get fromTimebox => source == 'timebox' || externalRequestId != null;
 
   const LeaveRequest({
     required this.id,
@@ -134,6 +142,10 @@ class LeaveRequest {
     this.approvalId = '',
     this.decisionNote = '',
     this.decidedAt,
+    this.source = '',
+    this.externalRequestId,
+    this.callbackStatus = 'none',
+    this.createdAt,
   });
 
   factory LeaveRequest.fromJson(Map<String, dynamic> j) {
@@ -155,6 +167,10 @@ class LeaveRequest {
       approvalId: _idOf(j['approvalId']),
       decisionNote: j['decisionNote'] as String? ?? '',
       decidedAt: _date(j['decidedAt']),
+      source: j['externalSource'] as String? ?? '',
+      externalRequestId: (j['externalRequestId'] as num?)?.toInt(),
+      callbackStatus: j['callbackStatus'] as String? ?? 'none',
+      createdAt: _date(j['createdAt']),
     );
   }
 }

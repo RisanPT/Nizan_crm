@@ -70,6 +70,12 @@ final stylistClientsProvider =
   return ref.watch(stylistClientServiceProvider).list(q);
 });
 
+/// Upcoming Team N Royal package bookings, for the Royal clients list.
+final royalBookingsProvider = FutureProvider.autoDispose<List<RoyalBooking>>((ref) async {
+  ref.watch(consultationsRefreshTriggerProvider);
+  return ref.watch(stylistClientServiceProvider).royalBookings();
+});
+
 final stylistClientProvider = FutureProvider.autoDispose.family<StylistClient, String>((ref, id) async {
   ref.watch(consultationsRefreshTriggerProvider);
   return ref.watch(stylistClientServiceProvider).getById(id);

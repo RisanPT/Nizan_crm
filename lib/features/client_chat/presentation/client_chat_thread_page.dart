@@ -324,6 +324,8 @@ class _ClientChatThreadPageState extends ConsumerState<ClientChatThreadPage> {
           content: Text(friendlyErrorMessage(e)),
           backgroundColor: context.crmColors.destructive,
           behavior: SnackBarBehavior.floating,
+          persist: false,
+          duration: const Duration(seconds: 5),
           action: SnackBarAction(
             label: 'Retry',
             textColor: Colors.white,

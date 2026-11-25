@@ -9,6 +9,7 @@ import 'package:nizan_crm/features/consultations/data/stylist_client.dart';
 import 'package:nizan_crm/features/consultations/presentation/screens/stylist_client_form_screen.dart';
 import 'package:nizan_crm/features/consultations/presentation/screens/stylist_client_screen.dart';
 import 'package:nizan_crm/features/consultations/presentation/screens/stylist_clients_screen.dart';
+import 'package:nizan_crm/features/consultations/presentation/screens/royal_clients_screen.dart';
 import 'package:nizan_crm/features/consultations/presentation/widgets/consultation_ui.dart';
 import 'package:nizan_crm/features/consultations/presentation/widgets/reference_images.dart';
 import 'package:nizan_crm/features/consultations/presentation/widgets/stylist_client_ui.dart';
@@ -96,6 +97,7 @@ Future<void> _pump(WidgetTester tester, Widget screen, Size size) async {
         consultationStylistsProvider.overrideWith(
           (ref) async => const [ConsultationStylist(id: 's1', name: 'Priya', role: 'stylist')],
         ),
+        royalBookingsProvider.overrideWith((ref) async => _royal),
       ],
       child: MaterialApp(theme: AppTheme.lightTheme, home: screen),
     ),
@@ -286,4 +288,57 @@ void main() {
       expect(fmtDaysToEvent(21), 'In 3 weeks');
     });
   });
+
+  // ── Royal package clients ─────────────────────────────────────────────────
+  for (final entry in {'desktop': const Size(1440, 1600), 'phone': const Size(390, 1600)}.entries) {
+    testWidgets('Royal clients: waiting list with one-tap add, taken list shows the stylist (${entry.key})',
+        (tester) async {
+      await _pump(tester, const RoyalClientsScreen(), entry.value);
+      expect(tester.takeException(), isNull);
+      expect(find.text('Royal package clients'), findsOneWidget);
+      expect(find.text('Waiting · 1'), findsOneWidget);
+      expect(find.text('Taken · 1'), findsOneWidget);
+      expect(find.text('Meera Nair'), findsOneWidget);
+      expect(find.text('Team N Royal'), findsOneWidget);
+      expect(find.text('Add as client'), findsOneWidget);
+      expect(find.text('Lakshmi Das'), findsNothing); // taken → other segment
+
+      await tester.tap(find.text('Taken · 1'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lakshmi Das'), findsOneWidget);
+      expect(find.text('Stylist: Priya'), findsOneWidget);
+      expect(find.text('Open client'), findsOneWidget);
+      expect(find.text('Add as client'), findsNothing);
+    });
+  }
+
+  testWidgets('My clients shows a banner when Royal clients are waiting', (tester) async {
+    await _pump(tester, const StylistClientsScreen(), const Size(1440, 2000));
+    expect(find.text('1 Royal package client is waiting for a stylist'), findsOneWidget);
+  });
 }
+
+final _royal = [
+  RoyalBooking.fromJson({
+    'bookingId': 'b1',
+    'bookingNumber': 'BK-7',
+    'name': 'Meera Nair',
+    'phone': '9000000001',
+    'district': 'Kozhikode',
+    'packageName': 'Team N Royal',
+    'eventDates': [DateFormat('yyyy-MM-dd').format(_now.add(const Duration(days: 12)))],
+    'nextEventDay': DateFormat('yyyy-MM-dd').format(_now.add(const Duration(days: 12))),
+    'artistNames': ['Asha'],
+    'clientId': null,
+  }),
+  RoyalBooking.fromJson({
+    'bookingId': 'b2',
+    'name': 'Lakshmi Das',
+    'packageName': 'Royal Package',
+    'eventDates': [DateFormat('yyyy-MM-dd').format(_now.add(const Duration(days: 3)))],
+    'nextEventDay': DateFormat('yyyy-MM-dd').format(_now.add(const Duration(days: 3))),
+    'clientId': 'c9',
+    'stylistName': 'Priya',
+    'clientIsOwn': true,
+  }),
+];

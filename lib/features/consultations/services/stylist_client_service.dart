@@ -86,6 +86,20 @@ class StylistClientService {
     }
   }
 
+  // GET /api/stylist-clients/royal-bookings — upcoming Team N Royal package
+  // bookings (stylist included), soonest first.
+  Future<List<RoyalBooking>> royalBookings() async {
+    try {
+      final res = await _dio.get('/stylist-clients/royal-bookings');
+      return (res.data as List)
+          .whereType<Map<String, dynamic>>()
+          .map(RoyalBooking.fromJson)
+          .toList();
+    } catch (e) {
+      throw _wrap(e, 'load Royal package clients');
+    }
+  }
+
   // POST /api/stylist-clients — Team N: filled in from the enquiry/booking.
   Future<StylistClient> createTeamN({
     required TeamNCandidate from,

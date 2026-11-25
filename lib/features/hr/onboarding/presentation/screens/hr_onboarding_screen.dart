@@ -12,6 +12,10 @@ import 'package:nizan_crm/features/hr/onboarding/service/onboarding_service.dart
 import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
 import 'package:go_router/go_router.dart';
 
+/// The onboarding "Send reminder" button is hidden until it really emails the
+/// new hire (owner decision 2026-11-24).
+const bool _kShowDocReminder = false;
+
 Color _avatarColor(String name) {
   final colors = [
     const Color(0xFF601A29), // Maroon
@@ -970,7 +974,9 @@ class _HrOnboardingScreenState extends ConsumerState<HrOnboardingScreen> {
                   ),
                 ],
               ),
-              OutlinedButton.icon(
+              // Hidden 2026-11-24: no email is sent yet (it only showed a message).
+              // Set _kShowDocReminder to true once a real reminder email exists.
+              if (_kShowDocReminder) OutlinedButton.icon(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

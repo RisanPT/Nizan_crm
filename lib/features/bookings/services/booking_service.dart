@@ -114,12 +114,18 @@ class BookingService {
 
   /// [allowDuplicate] skips the server's same-number/same-date duplicate
   /// check, after the user confirmed they really want a second booking.
-  Future<Booking> createBooking(Booking booking, {bool allowDuplicate = false}) async {
+  /// [confirmDriverDay]: the person agreed to move the artist's other works that day, which
+  /// have another driver, to this booking's driver (one driver per artist per day).
+  Future<Booking> createBooking(Booking booking, {bool allowDuplicate = false, bool confirmDriverDay = false}) async {
     try {
-      final response = await _dio.post('/bookings', data: {
-        ...booking.toJson(),
-        if (allowDuplicate) 'allowDuplicate': true,
-      });
+      final response = await _dio.post(
+        '/bookings',
+        data: {
+          ...booking.toJson(),
+          if (allowDuplicate) 'allowDuplicate': true,
+        },
+        options: confirmDriverDay ? Options(headers: {'X-Confirm-Driver-Day': '1'}) : null,
+      );
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'create booking');
@@ -129,11 +135,19 @@ class BookingService {
   /// [confirmFleetConflict]: the person has agreed to put a driver / vehicle on a work they are
   /// already committed to (the server otherwise answers 409 FLEET_CONFLICT for that).
   /// Saves [booking]. [confirmFleetConflict] / [confirmArtistConflict] answer "assign anyway" to a clash the server reported
-  /// (FLEET_CONFLICT / ARTIST_CONFLICT); [extraBody] rides along with the booking (the allocation's `allocationIntent`).
-  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false, bool confirmArtistConflict = false, Map<String, dynamic>? extraBody}) async {
+  /// (FLEET_CONFLICT / ARTIST_CONFLICT); [confirmDriverDay] agrees to move the artist's other works that day to this driver
+  /// (DRIVER_DAY_CONFLICT); [extraBody] rides along with the booking (the allocation's `allocationIntent`).
+  Future<Booking> updateBooking(
+    Booking booking, {
+    bool confirmFleetConflict = false,
+    bool confirmDriverDay = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
+  }) async {
     try {
       final headers = <String, String>{
         if (confirmFleetConflict) 'X-Confirm-Fleet-Conflict': '1',
+        if (confirmDriverDay) 'X-Confirm-Driver-Day': '1',
         if (confirmArtistConflict) 'X-Confirm-Artist-Conflict': '1',
       };
       final response = await _dio.put(
@@ -144,6 +158,34 @@ class BookingService {
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       throw AppException(e, action: 'update booking');
+    }
+  }
+
+  /// Corrects the advance the client paid (0 allowed). [itemAmounts] maps a
+  /// package's index to its advance on a multi-package booking; otherwise
+  /// [amount] is the whole advance. The server logs the change with [reason]
+  /// and sends a verified advance back to Accounts for re-checking.
+  Future<Booking> updateAdvance(
+    String bookingId, {
+    double? amount,
+    Map<int, double>? itemAmounts,
+    required String reason,
+  }) async {
+    try {
+      final response = await _dio.put(
+        '/booking-advances/$bookingId/amount',
+        data: {
+          'reason': reason,
+          'amount': ?amount,
+          if (itemAmounts != null)
+            'items': [
+              for (final e in itemAmounts.entries) {'index': e.key, 'amount': e.value},
+            ],
+        },
+      );
+      return Booking.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'update the advance');
     }
   }
 

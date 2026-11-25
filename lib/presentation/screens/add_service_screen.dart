@@ -49,6 +49,9 @@ class AddServiceScreen extends HookConsumerWidget {
     final priceCtrl = useTextEditingController(text: '0');
     final advanceCtrl = useTextEditingController(text: '3000');
     final descriptionCtrl = useTextEditingController();
+    final techniqueCtrl = useTextEditingController();
+    final productsCtrl = useTextEditingController();
+    final included = useState<Set<String>>({});
     final isSaving = useState(false);
     final hasPrefilled = useState(false);
 
@@ -79,6 +82,12 @@ class AddServiceScreen extends HookConsumerWidget {
       priceCtrl.text = existingPackage.price.toStringAsFixed(0);
       advanceCtrl.text = existingPackage.advanceAmount.toStringAsFixed(0);
       descriptionCtrl.text = existingPackage.description;
+      // Saved inclusions, else the quote's built-in ones for this package, so
+      // saving the form keeps what the quote shows today.
+      final inc = existingPackage.effectiveQuoteInclusions;
+      techniqueCtrl.text = inc?.technique ?? '';
+      productsCtrl.text = inc?.products ?? '';
+      included.value = {...?inc?.included};
 
       for (final controller in districtPriceControllers.values) {
         controller.clear();
@@ -137,6 +146,17 @@ class AddServiceScreen extends HookConsumerWidget {
               description: descriptionCtrl.text.trim(),
               regionPrices: const [],
               districtPrices: districtPrices,
+              quoteInclusions: QuoteInclusions(
+                technique: techniqueCtrl.text.trim(),
+                products: productsCtrl.text.trim(),
+                included: [
+                  for (final label in QuoteInclusions.checks)
+                    if (included.value.contains(label)) label,
+                  // Keep any saved extras not in the standard list.
+                  for (final label in included.value)
+                    if (!QuoteInclusions.checks.contains(label)) label,
+                ],
+              ),
             );
 
         // Refresh BOTH caches: the Services list reads the paginated one, so
@@ -176,6 +196,14 @@ class AddServiceScreen extends HookConsumerWidget {
       isSaving: isSaving.value,
       isEditing: existingPackage != null,
       onSubmit: submitPackage,
+    );
+
+    final inclusionsCard = _QuoteInclusionsCard(
+      theme: theme,
+      crmColors: crmColors,
+      techniqueCtrl: techniqueCtrl,
+      productsCtrl: productsCtrl,
+      included: included,
     );
 
     final districtsCard = _DistrictsCard(
@@ -243,12 +271,17 @@ class AddServiceScreen extends HookConsumerWidget {
           if (isMobile) ...[
             basicCard,
             24.h,
+            inclusionsCard,
+            24.h,
             districtsCard,
           ] else
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(flex: 2, child: basicCard),
+                Expanded(
+                  flex: 2,
+                  child: Column(children: [basicCard, 24.h, inclusionsCard]),
+                ),
                 24.w,
                 Expanded(child: districtsCard),
               ],
@@ -369,6 +402,83 @@ class _BasicInfoCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "What's included" rows for the Bridal Quote comparison table.
+class _QuoteInclusionsCard extends StatelessWidget {
+  final ThemeData theme;
+  final CrmTheme crmColors;
+  final TextEditingController techniqueCtrl;
+  final TextEditingController productsCtrl;
+  final ValueNotifier<Set<String>> included;
+
+  const _QuoteInclusionsCard({
+    required this.theme,
+    required this.crmColors,
+    required this.techniqueCtrl,
+    required this.productsCtrl,
+    required this.included,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: crmColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'What\'s included (Quote)',
+              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            4.h,
+            Text(
+              'Shown in the Bridal Quote comparison table. Ticked = ✓, not ticked = —.',
+              style: theme.textTheme.bodySmall?.copyWith(color: crmColors.textSecondary),
+            ),
+            16.h,
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: techniqueCtrl,
+                    decoration: _inputDeco(QuoteInclusions.techniqueLabel, crmColors)
+                        .copyWith(hintText: 'e.g. HD, Airbrush'),
+                  ),
+                ),
+                16.w,
+                Expanded(
+                  child: TextFormField(
+                    controller: productsCtrl,
+                    decoration: _inputDeco(QuoteInclusions.productsLabel, crmColors)
+                        .copyWith(hintText: 'e.g. Premium & high-end'),
+                  ),
+                ),
+              ],
+            ),
+            8.h,
+            for (final label in QuoteInclusions.checks)
+              CheckboxListTile(
+                value: included.value.contains(label),
+                onChanged: (on) => included.value = on == true
+                    ? {...included.value, label}
+                    : ({...included.value}..remove(label)),
+                title: Text(label),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+              ),
+          ],
         ),
       ),
     );

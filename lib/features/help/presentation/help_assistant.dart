@@ -300,7 +300,7 @@ class _HelpChatPanelState extends ConsumerState<HelpChatPanel> {
     (Icons.request_quote_outlined, 'Create a quote', 'How do I create a quote?'),
     (Icons.chat_outlined, 'Invoice on WhatsApp', 'How do I send an invoice on WhatsApp?'),
     (Icons.flag_outlined, 'Report & Goals', 'Where is Report & Goals?'),
-    (Icons.event_available_outlined, 'Apply for leave', 'How do I apply for leave?'),
+    (Icons.event_available_outlined, 'Leave', 'How do I apply for leave?'),
   ];
 
   @override

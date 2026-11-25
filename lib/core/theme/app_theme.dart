@@ -69,6 +69,13 @@ class AppTheme {
             titleLarge: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: _inkColor),
           ),
       extensions: [crmThemeExtension],
+      // Every snackbar gets an ✕ so it can always be closed by hand. They
+      // auto-close after 4 s (Flutter's default) unless they carry an action;
+      // those set `persist: false` + a 5 s duration where they are shown.
+      snackBarTheme: const SnackBarThemeData(
+        showCloseIcon: true,
+        closeIconColor: Colors.white,
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: _surfaceColor,
         foregroundColor: _textPrimaryColor,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/models/addon_service.dart';
+import 'package:nizan_crm/core/models/blocked_date.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/core/models/pincode_lookup.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
@@ -11,6 +12,7 @@ import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/core/widgets/pincode_field.dart';
 import 'package:nizan_crm/features/bookings/presentation/screens/add_booking_screen.dart';
 import 'package:nizan_crm/services/addon_service_service.dart';
+import 'package:nizan_crm/services/blocked_date_service.dart';
 import 'package:nizan_crm/services/district_service.dart';
 import 'package:nizan_crm/services/package_service.dart';
 import 'package:nizan_crm/services/pincode_service.dart';
@@ -59,6 +61,7 @@ Widget _app({
   return ProviderScope(
     overrides: <Override>[
       packagesProvider.overrideWith((ref) async => <ServicePackage>[]),
+      blockedDatesProvider.overrideWith((ref) async => <BlockedDate>[]),
       districtsProvider.overrideWith((ref) async => districts),
       addonServicesProvider.overrideWith((ref) async => <AddonService>[]),
       pincodeLookupProvider.overrideWith((ref, code) async {

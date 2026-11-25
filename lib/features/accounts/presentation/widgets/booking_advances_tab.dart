@@ -10,6 +10,8 @@ import 'package:nizan_crm/features/finance/data/bank_account.dart';
 import 'package:nizan_crm/features/finance/presentation/widgets/money_account_picker.dart';
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
 import 'package:nizan_crm/features/accounts/presentation/widgets/collection_image_view.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/edit_advance_dialog.dart';
+import 'package:nizan_crm/features/bookings/services/booking_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
 
 final _inr = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -167,6 +169,20 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
       _reload();
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(AppException(e, action: 'update the advance')))));
+    }
+  }
+
+  /// Edit advance: correct the amount (opens the booking's full record so a
+  /// multi-package booking can be split per package), then reload the list.
+  Future<void> _editAmount(BookingAdvance a) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final booking = await ref.read(bookingServiceProvider).getBookingById(a.id);
+      if (!mounted) return;
+      final saved = await showEditAdvanceDialog(context, booking);
+      if (saved != null && mounted) _reload();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
     }
   }
 
@@ -368,6 +384,7 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
 
   Widget _row(CrmTheme crm, BookingAdvance a) {
     final recorded = a.advanceStatus == 'verified';
+    final canEdit = canEditAdvance(ref);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -413,11 +430,13 @@ class _BookingAdvancesTabState extends ConsumerState<BookingAdvancesTab> {
             ),
           PopupMenuButton<String>(
             onSelected: (v) {
+              if (v == 'amount') _editAmount(a);
               if (v == 'change') _verify(a, change: true);
               if (v == 'reject') _setStatus(a, 'rejected', done: 'Marked not received');
               if (v == 'undo') _setStatus(a, 'pending', done: 'Moved to “To verify”');
             },
             itemBuilder: (_) => [
+              if (canEdit) const PopupMenuItem(value: 'amount', child: Text('Edit advance amount')),
               if (recorded) const PopupMenuItem(value: 'change', child: Text('Change account')),
               if (recorded) const PopupMenuItem(value: 'undo', child: Text('Undo (back to To verify)')),
               if (a.advanceStatus != 'rejected') const PopupMenuItem(value: 'reject', child: Text('Not received')),

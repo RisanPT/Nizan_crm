@@ -39,13 +39,22 @@ class NotificationToast {
     late OverlayEntry entry;
     Timer? timer;
     Timer? hardTimer;
+    var closed = false;
 
     void dismiss() {
+      if (closed) return;
+      closed = true;
       timer?.cancel();
       hardTimer?.cancel();
       _dismissers.remove(entry);
-      if (!_active.remove(entry)) return;
-      if (entry.mounted) entry.remove();
+      _active.remove(entry);
+      // Always take it out of the overlay. Don't gate this on entry.mounted:
+      // that only turns true once the card has been DRAWN. A notification that
+      // arrives while the CRM isn't being drawn (background tab, minimised
+      // app, phone screen off) hits its 5s timer before its first frame — the
+      // old `if (entry.mounted)` check then skipped the removal, and the card
+      // appeared later and stayed forever (✕ did nothing either).
+      entry.remove();
       onDismissed?.call();
       // Re-slot the remaining toasts so they move up into the freed space.
       for (final e in _active) {
@@ -62,7 +71,7 @@ class NotificationToast {
         close(); // cancels its timers + closes its native twin
       } else {
         _active.removeAt(0);
-        if (oldest.mounted) oldest.remove();
+        oldest.remove(); // not gated on mounted — see dismiss()
       }
       overflowed = true;
     }

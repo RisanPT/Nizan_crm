@@ -92,6 +92,9 @@ import '../../features/marketing/presentation/screens/marketing_insights_screen.
 import '../../features/marketing/presentation/screens/marketing_analytics_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_calendar_screen.dart';
 import '../../features/marketing/presentation/screens/marketing_reengagement_screen.dart';
+import '../../features/website/presentation/screens/website_home_screen.dart';
+import '../../features/website/presentation/screens/section_editor_screen.dart';
+import '../../features/website/presentation/screens/website_area_screens.dart';
 import '../../presentation/screens/settings_screen.dart';
 import '../../presentation/screens/settings/roles_permissions_screen.dart';
 import '../../features/org/presentation/screens/departments_screen.dart';
@@ -213,6 +216,7 @@ import '../../features/consultations/presentation/screens/consultation_form_scre
 import '../../features/consultations/presentation/screens/consultation_detail_screen.dart';
 import '../../features/consultations/presentation/screens/after_call_form_screen.dart';
 import '../../features/consultations/presentation/screens/stylist_clients_screen.dart';
+import '../../features/consultations/presentation/screens/royal_clients_screen.dart';
 import '../../features/consultations/data/stylist_client.dart' show parseDay;
 import '../../features/consultations/presentation/screens/stylist_client_screen.dart';
 import '../../features/consultations/presentation/screens/stylist_client_form_screen.dart';
@@ -448,12 +452,15 @@ bool isRouteAllowed(String path, Access access,
   if (path == '/hr/slots') return access.canSeeSub('staff.slots');
   if (path == '/hr/attendance') return access.canSeeSub('staff.attendance');
   if (path == '/hr/evaluation') return access.canSeeSub('staff.evaluation');
-  // Leave is available to every employee (ESS); managers/HR also get approvals.
-  if (path == '/hr/leave') return access.canSeeLeaveRequests || access.has('leave', false);
+  // Leave is open to every signed-in user. The server decides what they see:
+  // admin + HR department get the leave desk (everyone's requests), everyone
+  // else only their own leave. Gating it on the `leave` permission locked HR
+  // logins out of Leave Management even though the HRMS menu showed it.
+  if (path == '/hr/leave') return true;
   // Own payslips — every signed-in staff member (server returns only theirs).
   if (path == '/hr/my-payslips') return true;
   if (path == '/hr/approvals') {
-    return access.isFullAccess || access.isDepartmentHead || access.has('approvals', false);
+    return access.isFullAccess || access.isDepartmentHead || access.isHrRole || access.has('approvals', false);
   }
   // HR Home (ESS landing) — anyone with an employee self-service footing.
   if (path == '/hr/home') {
@@ -475,7 +482,7 @@ bool isRouteAllowed(String path, Access access,
   if (path == '/hr/files') {
     return access.canSeeStaff || access.has('hr_files', false) || access.has('leave', false);
   }
-  if (path == '/hr/logins') return access.isFullAccess || access.isDepartmentHead;
+  if (path == '/hr/logins') return access.isFullAccess || access.isDepartmentHead || access.isHrRole;
   // Shift management — HR/managers.
   if (path == '/hr/shift') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('shift', false);
@@ -628,6 +635,8 @@ bool isRouteAllowed(String path, Access access,
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canSeeFleet;
   }
+  // Team N Website — admin + marketing_admin (or a website.* grant); tabs gate themselves.
+  if (path.startsWith('/website')) return access.canSeeWebsite;
   if (path.startsWith('/marketing')) {
     final sub = subKeyForPath(path);
     return sub != null ? access.canSeeSub(sub) : access.canManageMarketing;
@@ -686,6 +695,7 @@ String landingRouteFor(Access access,
     '/accounts/attendance-payroll', '/accounts/sales-returns', '/accounts/hra',
     '/marketing/dashboard', '/marketing/competitors', '/marketing/scores',
     '/marketing/content/dashboard', '/marketing/content/calendar',
+    '/website',
     '/inventory', '/inventory/stock', '/inventory/kits', '/inventory/alerts',
     '/inventory/expiry', '/inventory/reports', '/inventory/purchases', '/inventory/vendors',
     '/fleet/assignments', '/fleet/vehicles', '/fleet/drivers', '/fleet/fuel',
@@ -1021,6 +1031,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Sales Returns / Credit Notes';
           } else if (state.uri.path == '/accounts/hra') {
             title = 'HRA · House Rent Allowance';
+          } else if (state.uri.path == '/website') {
+            title = 'Team N Website';
+          } else if (state.uri.path.startsWith('/website/')) {
+            title = 'Team N Website';
           } else if (state.uri.path == '/marketing/dashboard') {
             title = 'Marketing Intelligence';
           } else if (state.uri.path == '/marketing/team') {
@@ -1099,6 +1113,8 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             title = 'Call';
           } else if (state.uri.path == '/stylist/clients') {
             title = 'Clients';
+          } else if (state.uri.path == '/stylist/royal') {
+            title = 'Royal Clients';
           } else if (state.uri.path == '/stylist/clients/new') {
             title = 'New Client';
           } else if (state.uri.path.startsWith('/stylist/clients/')) {
@@ -1530,6 +1546,29 @@ final goRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) =>
                 const OperationsSalariesScreen(),
           ),
+          // ── Team N Website (public site CMS) ────────────────────────
+          GoRoute(
+            path: '/website',
+            builder: (context, state) => WebsiteHomeScreen(
+                initialTab: state.uri.queryParameters['tab'] ?? ''),
+          ),
+          GoRoute(
+            path: '/website/gallery',
+            builder: (context, state) => const WebsiteGalleryScreen(),
+          ),
+          GoRoute(
+            path: '/website/packages',
+            builder: (context, state) => const WebsitePackagesScreen(),
+          ),
+          GoRoute(
+            path: '/website/enquiries',
+            builder: (context, state) => const WebsiteEnquiriesScreen(),
+          ),
+          GoRoute(
+            path: '/website/section/:key',
+            builder: (context, state) =>
+                SectionEditorScreen(sectionKey: state.pathParameters['key'] ?? ''),
+          ),
           // ── Marketing (Competitor Intelligence) ──────────────────────
           GoRoute(
             path: '/marketing/dashboard',
@@ -1722,6 +1761,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/stylist/clients',
             builder: (context, state) => const StylistClientsScreen(),
+          ),
+          // Team N Royal bookings (stylist included) to take as clients.
+          GoRoute(
+            path: '/stylist/royal',
+            builder: (context, state) => const RoyalClientsScreen(),
           ),
           GoRoute(
             path: '/stylist/clients/new',

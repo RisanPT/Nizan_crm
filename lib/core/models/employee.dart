@@ -57,6 +57,8 @@ class Employee {
   final String? departmentId;
   final String? reportingManagerId;
   final String? designationId;
+  /// HRMS job role this person was hired into (read-only here; set by the hire flow).
+  final String? jobRoleId;
   final int? timeboxEmployeeId;
   final String timeboxName;
 
@@ -102,6 +104,7 @@ class Employee {
     this.role,
     this.reportingManagerId,
     this.designationId,
+    this.jobRoleId,
     this.salaryType = 'fixed_monthly',
     this.baseSalary = 0,
     this.allowances = 0,
@@ -206,6 +209,9 @@ class Employee {
       designationId: json['designationId'] is Map
           ? (json['designationId']['_id'] as String?)
           : (json['designationId'] as String?),
+      jobRoleId: json['jobRoleId'] is Map
+          ? (json['jobRoleId']['_id'] as String?)
+          : (json['jobRoleId'] as String?),
       salaryType: json['salaryType'] as String? ?? 'fixed_monthly',
       baseSalary: (json['baseSalary'] as num?)?.toDouble() ?? 0,
       allowances: (json['allowances'] as num?)?.toDouble() ?? 0,
@@ -379,6 +385,7 @@ class Employee {
       role: role ?? this.role,
       reportingManagerId: reportingManagerId ?? this.reportingManagerId,
       designationId: designationId ?? this.designationId,
+      jobRoleId: jobRoleId,
       salaryType: salaryType ?? this.salaryType,
       baseSalary: baseSalary ?? this.baseSalary,
       allowances: allowances ?? this.allowances,

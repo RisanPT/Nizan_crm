@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/notifications/controllers/live_notifications.dart';
 import 'package:nizan_crm/features/notifications/data/app_notification.dart';
 import 'package:nizan_crm/features/notifications/presentation/widgets/notification_watcher.dart';
+import 'package:nizan_crm/features/notifications/presentation/widgets/notification_toast.dart';
 
 NotificationPage _page(List<AppNotification> items) => NotificationPage(
       items: items,
@@ -30,6 +32,29 @@ Widget _harness(List<AppNotification> items) => ProviderScope(
     );
 
 void main() {
+  // The real-world bug: a notification arrives while the CRM isn't being drawn
+  // (tab in the background, app minimised, phone screen off). The 5s timer
+  // fires before the card's first frame; the card must still go away — and ✕
+  // must still work — once the screen is drawn again.
+  testWidgets('a popup that closes before it was ever drawn does not get stuck', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: ThemeData(extensions: [AppTheme.crmThemeExtension]),
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () => NotificationToast.show(ctx, title: 'Background popup', body: 'Arrived while hidden'),
+            child: const Text('show'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('show'));
+    // No frame in between: time passes (timers fire) and only then a frame is drawn.
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Background popup'), findsNothing);
+  });
+
   testWidgets('pops a toast for a fresh unread notification', (tester) async {
     // Keys are scoped to the logged-in user; tests have no auth session → 'anon'.
     SharedPreferences.setMockInitialValues({'notif_watcher_primed_anon': true});
@@ -52,8 +77,36 @@ void main() {
     expect(find.text('Payment received'), findsOneWidget);
     expect(find.text('A payment of Rs 5,000 was recorded.'), findsOneWidget);
 
-    // Flush the 6s auto-dismiss timer so none are left pending.
-    await tester.pump(const Duration(seconds: 7));
+    // It must close by itself (5s), not stay on screen.
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Payment received'), findsNothing);
+  });
+
+  testWidgets('closes by itself even while the mouse rests on it', (tester) async {
+    SharedPreferences.setMockInitialValues({'notif_watcher_primed_anon': true});
+    await tester.pumpWidget(_harness([
+      AppNotification(
+        id: 'h1',
+        type: 'payment_received',
+        title: 'Hovered popup',
+        body: 'Mouse stays on it.',
+        read: false,
+        createdAt: DateTime.now(),
+      ),
+    ]));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.pump(const Duration(milliseconds: 350));
+    expect(find.text('Hovered popup'), findsOneWidget);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.text('Hovered popup')));
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Hovered popup'), findsNothing);
+    await mouse.removePointer();
   });
 
   testWidgets('does NOT pop an already-seen or already-read notification', (tester) async {

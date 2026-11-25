@@ -46,18 +46,18 @@ void _installGlobalErrorHandlers() {
   };
   if (kReleaseMode) {
     ErrorWidget.builder = (details) => const Material(
-          color: Colors.transparent,
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'This section could not be displayed.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
-              ),
-            ),
+      color: Colors.transparent,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'This section could not be displayed.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Color(0xFF6B7280), fontSize: 13),
           ),
-        );
+        ),
+      ),
+    );
   }
 }
 

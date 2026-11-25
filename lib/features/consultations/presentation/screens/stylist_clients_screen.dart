@@ -13,6 +13,7 @@ import '../../data/stylist_client.dart';
 import '../../services/stylist_client_service.dart';
 import '../widgets/consultation_ui.dart';
 import '../widgets/stylist_client_ui.dart';
+import 'royal_clients_screen.dart' show RoyalWaitingBanner;
 
 /// Wide enough for the one-line filter bar and the table layout.
 const _wideBreakpoint = 900.0;
@@ -69,6 +70,8 @@ class _StylistClientsScreenState extends ConsumerState<StylistClientsScreen> {
         body: Column(
           children: [
             _header(crm, isLead, async.value?.length, wide),
+            // Royal package bookings with no client file yet (hidden at 0).
+            const RoyalWaitingBanner(),
             Expanded(
               child: async.when(
                 loading: () => const Center(child: CircularProgressIndicator()),

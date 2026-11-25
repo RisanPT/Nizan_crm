@@ -634,7 +634,7 @@ class Sidebar extends ConsumerWidget {
                     ),
                   ],
                   // Leave — every employee (ESS) without full HRMS access
-                  if (!access.canSeeStaff && (access.canSeeLeaveRequests || access.has('leave', false)))
+                  if (!access.canSeeStaff)
                     _SidebarItem(
                       icon: Icons.event_busy_outlined,
                       title: 'Leave',
@@ -653,6 +653,7 @@ class Sidebar extends ConsumerWidget {
                   // Approvals — managers, department heads and HR.
                   if (access.isFullAccess ||
                       access.isDepartmentHead ||
+                      access.isHrRole ||
                       access.has('approvals', false))
                     _SidebarItem(
                       icon: Icons.fact_check_outlined,
@@ -749,7 +750,7 @@ class Sidebar extends ConsumerWidget {
                           _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization Chart', route: '/hr/org', selected: currentPath == '/hr/org'),
                           _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
                           _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
-                          if (access.isFullAccess || access.isDepartmentHead)
+                          if (access.isFullAccess || access.isDepartmentHead || access.isHrRole)
                             _HrNavItem(icon: Icons.key_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
                         ],
                       ),
@@ -982,6 +983,16 @@ class Sidebar extends ConsumerWidget {
                           isCollapsed: false,
                           isSelected: currentPath.startsWith('/stylist/clients'),
                           onTap: () => context.go('/stylist/clients'),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 14),
+                        child: _SidebarItem(
+                          icon: Icons.workspace_premium_outlined,
+                          title: 'Royal Clients',
+                          isCollapsed: false,
+                          isSelected: currentPath == '/stylist/royal',
+                          onTap: () => context.go('/stylist/royal'),
                         ),
                       ),
                       Padding(
@@ -1733,6 +1744,15 @@ class Sidebar extends ConsumerWidget {
                       ],
                     ],
                   ],
+                  // Team N Website — one entry; its screen has tabs per area.
+                  if (access.canSeeWebsite)
+                    _SidebarItem(
+                      icon: Icons.language_outlined,
+                      title: 'Team N Website',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath.startsWith('/website'),
+                      onTap: () => context.go('/website'),
+                    ),
                   if (access.canSeeFleet) ...[
                     _SidebarItem(
                       icon: Icons.local_shipping_outlined,

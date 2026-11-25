@@ -12,6 +12,7 @@ import 'package:nizan_crm/features/crm/presentation/widgets/crm_booking_care_car
 import 'package:nizan_crm/features/marketing/presentation/portfolio/booking_content_card.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/booking_date_picker.dart';
 import 'package:nizan_crm/core/models/district.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/fleet/presentation/widgets/fleet_availability_widgets.dart';
@@ -268,11 +269,14 @@ class ManageBookingScreen extends HookConsumerWidget {
           booking?.totalPrice.toStringAsFixed(0) ??
           '',
     );
+    // A package entry edits that package's advance. A booking without
+    // packages edits the WHOLE advance — its per-date display entries only
+    // carry a share of it, and saving that share would shrink the advance.
+    final double? editableAdvance = selectedBookingItemIndex >= 0
+        ? selectedDisplayEntry?.advanceAmount
+        : booking?.advanceAmount;
     final advanceCtrl = useTextEditingController(
-      text:
-          selectedDisplayEntry?.advanceAmount.toStringAsFixed(0) ??
-          booking?.advanceAmount.toStringAsFixed(0) ??
-          '',
+      text: editableAdvance?.toStringAsFixed(0) ?? '',
     );
     final discountCtrl = useTextEditingController(
       text:
@@ -383,8 +387,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             (sum, addon) => sum + (addon.amount * addon.persons),
           );
           advanceCtrl.text =
-              (selectedDisplayEntry?.advanceAmount ?? booking.advanceAmount)
-                  .toStringAsFixed(0);
+              (editableAdvance ?? booking.advanceAmount).toStringAsFixed(0);
           discountType.value = booking.discountType;
           discountCtrl.text =
               ((booking.discountValue == 0
@@ -1603,8 +1606,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                                       ) ??
                                       canonicalBookingDate ??
                                       booking.bookingDate;
-                                  final picked = await showDatePicker(
-                                    context: context,
+                                  final picked = await showWorkDatePicker(
+                                    context,
+                                    ref,
                                     initialDate: initialDate,
                                     firstDate: DateTime(2020),
                                     lastDate: DateTime(2035),
@@ -5077,8 +5081,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                     12.h,
                     InkWell(
                       onTap: () async {
-                        final picked = await showDatePicker(
-                          context: ctx,
+                        final picked = await showWorkDatePicker(
+                          ctx,
+                          ref,
                           initialDate: date,
                           firstDate: DateTime(2020),
                           lastDate: DateTime(2100),

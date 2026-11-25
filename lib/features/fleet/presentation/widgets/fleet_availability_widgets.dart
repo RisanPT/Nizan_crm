@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/features/allocation/data/allocation_models.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/artist_conflict_dialog.dart'
+    show showArtistConflictDialog;
+import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
+import 'package:nizan_crm/features/bookings/data/driver_day.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_availability.dart';
-import 'package:nizan_crm/features/allocation/presentation/widgets/artist_conflict_dialog.dart' show saveBookingConfirmingConflicts;
 
 /// free | tight | busy | unavailable → the colour it is drawn in.
 Color availabilityColor(CrmTheme crm, String status) => switch (status) {
@@ -220,12 +224,215 @@ Future<bool> showFleetConflictDialog(
 /// Returns the saved booking, or null when the person chose not to assign. Any other failure is thrown
 /// as before, for the caller to show.
 ///
-/// An artist the server refuses for a NEW booking (ARTIST_CONFLICT — the allocation's clash check) is asked about the same way: see
-/// saveBookingConfirmingConflicts.
+/// One driver per artist per day: if the artist's other works that day have another driver, the
+/// server asks first (409 DRIVER_DAY_CONFLICT) — "move them too?"; after the save, the works that
+/// got the driver too (or were left alone, and why) are shown.
+///
+/// An artist the server refuses for a booking (ARTIST_CONFLICT) is asked about the same way.
 Future<Booking?> updateBookingConfirmingFleet(
   BuildContext context,
   WidgetRef ref,
   Booking booking, {
   Map<String, dynamic>? allocationIntent,
-}) =>
-    saveBookingConfirmingConflicts(context, ref, booking, allocationIntent: allocationIntent);
+}) async {
+  var confirmFleet = false;
+  var confirmDriverDay = false;
+  var confirmArtist = false;
+  // At most one question of each kind, then a final save.
+  for (var attempt = 0; attempt < 4; attempt++) {
+    try {
+      final saved = await ref
+          .read(bookingProvider.notifier)
+          .updateBooking(
+            booking,
+            confirmFleetConflict: confirmFleet,
+            confirmDriverDay: confirmDriverDay,
+            confirmArtistConflict: confirmArtist,
+            extraBody: allocationIntent == null ? null : {'allocationIntent': allocationIntent},
+          );
+      final result = saved.driverDay;
+      if (result != null && context.mounted) {
+        await showDriverDayResultDialog(context, result);
+      }
+      return saved;
+    } catch (error) {
+      final fleet = FleetConflict.of(error);
+      final day = DriverDayConflict.of(error);
+      final artist = AllocationRefusal.of(error);
+      if (fleet != null && !confirmFleet) {
+        if (!context.mounted) return null;
+        if (!await showFleetConflictDialog(context, fleet)) return null;
+        confirmFleet = true;
+      } else if (day != null && !confirmDriverDay) {
+        if (!context.mounted) return null;
+        if (!await showDriverDayConflictDialog(context, day)) return null;
+        confirmDriverDay = true;
+      } else if (artist != null && artist.isConflict && !confirmArtist) {
+        if (!context.mounted) return null;
+        if (!await showArtistConflictDialog(context, artist)) return null;
+        confirmArtist = true;
+      } else {
+        rethrow;
+      }
+    }
+  }
+  return null;
+}
+
+String _workTime(DriverDayWork w) {
+  final at = w.serviceStart;
+  final day = w.day.isEmpty ? '' : _day(w.day);
+  if (at == null) return day;
+  return [day, DateFormat('h:mm a').format(at)].where((x) => x.isNotEmpty).join(', ');
+}
+
+Widget _workLine(BuildContext context, DriverDayWork w, String note, {IconData icon = Icons.event_note_outlined}) {
+  final crm = context.crmColors;
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: crm.textSecondary),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: w.label.isNotEmpty ? w.label : w.customerName,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                TextSpan(
+                  text: [_workTime(w), note].where((x) => x.isNotEmpty).map((x) => '\n$x').join(),
+                  style: TextStyle(fontSize: 12.5, color: crm.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// "Move them too?" — the artist's other works that day have another driver. True = move them.
+Future<bool> showDriverDayConflictDialog(
+  BuildContext context,
+  DriverDayConflict conflict,
+) async {
+  final driver = conflict.driverName.isNotEmpty ? conflict.driverName : 'this driver';
+  final answer = await showDialog<bool>(
+    context: context,
+    builder: (ctx) {
+      final crm = ctx.crmColors;
+      return AlertDialog(
+        key: const Key('driverDayConflictDialog'),
+        icon: Icon(Icons.swap_horiz_rounded, color: crm.warning, size: 32),
+        title: const Text('Same driver for the whole day'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "One driver covers all of the artist's works in a day. "
+                  '${conflict.works.length == 1 ? 'This work has' : 'These works have'} another driver now:',
+                ),
+                const SizedBox(height: 12),
+                for (final w in conflict.works)
+                  _workLine(ctx, w, 'Driver now: ${w.driverName}', icon: Icons.person_outline),
+                Text(
+                  'Move ${conflict.works.length == 1 ? 'it' : 'them'} to $driver too?',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const Key('driverDayConflictCancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('driverDayConflictMove'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Move to $driver'),
+          ),
+        ],
+      );
+    },
+  );
+  return answer == true;
+}
+
+/// What the save did to the artist's other works that day.
+Future<void> showDriverDayResultDialog(
+  BuildContext context,
+  DriverDayResult result,
+) {
+  final driver = result.driverName.isNotEmpty ? result.driverName : 'the driver';
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      final crm = ctx.crmColors;
+      return AlertDialog(
+        key: const Key('driverDayResultDialog'),
+        icon: Icon(Icons.directions_car_outlined, color: crm.success, size: 32),
+        title: Text(result.removed ? 'Driver removed for the day' : 'Driver set for the whole day'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (result.assigned.isNotEmpty) ...[
+                  Text(
+                    result.removed
+                        ? "Also removed from the artist's other works that day:"
+                        : "Also assigned to $driver — the artist's other works that day:",
+                  ),
+                  const SizedBox(height: 10),
+                  for (final w in result.assigned)
+                    _workLine(
+                      ctx,
+                      w,
+                      w.driverName.isNotEmpty && !result.removed ? 'Was: ${w.driverName}' : '',
+                      icon: Icons.check_circle_outline,
+                    ),
+                ],
+                if (result.skipped.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  const Text('Not changed:', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  for (final w in result.skipped)
+                    _workLine(ctx, w, w.reasonText, icon: Icons.info_outline_rounded),
+                ],
+                for (final warning in result.warnings)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      warning,
+                      style: TextStyle(fontSize: 12.5, color: crm.destructive),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          FilledButton(
+            key: const Key('driverDayResultOk'),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    },
+  );
+}

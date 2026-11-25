@@ -869,6 +869,8 @@ class _ModernOffboardingCard extends ConsumerWidget {
         content: Text(letterRecorded
             ? 'Experience letter saved to ${emp.name}\'s documents and HR Letters'
             : 'Experience letter saved to documents (could not add it to HR Letters)'),
+        persist: false,
+        duration: const Duration(seconds: 5),
         action: SnackBarAction(
           label: 'Open PDF',
           onPressed: () => previewOrDownloadNizanHrDocument(

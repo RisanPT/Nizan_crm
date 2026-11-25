@@ -187,6 +187,10 @@ class Access {
   bool get canSeePayables =>
       isFullAccess || isCeo || has('payables', role.canSeePayables);
 
+  /// The HR role (owner decision 2026-11-16): manages staff logins, approvals
+  /// and the leave desk on top of its Staff / HR module.
+  bool get isHrRole => roleKey == 'hr';
+
   /// Finance Head dashboard — the finance_head role, or full-access management.
   bool get canSeeFinanceHeadDashboard =>
       isFullAccess || roleKey == 'finance_head';
@@ -199,6 +203,21 @@ class Access {
   bool get canSeeFleet => has('fleet', role.canSeeFleet);
   bool get canManageInventory => has('inventory', role.canManageInventory);
   bool get canManageMarketing => has('marketing', role.canManageMarketing);
+
+  /// Team N Website (public site CMS). Matches the backend rule exactly
+  /// (middleware/websiteAccess.js): the admin role, or the `website` key, or a
+  /// `website.*` sub-key. Unlike other modules, Manager does NOT get it by
+  /// default — it is admin + marketing_admin only unless granted.
+  bool get canSeeWebsite =>
+      roleKey == 'admin' ||
+      granted.contains('website') ||
+      granted.any((k) => k.startsWith('website.'));
+
+  /// One area of Team N Website: content | gallery | packages | enquiries.
+  bool canSeeWebsiteArea(String area) =>
+      roleKey == 'admin' ||
+      granted.contains('website') ||
+      granted.contains('website.$area');
   bool get canSeeCEOReport => has('reports', role.canSeeCEOReport);
 
   /// The Associate Works report: Operations (CRM), the artist head, Accounts and the owners. Sales and artists do not see it (the server

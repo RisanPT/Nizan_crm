@@ -41,7 +41,7 @@ class BlockedDateService {
     try {
       final payload = {
         if (id != null && id.isNotEmpty) 'id': id,
-        'date': date.toIso8601String(),
+        'date': dayString(date),
         'reason': reason,
         'active': active,
       };
