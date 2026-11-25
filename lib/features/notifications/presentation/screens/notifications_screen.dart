@@ -443,6 +443,9 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.payments_outlined, Color(0xFFB45309));
     case 'project_cost_decision':
       return const _TypeMeta(Icons.verified_outlined, Color(0xFF15803D));
+    // made a project's manager, added to its team, or taken off it
+    case 'project_team':
+      return const _TypeMeta(Icons.groups_2_outlined, Color(0xFF7C3AED));
     // A project asking HR for more people / what HR did / a head asked to let someone go
     case 'manpower_request':
       return const _TypeMeta(Icons.group_add_outlined, Color(0xFFB45309));
@@ -450,6 +453,19 @@ _TypeMeta _typeMeta(String type) {
       return const _TypeMeta(Icons.groups_outlined, Color(0xFF1D4ED8));
     case 'manpower_release':
       return const _TypeMeta(Icons.how_to_reg_outlined, Color(0xFFB45309));
+    // the smart booking allocation (each notification carries its own link: My Works, the Allocation Board, the booking)
+    case 'artist_assigned':
+      return const _TypeMeta(Icons.assignment_turned_in_outlined, Color(0xFF16A34A));
+    case 'artist_unassigned':
+      return const _TypeMeta(Icons.assignment_return_outlined, Color(0xFF6B7280));
+    case 'extra_slot_request':
+      return const _TypeMeta(Icons.more_time_rounded, Color(0xFFF59E0B));
+    case 'extra_slot_decision':
+      return const _TypeMeta(Icons.fact_check_outlined, Color(0xFF2563EB));
+    case 'allocation_needed':
+      return const _TypeMeta(Icons.person_search_outlined, Color(0xFFF59E0B));
+    case 'booking_artist_assigned':
+      return const _TypeMeta(Icons.how_to_reg_outlined, Color(0xFF16A34A));
     default:
       return const _TypeMeta(Icons.notifications_outlined, Color(0xFF6B7280));
   }

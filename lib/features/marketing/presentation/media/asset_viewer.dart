@@ -10,6 +10,8 @@ import 'package:nizan_crm/features/marketing/presentation/media/gallery_prefs.da
 import 'package:nizan_crm/features/marketing/presentation/media/media_link.dart';
 import 'package:nizan_crm/features/marketing/presentation/media/media_stream.dart';
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart' show AssetThumb;
+import 'package:nizan_crm/features/marketing/presentation/portfolio/work_review_widgets.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/artist_quality_tab.dart' show showArtistQuality;
 
 /// Open an asset: a video plays in the app — a Dropbox video through our own server first (it sends Dropbox's file with the right type,
 /// keeps a copy, and says why when Dropbox refuses — see media_stream.dart), then straight from Dropbox ([MediaLink]); anything else says how it
@@ -101,7 +103,8 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
       }
       if (s != null && s.ok && s.url.isNotEmpty) {
         _relayUrl = s.url;
-        urls = [s.url, ...urls];
+        // straight from Dropbox first (the company's own files), then through the server, then Dropbox's plain routes
+        urls = [...s.sources, ...urls];
       }
     }
     final ClipPlayer p;
@@ -195,7 +198,7 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
   Widget build(BuildContext context) {
     final a = widget.asset;
     // a Dropbox FOLDER (an artist's footage): what is inside, each video playing here (dropbox_folder_view.dart)
-    if (_link.isFolder) return DropboxFolderView(url: a.url, title: a.title);
+    if (_link.isFolder) return DropboxFolderView(url: a.url, title: a.title, below: a.work == null ? null : WorkDetailsPanel(work: a.work!, onArtist: (artist) => showArtistQuality(context, artistKey: artist.key, name: artist.name)));
     final p = _player;
     final live = p != null && _problem == null && p.isReady;
     // turning Autoplay on while a video is open and paused starts it, muted
@@ -217,7 +220,15 @@ class _AssetViewerState extends ConsumerState<AssetViewer> {
           IconButton(key: const Key('viewer_close'), tooltip: 'Close', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
         ]),
         const SizedBox(height: 8),
-        Flexible(child: SingleChildScrollView(child: _stage(context))),
+        Flexible(
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _stage(context),
+              // the work it came from and the client's review of it; an artist opens their Artist Quality
+              if (a.work != null) WorkDetailsPanel(work: a.work!, onArtist: (artist) => showArtistQuality(context, artistKey: artist.key, name: artist.name)),
+            ]),
+          ),
+        ),
         if (live) ...[
           const SizedBox(height: 8),
           Row(children: [

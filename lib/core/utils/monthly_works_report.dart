@@ -476,7 +476,7 @@ Future<List<int>> _buildPdf(
         child: pw.Row(
           children: [
             txt(
-              'Team N ERP - generated $generated - internal use only',
+              'Team N Makeovers - generated $generated - internal use only',
               size: 7.5,
               color: _muted,
             ),

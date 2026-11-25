@@ -1,6 +1,11 @@
 import '../models/auth_session.dart';
 import 'app_role.dart';
 
+/// The client bridal app (phone sign-in, the concierge chat) is not live yet — its server runs apart (nizan_bride_backend) — so
+/// Client Chat and App Clients stay out of the CRM: no menu item, no page, no chat figures on the CRM Dashboard. Set to true when
+/// the app launches; everything comes back as it was.
+const kClientAppLive = false;
+
 /// Resolves what the signed-in user may access.
 ///
 /// Permissions come from the backend `Role` record, so an administrator can
@@ -143,7 +148,9 @@ class Access {
   // administrator can never lock themselves out of Settings.
   bool get isFullAccess => role.isFullAccess;
 
-  bool get canSeeDashboard => has('dashboard', role.canSeeDashboard);
+  /// The company-wide Dashboard (Operations / Sales / Marketing / Finance). Never the CRM Head's, even with the permission ticked:
+  /// they see only their own CRM Dashboard, and '/' sends them there.
+  bool get canSeeDashboard => !isCrmHead && has('dashboard', role.canSeeDashboard);
   bool get canSeeClients => has('clients', role.canSeeClients);
   bool get canSeeCalendar =>
       isFullAccess || canSeeArtistHead || has('calendar', role.canSeeCalendar);
@@ -223,6 +230,25 @@ class Access {
   /// May hand CRM work to a team member (or move it): the CRM Head and management. The leaders read only.
   bool get canAssignCrmWork => isFullAccess || isCrmHead;
 
+  /// The smart booking allocation (Allocation Board, Artist Management, the suggestions on confirm) — the server decides the same way
+  /// (backend utils/allocationAccess.js). The CEO / Executive Director read it.
+  bool get canSeeAllocation => isFullAccess || isCeo || isCrmTeam || canSeeArtistHead;
+
+  /// The Artist Head proper (not the regional one): the artist_head role, or an artist flagged as head.
+  bool get _isArtistHeadProper => (role == AppRole.artistHead && roleKey != 'regional_artist_head') || artistHead;
+
+  /// May give a new work to an artist team (confirm a suggestion): the CRM team, the Artist Head, managers.
+  bool get canAllocateArtists => isFullAccess || isCrmTeam || _isArtistHeadProper;
+
+  /// May OK an EXTRA (4th) slot on a peak day: the Artist Head and managers.
+  bool get canApproveExtraSlots => isFullAccess || _isArtistHeadProper;
+
+  /// May set up the teams (main artist, assistants, preferred places, rotation, slots): the whole CRM team, the Artist Head, managers.
+  bool get canManageArtistTeams => isFullAccess || isCrmTeam || _isArtistHeadProper;
+
+  /// May read a booking's artist allocation (who has it, or why it waits): the allocation's readers and the salespeople.
+  bool get canSeeBookingAllocation => canSeeAllocation || role == AppRole.sales;
+
   /// Artist Head dashboard — only the dedicated artist_head role, or an artist flagged
   /// as also-head.
   bool get canSeeArtistHead =>
@@ -258,8 +284,8 @@ class Access {
       role == AppRole.accounts ||
       canSeeSales;
 
-  bool get canSeeClientChat => canSeeClientReviews;
-  bool get canSeeAppClients => canSeeClientReviews;
+  bool get canSeeClientChat => kClientAppLive && canSeeClientReviews;
+  bool get canSeeAppClients => kClientAppLive && canSeeClientReviews;
 
   // IT hub (projects, task board, and — later — helpdesk tickets). No AppRole
   // matrix entry yet, so it's driven by the granted 'it' permission (admin/

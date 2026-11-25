@@ -14,6 +14,7 @@ import 'package:nizan_crm/features/marketing/presentation/socials/asset_editor.d
 import 'package:nizan_crm/features/marketing/presentation/socials/socials_widgets.dart' show AssetThumb;
 import 'package:nizan_crm/features/marketing/services/portfolio_service.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/work_review_widgets.dart';
 
 Color assetStageColor(String s) => switch (s) {
       'approved' => Mkt.good,
@@ -169,6 +170,8 @@ class AssetCard extends ConsumerWidget {
           AssetMenu(asset: asset, manager: manager),
         ]),
         Text([if (asset.page.isNotEmpty) asset.page else asset.portfolio, asset.brand == 'kerala' ? 'Kerala' : 'Main'].where((x) => x.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, color: Mkt.inkSoft)),
+        // the work it came from — day, booking, client, artists — and the client's rating of it
+        if (asset.work != null) WorkCardLines(work: asset.work!),
         if (onKeyword != null && asset.tags.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 5), child: AssetKeywordChips(asset: asset, onKeyword: onKeyword!)),
         const SizedBox(height: 4),
         MktChip(assetStageLabel(asset.stage), color: assetStageColor(asset.stage)),
@@ -203,6 +206,7 @@ class AssetRows extends StatelessWidget {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12.5, weight: FontWeight.w700)),
                   Text([assetKindLabel(a.kind), if (a.page.isNotEmpty) a.page else a.portfolio, a.brand == 'kerala' ? 'Kerala' : 'Main', if (a.owner.isNotEmpty) a.owner, if (a.createdAt != null) DateFormat('d MMM yyyy').format(a.createdAt!)].where((x) => x.isNotEmpty).join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, color: Mkt.inkSoft)),
+                  if (a.work != null) WorkCardLines(work: a.work!, compact: true),
                   if (onKeyword != null && a.tags.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 3), child: AssetKeywordChips(asset: a, onKeyword: onKeyword!, max: 5)),
                 ]),
               ),

@@ -21,7 +21,7 @@ import 'package:nizan_crm/features/marketing/services/meta_leads_service.dart';
 
 Map<String, dynamic> _status({bool ready = true, bool manager = true, bool ok = true, bool auto = true, List<Map<String, dynamic>>? unlinked, List<String> ignored = const [], bool lastRun = true}) => {
   'config': {'appSecret': ready, 'token': ready, 'accounts': ready ? [{'id': 'act_111', 'brand': 'kerala'}, {'id': 'act_222', 'brand': 'main'}] : [], 'ready': ready, 'version': 'v25.0'},
-  'settings': {'autoSync': auto, 'everyHours': 6, 'daysBack': 3, 'maxDays': 92},
+  'settings': {'autoSync': auto, 'everyMinutes': 30, 'everyHours': 0.5, 'daysBack': 3, 'maxDays': 92},
   'canManage': manager,
   'running': false,
   'lastRun': lastRun
@@ -120,6 +120,29 @@ void main() {
     expect(MetaLinkResult.fromJson(const {'linked': [{}, {}], 'run': {'busy': true}}).message, '2 campaigns linked; their figures come with the next sync.');
   });
 
+  test('every 30 minutes (an older server still says its hours); a run says what Meta changed; why a Meta campaign was not matched', () {
+    expect(MetaAdsStatus.fromJson(_status()).cadence, 'every 30 minutes');
+    expect(MetaAdsStatus.fromJson(const {'settings': {'everyHours': 6}}).cadence, 'every 6 hours', reason: 'a server from before the change');
+    expect(MetaAdsStatus.fromJson(const {'settings': {}}).cadence, 'every 30 minutes');
+    final run = MetaSyncRun.fromJson(const {'ok': true, 'campaignDays': 3, 'adDays': 6, 'segments': 0, 'statusChanges': 2, 'pictures': 4, 'adsSkipped': 1});
+    expect(run.details, '3 campaign-days · 6 ad-days · 0 audience rows · 2 statuses changed on Meta · 4 ad pictures · 1 ad skipped (two share a name)');
+    String why(String reason) => MetaUnlinked.fromJson({'metaId': '1', 'reason': reason}).reasonText;
+    expect(why('other_meta_id'), 'our campaign of this name is linked to another Meta campaign');
+    expect(why('same_name'), 'two Meta campaigns have this name');
+    expect(why('ambiguous'), 'two of our campaigns share this name');
+    expect(why('no_match'), '');
+    expect(importReasonText('other_meta_id'), why('other_meta_id'));
+  });
+
+  testWidgets('not linked: a Meta campaign whose name is taken by one linked to another Meta campaign says so', (t) async {
+    await _pump(t, _status(unlinked: const [
+      {'metaId': '3006', 'name': 'Studio Tour', 'accountId': 'act_222', 'brand': 'main', 'reason': 'other_meta_id', 'firstDay': '2026-11-17', 'lastDay': '2026-11-18', 'spend': 90, 'runFrom': '2026-11-16', 'runTo': '2026-11-18'},
+      {'metaId': '3007', 'name': 'Makeup Courses', 'accountId': 'act_222', 'brand': 'main', 'reason': 'same_name', 'firstDay': '2026-11-17', 'lastDay': '2026-11-18', 'spend': 40, 'runFrom': '2026-11-16', 'runTo': '2026-11-18'},
+    ]));
+    expect(find.descendant(of: find.byKey(const Key('ads_unlinked_reason_3006')), matching: find.text('our campaign of this name is linked to another Meta campaign')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('ads_unlinked_reason_3007')), matching: find.text('two Meta campaigns have this name')), findsOneWidget);
+  });
+
   testWidgets('set up and synced: the accounts with their brands, the last run, the next automatic one, spend not linked', (t) async {
     await _pump(t, _status());
     expect(find.text('Connected'), findsOneWidget);
@@ -128,7 +151,7 @@ void main() {
     expect(find.byKey(const Key('meta_ads_setup_steps')), findsNothing);
     expect(find.text('₹12,340 on 5 campaigns, 16 – 18 Nov.'), findsOneWidget);
     expect(find.text('₹960 more was spent on Meta campaigns not linked yet (below).'), findsOneWidget);
-    expect(find.textContaining('Runs on its own every 6 hours (the last 3 days) · next'), findsOneWidget);
+    expect(find.textContaining('Runs on its own every 30 minutes (the last 3 days) · next'), findsOneWidget);
     expect(find.text('Last sync worked'), findsOneWidget);
     expect(find.byKey(const Key('meta_ads_history')), findsOneWidget);
   });
@@ -180,7 +203,7 @@ void main() {
     expect(find.text('2 waiting'), findsOneWidget);
     expect(find.text('Main Diwali'), findsOneWidget);
     expect(find.textContaining('₹900 spent 16 – 18 Nov (last sync) · first seen 1 Nov · act_222'), findsOneWidget);
-    expect(find.text('two campaigns share this name'), findsOneWidget);
+    expect(find.text('two of our campaigns share this name'), findsOneWidget);
     await t.tap(find.byKey(const Key('meta_link_3003')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('meta_link_dialog')), findsOneWidget);
@@ -249,7 +272,7 @@ void main() {
     testWidgets('live: when it last synced, what waits to be linked, straight to the sync', (t) async {
       final went = await card(t, const {'connected': true, 'status': 'connected', 'sync': {'lastOkAt': '2026-11-18T08:40:00.000Z', 'ok': true, 'unlinked': 2, 'autoSync': true}, 'lastImport': {'id': 'l', 'at': '2026-11-18T08:40:00.000Z', 'source': 'api'}});
       expect(find.text('Live sync on'), findsOneWidget);
-      expect(find.textContaining('Figures come from Meta on their own every 6 hours'), findsOneWidget);
+      expect(find.textContaining('Figures come from Meta on their own every 30 minutes'), findsOneWidget);
       expect(find.text('2 Meta campaigns not linked: their spend is not counted yet'), findsOneWidget);
       expect(find.textContaining('(Meta sync)'), findsOneWidget);
       await t.tap(find.byKey(const Key('hub_meta_sync_button')));

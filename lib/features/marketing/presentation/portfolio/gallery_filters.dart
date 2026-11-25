@@ -22,13 +22,19 @@ final kKindLabels = {for (final k in kAssetKinds) k.$1: k.$2};
 final kStageLabels = {for (final s in kAssetStages) s.$1: s.$2};
 
 /// What each filter is called on the screen, and the key prefix its rows carry.
-const kFacetTitles = {'media': 'Media type', 'kind': 'Asset type', 'stage': 'Production stage', 'portfolio': 'Portfolio', 'page': 'Page', 'owner': 'Owner'};
-const _facetKey = {'media': 'gl_media', 'kind': 'gl_kind', 'stage': 'gl_stage', 'portfolio': 'gl_portfolio', 'page': 'gl_page', 'owner': 'gl_owner'};
+const kFacetTitles = {'media': 'Media type', 'kind': 'Asset type', 'stage': 'Production stage', 'portfolio': 'Portfolio', 'page': 'Page', 'owner': 'Owner', 'review': 'Client review of the work', 'artist': 'Artist on the work'};
+const _facetKey = {'media': 'gl_media', 'kind': 'gl_kind', 'stage': 'gl_stage', 'portfolio': 'gl_portfolio', 'page': 'gl_page', 'owner': 'gl_owner', 'review': 'gl_review', 'artist': 'gl_artist'};
 
-String facetValueLabel(String facet, String v) => switch (facet) {
+/// The two filters on the work behind an item (its client's review, its artists) — shown first: they find the work that needs a look.
+const kWorkFacets = ['review', 'artist'];
+
+/// A filter value in words. [names] = the artists' names by key (the Artist filter's values are ids).
+String facetValueLabel(String facet, String v, [Map<String, String> names = const {}]) => switch (facet) {
       'media' => kMediaLabels[v] ?? v,
       'kind' => kKindLabels[v] ?? v,
       'stage' => kStageLabels[v] ?? v,
+      'review' => reviewFilterLabel(v),
+      'artist' => (names[v] ?? '').isNotEmpty ? names[v]! : (v.startsWith('n:') ? v.substring(2) : 'An artist'),
       _ => v,
     };
 
@@ -56,12 +62,18 @@ class GalleryFilterPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = page ?? const AssetPage();
-    Map<String, int> values(String f) => {...p.facet(f), for (final v in search.facet(f)) if (!p.facet(f).containsKey(v)) v: 0};
+    Map<String, int> values(String f) => {
+          // a kind of review no item has is left out (unless it is picked)
+          for (final e in p.facet(f).entries)
+            if (f != 'review' || e.value > 0 || search.facet(f).contains(e.key)) e.key: e.value,
+          for (final v in search.facet(f)) if (!p.facet(f).containsKey(v)) v: 0,
+        };
     // stages and media in their natural order; the rest by how many
     List<String>? order(String f) => switch (f) {
           'stage' => [for (final s in kAssetStages) s.$1],
           'media' => kMediaLabels.keys.toList(),
           'kind' => [for (final k in kAssetKinds) k.$1],
+          'review' => [for (final r in kReviewFilters) r.$1],
           _ => null,
         };
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -78,7 +90,8 @@ class GalleryFilterPanel extends ConsumerWidget {
       const SizedBox(height: 6),
       _AddedPicker(search: search, onChanged: onChanged),
       const Divider(height: 22),
-      for (final f in kAssetFacets) _FacetSection(name: f, values: values(f), order: order(f), selected: search.facet(f), onToggle: (v) => onChanged(search.toggle(f, v))),
+      for (final f in [...kWorkFacets, ...kAssetFacets.where((x) => !kWorkFacets.contains(x))])
+        _FacetSection(name: f, values: values(f), order: order(f), selected: search.facet(f), names: p.artistNames, onToggle: (v) => onChanged(search.toggle(f, v))),
     ]);
   }
 }
@@ -159,8 +172,9 @@ class _AddedPicker extends ConsumerWidget {
 
 /// One filter's values as ticks, with the number each would show; the first six, then "Show all".
 class _FacetSection extends StatefulWidget {
-  const _FacetSection({required this.name, required this.values, required this.selected, required this.onToggle, this.order});
+  const _FacetSection({required this.name, required this.values, required this.selected, required this.onToggle, this.order, this.names = const {}});
   final String name;
+  final Map<String, String> names;
   final Map<String, int> values;
   final Set<String> selected;
   final ValueChanged<String> onToggle;
@@ -187,7 +201,7 @@ class _FacetSectionState extends State<_FacetSection> {
         const SizedBox(height: 4),
         if (keys.isEmpty) Text('—', style: mktText(11.5, color: Mkt.inkSoft)),
         for (final v in shown)
-          _Toggle(keyName: '${prefix}_$v', label: facetValueLabel(widget.name, v), value: widget.selected.contains(v), count: widget.values[v], onChanged: (_) => widget.onToggle(v)),
+          _Toggle(keyName: '${prefix}_$v', label: facetValueLabel(widget.name, v, widget.names), value: widget.selected.contains(v), count: widget.values[v], onChanged: (_) => widget.onToggle(v)),
         if (keys.length > 6) TextButton(key: Key('${prefix}_more'), style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact), onPressed: () => setState(() => _all = !_all), child: Text(_all ? 'Show fewer' : 'Show all ${keys.length}')),
       ]),
     );
@@ -314,8 +328,11 @@ class _KeywordFilterState extends ConsumerState<KeywordFilter> {
 
 /// The filters in force as chips, each with its ×, and "Clear all".
 class ActiveFilterChips extends StatelessWidget {
-  const ActiveFilterChips({super.key, required this.search, required this.onChanged});
+  const ActiveFilterChips({super.key, required this.search, required this.onChanged, this.names = const {}});
   final AssetSearch search;
+
+  /// The artists' names by key (the Artist filter's values are ids).
+  final Map<String, String> names;
   final ValueChanged<AssetSearch> onChanged;
 
   @override
@@ -339,7 +356,7 @@ class ActiveFilterChips extends StatelessWidget {
         if (s.keywords.length > 1) chip('gl_active_kwmode', s.kwAny ? 'any of these keywords' : 'all of these keywords', () => onChanged(s.copyWith(kwAny: !s.kwAny)), color: Mkt.inkSoft),
         for (final k in s.notKeywords) chip('gl_active_notkw_$k', 'not #$k', () => onChanged(s.toggleKeyword(k, exclude: true)), color: Mkt.bad),
         for (final f in kAssetFacets)
-          for (final v in s.facet(f)) chip('gl_active_${f}_$v', facetValueLabel(f, v), () => onChanged(s.toggle(f, v))),
+          for (final v in s.facet(f)) chip('gl_active_${f}_$v', facetValueLabel(f, v, names), () => onChanged(s.toggle(f, v))),
         if (s.untagged) chip('gl_active_untagged', 'No keywords yet', () => onChanged(s.copyWith(untagged: false))),
         if (s.finalOnly) chip('gl_active_final', 'Final outputs', () => onChanged(s.copyWith(finalOnly: false))),
         if (s.usable) chip('gl_active_usable', 'Ready to post', () => onChanged(s.copyWith(usable: false))),

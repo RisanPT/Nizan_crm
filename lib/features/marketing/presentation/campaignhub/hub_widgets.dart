@@ -90,6 +90,23 @@ Color hubStatusColor(String s) => switch (s) {
       _ => Mkt.grey,
     };
 
+/// A campaign's status chip. With [metaStatus] (the live Meta sync read it) the chip carries Meta's mark and says, on hover, that the
+/// status comes from Meta and in Meta's own word ("Paused", "Ended").
+class HubStatusChip extends StatelessWidget {
+  const HubStatusChip({super.key, required this.status, this.metaStatus = ''});
+  final String status, metaStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = MktChip(hubStatusLabel(status), color: hubStatusColor(status), icon: metaStatus.isEmpty ? null : Icons.all_inclusive_rounded);
+    if (metaStatus.isEmpty) return chip;
+    return Tooltip(message: 'From Meta: $metaStatus. The sync keeps it up to date.', child: chip);
+  }
+}
+
+/// An ad's status on Meta when it says more than running / paused ("Ad set paused", "Rejected by Meta", "In review") — '' otherwise.
+String adMetaNote(String metaStatus) => const {'', 'Active', 'Paused'}.contains(metaStatus) ? '' : metaStatus;
+
 Color adVerdictColor(String v) => switch (v) {
       'top' => Mkt.good,
       'under' => Mkt.warn,
@@ -149,7 +166,8 @@ class HubThumb extends StatelessWidget {
     final fallback = Container(width: size, height: size, color: Mkt.tint(c, 0.14), child: Icon(adFormatIcon(format), size: size * 0.45, color: c));
     return ClipRRect(
       borderRadius: BorderRadius.circular(radius),
-      child: url.isEmpty ? fallback : Image.network(url, width: size, height: size, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback, loadingBuilder: (_, child, p) => p == null ? child : fallback),
+      // on the web an ad's picture from Meta (its own image server) may not allow the app to read it: it is then shown as a plain picture
+      child: url.isEmpty ? fallback : Image.network(url, width: size, height: size, fit: BoxFit.cover, webHtmlElementStrategy: WebHtmlElementStrategy.fallback, errorBuilder: (_, _, _) => fallback, loadingBuilder: (_, child, p) => p == null ? child : fallback),
     );
   }
 }

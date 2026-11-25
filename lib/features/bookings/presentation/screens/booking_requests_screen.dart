@@ -12,6 +12,57 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/crm/data/crm_models.dart';
 import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
 import 'package:nizan_crm/features/crm/services/crm_service.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/allocation_sheet.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/booking_allocation_result.dart';
+import 'package:nizan_crm/features/allocation/services/allocation_service.dart';
+import 'package:go_router/go_router.dart';
+
+/// Confirms a booking request. With automatic allocation on, the status is saved and the server gives the work to the best team at once
+/// when it is a clean match — the result (or why it waits for CRM) is shown, with "Allocate now" / "Change team". With the allocation
+/// suggesting (not automatic) and a person who may allocate, "who takes it" opens first: Confirm & allocate (the status, then the team)
+/// or Confirm without artist (it waits on the Allocation Board). Otherwise only the status, as before. → true when confirmed.
+Future<bool> confirmBookingRequest(BuildContext context, WidgetRef ref, Booking booking) async {
+  Future<void> confirm() => ref.read(bookingProvider.notifier).updateBooking(booking.copyWith(status: 'confirmed'));
+  final access = Access.of(ref.read(authSessionProvider));
+  var useSheet = false;
+  var auto = false;
+  if (access.canAllocateArtists) {
+    try {
+      final s = await ref.read(allocationSettingsProvider.future);
+      useSheet = s.suggest && s.canAllocate;
+      auto = s.autoOn;
+    } catch (_) {
+      useSheet = false; // the settings can't be read: confirm as before
+    }
+  }
+  if (auto && context.mounted) {
+    await confirm();
+    if (context.mounted) await showBookingAllocationResult(context, ref, bookingId: booking.id);
+    return true;
+  }
+  if (!useSheet || !context.mounted) {
+    await confirm();
+    return true;
+  }
+  var confirmed = false;
+  await showAllocationSheet(
+    context,
+    bookingId: booking.id,
+    source: 'requests',
+    primaryLabel: 'Confirm & allocate',
+    secondaryLabel: 'Confirm without artist',
+    beforeConfirm: () async {
+      await confirm();
+      confirmed = true;
+      return true;
+    },
+    onSecondary: () async {
+      await confirm();
+      confirmed = true;
+    },
+  );
+  return confirmed;
+}
 
 class BookingRequestsScreen extends ConsumerStatefulWidget {
   const BookingRequestsScreen({super.key});
@@ -28,6 +79,18 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   // CRM: whose requests to show — all | mine | unassigned
   String _ownerFilter = 'all';
 
+  /// Is the smart allocation suggesting, for someone who may allocate (the confirmed works then go to the Allocation Board)? [auto] —
+  /// clean matches were given their team automatically as they were confirmed.
+  Future<({bool on, bool auto})> _allocationOn() async {
+    if (!Access.of(ref.read(authSessionProvider)).canAllocateArtists) return (on: false, auto: false);
+    try {
+      final s = await ref.read(allocationSettingsProvider.future);
+      return (on: s.suggest && s.canAllocate, auto: s.autoOn);
+    } catch (_) {
+      return (on: false, auto: false);
+    }
+  }
+
   Future<void> _updateStatus(Booking booking, String status) async {
     await ref
         .read(bookingProvider.notifier)
@@ -37,7 +100,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
   // Accept a single request straight from its card (no dialog needed).
   Future<void> _acceptSingle(Booking booking) async {
     try {
-      await _updateStatus(booking, 'confirmed');
+      if (!await confirmBookingRequest(context, ref, booking)) return;
       if (mounted) {
         setState(() => _selectedIds.remove(booking.id));
         ScaffoldMessenger.of(context).showSnackBar(
@@ -107,8 +170,13 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
           _selectedIds.clear();
           _activeBookingId = null;
         });
+        final allocating = await _allocationOn();
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${toUpdate.length} booking(s) confirmed.')),
+          SnackBar(
+            content: Text('${toUpdate.length} booking(s) confirmed.${allocating.auto ? ' Artists were assigned automatically where the route fits — the rest wait on the Allocation Board.' : allocating.on ? ' Give them their artists on the Allocation Board.' : ''}'),
+            action: allocating.on ? SnackBarAction(label: 'Open board', onPressed: () => context.go('/booking/allocation')) : null,
+          ),
         );
       }
     } catch (error) {
@@ -539,10 +607,7 @@ class _BookingRequestsScreenState extends ConsumerState<BookingRequestsScreen> {
                                 final scaffoldMessenger = ScaffoldMessenger.of(
                                   context,
                                 );
-                                await _updateStatus(
-                                  activeBooking.booking,
-                                  'confirmed',
-                                );
+                                if (!await confirmBookingRequest(context, ref, activeBooking.booking)) return;
                                 if (mounted) {
                                   scaffoldMessenger.showSnackBar(
                                     const SnackBar(
@@ -931,9 +996,16 @@ class _BookingApprovalDialogState
   Future<void> _changeStatus(String status) async {
     setState(() => _saving = true);
     try {
-      await ref
-          .read(bookingProvider.notifier)
-          .updateBooking(widget.booking.booking.copyWith(status: status));
+      if (status == 'confirmed') {
+        if (!await confirmBookingRequest(context, ref, widget.booking.booking)) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+      } else {
+        await ref
+            .read(bookingProvider.notifier)
+            .updateBooking(widget.booking.booking.copyWith(status: status));
+      }
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

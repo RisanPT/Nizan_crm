@@ -187,6 +187,8 @@ class _FakeBookings extends BookingNotifier {
   Future<Booking> updateBooking(
     Booking booking, {
     bool confirmFleetConflict = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
   }) async {
     calls.add((
       driverId: booking.driverId,

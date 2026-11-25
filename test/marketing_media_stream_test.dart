@@ -65,4 +65,21 @@ void main() {
     expect(await _service(_Server(null)).link(_link), isNull);
     expect(await NoMediaStream().link(_link, probe: true), isNull);
   });
+
+  test('a direct Dropbox link in the answer is played first, while it has more than 5 minutes left; then the server\'s stream', () {
+    final l = MediaStreamLink.fromJson({
+      'path': '/marketing/media/stream/T0K.SIG',
+      'ok': true,
+      'direct': {'url': 'https://uc9.dl.dropboxusercontent.com/temp/reel.mp4', 'until': '2026-11-25T12:00:00.000Z'},
+    }, 'https://api.test/api');
+    expect(l.directUrl, 'https://uc9.dl.dropboxusercontent.com/temp/reel.mp4');
+    final until = DateTime.parse('2026-11-25T12:00:00.000Z');
+    expect(l.sourcesAt(until.subtract(const Duration(hours: 1))),
+        ['https://uc9.dl.dropboxusercontent.com/temp/reel.mp4', 'https://api.test/api/marketing/media/stream/T0K.SIG']);
+    expect(l.sourcesAt(until.subtract(const Duration(minutes: 4))), ['https://api.test/api/marketing/media/stream/T0K.SIG'],
+        reason: 'about to stop working: the server\'s stream only');
+    final plain = MediaStreamLink.fromJson({'path': '/marketing/media/stream/X.Y'}, 'https://api.test/api');
+    expect(plain.directUrl, '');
+    expect(plain.sources, ['https://api.test/api/marketing/media/stream/X.Y'], reason: 'someone else\'s link: the relay, as before');
+  });
 }

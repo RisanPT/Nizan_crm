@@ -181,7 +181,7 @@ class _SyncCardState extends ConsumerState<_SyncCard> {
         Row(children: [
           Expanded(
             child: Text(
-              s.autoSync ? 'Runs on its own every ${s.everyHours} hours (the last ${s.daysBack} days)${s.nextAutoAt != null && s.ready ? ' · next ${_when.format(s.nextAutoAt!)}' : ''}' : 'Automatic sync is off',
+              s.autoSync ? 'Runs on its own ${s.cadence} (the last ${s.daysBack} days)${s.nextAutoAt != null && s.ready ? ' · next ${_when.format(s.nextAutoAt!)}' : ''}' : 'Automatic sync is off',
               key: const Key('meta_ads_auto_text'),
               style: mktText(12, weight: FontWeight.w600),
             ),
@@ -312,7 +312,7 @@ class _UnlinkedCardState extends ConsumerState<_UnlinkedCard> {
         Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
           Text(u.name.isEmpty ? 'Meta campaign ${u.metaId}' : u.name, style: mktText(13, weight: FontWeight.w700)),
           MktChip(u.brandLabel, color: Mkt.blue),
-          if (u.ambiguous) const MktChip('two campaigns share this name', color: Mkt.warn),
+          if (u.reasonText.isNotEmpty) MktChip(u.reasonText, key: Key('ads_unlinked_reason_${u.metaId}'), color: Mkt.warn),
         ]),
         const SizedBox(height: 2),
         Text(

@@ -167,8 +167,11 @@ class MoodboardPreview extends StatelessWidget {
 
 /// The Moodboard tab: every picture and link as a grid, and the buttons that add to it.
 class ShootMoodboard extends ConsumerStatefulWidget {
-  const ShootMoodboard({super.key, required this.detail});
+  const ShootMoodboard({super.key, required this.detail, this.camera = false});
   final ShootDetail detail;
+
+  /// Camera Movement's board instead of the moodboard: its own pictures, video links and PDFs (no cover from here).
+  final bool camera;
 
   @override
   ConsumerState<ShootMoodboard> createState() => _ShootMoodboardState();
@@ -179,6 +182,11 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
   String _progress = '';
 
   String get _id => widget.detail.summary.id;
+  bool get _cam => widget.camera;
+  Future<int> _add(List<Map<String, dynamic>> items) {
+    final svc = ref.read(marketingPortfolioServiceProvider);
+    return _cam ? svc.addCameraRefs(_id, items) : svc.addMoodboard(_id, items);
+  }
 
   Future<void> _addPictures() async {
     final files = await ref.read(moodboardPickerProvider)();
@@ -198,15 +206,15 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
       }
     }
     if (!mounted) return;
-    if (urls.isNotEmpty) await _run(context, ref, () => ref.read(marketingPortfolioServiceProvider).addMoodboard(_id, urls), done: '${urls.length} picture${urls.length == 1 ? '' : 's'} added${failed > 0 ? ' — $failed could not be uploaded' : ''}.');
+    if (urls.isNotEmpty) await _run(context, ref, () => _add(urls), done: '${urls.length} picture${urls.length == 1 ? '' : 's'} added${failed > 0 ? ' — $failed could not be uploaded' : ''}.');
     if (urls.isEmpty && mounted) _say(context, 'The pictures could not be uploaded. Check the connection and try again.');
     if (mounted) setState(() => (_busy = false, _progress = ''));
   }
 
   Future<void> _addLink() async {
-    final r = await showDialog<({String url, String label})>(context: context, builder: (_) => const _LinkDialog());
+    final r = await showDialog<({String url, String label})>(context: context, builder: (_) => _LinkDialog(video: _cam));
     if (r == null || !mounted) return;
-    await _run(context, ref, () => ref.read(marketingPortfolioServiceProvider).addMoodboard(_id, [{'url': r.url, 'label': r.label}]));
+    await _run(context, ref, () => _add([{'url': r.url, 'label': r.label}]));
   }
 
   Future<void> _open(MoodboardItem r) async {
@@ -224,32 +232,54 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
         await launchUrl(Uri.parse(r.url), mode: LaunchMode.externalApplication);
       case 'rename':
         final label = await showDialog<String>(context: context, builder: (_) => _LabelDialog(initial: r.label));
-        if (label != null && mounted) await _run(context, ref, () => svc.renameMoodboardItem(_id, r.url, label));
+        if (label != null && mounted) await _run(context, ref, () => _cam ? svc.renameCameraRef(_id, r.url, label) : svc.renameMoodboardItem(_id, r.url, label));
       case 'cover':
         await _run(context, ref, () => svc.saveShoot({'coverUrl': r.url}, id: _id).then((_) {}), done: 'Now the shoot\'s cover.');
       case 'remove':
-        await _run(context, ref, () => svc.removeMoodboardItem(_id, r.url));
+        await _run(context, ref, () => _cam ? svc.removeCameraRef(_id, r.url) : svc.removeMoodboardItem(_id, r.url));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final refs = widget.detail.references;
+    final refs = _cam ? widget.detail.cameraRefs : widget.detail.references;
+    final k = _cam ? 'camera' : 'moodboard'; // the keys (pf_moodboard_add_pictures / pf_camera_add_pictures …)
+    final item = _cam ? 'cam' : 'mood';
+    final pictures = refs.where((r) => r.kind == 'image').length;
+    final videos = refs.where((r) => r.kind == 'video').length;
     final buttons = Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-      FilledButton.icon(key: const Key('pf_moodboard_add_pictures'), style: FilledButton.styleFrom(backgroundColor: Mkt.maroon), onPressed: _busy ? null : _addPictures, icon: const Icon(Icons.add_photo_alternate_outlined, size: 18), label: const Text('Add pictures')),
-      OutlinedButton.icon(key: const Key('pf_moodboard_add_link'), onPressed: _busy ? null : _addLink, icon: const Icon(Icons.add_link_rounded, size: 18), label: const Text('Add a link')),
-      if (_busy) Text(_progress, key: const Key('pf_moodboard_progress'), style: mktText(11.5, color: Mkt.inkSoft)),
+      FilledButton.icon(key: Key('pf_${k}_add_pictures'), style: FilledButton.styleFrom(backgroundColor: Mkt.maroon), onPressed: _busy ? null : _addPictures, icon: const Icon(Icons.add_photo_alternate_outlined, size: 18), label: const Text('Add pictures')),
+      OutlinedButton.icon(key: Key('pf_${k}_add_link'), onPressed: _busy ? null : _addLink, icon: Icon(_cam ? Icons.video_library_outlined : Icons.add_link_rounded, size: 18), label: Text(_cam ? 'Add a video link' : 'Add a link')),
+      if (_busy) Text(_progress, key: Key('pf_${k}_progress'), style: mktText(11.5, color: Mkt.inkSoft)),
     ]);
-    return Column(key: const Key('pf_moodboard'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return Column(key: Key(_cam ? 'pf_camera_board' : 'pf_moodboard'), crossAxisAlignment: CrossAxisAlignment.start, children: [
       buttons,
       const SizedBox(height: 10),
-      // PDFs read in the app: a lookbook, the client's brief
-      ShootPdfs(detail: widget.detail, part: 'moodboard', hint: 'A lookbook or the client\'s brief as a PDF — read here, page by page.'),
+      // PDFs read in the app: a lookbook, the client's brief — or the camera plan / a shot list with the moves
+      ShootPdfs(
+        detail: widget.detail,
+        part: _cam ? 'camera' : 'moodboard',
+        hint: _cam ? 'A camera plan or a shot list with the moves, as a PDF.' : 'A lookbook or the client\'s brief as a PDF — read here, page by page.',
+      ),
       const SizedBox(height: 12),
       if (refs.isEmpty)
-        const MktEmpty('No moodboard yet. Add reference pictures from the phone or computer, or links from Pinterest, Instagram or Drive.', icon: Icons.photo_library_outlined, height: 110)
+        MktEmpty(
+          _cam
+              ? 'No camera references yet. Add pictures of the moves (a diagram, a frame), or video links from YouTube or an Instagram reel showing the move.'
+              : 'No moodboard yet. Add reference pictures from the phone or computer, or links from Pinterest, Instagram or Drive.',
+          icon: _cam ? Icons.videocam_outlined : Icons.photo_library_outlined,
+          height: 110,
+        )
       else ...[
-        Text('${refs.length} item${refs.length == 1 ? '' : 's'} · ${widget.detail.pictures.length} picture${widget.detail.pictures.length == 1 ? '' : 's'}', style: mktText(11.5, color: Mkt.inkSoft)),
+        Text(
+          [
+            '${refs.length} item${refs.length == 1 ? '' : 's'}',
+            '$pictures picture${pictures == 1 ? '' : 's'}',
+            if (_cam || videos > 0) '$videos video${videos == 1 ? '' : 's'}',
+          ].join(' · '),
+          key: Key('pf_${k}_count'),
+          style: mktText(11.5, color: Mkt.inkSoft),
+        ),
         const SizedBox(height: 8),
         LayoutBuilder(builder: (context, c) {
           const gap = 8.0;
@@ -258,7 +288,7 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
           return Wrap(spacing: gap, runSpacing: gap, children: [
             for (final r in refs)
               SizedBox(
-                key: Key('pf_mood_${refs.indexOf(r)}'),
+                key: Key('pf_${item}_${refs.indexOf(r)}'),
                 width: w,
                 child: Stack(children: [
                   MoodboardTile(item: r, onTap: () => _open(r)),
@@ -269,7 +299,7 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
                       color: Colors.white.withValues(alpha: 0.9),
                       shape: const CircleBorder(),
                       child: PopupMenuButton<String>(
-                        key: Key('pf_mood_menu_${refs.indexOf(r)}'),
+                        key: Key('pf_${item}_menu_${refs.indexOf(r)}'),
                         tooltip: 'More',
                         iconSize: 18,
                         padding: EdgeInsets.zero,
@@ -277,7 +307,7 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
                         itemBuilder: (_) => [
                           const PopupMenuItem(value: 'open', child: Text('Open')),
                           const PopupMenuItem(value: 'rename', child: Text('Name it')),
-                          if (r.kind == 'image') const PopupMenuItem(value: 'cover', child: Text('Use as the cover')),
+                          if (r.kind == 'image' && !_cam) const PopupMenuItem(value: 'cover', child: Text('Use as the cover')),
                           const PopupMenuItem(value: 'remove', child: Text('Remove', style: TextStyle(color: Mkt.bad))),
                         ],
                       ),
@@ -297,7 +327,8 @@ class _ShootMoodboardState extends ConsumerState<ShootMoodboard> {
 }
 
 class _LinkDialog extends StatefulWidget {
-  const _LinkDialog();
+  const _LinkDialog({this.video = false});
+  final bool video; // Camera Movement: a video showing the move
   @override
   State<_LinkDialog> createState() => _LinkDialogState();
 }
@@ -323,15 +354,20 @@ class _LinkDialogState extends State<_LinkDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Add a link'),
+        title: Text(widget.video ? 'Add a video link' : 'Add a link'),
         content: SizedBox(
           width: 420,
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(key: const Key('pf_mood_link_url'), controller: _url, autofocus: true, decoration: InputDecoration(labelText: 'Link', hintText: 'https://www.pinterest.com/pin/…', errorText: _error, isDense: true, border: const OutlineInputBorder())),
+            TextField(key: const Key('pf_mood_link_url'), controller: _url, autofocus: true, decoration: InputDecoration(labelText: 'Link', hintText: widget.video ? 'https://www.instagram.com/reel/…' : 'https://www.pinterest.com/pin/…', errorText: _error, isDense: true, border: const OutlineInputBorder())),
             const SizedBox(height: 10),
-            TextField(key: const Key('pf_mood_link_label'), controller: _label, decoration: const InputDecoration(labelText: 'Name (optional)', hintText: 'Hair idea', isDense: true, border: OutlineInputBorder())),
+            TextField(key: const Key('pf_mood_link_label'), controller: _label, decoration: InputDecoration(labelText: 'Name (optional)', hintText: widget.video ? 'Dolly in on the bride' : 'Hair idea', isDense: true, border: const OutlineInputBorder())),
             const SizedBox(height: 8),
-            Text('A link to a picture (.jpg, .png) shows on the board; any other link opens in its own app.', style: mktText(11, color: Mkt.inkSoft)),
+            Text(
+              widget.video
+                  ? 'A YouTube, Instagram reel, Vimeo or TikTok link shows as a video and plays in its own app; a link to a picture shows on the board.'
+                  : 'A link to a picture (.jpg, .png) shows on the board; any other link opens in its own app.',
+              style: mktText(11, color: Mkt.inkSoft),
+            ),
           ]),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(key: const Key('pf_mood_link_ok'), onPressed: _ok, child: const Text('Add'))],
@@ -541,6 +577,22 @@ class ShootFootageList extends StatelessWidget {
           ),
     ]);
   }
+}
+
+// ── the camera movement plan ─────────────────────────────────────────────────
+
+/// Camera Movement: how the camera moves for each shot (pan, tilt, dolly, gimbal, drone…) — reference pictures, video links that show the
+/// moves (YouTube, an Instagram reel…), and PDFs (a camera plan, a shot list) read here page by page: a board like the moodboard.
+class ShootCameraMovement extends StatelessWidget {
+  const ShootCameraMovement({super.key, required this.detail});
+  final ShootDetail detail;
+
+  @override
+  Widget build(BuildContext context) => Column(key: const Key('pf_camera'), crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('How the camera moves for each shot — pan, tilt, dolly, gimbal, drone: pictures of the moves, video links that show them, and the camera plan as a PDF.', style: mktText(11.5, color: Mkt.inkSoft)),
+        const SizedBox(height: 10),
+        ShootMoodboard(detail: detail, camera: true),
+      ]);
 }
 
 // ── the storyboard ───────────────────────────────────────────────────────────

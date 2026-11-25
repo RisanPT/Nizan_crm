@@ -150,6 +150,8 @@ import 'package:nizan_crm/features/reviews/presentation/screens/reviews_screen.d
 import 'package:nizan_crm/features/client_chat/presentation/client_chat_inbox_page.dart';
 import 'package:nizan_crm/features/client_chat/presentation/client_chat_thread_page.dart';
 import 'package:nizan_crm/core/utils/report_range.dart' show ReportPreset, ReportRange;
+import 'package:nizan_crm/features/allocation/presentation/screens/allocation_board_screen.dart';
+import 'package:nizan_crm/features/allocation/presentation/screens/artist_management_screen.dart';
 import 'package:nizan_crm/features/crm/presentation/screens/crm_case_screen.dart';
 import 'package:nizan_crm/features/crm/presentation/screens/crm_cases_screen.dart';
 import 'package:nizan_crm/features/crm/presentation/screens/crm_dashboard_screen.dart';
@@ -401,6 +403,8 @@ const _ceoScreens = [
   '/crm/team',
   '/crm/cases',
   '/crm/weekly',
+  '/booking/allocation',
+  '/artist-management',
   '/notifications',
   '/profile',
 ];
@@ -425,6 +429,12 @@ bool isRouteAllowed(String path, Access access,
   // own work, the cases and the call list are the whole team's. (The server decides what each sees inside — backend crmController.js.)
   if (path == '/crm/dashboard' || path.startsWith('/crm/team') || path == '/crm/month-end' || path == '/crm/weekly') return access.canSeeCrmDashboard;
   if (path.startsWith('/crm')) return access.canSeeCrmWork;
+  // the smart booking allocation — before the generic '/booking' rule below
+  if (path.startsWith('/booking/allocation') || path == '/artist-management') return access.canSeeAllocation;
+  // Client Chat and App Clients before the general /client rule (it would match /client-chat too): hidden while the client app is not
+  // live (kClientAppLive), else the client-facing staff of Client Reviews
+  if (path.startsWith('/client-chat')) return access.canSeeClientChat;
+  if (path.startsWith('/app-clients')) return access.canSeeAppClients;
   if (path.startsWith('/client')) return access.canSeeClients;
   if (path.startsWith('/calendar')) return access.canSeeCalendar;
   if (path.startsWith('/booking/manage')) {
@@ -1779,6 +1789,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/app-clients',
             builder: (context, state) => const AppClientsInboxPage(),
+          ),
+          // ── the smart booking allocation ──
+          GoRoute(
+            path: '/booking/allocation',
+            builder: (context, state) => AllocationBoardScreen(initialDay: state.uri.queryParameters['date']),
+          ),
+          GoRoute(
+            path: '/artist-management',
+            builder: (context, state) => const ArtistManagementScreen(),
           ),
           // ── CRM team work ──
           GoRoute(

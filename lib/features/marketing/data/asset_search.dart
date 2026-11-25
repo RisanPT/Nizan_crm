@@ -103,7 +103,9 @@ class BulkKeywordResult {
 const kGalleryPageSize = 60;
 
 /// The filters with several values each, by the name the server knows them by.
-const kAssetFacets = ['media', 'kind', 'stage', 'portfolio', 'page', 'owner'];
+/// 'artist' (an artist on the work behind the item: employee id or "n:name") and 'review' (the client's review of it) — see
+/// work_review.dart.
+const kAssetFacets = ['media', 'kind', 'stage', 'portfolio', 'page', 'owner', 'artist', 'review'];
 
 /// One gallery search. Every list is "any of these"; the lists, keywords, toggles and dates add up. [keywords] are all wanted unless
 /// [kwAny]; [notKeywords] are left out. [sort] 'auto' = Best match while words are searched, else the newest first.
@@ -199,7 +201,7 @@ const Object _keep = Object();
 /// number they would show (counted with every filter but their own), the keywords, how many have none, and what the search box was
 /// read as.
 class AssetPage {
-  const AssetPage({this.items = const [], this.total = 0, this.pageNo = 1, this.pages = 1, this.sort = 'newest', this.counts = const AssetCounts(), this.facets = const {}, this.keywords = const [], this.untagged = 0, this.terms = const [], this.exclude = const [], this.hashKeywords = const [], this.hashNotKeywords = const [], this.canManage = false});
+  const AssetPage({this.items = const [], this.total = 0, this.pageNo = 1, this.pages = 1, this.sort = 'newest', this.counts = const AssetCounts(), this.facets = const {}, this.keywords = const [], this.untagged = 0, this.terms = const [], this.exclude = const [], this.hashKeywords = const [], this.hashNotKeywords = const [], this.canManage = false, this.artistNames = const {}});
   final List<Asset> items;
 
   /// This login may approve, reject and mark final outputs (a Marketing Manager).
@@ -211,6 +213,9 @@ class AssetPage {
   final List<KeywordCount> keywords;
   final List<String> terms, exclude, hashKeywords, hashNotKeywords;
 
+  /// The artists in the Artist filter: key → name.
+  final Map<String, String> artistNames;
+
   Map<String, int> facet(String name) => facets[name] ?? const {};
 
   factory AssetPage.fromJson(Map<String, dynamic> j) {
@@ -218,6 +223,7 @@ class AssetPage {
     Map<String, int> counts(String k) => _m(f[k]).map((a, b) => MapEntry(a, _i(b)));
     final kw = _l(f['keywords']).map(KeywordCount.fromJson).toList();
     final search = _m(j['search']);
+    final artists = _l(f['artists']);
     return AssetPage(
       items: _l(j['items']).map(Asset.fromJson).toList(),
       total: _i(j['total']),
@@ -225,7 +231,17 @@ class AssetPage {
       pages: _i(j['pages']) == 0 ? 1 : _i(j['pages']),
       sort: _s(j['sort']).isEmpty ? 'newest' : _s(j['sort']),
       counts: AssetCounts.fromJson(_m(j['counts'])),
-      facets: {'media': counts('media'), 'kind': counts('kinds'), 'stage': counts('stages'), 'portfolio': counts('portfolios'), 'page': counts('pages'), 'owner': counts('owners')},
+      facets: {
+        'media': counts('media'),
+        'kind': counts('kinds'),
+        'stage': counts('stages'),
+        'portfolio': counts('portfolios'),
+        'page': counts('pages'),
+        'owner': counts('owners'),
+        // the artists on the works (most items first) and the kinds of client review (an older server sends neither)
+        'artist': {for (final a in artists) _s(a['key']): _i(a['count'])},
+        'review': {for (final e in _m(f['reviews']).entries) e.key: _i(e.value)},
+      },
       // a server without the keyword list sends the map only
       keywords: kw.isNotEmpty ? kw : counts('tags').entries.map((e) => KeywordCount(e.key, e.value)).toList(),
       untagged: _i(f['untagged']),
@@ -234,6 +250,7 @@ class AssetPage {
       hashKeywords: _strs(search['keywords']),
       hashNotKeywords: _strs(search['notKeywords']),
       canManage: j['canManage'] == true,
+      artistNames: {for (final a in artists) _s(a['key']): _s(a['name'])},
     );
   }
 

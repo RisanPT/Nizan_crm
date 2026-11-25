@@ -49,12 +49,18 @@ class MetaSyncRun {
     this.adsCreated = 0,
     this.spend = 0,
     this.unlinkedSpend = 0,
+    this.statusChanges = 0,
+    this.pictures = 0,
+    this.adsSkipped = 0,
   });
   final DateTime? at, doneAt;
   final String trigger, byName, from, to, problemCode, problem;
   final bool ok;
   final int campaigns, campaignDays, adDays, segments, adsCreated;
   final double spend, unlinkedSpend;
+
+  /// Campaigns and ads whose status changed with Meta's; ads whose picture came from Meta; ads not written (two share a name).
+  final int statusChanges, pictures, adsSkipped;
 
   factory MetaSyncRun.fromJson(Map<String, dynamic> j) => MetaSyncRun(
     at: _d(j['at']),
@@ -73,6 +79,9 @@ class MetaSyncRun {
     adsCreated: _i(j['adsCreated']),
     spend: _n(j['spend']),
     unlinkedSpend: _n(j['unlinkedSpend']),
+    statusChanges: _i(j['statusChanges']),
+    pictures: _i(j['pictures']),
+    adsSkipped: _i(j['adsSkipped']),
   );
 
   /// "₹12,340 on 5 campaigns, 16 – 18 Nov" — or the reason it failed.
@@ -89,6 +98,9 @@ class MetaSyncRun {
     '$adDays ad-day${adDays == 1 ? '' : 's'}',
     '$segments audience row${segments == 1 ? '' : 's'}',
     if (adsCreated > 0) '$adsCreated new ad${adsCreated == 1 ? '' : 's'}',
+    if (statusChanges > 0) '$statusChanges status${statusChanges == 1 ? '' : 'es'} changed on Meta',
+    if (pictures > 0) '$pictures ad picture${pictures == 1 ? '' : 's'}',
+    if (adsSkipped > 0) '$adsSkipped ad${adsSkipped == 1 ? '' : 's'} skipped (two share a name)',
   ].join(' · ');
 
   String get how => switch (trigger) { 'auto' => 'automatic', 'link' => 'after linking', _ => byName.isEmpty ? 'by hand' : 'by $byName' };
@@ -101,6 +113,14 @@ class MetaUnlinked {
   final double spend;
   String get brandLabel => brand == 'main' ? 'Main' : 'Kerala';
   bool get ambiguous => reason == 'ambiguous';
+
+  /// Why it was not matched by its name, in words — '' when no campaign of ours has the name.
+  String get reasonText => switch (reason) {
+        'ambiguous' => 'two of our campaigns share this name',
+        'other_meta_id' => 'our campaign of this name is linked to another Meta campaign',
+        'same_name' => 'two Meta campaigns have this name',
+        _ => '',
+      };
   factory MetaUnlinked.fromJson(Map<String, dynamic> j) => MetaUnlinked(
     metaId: _s(j['metaId']),
     name: _s(j['name']),
@@ -137,7 +157,7 @@ class MetaAdsStatus {
     this.ready = false,
     this.version = '',
     this.autoSync = true,
-    this.everyHours = 6,
+    this.everyMinutes = 30,
     this.daysBack = 3,
     this.maxDays = 92,
     this.updatedByName = '',
@@ -154,7 +174,10 @@ class MetaAdsStatus {
   final bool appSecret, token, ready, autoSync, canManage, running;
   final List<MetaAdAccount> accounts;
   final String version, updatedByName;
-  final int everyHours, daysBack, maxDays;
+  final int everyMinutes, daysBack, maxDays;
+
+  /// "every 30 minutes" / "every 6 hours"
+  String get cadence => everyMinutes % 60 == 0 && everyMinutes >= 60 ? 'every ${everyMinutes ~/ 60} hour${everyMinutes == 60 ? '' : 's'}' : 'every $everyMinutes minutes';
   final MetaSyncRun? lastRun;
   final DateTime? lastOkAt, nextAutoAt;
   final List<MetaUnlinked> unlinked;
@@ -172,7 +195,8 @@ class MetaAdsStatus {
       ready: c['ready'] == true,
       version: _s(c['version']),
       autoSync: s['autoSync'] != false,
-      everyHours: _i(s['everyHours']) == 0 ? 6 : _i(s['everyHours']),
+      // a server from before the 30-minute sync sends only everyHours
+      everyMinutes: _i(s['everyMinutes']) > 0 ? _i(s['everyMinutes']) : (_i(s['everyHours']) > 0 ? _i(s['everyHours']) * 60 : 30),
       daysBack: _i(s['daysBack']) == 0 ? 3 : _i(s['daysBack']),
       maxDays: _i(s['maxDays']) == 0 ? 92 : _i(s['maxDays']),
       updatedByName: _s(s['updatedByName']),

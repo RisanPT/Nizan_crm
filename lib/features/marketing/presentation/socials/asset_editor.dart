@@ -49,6 +49,9 @@ class _AssetFormState extends ConsumerState<_AssetForm> {
   late final _owner = TextEditingController(text: widget.asset?.ownerName ?? '');
   late String? _shootId = widget.asset?.shootId ?? widget.shootId;
   String? _shootTitle;
+  // the work (CRM booking) it shows: its client's review then shows with it in the gallery
+  late String? _bookingId = widget.asset?.bookingId;
+  String? _bookingTitle;
   late String _kind = widget.asset?.kind ?? 'still';
   // a Type the person picked (or an existing asset's) is never changed behind their back
   late bool _kindChosen = widget.asset != null;
@@ -86,6 +89,7 @@ class _AssetFormState extends ConsumerState<_AssetForm> {
         if (_manager || _final != (widget.asset?.isFinal ?? false)) 'isFinal': _final,
         'ownerName': _owner.text.trim(),
         'shootId': _shootId,
+        'bookingId': _bookingId,
       }, id: widget.asset?.id);
       refreshPortfolio(ref);
       if (mounted) Navigator.pop(context);
@@ -111,6 +115,30 @@ class _AssetFormState extends ConsumerState<_AssetForm> {
         _portfolio.text = r.value!.brand == 'kerala' ? 'Kerala' : 'Main (Company)';
       }
     });
+  }
+
+  Future<void> _pickBooking() async {
+    final r = await pickBooking(context, selectedId: _bookingId);
+    if (r == null || !mounted) return;
+    setState(() {
+      _bookingId = r.value?.id;
+      _bookingTitle = r.value == null ? null : ['#${r.value!.bookingNumber}', r.value!.customerName].where((x) => x.length > 1).join(' · ');
+    });
+  }
+
+  String? _bookingLabel() {
+    if (_bookingId == null) return null;
+    if (_bookingTitle != null) return _bookingTitle;
+    final w = widget.asset?.work;
+    return w != null && widget.asset?.bookingId == _bookingId && w.title.isNotEmpty ? w.title : 'The linked booking';
+  }
+
+  /// What the Work field says under it: where the work comes from, and what it brings.
+  String _bookingNote() {
+    final w = widget.asset?.work;
+    if (_bookingId == null && w != null && widget.asset?.bookingId == null) return 'From the shoot: ${w.title}. Pick a booking only if this shows another work.';
+    if (_bookingId == null) return 'Pick the booking this shows — its artists and the client\'s review then show with it.';
+    return 'Its artists and the client\'s review of it show with this item in the gallery.';
   }
 
   String? _shootLabel() {
@@ -170,6 +198,20 @@ class _AssetFormState extends ConsumerState<_AssetForm> {
                 _shootTitle = null;
               }),
               note: _shootId == null ? null : 'Filed under the shoot\'s brand and portfolio, with its tag.',
+            ),
+            const SizedBox(height: 10),
+            LinkField(
+              key: const Key('asset_booking'),
+              label: 'Work (booking)',
+              icon: Icons.event_note_outlined,
+              hint: 'No booking',
+              value: _bookingLabel(),
+              onTap: _pickBooking,
+              onClear: () => setState(() {
+                _bookingId = null;
+                _bookingTitle = null;
+              }),
+              note: _bookingNote(),
             ),
             const SizedBox(height: 10),
             Row(children: [

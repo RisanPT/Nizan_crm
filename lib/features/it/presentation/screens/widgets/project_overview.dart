@@ -8,6 +8,7 @@ import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/it/data/it_task.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
+import 'package:nizan_crm/features/it/domain/project_phases.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
 import 'package:nizan_crm/features/it/presentation/screens/it_projects_screen.dart' show priorityColor;
 import 'package:nizan_crm/features/it/presentation/screens/widgets/manpower_widgets.dart';
@@ -16,6 +17,7 @@ import 'package:nizan_crm/features/it/presentation/screens/widgets/it_common.dar
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_detail_sheet.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/it_task_editor.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_departments.dart' show answerInvitation;
+import 'package:nizan_crm/features/it/presentation/screens/widgets/project_people.dart';
 import 'package:nizan_crm/features/it/presentation/screens/widgets/project_tabs.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 
@@ -128,6 +130,8 @@ class _ProjectOverviewState extends ConsumerState<ProjectOverview> {
             ),
             const SizedBox(height: 16),
           ],
+          // the manager and the team members — changed here after the project was created ("Edit team")
+          if (p != null) ProjectPeopleCard(project: p),
           // who HR has put on the project, where its requests for more people stand, and the button to ask for more
           if (p != null && p.status != 'proposed') ProjectTeamCard(project: p),
           if (wide && invitations != null)
@@ -430,7 +434,7 @@ class _ProjectOverviewState extends ConsumerState<ProjectOverview> {
         if (p.targetDepartment.isNotEmpty) row(Icons.apartment_outlined, 'Department', text(p.targetDepartment)),
         row(Icons.calendar_today_outlined, 'Start Date', text(_date(p.startDate))),
         row(Icons.event_outlined, 'Due Date', text(_date(p.endDate))),
-        row(Icons.flag_outlined, 'Phase', _Pill(label: cap(p.phase), color: crm.primary)),
+        row(Icons.flag_outlined, 'Phase', _Pill(label: phaseLabel(fitPhase(p.phase, p.targetDepartment)), color: crm.primary)),
         row(Icons.track_changes_outlined, 'Priority', _Pill(label: cap(p.priority), color: priorityColor(p.priority))),
         if (note != null)
           Padding(

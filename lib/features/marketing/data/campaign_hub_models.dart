@@ -215,8 +215,11 @@ class HubMeta {
 
 /// A campaign's settings (what the form edits).
 class HubCampaign {
-  const HubCampaign({required this.id, required this.title, this.brand = 'main', this.platform = '', this.channel = '', this.objective = '', this.status = 'active', this.startDate, this.endDate, this.budget = 0, this.dailyBudget = 0, this.metaCampaignId = '', this.audienceNote = '', this.notes = ''});
+  const HubCampaign({required this.id, required this.title, this.brand = 'main', this.platform = '', this.channel = '', this.objective = '', this.status = 'active', this.startDate, this.endDate, this.budget = 0, this.dailyBudget = 0, this.metaCampaignId = '', this.metaStatus = '', this.audienceNote = '', this.notes = ''});
   final String id, title, brand, platform, channel, objective, status, metaCampaignId, audienceNote, notes;
+
+  /// The status Meta shows for it, in words ("Paused", "Ended") — '' when the live sync has not read it (the status is the team's own).
+  final String metaStatus;
   final String? startDate, endDate;
   final double budget, dailyBudget;
   factory HubCampaign.fromJson(Map<String, dynamic> j) => HubCampaign(
@@ -232,6 +235,7 @@ class HubCampaign {
         budget: _d(j['budget']),
         dailyBudget: _d(j['dailyBudget']),
         metaCampaignId: _s(j['metaCampaignId']),
+        metaStatus: _s(j['metaStatus']),
         audienceNote: _s(j['audienceNote']),
         notes: _s(j['notes']),
       );
@@ -248,6 +252,7 @@ class HubCampaignRow {
     this.status = 'active',
     this.budget = 0,
     this.metaCampaignId = '',
+    this.metaStatus = '',
     this.spend = 0,
     this.reach = 0,
     this.impressions = 0,
@@ -272,6 +277,9 @@ class HubCampaignRow {
     this.thumbUrl = '',
   });
   final String id, title, brand, platform, objective, status, metaCampaignId, thumbUrl;
+
+  /// The status Meta shows for it ("Paused", "Ended"…); '' = not read from Meta.
+  final String metaStatus;
   final double budget, spend, revenue;
   final int reach, impressions, clicks, results, leads, qualified, hot, warm, nurture, cold, notRated, bookedLeads, bookings, workMinutes, workEntries;
   final double? ctr, cpl, conversionRate, roas;
@@ -286,6 +294,7 @@ class HubCampaignRow {
         status: _s(j['status']).isEmpty ? 'active' : _s(j['status']),
         budget: _d(j['budget']),
         metaCampaignId: _s(j['metaCampaignId']),
+        metaStatus: _s(j['metaStatus']),
         spend: _d(j['spend']),
         reach: _i(j['reach']),
         impressions: _i(j['impressions']),
@@ -324,8 +333,14 @@ class HubCampaignCounts {
 ///  • [leads] = the CRM leads of the dates whose "creative" names this ad (null when the server did not count them); [cpl] = the ad's spend
 ///    ÷ those leads, only for an ad with daily figures (null otherwise — shown as "—").
 class HubAdRow {
-  const HubAdRow({required this.id, required this.name, this.campaignId = '', this.campaign = '', this.adSetName = '', this.metaAdId = '', this.format = 'image', this.status = 'active', this.creativeUrl = '', this.thumbUrl = '', this.figures = 'lifetime', this.impressions = 0, this.reach = 0, this.clicks = 0, this.spend = 0, this.results = 0, this.ctr, this.cpm, this.costPerResult, this.leads, this.cpl, this.verdict = 'ok'});
+  const HubAdRow({required this.id, required this.name, this.campaignId = '', this.campaign = '', this.adSetName = '', this.metaAdId = '', this.format = 'image', this.status = 'active', this.metaStatus = '', this.creativeUrl = '', this.thumbUrl = '', this.thumbFromMeta = false, this.figures = 'lifetime', this.impressions = 0, this.reach = 0, this.clicks = 0, this.spend = 0, this.results = 0, this.ctr, this.cpm, this.costPerResult, this.leads, this.cpl, this.verdict = 'ok'});
   final String id, name, campaignId, campaign, adSetName, metaAdId, format, status, creativeUrl, thumbUrl, figures, verdict;
+
+  /// Meta's own word for the ad ("Ad set paused", "Rejected by Meta", "In review"…); '' = not read from Meta.
+  final String metaStatus;
+
+  /// The picture is the ad's own on Meta (each sync refreshes it).
+  final bool thumbFromMeta;
   final int impressions, reach, clicks, results;
   final int? leads;
   final double spend;
@@ -340,8 +355,10 @@ class HubAdRow {
         metaAdId: _s(j['metaAdId']),
         format: _s(j['format']).isEmpty ? 'image' : _s(j['format']),
         status: _s(j['status']).isEmpty ? 'active' : _s(j['status']),
+        metaStatus: _s(j['metaStatus']),
         creativeUrl: _s(j['creativeUrl']),
         thumbUrl: _s(j['thumbUrl']),
+        thumbFromMeta: j['thumbFromMeta'] == true,
         figures: _s(j['figures']) == 'range' ? 'range' : 'lifetime',
         impressions: _i(j['impressions']),
         reach: _i(j['reach']),
@@ -762,7 +779,15 @@ class HubSetup {
 
 // ── the import's answer ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// A campaign of the file: matched to one of ours (campaignId, title) or not (reason: no_match | ambiguous).
+/// Why a Meta campaign was not put on one of ours, in words ('' = simply not found).
+String importReasonText(String reason) => switch (reason) {
+      'ambiguous' => 'two of our campaigns share this name',
+      'other_meta_id' => 'our campaign of this name is linked to another Meta campaign',
+      'same_name' => 'two Meta campaigns have this name',
+      _ => '',
+    };
+
+/// A campaign of the file: matched to one of ours (campaignId, title) or not (reason: no_match | ambiguous | other_meta_id | same_name).
 class ImportGroup {
   const ImportGroup({required this.name, this.metaId = '', this.campaignId = '', this.title = '', this.reason = '', this.rows = 0, this.days = 0, this.ads = 0, this.segments = 0, this.spend = 0});
   final String name, metaId, campaignId, title, reason;
@@ -774,7 +799,10 @@ class ImportGroup {
 /// The answer to one import request. [level]: 'campaign' | 'ad' | 'breakdown' (what one row of the file was); [written] counts
 /// campaign-days, ad-days or segment-days by level; [adsCreated] = ads added from an ad-level file.
 class HubImportReport {
-  const HubImportReport({this.dryRun = false, this.level = 'campaign', this.rows = 0, this.skipped = 0, this.skippedRows = const [], this.matched = const [], this.unmatched = const [], this.created = 0, this.written = 0, this.adsCreated = 0, this.importId, this.from, this.to});
+  const HubImportReport({this.dryRun = false, this.level = 'campaign', this.rows = 0, this.skipped = 0, this.skippedRows = const [], this.matched = const [], this.unmatched = const [], this.created = 0, this.written = 0, this.adsCreated = 0, this.adsSkipped = const [], this.importId, this.from, this.to});
+
+  /// Ad rows NOT written: two of the campaign's ads share the name and the file has no Ad ID column to tell them apart.
+  final List<({String campaign, String ad, double spend})> adsSkipped;
   final bool dryRun;
   final String level;
   final int rows, skipped, created, written, adsCreated;
@@ -792,6 +820,7 @@ class HubImportReport {
         created: _i(j['created']),
         written: _i(j['written']),
         adsCreated: _i(j['adsCreated']),
+        adsSkipped: _l(j['adsSkipped']).map((e) => (campaign: _s(e['campaign']), ad: _s(e['ad']), spend: _d(e['spend']))).toList(),
         importId: j['importId'] == null ? null : _s(j['importId']),
         from: j['from'] == null ? null : _s(j['from']),
         to: j['to'] == null ? null : _s(j['to']),

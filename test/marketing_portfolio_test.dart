@@ -250,12 +250,12 @@ void main() {
   });
 
   group('the Creative Portfolio screen', () {
-    testWidgets('has the four tabs the document draws, the Footage tab, and the New Shoot Plan button', (tester) async {
+    testWidgets('has the four tabs the document draws, the Footage tab, Artist Quality, and the New Shoot Plan button', (tester) async {
       await _pump(tester);
       for (final t in kPortfolioTabs) {
         expect(_k('pf_tab_${t.$1}'), findsOneWidget, reason: t.$1);
       }
-      expect(kPortfolioTabs.map((t) => t.$1).toList(), ['planner', 'calendar', 'reports', 'gallery', 'footage']);
+      expect(kPortfolioTabs.map((t) => t.$1).toList(), ['planner', 'calendar', 'reports', 'gallery', 'footage', 'quality']);
       expect(_k('pf_new_shoot'), findsOneWidget);
       expect(find.text('Creative Portfolio'), findsWidgets);
     });

@@ -123,7 +123,7 @@ Future<void> printCancelledWorksReport(
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Text('TEAM N ERP',
+                  pw.Text('TEAM N MAKEOVERS',
                       style: pw.TextStyle(
                           fontSize: 16,
                           fontWeight: pw.FontWeight.bold,
@@ -207,7 +207,7 @@ Future<void> printCancelledWorksReport(
         ],
         pw.SizedBox(height: 16),
         pw.Center(
-          child: pw.Text('Team N ERP · Confidential sales report',
+          child: pw.Text('Team N Makeovers · Confidential sales report',
               style: pw.TextStyle(fontSize: 8, color: muted)),
         ),
       ],

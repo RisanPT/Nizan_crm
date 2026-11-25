@@ -230,7 +230,7 @@ class _AssetLibraryViewState extends ConsumerState<AssetLibraryView> {
             ]),
           ),
         const SizedBox(height: 7),
-        ActiveFilterChips(search: _s, onChanged: _apply),
+        ActiveFilterChips(search: _s, onChanged: _apply, names: p1.artistNames),
         if (picking) _pickBar(context, items, picked),
         if (items.isEmpty)
           MktEmpty(p1.counts.total == 0 ? (_s.from != null ? 'No asset was added in these days.' : widget.emptyText) : 'No asset matches. Try fewer words or filters.', icon: Icons.photo_library_outlined, height: 140)

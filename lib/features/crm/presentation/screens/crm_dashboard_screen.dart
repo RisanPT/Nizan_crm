@@ -14,6 +14,7 @@ import 'package:nizan_crm/features/crm/presentation/widgets/crm_dashboard_widget
 import 'package:nizan_crm/features/crm/presentation/widgets/crm_settings_dialog.dart';
 import 'package:nizan_crm/features/crm/presentation/widgets/crm_widgets.dart';
 import 'package:nizan_crm/features/crm/services/crm_service.dart';
+import 'package:nizan_crm/core/auth/access_control.dart' show kClientAppLive;
 
 /// The CRM Head's dashboard (/crm/dashboard) — also management's and leadership's (leadership only reads). How the team handled booking
 /// requests, client chats, reviews, cases, trials and re-engagement over a period, compared with the period before; who has what open;
@@ -259,7 +260,8 @@ class _OverviewTab extends ConsumerWidget {
             ],
           );
           final recent = CrmRecentCard(
-            items: o.recent,
+            // a chat conversation opens Client Chat — only while the client app is live
+            items: kClientAppLive ? o.recent : [for (final e in o.recent) if (e.refType != 'conversation') e],
             now: now ?? DateTime.now(),
             onOpen: (e) => _go(context, switch (e.refType) {
               'conversation' => '/client-chat/${e.refId}',
@@ -294,7 +296,12 @@ class _OverviewTab extends ConsumerWidget {
               const SizedBox(height: gap),
               ...middle,
               const SizedBox(height: gap),
-              if (wideCards) row([(1, chats), (1, care)]) else ...[chats, const SizedBox(height: gap), care],
+              // Client Chat only while the client app is live (kClientAppLive); Reviews & Cases then has the row to itself
+              if (!kClientAppLive)
+                care
+              else if (wideCards)
+                row([(1, chats), (1, care)])
+              else ...[chats, const SizedBox(height: gap), care],
               const SizedBox(height: gap),
               if (wideCards) row([(11, recent), (9, trials)]) else ...[recent, const SizedBox(height: gap), trials],
               const SizedBox(height: gap),
@@ -315,7 +322,7 @@ class _OverviewTab extends ConsumerWidget {
 
   List<Widget> _stats(BuildContext context, CrmOverview o) => [
     CrmStatCard(kpiKey: 'requestsReceived', label: 'Booking Requests', icon: Icons.event_note_outlined, kpi: o.kpi('requestsReceived'), highlight: true, onTap: () => _go(context, '/booking/requests')),
-    CrmStatCard(kpiKey: 'chatWaits', label: 'Client Chats', icon: Icons.chat_bubble_outline_rounded, kpi: o.kpi('chatWaits'), onTap: () => _go(context, '/client-chat')),
+    if (kClientAppLive) CrmStatCard(kpiKey: 'chatWaits', label: 'Client Chats', icon: Icons.chat_bubble_outline_rounded, kpi: o.kpi('chatWaits'), onTap: () => _go(context, '/client-chat')),
     CrmStatCard(kpiKey: 'casesOpened', label: 'Cases Opened', icon: Icons.layers_outlined, kpi: o.kpi('casesOpened'), onTap: onOpenCases),
     CrmStatCard(kpiKey: 'trialsScheduled', label: 'Trials', icon: Icons.science_outlined, kpi: o.kpi('trialsScheduled'), onTap: () => _go(context, '/trials')),
     CrmStatCard(kpiKey: 'reviewsSubmitted', label: 'Client Reviews', icon: Icons.star_outline_rounded, kpi: o.kpi('reviewsSubmitted'), onTap: () => _go(context, '/reviews')),

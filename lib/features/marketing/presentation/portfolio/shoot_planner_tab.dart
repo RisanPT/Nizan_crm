@@ -139,9 +139,10 @@ class _ListCardState extends ConsumerState<_ListCard> {
   }
 }
 
-enum _Part { brief, moodboard, storyboard, plan, crew, approvals }
+// the order of the views on a shoot (Content Plan comes right after the Brief)
+enum _Part { brief, plan, moodboard, storyboard, camera, crew, approvals }
 
-/// The open shoot: header with its status, six views (Brief, Moodboard, Storyboard, Content Plan, Crew & Logistics, Approvals), milestones
+/// The open shoot: header with its status, seven views (Brief, Content Plan, Moodboard, Storyboard, Camera Movement, Crew & Logistics, Approvals), milestones
 /// and progress.
 class ShootDetailCard extends ConsumerStatefulWidget {
   const ShootDetailCard({super.key, required this.id});
@@ -154,7 +155,7 @@ class ShootDetailCard extends ConsumerStatefulWidget {
 class _ShootDetailCardState extends ConsumerState<ShootDetailCard> {
   _Part _part = _Part.brief;
 
-  static const _labels = {_Part.brief: 'Brief', _Part.moodboard: 'Moodboard', _Part.storyboard: 'Storyboard', _Part.plan: 'Content Plan', _Part.crew: 'Crew & Logistics', _Part.approvals: 'Approvals'};
+  static const _labels = {_Part.brief: 'Brief', _Part.plan: 'Content Plan', _Part.moodboard: 'Moodboard', _Part.storyboard: 'Storyboard', _Part.camera: 'Camera Movement', _Part.crew: 'Crew & Logistics', _Part.approvals: 'Approvals'};
 
   Future<void> _setStatus(ShootDetail d, String status) async {
     try {
@@ -226,6 +227,7 @@ class _ShootDetailCardState extends ConsumerState<ShootDetailCard> {
               _Part.brief => _Brief(d: d, onMoodboard: () => setState(() => _part = _Part.moodboard)),
               _Part.moodboard => ShootMoodboard(detail: d),
               _Part.storyboard => ShootStoryboard(detail: d),
+              _Part.camera => ShootCameraMovement(detail: d),
               _Part.plan => _Plan(d: d),
               _Part.crew => _Crew(d: d),
               _Part.approvals => _Approvals(d: d),

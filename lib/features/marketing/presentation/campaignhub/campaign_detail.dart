@@ -120,7 +120,7 @@ class _CampaignDetailViewState extends ConsumerState<CampaignDetailView> {
               IconButton(key: const Key('det_close'), visualDensity: VisualDensity.compact, onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
             ]),
             Wrap(spacing: 6, runSpacing: 4, children: [
-              MktChip(hubStatusLabel(c.status), color: hubStatusColor(c.status)),
+              HubStatusChip(key: const Key('det_status'), status: c.status, metaStatus: c.metaStatus),
               MktChip(c.brand == 'kerala' ? 'Kerala' : 'Main', color: Mkt.primaryLight),
               if (c.platform.isNotEmpty) MktChip(hubPlatformLabel(c.platform), color: Mkt.blue, icon: hubPlatformIcon(c.platform)),
               if (c.objective.isNotEmpty) MktChip(hubObjectiveLabel(c.objective), color: Mkt.teal),

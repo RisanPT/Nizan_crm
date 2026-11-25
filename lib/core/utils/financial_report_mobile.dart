@@ -74,7 +74,7 @@ Future<void> printFinancialReport(FinancialAnalystReport r) async {
       build: (context) => [
         pw.Center(
           child: pw.Column(children: [
-            pw.Text('TEAM N ERP',
+            pw.Text('TEAM N MAKEOVERS',
                 style: pw.TextStyle(
                     fontSize: 18, fontWeight: pw.FontWeight.bold, color: primary)),
             pw.Text('${r.reportTitle} · ${r.periodText}',

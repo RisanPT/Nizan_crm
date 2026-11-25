@@ -172,6 +172,13 @@ class ProjectService {
     return Project.fromJson((res.data as Map).cast<String, dynamic>());
   });
 
+  /// Who is on a project: `{managerId?, members, confirmRemoval?, unassignTasks?}` ("Edit team"; a department lead may change their
+  /// own department's people). Someone with work on it is taken off only once confirmed — see TeamRemovalConflict.
+  Future<Project> saveTeam(String id, Map<String, dynamic> body) => _guard('save the team', () async {
+    final res = await _dio.put('/projects/$id/team', data: body);
+    return Project.fromJson((res.data as Map).cast<String, dynamic>());
+  });
+
   /// A department head accepts or declines the invitation to join a project.
   Future<Project> respondToInvitation(String projectId, String department, {required bool accept}) =>
       _guard(accept ? 'accept the invitation' : 'decline the invitation', () async {

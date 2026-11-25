@@ -85,7 +85,7 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
     <img class="inv-logo" src="data:image/png;base64,$teamLogoBase64" alt="Team N logo">
 
     <div>
-      <div class="inv-company">TEAM N ERP</div>
+      <div class="inv-company">TEAM N MAKEOVERS</div>
       <div class="inv-doc-type">SPOT INVOICE &middot; QUOTATION (NO GST)</div>
     </div>
     <div class="inv-meta-grid">
@@ -103,7 +103,7 @@ String buildSpotInvoiceHtml(SpotInvoiceData data) {
     </div>
     <div class="info-card">
       <div class="info-card-title">Company Details</div>
-      <div class="info-customer">TEAM N ERP</div>
+      <div class="info-customer">TEAM N MAKEOVERS</div>
       <div class="info-line"><span class="info-val" style="line-height:1.5;">Kozhikode, Kerala 673014<br>India</span></div>
       <div style="margin-top:8px;"></div>
       <div class="info-line"><span class="info-key" style="min-width:60px;">GSTIN</span> <span class="info-val">32AAJCN6432D1ZR</span></div>

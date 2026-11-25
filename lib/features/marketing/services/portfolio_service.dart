@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/marketing/data/portfolio_models.dart';
 import 'package:nizan_crm/features/marketing/data/team_models.dart';
+import 'package:nizan_crm/features/marketing/data/work_review.dart';
 import 'package:nizan_crm/features/marketing/services/socials_service.dart';
 import 'package:nizan_crm/features/marketing/services/team_service.dart';
 import 'package:nizan_crm/providers/dio_provider.dart';
@@ -34,6 +35,13 @@ class MarketingPortfolioService {
   Future<ProductionCalendar> calendar(TeamFilter f, {String? day}) => _get('load the production calendar', '/calendar', ProductionCalendar.fromJson, query: {..._range(f), 'day': ?day});
   Future<ShootReports> reports(TeamFilter f, ReportQuery q) => _get('load the shoot reports', '/reports', ShootReports.fromJson, query: {..._range(f), if (q.filter != 'all') 'filter': q.filter, if (q.q.trim().isNotEmpty) 'q': q.q.trim(), 'page': q.page});
   Future<ShootSetup> setup() => _get('open the shoot form', '/setup', ShootSetup.fromJson);
+
+  /// Artist Quality: the clients' reviews of each artist's works with event days [from]–[to] ('YYYY-MM-DD').
+  Future<QualityReport> quality({required String from, required String to}) => _get('load the artist quality', '/quality', QualityReport.fromJson, query: {'from': from, 'to': to});
+
+  /// One artist's works in those days, the ones needing a look first, each with its photos and videos.
+  Future<ArtistQualityDetail> artistQuality(String key, {required String from, required String to}) =>
+      _get("open the artist's works", '/quality/artist/${Uri.encodeComponent(key)}', ArtistQualityDetail.fromJson, query: {'from': from, 'to': to});
 
   /// Every report row that matches (the Export button) — not one page.
   Future<ShootReports> allReports(TeamFilter f, ReportQuery q) => _get('export the shoot reports', '/reports', ShootReports.fromJson, query: {..._range(f), if (q.filter != 'all') 'filter': q.filter, if (q.q.trim().isNotEmpty) 'q': q.q.trim(), 'all': 1});
@@ -73,6 +81,14 @@ class MarketingPortfolioService {
       _write('rename the moodboard item', () => _dio.patch('/marketing/portfolio/shoots/$shootId/moodboard', data: {'url': url, 'label': label}), (_) {});
   Future<void> removeMoodboardItem(String shootId, String url) =>
       _write('remove the moodboard item', () => _dio.delete('/marketing/portfolio/shoots/$shootId/moodboard', queryParameters: {'url': url}), (_) {});
+
+  /// Camera Movement: its reference pictures and video links (the moodboard's rules: each once, up to 60).
+  Future<int> addCameraRefs(String shootId, List<Map<String, dynamic>> items) =>
+      _write('add to the camera movement plan', () => _dio.post('/marketing/portfolio/shoots/$shootId/camera', data: {'items': items}), (j) => (j['added'] as num?)?.toInt() ?? 0);
+  Future<void> renameCameraRef(String shootId, String url, String label) =>
+      _write('rename the camera movement item', () => _dio.patch('/marketing/portfolio/shoots/$shootId/camera', data: {'url': url, 'label': label}), (_) {});
+  Future<void> removeCameraRef(String shootId, String url) =>
+      _write('remove the camera movement item', () => _dio.delete('/marketing/portfolio/shoots/$shootId/camera', queryParameters: {'url': url}), (_) {});
 
   /// Crew & Logistics: call time, map link, checklist ([{text, done}]), notes — only what is sent changes.
   /// One checklist line ticked or unticked — that line alone (a tick never undoes another person's).
@@ -127,6 +143,8 @@ final shootSetupProvider = FutureProvider.autoDispose<ShootSetup>((ref) => ref.w
 final shootOptionsProvider = FutureProvider.autoDispose.family<List<ShootOption>, String>((ref, q) => ref.watch(marketingPortfolioServiceProvider).shootOptions(q: q), retry: (_, _) => null);
 final bookingOptionsProvider = FutureProvider.autoDispose.family<List<BookingBrief>, ({String q, String? around})>((ref, k) => ref.watch(marketingPortfolioServiceProvider).bookingOptions(q: k.q, around: k.around), retry: (_, _) => null);
 final bookingContentProvider = FutureProvider.autoDispose.family<BookingContent, String>((ref, id) => ref.watch(marketingPortfolioServiceProvider).bookingContent(id), retry: (_, _) => null);
+final qualityReportProvider = FutureProvider.autoDispose.family<QualityReport, ({String from, String to})>((ref, k) => ref.watch(marketingPortfolioServiceProvider).quality(from: k.from, to: k.to), retry: (_, _) => null);
+final artistQualityProvider = FutureProvider.autoDispose.family<ArtistQualityDetail, ({String key, String from, String to})>((ref, k) => ref.watch(marketingPortfolioServiceProvider).artistQuality(k.key, from: k.from, to: k.to), retry: (_, _) => null);
 
 /// After a shoot, an asset or a log changes: every Creative Portfolio read starts again (and the Socials library the Gallery shares).
 void refreshPortfolio(WidgetRef ref) {
@@ -137,5 +155,7 @@ void refreshPortfolio(WidgetRef ref) {
   ref.invalidate(shootSetupProvider);
   ref.invalidate(shootOptionsProvider);
   ref.invalidate(bookingContentProvider);
+  ref.invalidate(qualityReportProvider);
+  ref.invalidate(artistQualityProvider);
   refreshSocials(ref);
 }

@@ -157,7 +157,7 @@ class _AssetCardPictureState extends ConsumerState<AssetCardPicture> {
       if (_link.isDropbox) {
         final s = await ref.read(mediaStreamServiceProvider).link(_link.original);
         if (!mounted || session != _session) return; // stopped while it was asking
-        if (s != null && s.url.isNotEmpty) urls = [s.url, ...urls];
+        if (s != null && s.sources.isNotEmpty) urls = [...s.sources, ...urls]; // straight from Dropbox first when it can
       }
       p = await openClip(ref.read(clipPlayerFactoryProvider), urls);
       if (!mounted || session != _session) {

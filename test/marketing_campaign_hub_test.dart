@@ -1643,7 +1643,7 @@ void main() {
       final f = _FakeHub()..dryRunJson = {'dryRun': true, 'matched': [_importGroup('A', campaignId: 'c1', title: 'A')], 'unmatched': [_importGroup('Twin', reason: 'ambiguous')]};
       await _pump(tester, csv: _csv, fake: f);
       await _tap(tester, 'hub_import_button');
-      expect(find.text('Twin — two campaigns share this name'), findsOneWidget);
+      expect(find.text('Twin — two of our campaigns share this name'), findsOneWidget);
       expect(_k('imp_create_missing'), findsNothing, reason: 'creating a third "Twin" would only make it worse');
     });
 
@@ -2108,6 +2108,52 @@ void main() {
       expect(f.imports.map((i) => i.level).toSet(), {'breakdown'});
       expect(_text(tester, _k('imp_done_title')), 'Imported 2 audience segments.');
       expect(_k('imp_done_ads_created'), findsNothing);
+    });
+
+    testWidgets('an ad file without Ad IDs: ads of a shared name are said to be left out, and why; a campaign linked to another Meta campaign too', (tester) async {
+      final f = _FakeHub()
+        ..importJson = {
+          'dryRun': false, 'level': 'breakdown', 'rows': 2, 'skipped': 0, 'skippedRows': [], 'matched': [],
+          'unmatched': [_importGroup('Studio Tour', reason: 'other_meta_id')], 'created': 0, 'written': 1, 'importId': 'imp1', 'from': '2026-11-02', 'to': '2026-11-02',
+          'adsSkipped': [{'campaign': 'Twins campaign', 'ad': 'Twin Reel', 'days': 1, 'spend': 120}],
+        };
+      await _pump(tester, csv: ageCsv, csvName: 'age.csv', fake: f);
+      await _tap(tester, 'hub_import_button');
+      await _tap(tester, 'imp_save');
+      expect(_text(tester, _k('imp_done_ads_skipped')), contains('"Twin Reel" in Twins campaign — two ads there share the name. Export the file with the Ad ID column'));
+      expect(_text(tester, _k('imp_done_unmatched')), contains('Studio Tour (our campaign of this name is linked to another Meta campaign)'));
+    });
+  });
+
+  group('Meta\'s own status on campaigns and ads (the live sync)', () {
+    testWidgets('a campaign whose status comes from Meta carries Meta\'s mark and says so; one typed by the team does not', (tester) async {
+      final f = _FakeHub()
+        ..campaignsJson = {
+          ..._campaignsPage(),
+          'items': [
+            {..._row('c1', status: 'paused'), 'metaStatus': 'Paused'},
+            _row('c2', title: 'Makeup Courses', metaId: ''),
+          ],
+        };
+      await _pump(tester, tab: 'campaigns', fake: f);
+      final meta = find.descendant(of: _k('cp_status_c1'), matching: find.byIcon(Icons.all_inclusive_rounded));
+      expect(meta, findsOneWidget);
+      expect(find.byWidgetPredicate((w) => w is Tooltip && w.message == 'From Meta: Paused. The sync keeps it up to date.'), findsOneWidget);
+      expect(find.descendant(of: _k('cp_status_c2'), matching: find.byIcon(Icons.all_inclusive_rounded)), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Creatives & Ads: an ad Meta rejected (or paused at its ad set) says so; a plain running ad says nothing extra', (tester) async {
+      final base = _adsData();
+      final items = [for (final a in (base['items'] as List)) Map<String, dynamic>.from(a as Map)];
+      items[0] = {...items[0], 'metaStatus': 'Rejected by Meta', 'status': 'paused', 'thumbFromMeta': true};
+      items[1] = {...items[1], 'metaStatus': 'Active'};
+      final f = _FakeHub()..adsJson = {...base, 'items': items};
+      await _pump(tester, tab: 'creatives', fake: f);
+      expect(_text(tester, _k('ad_meta_${items[0]['id']}')), 'Rejected by Meta');
+      expect(_k('ad_meta_${items[1]['id']}'), findsNothing);
+      final row = HubAdRow.fromJson(items[0]);
+      expect([row.metaStatus, row.thumbFromMeta], ['Rejected by Meta', true]);
     });
   });
 }

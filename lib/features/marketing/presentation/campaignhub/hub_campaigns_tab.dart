@@ -114,7 +114,7 @@ class _HubCampaignsTabState extends ConsumerState<HubCampaignsTab> {
             ? Text('—', style: mktText(12, color: Mkt.inkSoft))
             : Row(children: [Icon(hubPlatformIcon(r.platform), size: 14, color: Mkt.inkSoft), const SizedBox(width: 5), Flexible(child: Text(hubPlatformLabel(r.platform), maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12)))]),
         Padding(padding: const EdgeInsets.only(right: 6), child: Text(r.objective.isEmpty ? '—' : hubObjectiveLabel(r.objective), maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(12))),
-        MktChip(hubStatusLabel(r.status), color: hubStatusColor(r.status)),
+        HubStatusChip(key: Key('cp_status_${r.id}'), status: r.status, metaStatus: r.metaStatus),
         Text(hubInr(r.spend, compact: true), style: mktText(12)),
         Text('${r.leads}', style: mktText(12)),
         Text(hubInr(r.cpl), style: mktText(12)),

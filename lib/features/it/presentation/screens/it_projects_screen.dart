@@ -5,9 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/widgets/employee_picker.dart';
+import 'package:nizan_crm/core/widgets/employee_multi_picker.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/project_cost_widgets.dart';
+import 'package:nizan_crm/features/it/presentation/screens/widgets/project_people.dart' show memberNamesOf, saveTeamChecked;
 import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/features/it/data/project.dart';
+import 'package:nizan_crm/features/it/domain/project_phases.dart';
 import 'package:nizan_crm/features/it/services/it_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/it/presentation/controllers/it_tasks_notifier.dart';
@@ -446,14 +450,17 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
   }
 
   Future<void> _editProject(BuildContext context, WidgetRef ref, [Project? existing]) async {
-    final employees = ref.read(itEmployeesProvider);
     final name = TextEditingController(text: existing?.name ?? '');
     final desc = TextEditingController(text: existing?.description ?? '');
     String? managerId = existing?.managerId.isEmpty ?? true ? null : existing!.managerId;
-    final selectedMembers = Set<String>.from(existing?.memberIds ?? const []);
+    // (the manager is not also listed as a member)
+    final selectedMembers = <String>{...(existing?.memberIds ?? const <String>[]).where((id) => id.isNotEmpty && id != managerId)};
+    // A new project says what it is expected to cost — the server refuses one without (the finance head approves it).
+    var costInput = const CostInput();
+    var costMissing = false;
     String status = existing?.status ?? 'planning';
     String priority = existing?.priority ?? 'medium';
-    String phase = existing?.phase ?? 'discovery';
+    String phase = fitPhase(existing?.phase ?? '', kItDepartment);
     // New projects: the manager plans the work. An older project keeps what it had.
     String editMode = existing?.editMode ?? 'managed';
     final messenger = ScaffoldMessenger.of(context);
@@ -465,7 +472,10 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
       builder: (ctx) {
         var busy = false;
         return StatefulBuilder(
-          builder: (ctx, setSheet) => Padding(
+          // (a Consumer: the staff list may still be loading when the form opens — the pickers fill in once it arrives)
+          builder: (ctx, setSheet) => Consumer(builder: (ctx, cref, _) {
+            final employees = cref.watch(itEmployeesProvider);
+            return Padding(
             padding: EdgeInsets.fromLTRB(20, 18, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -481,7 +491,10 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                   selectedName: existing?.managerName,
                   label: 'Project Head / Manager (IT) *',
                   allowUnassign: false,
-                  onChanged: (e) => setSheet(() => managerId = e?.id),
+                  onChanged: (e) => setSheet(() {
+                    managerId = e?.id;
+                    if (managerId != null) selectedMembers.remove(managerId);
+                  }),
                 ),
                 if (employees.isEmpty)
                   Padding(
@@ -492,33 +505,26 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                const Text('Assign Team Members:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                if (employees.isNotEmpty)
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: employees.map((emp) {
-                      final isSelected = selectedMembers.contains(emp.id);
-                      return FilterChip(
-                        selected: isSelected,
-                        label: Text(emp.name, style: TextStyle(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500)),
-                        avatar: CircleAvatar(
-                          radius: 10,
-                          child: Text(emp.name.isNotEmpty ? emp.name[0].toUpperCase() : '?', style: const TextStyle(fontSize: 10)),
-                        ),
-                        onSelected: (val) {
-                          setSheet(() {
-                            if (val) {
-                              selectedMembers.add(emp.id);
-                            } else {
-                              selectedMembers.remove(emp.id);
-                            }
-                          });
-                        },
-                      );
-                    }).toList(),
+                // searchable; people already on the team who are not IT staff (any more) still show and can be removed
+                EmployeeMultiPickerField(
+                  employees: [for (final e in employees) if (e.id != managerId) e],
+                  selectedIds: selectedMembers,
+                  knownNames: existing == null ? const {} : memberNamesOf(existing),
+                  helper: 'IT staff. For a team from other departments, create it under Company Projects.',
+                  onChanged: (v) => setSheet(() => selectedMembers
+                    ..clear()
+                    ..addAll(v)),
+                ),
+                if (!isEdit) ...[
+                  const SizedBox(height: 14),
+                  ProjectCostFields(
+                    showError: costMissing,
+                    onChanged: (v) {
+                      costInput = v;
+                      if (costMissing && v.valid) setSheet(() => costMissing = false);
+                    },
                   ),
+                ],
                 const SizedBox(height: 12),
                 Text('Who can change the plan', style: TextStyle(fontSize: 12.5, color: context.crmColors.textSecondary, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 6),
@@ -547,7 +553,7 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                   Expanded(child: _dd('Priority', priority, const ['low', 'medium', 'high', 'critical'], (v) => setSheet(() => priority = v))),
                 ]),
                 const SizedBox(height: 10),
-                _dd('Phase', phase, const ['discovery', 'design', 'development', 'testing', 'deployment', 'maintenance'], (v) => setSheet(() => phase = v)),
+                _dd('Phase', phase, phasesForDepartment(kItDepartment), (v) => setSheet(() => phase = v)),
                 const SizedBox(height: 18),
                 SizedBox(
                   width: double.infinity,
@@ -563,9 +569,15 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                               messenger.showSnackBar(const SnackBar(content: Text('Pick a manager')));
                               return;
                             }
+                            if (!isEdit && !costInput.valid) {
+                              setSheet(() => costMissing = true);
+                              messenger.showSnackBar(const SnackBar(content: Text('Enter the estimated cost of the project')));
+                              return;
+                            }
                             setSheet(() => busy = true);
                             try {
-                              await ref.read(projectServiceProvider).saveProject({
+                              // (taking someone off who still has work on the project asks first)
+                              final done = await saveTeamChecked(ctx, (extra) => ref.read(projectServiceProvider).saveProject({
                                 'name': name.text.trim(),
                                 'description': desc.text.trim(),
                                 'managerId': managerId,
@@ -575,7 +587,15 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                                 'phase': phase,
                                 'editMode': editMode,
                                 'targetDepartment': 'it',
-                              }, id: existing?.id);
+                                if (!isEdit) ...{
+                                  if (costInput.plan.isNotEmpty) 'costPlan': [for (final l in costInput.plan) l.toJson()] else 'budget': costInput.typed,
+                                },
+                                ...extra,
+                              }, id: existing?.id));
+                              if (done == null) {
+                                setSheet(() => busy = false); // kept them on: nothing was saved
+                                return;
+                              }
                               if (ctx.mounted) Navigator.pop(ctx, true);
                             } catch (e) {
                               setSheet(() => busy = false);
@@ -587,7 +607,8 @@ class _ITProjectsScreenState extends ConsumerState<ITProjectsScreen> {
                 ),
               ]),
             ),
-          ),
+          );
+          }),
         );
       },
     );

@@ -187,7 +187,7 @@ class _ShootPdfsState extends ConsumerState<ShootPdfs> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove this PDF?'),
-        content: Text('"${d.title}" comes off the ${widget.part} for everyone.'),
+        content: Text('"${d.title}" comes off the ${const {'camera': 'camera movement plan'}[widget.part] ?? widget.part} for everyone.'),
         actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(key: const Key('pf_pdf_remove_ok'), style: FilledButton.styleFrom(backgroundColor: Mkt.bad), onPressed: () => Navigator.pop(context, true), child: const Text('Remove'))],
       ),
     );

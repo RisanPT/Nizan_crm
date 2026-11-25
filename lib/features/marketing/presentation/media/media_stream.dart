@@ -12,7 +12,7 @@ import 'package:nizan_crm/providers/dio_provider.dart';
 
 /// What the server answered for a Dropbox video link.
 class MediaStreamLink {
-  const MediaStreamLink({this.url = '', this.ok = true, this.code = '', this.message = '', this.retryDirect = false});
+  const MediaStreamLink({this.url = '', this.ok = true, this.code = '', this.message = '', this.retryDirect = false, this.directUrl = '', this.directUntil});
 
   /// The address to stream from ('' when the server gave none).
   final String url;
@@ -24,14 +24,29 @@ class MediaStreamLink {
   /// Worth trying Dropbox's own routes anyway (the server could not reach Dropbox; the viewer's own network may).
   final bool retryDirect;
 
+  /// A link straight from Dropbox (the file is in the company's own Dropbox) and when it stops working (Dropbox's last 4 hours). Played
+  /// first, so the video never passes through our server.
+  final String directUrl;
+  final DateTime? directUntil;
+
+  /// Where to play from, best first: straight from Dropbox while its link has at least 5 minutes left, then through the server.
+  List<String> sourcesAt(DateTime now) => [
+        if (directUrl.isNotEmpty && (directUntil == null || directUntil!.isAfter(now.add(const Duration(minutes: 5))))) directUrl,
+        if (url.isNotEmpty) url,
+      ];
+  List<String> get sources => sourcesAt(DateTime.now());
+
   factory MediaStreamLink.fromJson(Map<String, dynamic> j, String apiBase) {
     final path = (j['path'] ?? '').toString();
+    final direct = j['direct'];
     return MediaStreamLink(
       url: path.isEmpty ? '' : mediaStreamAddress(apiBase, path),
       ok: j['ok'] != false,
       code: (j['code'] ?? '').toString(),
       message: (j['message'] ?? '').toString(),
       retryDirect: j['retryDirect'] == true,
+      directUrl: direct is Map ? (direct['url'] ?? '').toString() : '',
+      directUntil: direct is Map ? DateTime.tryParse((direct['until'] ?? '').toString())?.toLocal() : null,
     );
   }
 }

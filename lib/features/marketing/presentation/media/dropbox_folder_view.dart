@@ -31,7 +31,10 @@ String _size(int bytes) {
 }
 
 class DropboxFolderView extends ConsumerStatefulWidget {
-  const DropboxFolderView({super.key, required this.url, this.title = ''});
+  const DropboxFolderView({super.key, required this.url, this.title = '', this.below});
+
+  /// Shown under the files, in the same scroll (the gallery puts the work the footage is from and its client's review here).
+  final Widget? below;
 
   /// The folder link as it was sent ("Open in Dropbox" opens exactly this).
   final String url;
@@ -146,7 +149,7 @@ class _DropboxFolderViewState extends ConsumerState<DropboxFolderView> {
     }
     final ClipPlayer p;
     try {
-      p = await openClip(ref.read(clipPlayerFactoryProvider), [s.url]);
+      p = await openClip(ref.read(clipPlayerFactoryProvider), s.sources); // straight from Dropbox first when it can
     } on ClipOpenException catch (e) {
       if (mounted && session == _clipSession) {
         setState(() {
@@ -345,6 +348,7 @@ class _DropboxFolderViewState extends ConsumerState<DropboxFolderView> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 if (_open != null) _stage(),
                 _list(),
+                ?widget.below,
               ]),
             ),
           ),

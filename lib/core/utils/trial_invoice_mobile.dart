@@ -104,7 +104,7 @@ Future<void> printTrialInvoice(Trial trial) async {
                         fontSize: 26)),
               ),
               pw.SizedBox(height: 6),
-              pw.Text('TEAM N ERP',
+              pw.Text('TEAM N MAKEOVERS',
                   style: pw.TextStyle(
                       fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
@@ -217,7 +217,7 @@ Future<void> printTrialInvoice(Trial trial) async {
               style: const pw.TextStyle(fontSize: 9)),
           pw.Spacer(),
           pw.Center(
-            child: pw.Text('Team N ERP - Trial invoice',
+            child: pw.Text('Team N Makeovers - Trial invoice',
                 style: pw.TextStyle(fontSize: 8, color: muted)),
           ),
         ],

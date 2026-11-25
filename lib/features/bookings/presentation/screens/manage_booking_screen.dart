@@ -23,6 +23,8 @@ import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:nizan_crm/core/models/addon_service.dart';
 import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/features/bookings/data/assignment_rules.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/suggest_team_button.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/booking_allocation_result.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/add_associate_dialog.dart';
 import 'package:nizan_crm/core/models/service_package.dart';
 import 'package:nizan_crm/services/addon_service_service.dart';
@@ -39,6 +41,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/widgets/map_link_distance_helper.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/calendar_extras.dart' show kInfluencerColor;
 
 /// 'YYYY-MM-DD' key used for a booking's per-date map overrides (`dateMaps`).
 String _dateKey(DateTime d) =>
@@ -177,7 +180,10 @@ class ManageBookingScreen extends HookConsumerWidget {
     final statusState = useState(booking?.id != null ? 'confirmed' : 'pending');
     final checklistCompleted = useState(false);
     final contentRequired = useState(false);
+    final influencerWork = useState(false);
     final assignments = useState<List<BookingAssignment>>([]);
+    // what "Suggest team" chose for this package — sent with the save (the allocation records suggestion vs choice)
+    final allocationIntent = useState<Map<String, dynamic>?>(null);
     final showAllTodayWorks = useState(false);
     final addons = useState<List<BookingAddon>>(
       booking != null ? List<BookingAddon>.from(booking.addons) : [],
@@ -492,6 +498,7 @@ class ManageBookingScreen extends HookConsumerWidget {
           staffNeedsCtrl.text = useItemDetail ? selectedItem.staffInstructions : booking.staffInstructions;
           remarksCtrl.text = useItemDetail ? selectedItem.internalRemarks : booking.internalRemarks;
           contentRequired.value = booking.contentCreationRequired;
+          influencerWork.value = booking.influencerWork;
           // Status DOES inherit the booking status when a package hasn't set its
           // own (a package defaults to the booking's status), so keep the fallback.
           statusState.value = (selectedItem != null && selectedItem.status.isNotEmpty)
@@ -537,6 +544,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         booking?.staffInstructions,
         booking?.internalRemarks,
         booking?.contentCreationRequired,
+        booking?.influencerWork,
         booking?.totalPrice,
         booking?.advanceAmount,
         booking?.addons.length,
@@ -1228,6 +1236,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         staffInstructions: isMultiItem ? booking.staffInstructions : staffNeedsCtrl.text.trim(),
         internalRemarks: isMultiItem ? booking.internalRemarks : remarksCtrl.text.trim(),
         contentCreationRequired: contentRequired.value,
+        influencerWork: influencerWork.value,
         createdAt:
             _parseDateInput(bookedDateCtrl.text.trim()) ?? booking.createdAt,
         bookingDate: parsedBookingDate,
@@ -1322,6 +1331,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             context,
             ref,
             updatedBooking,
+            allocationIntent: allocationIntent.value,
           );
         } catch (error) {
           if (context.mounted) {
@@ -1331,6 +1341,7 @@ class ManageBookingScreen extends HookConsumerWidget {
         }
         // null: a driver was already committed and the person chose not to assign anyway
         if (savedBooking == null) return;
+        allocationIntent.value = null;
         if (!context.mounted) return;
         try {
           await showPrintDialog(savedBooking);
@@ -1862,6 +1873,9 @@ class ManageBookingScreen extends HookConsumerWidget {
                   24.h,
                 ],
 
+                // ── Artist allocation (who the system / CRM gave it to, or why it waits) — sales read it too ──
+                BookingAllocationCard(bookingId: booking.id),
+
                 // ── Artist Assignment ─────────────────────────────────────
                 _buildArtistAssignment(
                   context,
@@ -1876,6 +1890,15 @@ class ManageBookingScreen extends HookConsumerWidget {
                   assignRoleCtrl,
                   assignmentType,
                   selectedPocId,
+                  suggestButton: SuggestTeamButton(
+                    bookingId: booking.id,
+                    unitKey: selectedBookingItemIndex >= 0 ? 'i:$selectedBookingItemIndex' : 'b',
+                    onPicked: (pick) {
+                      assignments.value = withPickedTeam(assignments.value, pick, asyncEmployees.value ?? const []);
+                      allocationIntent.value = pick.toIntent();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${pick.teamName} put on this package — Save to keep it.')));
+                    },
+                  ),
                 ),
                 24.h,
 
@@ -1929,6 +1952,36 @@ class ManageBookingScreen extends HookConsumerWidget {
                                       Flexible(
                                         child: Text(
                                           'CONTENT CREATION REQUIRED (SOCIAL MEDIA)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: crmColors.textPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                8.h,
+                                Container(
+                                  key: const Key('mb_influencer_work'),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: crmColors.surface,
+                                    border: Border.all(color: crmColors.border),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Checkbox(
+                                        value: influencerWork.value,
+                                        onChanged: (v) =>
+                                            influencerWork.value = v ?? false,
+                                        activeColor: kInfluencerColor,
+                                      ),
+                                      Flexible(
+                                        child: Text(
+                                          'INFLUENCER WORK (OWN COLOUR ON THE CALENDAR)',
                                           style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
@@ -2109,6 +2162,7 @@ class ManageBookingScreen extends HookConsumerWidget {
                                 context,
                                 ref,
                                 updatedBooking,
+                                allocationIntent: allocationIntent.value,
                               );
                             } catch (error) {
                               if (context.mounted) {
@@ -3087,8 +3141,9 @@ class ManageBookingScreen extends HookConsumerWidget {
     ValueNotifier<String?> assignArtistId,
     TextEditingController assignRoleCtrl,
     ValueNotifier<String> assignmentType,
-    ValueNotifier<String> selectedPocId,
-  ) {
+    ValueNotifier<String> selectedPocId, {
+    Widget? suggestButton,
+  }) {
     return _SectionCard(
       title: 'Artist Assignment Flow',
       child: Flex(
@@ -3100,6 +3155,7 @@ class ManageBookingScreen extends HookConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                ?suggestButton,
                 Text(
                   'CURRENT ASSIGNED TEAM',
                   style: TextStyle(

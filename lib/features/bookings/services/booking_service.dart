@@ -128,12 +128,18 @@ class BookingService {
 
   /// [confirmFleetConflict]: the person has agreed to put a driver / vehicle on a work they are
   /// already committed to (the server otherwise answers 409 FLEET_CONFLICT for that).
-  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false}) async {
+  /// Saves [booking]. [confirmFleetConflict] / [confirmArtistConflict] answer "assign anyway" to a clash the server reported
+  /// (FLEET_CONFLICT / ARTIST_CONFLICT); [extraBody] rides along with the booking (the allocation's `allocationIntent`).
+  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false, bool confirmArtistConflict = false, Map<String, dynamic>? extraBody}) async {
     try {
+      final headers = <String, String>{
+        if (confirmFleetConflict) 'X-Confirm-Fleet-Conflict': '1',
+        if (confirmArtistConflict) 'X-Confirm-Artist-Conflict': '1',
+      };
       final response = await _dio.put(
         '/bookings/${booking.id}',
-        data: booking.toJson(),
-        options: confirmFleetConflict ? Options(headers: {'X-Confirm-Fleet-Conflict': '1'}) : null,
+        data: {...booking.toJson(), ...?extraBody},
+        options: headers.isEmpty ? null : Options(headers: headers),
       );
       return Booking.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {

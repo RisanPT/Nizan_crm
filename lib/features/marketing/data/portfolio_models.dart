@@ -232,7 +232,7 @@ class ShootLog {
 }
 
 class ShootDetail {
-  const ShootDetail({required this.summary, this.pillar = '', this.objective = '', this.audience = '', this.notes = '', this.crew = const [], this.references = const [], this.milestones = const [], this.currentMilestone = '', this.assets = const [], this.footageMb = 0, this.takeaways = const [], this.activity = const [], this.storyboard = const [], this.booking, this.posts = const [], this.checklist = const [], this.activityScope = 'team', this.logistics = const ShootLogistics(), this.footage = const [], this.documents = const []});
+  const ShootDetail({required this.summary, this.pillar = '', this.objective = '', this.audience = '', this.notes = '', this.crew = const [], this.references = const [], this.cameraRefs = const [], this.milestones = const [], this.currentMilestone = '', this.assets = const [], this.footageMb = 0, this.takeaways = const [], this.activity = const [], this.storyboard = const [], this.booking, this.posts = const [], this.checklist = const [], this.activityScope = 'team', this.logistics = const ShootLogistics(), this.footage = const [], this.documents = const []});
 
   /// PDFs on the moodboard and the storyboard (a lookbook, a drawn storyboard, a shot list) — read in the app.
   final List<ShootDocument> documents;
@@ -255,6 +255,8 @@ class ShootDetail {
   final List<CrewMember> crew;
   /// The moodboard: pictures (shown), videos and links (opened outside).
   final List<MoodboardItem> references;
+  /// Camera Movement's reference pictures and video links (its PDFs are documents of part 'camera').
+  final List<MoodboardItem> cameraRefs;
   final List<Milestone> milestones;
   final List<ShootAsset> assets;
   final double footageMb;
@@ -271,6 +273,7 @@ class ShootDetail {
       notes: _s(brief['notes']),
       crew: _l(j['crew']).map(CrewMember.fromJson).toList(),
       references: _l(j['references']).map(MoodboardItem.fromJson).toList(),
+      cameraRefs: _l(j['cameraRefs']).map(MoodboardItem.fromJson).toList(),
       milestones: _l(j['milestones']).map(Milestone.fromJson).toList(),
       currentMilestone: _s(j['currentMilestone']),
       assets: _l(j['assets']).map(ShootAsset.fromJson).toList(),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/app_role.dart';
+import '../../core/auth/access_control.dart';
 import '../../core/auth/workspace.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
@@ -605,149 +606,13 @@ class Sidebar extends ConsumerWidget {
                     _buildSectionTitle('CRM', isCollapsed: isCollapsed, theme: theme),
                     4.h,
                   ],
-                  if (access.canSeeDashboard)
-                    _SidebarItem(
-                      icon: Icons.dashboard_outlined,
-                      title: 'Dashboard',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/',
-                      onTap: () => context.go('/'),
-                    ),
-                  // The CRM team's own work: the head's dashboard, a member's queue, and the cases (with how many are overdue).
-                  if (access.canSeeCrmDashboard)
-                    _SidebarItem(
-                      key: const Key('sidebar_crm_dashboard'),
-                      icon: Icons.support_agent_outlined,
-                      title: 'CRM Dashboard',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/crm/dashboard' || currentPath.startsWith('/crm/team'),
-                      onTap: () => context.go('/crm/dashboard'),
-                    )
-                  else if (access.isCrmTeam)
-                    _SidebarItem(
-                      key: const Key('sidebar_crm_my_work'),
-                      icon: Icons.assignment_ind_outlined,
-                      title: 'My CRM Work',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/crm/my-work',
-                      onTap: () => context.go('/crm/my-work'),
-                    ),
-                  if (access.canSeeCrmDashboard)
-                    _SidebarItem(
-                      key: const Key('sidebar_crm_weekly'),
-                      icon: Icons.summarize_outlined,
-                      title: 'CRM Weekly Report',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/crm/weekly',
-                      onTap: () => context.go('/crm/weekly'),
-                    ),
-                  if (access.canSeeCrmWork)
-                    _SidebarItem(
-                      key: const Key('sidebar_crm_cases'),
-                      icon: Icons.report_problem_outlined,
-                      title: 'CRM Cases',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/crm/cases') || currentPath == '/crm/re-engagement',
-                      trailing: _crmOverdueBadge(ref, crmColors, isCollapsed),
-                      onTap: () => context.go('/crm/cases'),
-                    ),
-                  if (access.canSeeClients)
-                    _SidebarItem(
-                      icon: Icons.people_outline,
-                      title: 'Clients',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/client') &&
-                          !currentPath.startsWith('/client-chat'),
-                      onTap: () => context.go('/clients'),
-                    ),
-                  if (access.canSeeClientReviews)
-                    _SidebarItem(
-                      icon: Icons.reviews_outlined,
-                      title: 'Client Reviews',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/reviews'),
-                      onTap: () => context.go('/reviews'),
-                    ),
-                  if (access.canSeeClientChat)
-                    _SidebarItem(
-                      icon: Icons.forum_outlined,
-                      title: 'Client Chat',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/client-chat'),
-                      trailing: _clientChatBadge(ref, crmColors, isCollapsed),
-                      onTap: () => context.go('/client-chat'),
-                    ),
-                  if (access.canSeeAppClients)
-                    _SidebarItem(
-                      icon: Icons.diversity_1_outlined,
-                      title: 'App Clients',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/app-clients'),
-                      onTap: () => context.go('/app-clients'),
-                    ),
-                  if (access.canSeeBookings)
-                    _SidebarItem(
-                      icon: Icons.receipt_long_outlined,
-                      title: 'Booking',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/booking'),
-                      onTap: () => context.go('/booking/requests'),
-                    ),
-                  if (access.canSeeCalendar)
-                    _SidebarItem(
-                      icon: Icons.calendar_month,
-                      title: 'Calendar',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/calendar',
-                      onTap: () => context.go('/calendar'),
-                    ),
-                  if (access.canSeeAssociateWorks && access.canSeeBookings)
-                    _SidebarItem(
-                      icon: Icons.how_to_reg_outlined,
-                      title: 'Associate Works',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/associate-works',
-                      onTap: () => context.go('/associate-works'),
-                    ),
-                  if (access.canSeeTrials) ...[
-                    _SidebarItem(
-                      icon: Icons.event_available_outlined,
-                      title: 'Trials',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
-                      onTap: () => context.go('/trials'),
-                    ),
-                    _SidebarItem(
-                      icon: Icons.auto_awesome_mosaic_outlined,
-                      title: 'Trial Packages',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath.startsWith('/trial-packages'),
-                      onTap: () => context.go('/trial-packages'),
-                    ),
-                  ],
-                  // Artist Head org-wide dashboard — shown ONLY if user is artist head
-                  if (access.canSeeArtistHead) ...[
-                    _SidebarItem(
-                      icon: Icons.insights_outlined,
-                      title: 'Artist Head',
-                      isCollapsed: isCollapsed,
-                      isSelected: currentPath == '/artist-head',
-                      onTap: () => context.go('/artist-head'),
-                    ),
-                    _SidebarItem(
-                      icon: Icons.groups_2_outlined,
-                      title: 'Artists',
-                      isCollapsed: isCollapsed,
-                      isSelected:
-                          currentPath.startsWith('/artist-head/artist'),
-                      onTap: () => context.go('/artist-head/artists'),
-                    ),
-                  ],
+                  // in four small groups, the daily work first (see _crmSection)
+                  ..._crmSection(context, ref, access, currentPath, isCollapsed, crmColors, theme),
 
                   // ── ERP SECTION ──────────────────────────────────────────────
-                  if (access.canSeeServices || access.canSeeStaff ||
-                      access.canSeeSales || access.canSeeFinance || access.canSeeFleet ||
-                      access.canSeeConsultations) ...[
+                  // always titled: My Payslips below is everyone's, so the section is never empty (without the title, a CRM login's
+                  // payslips and approvals read as part of the CRM's last group)
+                  ...[
                     32.h,
                     _buildSectionTitle('ERP', isCollapsed: isCollapsed, theme: theme),
                     8.h,
@@ -2272,6 +2137,217 @@ class Sidebar extends ConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// The CRM section in four small groups, ordered by how often the team opens them — Overview (the dashboards and the weekly
+  /// report), Bookings (requests, the calendar, who takes each work, trials), Client Care (clients, cases, reviews) and Artist Teams
+  /// (the teams, outsourced artists' works, the Artist Head's view). A group shows only when it has something for this login; Client
+  /// Chat and App Clients join Client Care when the client app is live (kClientAppLive).
+  List<Widget> _crmSection(BuildContext context, WidgetRef ref, Access access, String currentPath, bool isCollapsed, CrmTheme crmColors, ThemeData theme) {
+    final overview = <Widget>[
+      if (access.canSeeDashboard)
+        _SidebarItem(
+          key: const Key('sidebar_dashboard'),
+          icon: Icons.dashboard_outlined,
+          title: 'Dashboard',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/',
+          onTap: () => context.go('/'),
+        ),
+      // The CRM team's own work: the head's dashboard, or a member's queue.
+      if (access.canSeeCrmDashboard)
+        _SidebarItem(
+          key: const Key('sidebar_crm_dashboard'),
+          icon: Icons.support_agent_outlined,
+          title: 'CRM Dashboard',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/crm/dashboard' || currentPath.startsWith('/crm/team'),
+          onTap: () => context.go('/crm/dashboard'),
+        )
+      else if (access.isCrmTeam)
+        _SidebarItem(
+          key: const Key('sidebar_crm_my_work'),
+          icon: Icons.assignment_ind_outlined,
+          title: 'My CRM Work',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/crm/my-work',
+          onTap: () => context.go('/crm/my-work'),
+        ),
+      if (access.canSeeCrmDashboard)
+        _SidebarItem(
+          key: const Key('sidebar_crm_weekly'),
+          icon: Icons.summarize_outlined,
+          title: 'CRM Weekly Report',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/crm/weekly',
+          onTap: () => context.go('/crm/weekly'),
+        ),
+    ];
+    final bookings = <Widget>[
+      if (access.canSeeBookings)
+        _SidebarItem(
+          key: const Key('sidebar_booking'),
+          icon: Icons.receipt_long_outlined,
+          title: 'Booking',
+          isCollapsed: isCollapsed,
+          // the allocation board lives under /booking too: it has its own item
+          isSelected: currentPath.startsWith('/booking') && !currentPath.startsWith('/booking/allocation'),
+          onTap: () => context.go('/booking/requests'),
+        ),
+      if (access.canSeeCalendar)
+        _SidebarItem(
+          key: const Key('sidebar_calendar'),
+          icon: Icons.calendar_month,
+          title: 'Calendar',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/calendar',
+          onTap: () => context.go('/calendar'),
+        ),
+      // the smart booking allocation: who takes each new work
+      if (access.canSeeAllocation)
+        _SidebarItem(
+          key: const Key('sidebar_allocation_board'),
+          icon: Icons.view_timeline_outlined,
+          title: 'Allocation Board',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/booking/allocation'),
+          onTap: () => context.go('/booking/allocation'),
+        ),
+      if (access.canSeeTrials) ...[
+        _SidebarItem(
+          key: const Key('sidebar_trials'),
+          icon: Icons.event_available_outlined,
+          title: 'Trials',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/trials' || currentPath.startsWith('/trials/'),
+          onTap: () => context.go('/trials'),
+        ),
+        _SidebarItem(
+          key: const Key('sidebar_trial_packages'),
+          icon: Icons.auto_awesome_mosaic_outlined,
+          title: 'Trial Packages',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/trial-packages'),
+          onTap: () => context.go('/trial-packages'),
+        ),
+      ],
+    ];
+    final care = <Widget>[
+      if (access.canSeeClients)
+        _SidebarItem(
+          key: const Key('sidebar_clients'),
+          icon: Icons.people_outline,
+          title: 'Clients',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/client') && !currentPath.startsWith('/client-chat'),
+          onTap: () => context.go('/clients'),
+        ),
+      if (access.canSeeCrmWork)
+        _SidebarItem(
+          key: const Key('sidebar_crm_cases'),
+          icon: Icons.report_problem_outlined,
+          title: 'CRM Cases',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/crm/cases') || currentPath == '/crm/re-engagement',
+          trailing: _crmOverdueBadge(ref, crmColors, isCollapsed),
+          onTap: () => context.go('/crm/cases'),
+        ),
+      if (access.canSeeClientReviews)
+        _SidebarItem(
+          key: const Key('sidebar_client_reviews'),
+          icon: Icons.reviews_outlined,
+          title: 'Client Reviews',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/reviews'),
+          onTap: () => context.go('/reviews'),
+        ),
+      if (access.canSeeClientChat)
+        _SidebarItem(
+          key: const Key('sidebar_client_chat'),
+          icon: Icons.forum_outlined,
+          title: 'Client Chat',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/client-chat'),
+          trailing: _clientChatBadge(ref, crmColors, isCollapsed),
+          onTap: () => context.go('/client-chat'),
+        ),
+      if (access.canSeeAppClients)
+        _SidebarItem(
+          key: const Key('sidebar_app_clients'),
+          icon: Icons.diversity_1_outlined,
+          title: 'App Clients',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/app-clients'),
+          onTap: () => context.go('/app-clients'),
+        ),
+    ];
+    final artists = <Widget>[
+      if (access.canSeeAllocation)
+        _SidebarItem(
+          key: const Key('sidebar_artist_management'),
+          icon: Icons.groups_outlined,
+          title: 'Artist Management',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/artist-management',
+          onTap: () => context.go('/artist-management'),
+        ),
+      if (access.canSeeAssociateWorks && access.canSeeBookings)
+        _SidebarItem(
+          key: const Key('sidebar_associate_works'),
+          icon: Icons.how_to_reg_outlined,
+          title: 'Associate Works',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/associate-works',
+          onTap: () => context.go('/associate-works'),
+        ),
+      // Artist Head org-wide dashboard — shown ONLY if user is artist head
+      if (access.canSeeArtistHead) ...[
+        _SidebarItem(
+          key: const Key('sidebar_artist_head'),
+          icon: Icons.insights_outlined,
+          title: 'Artist Head',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath == '/artist-head',
+          onTap: () => context.go('/artist-head'),
+        ),
+        _SidebarItem(
+          key: const Key('sidebar_artist_head_artists'),
+          icon: Icons.groups_2_outlined,
+          title: 'Artists',
+          isCollapsed: isCollapsed,
+          isSelected: currentPath.startsWith('/artist-head/artist'),
+          onTap: () => context.go('/artist-head/artists'),
+        ),
+      ],
+    ];
+    // a group's small heading only when the section has more than one group (a login with one group sees just its items)
+    final groups = [('OVERVIEW', overview), ('BOOKINGS', bookings), ('CLIENT CARE', care), ('ARTIST TEAMS', artists)].where((g) => g.$2.isNotEmpty).toList();
+    return [
+      for (final (name, items) in groups) ...[
+        if (groups.length > 1) _buildGroupTitle(name, isCollapsed: isCollapsed, theme: theme, first: name == groups.first.$1),
+        ...items,
+      ],
+    ];
+  }
+
+  /// A small heading for a group inside a section ("BOOKINGS" under "CRM"): quieter than the section's own title, no rule beside it.
+  /// Collapsed to icons, a little space stands in for it.
+  Widget _buildGroupTitle(String title, {required bool isCollapsed, required ThemeData theme, bool first = false}) {
+    final crmColors = theme.extension<CrmTheme>()!;
+    if (isCollapsed) return SizedBox(height: first ? 0 : 10);
+    return Padding(
+      key: Key('sidebar_group_${title.toLowerCase().replaceAll(' ', '_')}'),
+      padding: EdgeInsets.fromLTRB(14, first ? 2 : 12, 10, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: crmColors.sidebarForeground.withValues(alpha: 0.36),
+          fontWeight: FontWeight.w600,
+          fontSize: 9.5,
+          letterSpacing: 1.1,
+        ),
       ),
     );
   }

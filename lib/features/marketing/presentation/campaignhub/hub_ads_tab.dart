@@ -136,6 +136,8 @@ class _HubAdsTabState extends ConsumerState<HubAdsTab> {
             child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(12, weight: FontWeight.w700)),
               if (r.adSetName.isNotEmpty) Text(r.adSetName, maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, color: Mkt.inkSoft)),
+              // Meta's own word when it says more than running / paused: "Rejected by Meta", "Ad set paused", "In review"
+              if (adMetaNote(r.metaStatus).isNotEmpty) Text(adMetaNote(r.metaStatus), key: Key('ad_meta_${r.id}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: mktText(10.5, weight: FontWeight.w700, color: Mkt.warn)),
             ]),
           ),
           if (r.isLifetime) ...[const SizedBox(width: 4), HubLifetimeMark(key: Key('ad_lifetime_${r.id}'))],

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
-import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/fleet/data/fleet_availability.dart';
+import 'package:nizan_crm/features/allocation/presentation/widgets/artist_conflict_dialog.dart' show saveBookingConfirmingConflicts;
 
 /// free | tight | busy | unavailable → the colour it is drawn in.
 Color availabilityColor(CrmTheme crm, String status) => switch (status) {
@@ -219,20 +219,13 @@ Future<bool> showFleetConflictDialog(
 /// unavailable), asks "assign anyway?" and — only if the answer is yes — saves again with confirmation.
 /// Returns the saved booking, or null when the person chose not to assign. Any other failure is thrown
 /// as before, for the caller to show.
+///
+/// An artist the server refuses for a NEW booking (ARTIST_CONFLICT — the allocation's clash check) is asked about the same way: see
+/// saveBookingConfirmingConflicts.
 Future<Booking?> updateBookingConfirmingFleet(
   BuildContext context,
   WidgetRef ref,
-  Booking booking,
-) async {
-  try {
-    return await ref.read(bookingProvider.notifier).updateBooking(booking);
-  } catch (error) {
-    final conflict = FleetConflict.of(error);
-    if (conflict == null) rethrow;
-    if (!context.mounted) return null;
-    if (!await showFleetConflictDialog(context, conflict)) return null;
-    return ref
-        .read(bookingProvider.notifier)
-        .updateBooking(booking, confirmFleetConflict: true);
-  }
-}
+  Booking booking, {
+  Map<String, dynamic>? allocationIntent,
+}) =>
+    saveBookingConfirmingConflicts(context, ref, booking, allocationIntent: allocationIntent);

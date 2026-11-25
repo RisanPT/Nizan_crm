@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:nizan_crm/features/marketing/presentation/kit/mkt_kit.dart';
+import 'package:nizan_crm/features/marketing/presentation/portfolio/artist_quality_tab.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/footage_tab.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/portfolio_gallery_tab.dart';
 import 'package:nizan_crm/features/marketing/presentation/portfolio/production_calendar_tab.dart';
@@ -20,6 +21,8 @@ const kPortfolioTabs = [
   ('gallery', 'Gallery', Icons.photo_library_outlined),
   // the raw footage the artists hand in from their works (Dropbox), on its way to an editor
   ('footage', 'Footage', Icons.video_library_outlined),
+  // the clients' reviews of each artist's works — whose work needs a look, and in what
+  ('quality', 'Artist Quality', Icons.star_half_rounded),
 ];
 
 /// Marketing → Creative Portfolio. Plan a shoot once; the calendar, the reports and the gallery read it. A shoot's progress moves when
@@ -96,7 +99,7 @@ class _PortfolioScreenState extends ConsumerState<PortfolioScreen> with SingleTi
           ]),
         ),
         const SizedBox(height: 10),
-        Expanded(child: TabBarView(controller: _tabs, children: const [ShootPlannerTab(), ProductionCalendarTab(), ShootReportsTab(), PortfolioGalleryTab(), FootageTab()])),
+        Expanded(child: TabBarView(controller: _tabs, children: const [ShootPlannerTab(), ProductionCalendarTab(), ShootReportsTab(), PortfolioGalleryTab(), FootageTab(), ArtistQualityTab()])),
       ]),
     );
   }

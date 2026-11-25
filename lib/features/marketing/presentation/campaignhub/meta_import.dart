@@ -421,6 +421,7 @@ class _MetaImportFormState extends ConsumerState<MetaImportForm> {
     var created = 0;
     var adsCreated = 0;
     var skipped = 0;
+    final adsSkipped = <({String campaign, String ad, double spend})>[];
     final unmatched = <String, ImportGroup>{};
     String? first;
     String? last;
@@ -436,6 +437,7 @@ class _MetaImportFormState extends ConsumerState<MetaImportForm> {
         created += r.created;
         adsCreated += r.adsCreated;
         skipped += r.skipped;
+        adsSkipped.addAll(r.adsSkipped);
         for (final u in r.unmatched) {
           unmatched.putIfAbsent(u.name.isEmpty ? u.metaId : u.name.toLowerCase(), () => u);
         }
@@ -445,7 +447,7 @@ class _MetaImportFormState extends ConsumerState<MetaImportForm> {
       refreshCampaignHub(ref);
       if (mounted) {
         setState(() {
-          _result = HubImportReport(level: level, written: written, created: created, adsCreated: adsCreated, skipped: skipped, unmatched: unmatched.values.toList(), importId: importId, from: first, to: last, rows: rows.length);
+          _result = HubImportReport(level: level, written: written, created: created, adsCreated: adsCreated, adsSkipped: adsSkipped, skipped: skipped, unmatched: unmatched.values.toList(), importId: importId, from: first, to: last, rows: rows.length);
           _phase = _Phase.done;
         });
       }
@@ -528,9 +530,9 @@ class _MetaImportFormState extends ConsumerState<MetaImportForm> {
               key: Key('imp_unmatched_${u.name.isEmpty ? u.metaId : u.name}'),
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(children: [
-                Icon(u.reason == 'ambiguous' ? Icons.warning_amber_rounded : Icons.help_outline_rounded, size: 15, color: u.reason == 'ambiguous' ? Mkt.warn : Mkt.inkSoft),
+                Icon(importReasonText(u.reason).isNotEmpty ? Icons.warning_amber_rounded : Icons.help_outline_rounded, size: 15, color: importReasonText(u.reason).isNotEmpty ? Mkt.warn : Mkt.inkSoft),
                 const SizedBox(width: 6),
-                Expanded(child: Text(u.reason == 'ambiguous' ? '${u.name} — two campaigns share this name' : (u.name.isEmpty ? 'Campaign ID ${u.metaId}' : u.name), maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(12.5))),
+                Expanded(child: Text(importReasonText(u.reason).isNotEmpty ? '${u.name.isEmpty ? 'Campaign ID ${u.metaId}' : u.name} — ${importReasonText(u.reason)}' : (u.name.isEmpty ? 'Campaign ID ${u.metaId}' : u.name), maxLines: 2, overflow: TextOverflow.ellipsis, style: mktText(12.5))),
               ]),
             ));
           }
@@ -568,7 +570,12 @@ class _MetaImportFormState extends ConsumerState<MetaImportForm> {
         if (r.from != null) out.add(_line('${hubDay(r.from!)}${r.to != null && r.to != r.from ? ' – ${hubDay(r.to!)}' : ''}', color: Mkt.inkSoft, key: const Key('imp_done_span')));
         if (r.created > 0) out.add(_line('${r.created} new campaign${r.created == 1 ? '' : 's'} created.', key: const Key('imp_done_created')));
         if (r.adsCreated > 0) out.add(_line('${r.adsCreated} ad${r.adsCreated == 1 ? '' : 's'} added to ${r.adsCreated == 1 ? 'its campaign' : 'their campaigns'} (they were not in the CRM yet).', key: const Key('imp_done_ads_created')));
-        if (r.unmatched.isNotEmpty) out.add(_line('Left out, no matching campaign: ${r.unmatched.map((u) => u.name.isEmpty ? u.metaId : u.name).join(', ')}.', color: Mkt.warn, weight: FontWeight.w600, key: const Key('imp_done_unmatched')));
+        if (r.unmatched.isNotEmpty) out.add(_line('Left out, no matching campaign: ${r.unmatched.map((u) => [u.name.isEmpty ? u.metaId : u.name, if (importReasonText(u.reason).isNotEmpty) '(${importReasonText(u.reason)})'].join(' ')).join(', ')}.', color: Mkt.warn, weight: FontWeight.w600, key: const Key('imp_done_unmatched')));
+        // two ads of one name and no Ad ID in the file: which ad a row belongs to cannot be told — another ad would count it twice
+        if (r.adsSkipped.isNotEmpty) {
+          final names = {for (final s in r.adsSkipped) '"${s.ad}" in ${s.campaign}'}.join(', ');
+          out.add(_line('Not imported: $names — two ads there share the name. Export the file with the Ad ID column so each lands on its own ad.', color: Mkt.warn, weight: FontWeight.w600, key: const Key('imp_done_ads_skipped')));
+        }
         if (r.skipped > 0) out.add(_line('${r.skipped} row${r.skipped == 1 ? '' : 's'} skipped as not valid.', color: Mkt.inkSoft, key: const Key('imp_done_skipped')));
         out.add(_line(
           switch (r.level) {
@@ -635,7 +642,7 @@ class MetaCard extends StatelessWidget {
       child: Column(key: const Key('hub_meta_card'), crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
           sync != null
-              ? 'Figures come from Meta on their own${sync.autoSync ? ' every 6 hours' : ' when someone presses Sync now'}. You can still import an Ads Manager file or type a day.'
+              ? 'Figures come from Meta on their own${sync.autoSync ? ' every 30 minutes' : ' when someone presses Sync now'}. You can still import an Ads Manager file or type a day.'
               : 'Ad figures have no live Meta sync yet. Export from Meta Ads Manager (one row per day — by campaign, by ad, or broken down by age, gender or placement) and import the file here, or type a day\'s figures by hand.',
           key: const Key('hub_meta_text'),
           style: mktText(12, color: Mkt.inkSoft, height: 1.35),

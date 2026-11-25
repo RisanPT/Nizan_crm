@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/models/auth_session.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/presentation/common_widgets/sidebar.dart';
 import 'package:nizan_crm/core/routing/app_router.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/core/utils/report_range.dart';
@@ -172,6 +174,130 @@ void main() {
       expect(landingRouteFor(head), '/crm/dashboard');
       expect(landingRouteFor(member), '/booking/requests');
     });
+
+    testWidgets('the CRM Head\'s menu has their CRM Dashboard and not the company-wide Dashboard', (t) async {
+      t.view.physicalSize = const Size(1400, 1400);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      Future<void> pumpFor(AuthSession session) async {
+        final router = GoRouter(initialLocation: '/crm/dashboard', routes: [
+          GoRoute(
+            path: '/crm/dashboard',
+            builder: (context, state) => Scaffold(
+              body: Row(children: [
+                SizedBox(
+                  width: 250,
+                  child: Sidebar(
+                    fleetExpanded: false, fleetUserCollapsed: false, onFleetExpandToggle: (_) {},
+                    accountsExpanded: false, accountsUserCollapsed: false, onAccountsExpandToggle: (_) {},
+                    operationsExpanded: false, operationsUserCollapsed: false, onOperationsExpandToggle: (_) {},
+                    administrativeExpanded: false, administrativeUserCollapsed: false, onAdministrativeExpandToggle: (_) {},
+                    inventoryExpanded: false, inventoryUserCollapsed: false, onInventoryExpandToggle: (_) {},
+                    salesExpanded: false, salesUserCollapsed: false, onSalesExpandToggle: (_) {},
+                    hrExpanded: false, hrUserCollapsed: false, onHrExpandToggle: (_) {},
+                    financeExpanded: false, financeUserCollapsed: false, onFinanceExpandToggle: (_) {},
+                    itExpanded: false, itUserCollapsed: false, onItExpandToggle: (_) {},
+                    stylistExpanded: false, stylistUserCollapsed: false, onStylistExpandToggle: (_) {},
+                    marketingExpanded: false, marketingUserCollapsed: false, onMarketingExpandToggle: (_) {},
+                    contentExpanded: false, contentUserCollapsed: false, onContentExpandToggle: (_) {},
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ]);
+        await t.pumpWidget(ProviderScope(
+          key: UniqueKey(),
+          overrides: [authSessionProvider.overrideWithValue(session)],
+          child: MaterialApp.router(theme: AppTheme.lightTheme, routerConfig: router),
+        ));
+        await t.pumpAndSettle();
+      }
+
+      const withDashboard = ['dashboard', 'clients', 'calendar', 'bookings', 'trials'];
+      await pumpFor(_session('crm_manager', perms: withDashboard));
+      expect(find.byKey(const Key('sidebar_crm_dashboard')), findsOneWidget);
+      expect(find.text('Dashboard'), findsNothing, reason: 'the company-wide dashboard is not the CRM Head\'s');
+      await pumpFor(_session('crm', perms: withDashboard));
+      expect(find.text('Dashboard'), findsOneWidget, reason: 'a CRM member it was ticked for still has it');
+    });
+
+    test('Client Chat and App Clients are hidden while the client app is not live — no menu, no page', () {
+      expect(kClientAppLive, isFalse);
+      final admin = Access.of(_session('admin', perms: const []));
+      expect([admin.canSeeClientChat, admin.canSeeAppClients], [false, false]);
+      for (final p in ['/client-chat', '/client-chat/c1', '/app-clients', '/app-clients/a1']) {
+        expect(isRouteAllowed(p, admin), isFalse, reason: p);
+      }
+      expect(admin.canSeeClientReviews, isTrue, reason: 'reviews stay');
+    });
+
+    testWidgets('the CRM menu in four groups, the daily work first; Client Chat and App Clients are not in it', (t) async {
+      t.view.physicalSize = const Size(1400, 2000);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      Future<void> pumpFor(AuthSession session) async {
+        final router = GoRouter(initialLocation: '/crm/dashboard', routes: [
+          GoRoute(
+            path: '/crm/dashboard',
+            builder: (context, state) => Scaffold(
+              body: Row(children: [
+                SizedBox(
+                  width: 250,
+                  child: Sidebar(
+                    fleetExpanded: false, fleetUserCollapsed: false, onFleetExpandToggle: (_) {},
+                    accountsExpanded: false, accountsUserCollapsed: false, onAccountsExpandToggle: (_) {},
+                    operationsExpanded: false, operationsUserCollapsed: false, onOperationsExpandToggle: (_) {},
+                    administrativeExpanded: false, administrativeUserCollapsed: false, onAdministrativeExpandToggle: (_) {},
+                    inventoryExpanded: false, inventoryUserCollapsed: false, onInventoryExpandToggle: (_) {},
+                    salesExpanded: false, salesUserCollapsed: false, onSalesExpandToggle: (_) {},
+                    hrExpanded: false, hrUserCollapsed: false, onHrExpandToggle: (_) {},
+                    financeExpanded: false, financeUserCollapsed: false, onFinanceExpandToggle: (_) {},
+                    itExpanded: false, itUserCollapsed: false, onItExpandToggle: (_) {},
+                    stylistExpanded: false, stylistUserCollapsed: false, onStylistExpandToggle: (_) {},
+                    marketingExpanded: false, marketingUserCollapsed: false, onMarketingExpandToggle: (_) {},
+                    contentExpanded: false, contentUserCollapsed: false, onContentExpandToggle: (_) {},
+                  ),
+                ),
+              ]),
+            ),
+          ),
+        ]);
+        await t.pumpWidget(ProviderScope(
+          key: UniqueKey(),
+          overrides: [authSessionProvider.overrideWithValue(session)],
+          child: MaterialApp.router(theme: AppTheme.lightTheme, routerConfig: router),
+        ));
+        await t.pumpAndSettle();
+      }
+
+      await pumpFor(_session('crm_manager', perms: const ['clients', 'calendar', 'bookings', 'trials']));
+      expect(find.text('Client Chat'), findsNothing);
+      expect(find.text('App Clients'), findsNothing);
+      double y(String key) => t.getTopLeft(find.byKey(Key(key))).dy;
+      // the groups in order, each item under its own heading
+      final order = ['sidebar_group_overview', 'sidebar_crm_dashboard', 'sidebar_crm_weekly', 'sidebar_group_bookings', 'sidebar_booking', 'sidebar_calendar', 'sidebar_allocation_board', 'sidebar_trials', 'sidebar_group_client_care', 'sidebar_clients', 'sidebar_crm_cases', 'sidebar_client_reviews', 'sidebar_group_artist_teams', 'sidebar_artist_management'];
+      for (var i = 1; i < order.length; i++) {
+        expect(y(order[i - 1]), lessThan(y(order[i])), reason: '${order[i - 1]} above ${order[i]}');
+      }
+      expect(find.text('BOOKINGS'), findsOneWidget);
+      expect(t.takeException(), isNull);
+    });
+
+    test('the CRM Head sees only their own dashboard — never the company-wide one, even with "dashboard" ticked', () {
+      const withDashboard = ['dashboard', 'clients', 'calendar', 'bookings', 'trials'];
+      final tickedHead = Access.of(_session('crm_manager', perms: withDashboard));
+      expect(tickedHead.canSeeDashboard, isFalse);
+      expect(isRouteAllowed('/', tickedHead), isFalse, reason: "'/' sends the head to the CRM dashboard");
+      expect(landingRouteFor(tickedHead), '/crm/dashboard');
+      expect(isRouteAllowed('/crm/dashboard', tickedHead), isTrue);
+      // a department head of CRM is the CRM Head too
+      final deptHead = Access.of(AuthSession(token: 't', userId: 'u', name: 'h', email: 'h@x', role: 'crm', permissions: withDashboard, homeRoute: '/', isDepartmentHead: true));
+      expect(deptHead.canSeeDashboard, isFalse);
+      // nobody else loses it
+      expect(Access.of(_session('crm', perms: withDashboard)).canSeeDashboard, isTrue, reason: 'a CRM member it was ticked for keeps it');
+      expect(Access.of(_session('admin', perms: const [])).canSeeDashboard, isTrue);
+    });
   });
 
   group('the figures', () {
@@ -199,10 +325,11 @@ void main() {
       expect(t.takeException(), isNull);
     });
 
-    testWidgets('the five figures with their change on the period before: green when better, red when worse, none when nothing to compare', (t) async {
+    testWidgets('the figures with their change on the period before: green when better, red when worse, none when nothing to compare', (t) async {
       await _pump(t, CrmDashboardScreen(now: _now), me: _me('head'), svc: _FakeCrm());
       expect(_text(t, const Key('crmKpiChange_requestsReceived')), '+33%');
-      expect(_text(t, const Key('crmKpiChange_chatWaits')), '−10%');
+      // the client app is not live: no chat figure (kClientAppLive)
+      expect(find.byKey(const Key('crmKpiChange_chatWaits')), kClientAppLive ? findsOneWidget : findsNothing);
       expect(_text(t, const Key('crmKpiChange_casesOpened')), '+20%');
       Color colour(String k) => t.widget<Text>(find.byKey(Key('crmKpiChange_$k'))).style!.color!;
       expect(colour('requestsReceived'), kCrmGreen);
@@ -212,7 +339,7 @@ void main() {
       expect(_text(t, const Key('crmKpiValue_reviewsSubmitted')), '64');
     });
 
-    testWidgets('open work as a ring with its total, what is overdue and not assigned; today; chat; reviews & cases', (t) async {
+    testWidgets('open work as a ring with its total, what is overdue and not assigned; today; reviews & cases (chat only once the client app is live)', (t) async {
       await _pump(t, CrmDashboardScreen(now: _now), me: _me('head'), svc: _FakeCrm());
       expect(_text(t, const Key('crmOpen_total')), '10');
       expect(_text(t, const Key('crmOpen_cases')), '4');
@@ -220,7 +347,7 @@ void main() {
       expect(_text(t, const Key('crmOpen_unassigned')), '3');
       expect(_text(t, const Key('crmToday_requestsReceived')), '12');
       expect(find.byKey(const Key('crmRequestsChart')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const Key('crmChatCard')), matching: find.text('30 min', findRichText: true)), findsOneWidget);
+      expect(find.byKey(const Key('crmChatCard')), kClientAppLive ? findsOneWidget : findsNothing);
       expect(find.descendant(of: find.byKey(const Key('crmCareCard')), matching: find.text('4.8 / 5', findRichText: true)), findsOneWidget, reason: 'a big 4.8 and a small "/ 5"');
     });
 

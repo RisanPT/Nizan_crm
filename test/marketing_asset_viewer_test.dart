@@ -776,11 +776,53 @@ void main() {
       expect(_k('viewer_play'), findsOneWidget);
     });
 
+    const direct = 'https://uc9.dl.dropboxusercontent.com/temp/team/reel.mp4';
+    final soon = DateTime.now().add(const Duration(hours: 3));
+
+    testWidgets('the company\'s own video plays straight from Dropbox (its direct link) — the server\'s stream is not even opened', (tester) async {
+      final w = await _open(tester, _asset(_dropbox), stream: _Stream(MediaStreamLink(url: relay, directUrl: direct, directUntil: soon)));
+      expect(w.clips.map((c) => c.uri.toString()), [direct]);
+      expect(_k('viewer_play'), findsOneWidget);
+    });
+
+    testWidgets('when the direct link will not open (a network that blocks Dropbox), the server\'s stream plays it', (tester) async {
+      final w = await _open(tester, _asset(_dropbox),
+          stream: _Stream(MediaStreamLink(url: relay, directUrl: direct, directUntil: soon)),
+          failFor: (u) => u.host.endsWith('dropboxusercontent.com'),
+          openError: Exception('MEDIA_ERR_NETWORK'));
+      expect(w.clips.map((c) => c.uri.toString()), [direct, relay]);
+      expect(w.clips.first.disposed, isTrue);
+      expect(_k('viewer_play'), findsOneWidget);
+    });
+
     testWidgets('a link that is not on Dropbox never asks the server', (tester) async {
       final stream = _Stream(const MediaStreamLink(url: relay));
       final w = await _open(tester, _asset('https://cdn.example.com/reel.mp4'), stream: stream);
       expect(stream.asks, isEmpty);
       expect(w.clips.map((c) => c.uri.toString()), ['https://cdn.example.com/reel.mp4']);
+    });
+
+    testWidgets('a grid preview of the company\'s own video plays straight from Dropbox — browsing the gallery puts no video through the server', (tester) async {
+      SharedPreferences.setMockInitialValues({'marketing.gallery.autoplay': true});
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final clips = <_FakeClip>[];
+      final container = ProviderContainer(overrides: [
+        mediaStreamServiceProvider.overrideWithValue(_Stream(MediaStreamLink(url: relay, directUrl: direct, directUntil: DateTime.now().add(const Duration(hours: 3))))),
+        clipPlayerFactoryProvider.overrideWithValue((u) {
+          final c = _FakeClip(u);
+          clips.add(c);
+          return c;
+        }),
+      ]);
+      addTearDown(container.dispose);
+      container.read(galleryAutoplayProvider);
+      await tester.pumpWidget(UncontrolledProviderScope(container: container, child: MaterialApp(theme: AppTheme.lightTheme, home: Scaffold(body: SingleChildScrollView(child: AssetGrid(items: [_asset(_dropbox, id: 'v1')]))))));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
+      expect(clips.map((c) => c.uri.toString()), [direct]);
+      expect(clips.single.playing, isTrue);
     });
 
     testWidgets('a grid preview streams from the server too (no probe — a card only needs the address)', (tester) async {

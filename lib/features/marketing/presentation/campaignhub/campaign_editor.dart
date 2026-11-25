@@ -123,7 +123,7 @@ class _CampaignFormState extends ConsumerState<_CampaignForm> {
         Row(children: [
           Expanded(child: DropdownButtonFormField<String>(key: const Key('cmp_brand'), isExpanded: true, initialValue: _brand, decoration: hubDec('Brand'), items: const [DropdownMenuItem(value: 'main', child: Text('Main')), DropdownMenuItem(value: 'kerala', child: Text('Kerala'))], onChanged: (v) => setState(() => _brand = v ?? _brand))),
           const SizedBox(width: 10),
-          Expanded(child: DropdownButtonFormField<String>(key: const Key('cmp_status'), isExpanded: true, initialValue: _status, decoration: hubDec('Status'), items: [for (final s in kHubStatuses) DropdownMenuItem(value: s.$1, child: Text(s.$2))], onChanged: (v) => setState(() => _status = v ?? _status))),
+          Expanded(child: DropdownButtonFormField<String>(key: const Key('cmp_status'), isExpanded: true, initialValue: _status, decoration: hubDec('Status', helper: (widget.campaign?.metaStatus ?? '').isEmpty ? null : 'Follows Meta (${widget.campaign!.metaStatus}): the sync sets it'), items: [for (final s in kHubStatuses) DropdownMenuItem(value: s.$1, child: Text(s.$2))], onChanged: (v) => setState(() => _status = v ?? _status))),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -143,7 +143,7 @@ class _CampaignFormState extends ConsumerState<_CampaignForm> {
           Expanded(child: TextField(key: const Key('cmp_daily'), controller: _daily, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: hubDec('Daily budget (₹)'))),
         ]),
         const SizedBox(height: 10),
-        TextField(key: const Key('cmp_meta_id'), controller: _metaId, decoration: hubDec('Meta campaign ID (optional)', helper: 'Lets a Meta Ads Manager import find this campaign even if it is renamed there.')),
+        TextField(key: const Key('cmp_meta_id'), controller: _metaId, decoration: hubDec('Meta campaign ID (optional)', helper: 'Lets a Meta Ads Manager import find this campaign even if it is renamed there; the Meta leads that came from it are added to it.')),
         const SizedBox(height: 10),
         TextField(key: const Key('cmp_audience'), controller: _audience, decoration: hubDec('Audience (optional)', hint: 'Brides 22–35, Kerala')),
         const SizedBox(height: 10),

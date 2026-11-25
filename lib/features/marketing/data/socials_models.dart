@@ -1,3 +1,6 @@
+import 'package:nizan_crm/features/marketing/data/work_review.dart';
+export 'package:nizan_crm/features/marketing/data/work_review.dart';
+
 // The Socials module's payloads (backend controllers/marketingSocialsController.js).
 
 int _i(dynamic v) => (v as num?)?.toInt() ?? 0;
@@ -225,7 +228,7 @@ String assetStageLabel(String s) => kAssetStages.firstWhere((e) => e.$1 == s, or
 String assetKindLabel(String s) => kAssetKinds.firstWhere((e) => e.$1 == s, orElse: () => (s, s)).$2;
 
 class Asset {
-  const Asset({required this.id, required this.title, this.brand = 'main', this.kind = 'still', this.media = 'image', this.stage = 'raw', this.url = '', this.thumbUrl = '', this.portfolio = '', this.page = '', this.tags = const [], this.durationSec = 0, this.sizeMb = 0, this.shootId, this.isFinal = false, this.ownerName = '', this.owner = '', this.approvedAt, this.createdAt});
+  const Asset({required this.id, required this.title, this.brand = 'main', this.kind = 'still', this.media = 'image', this.stage = 'raw', this.url = '', this.thumbUrl = '', this.portfolio = '', this.page = '', this.tags = const [], this.durationSec = 0, this.sizeMb = 0, this.shootId, this.isFinal = false, this.ownerName = '', this.owner = '', this.approvedAt, this.createdAt, this.bookingId, this.workDay = '', this.work});
   final String id, title, brand, kind, media, stage, url, thumbUrl, portfolio, page, ownerName;
 
   /// Who it belongs to: the named owner, else the person who added it.
@@ -239,6 +242,15 @@ class Asset {
   final double sizeMb;
   final String? shootId;
   final bool isFinal;
+
+  /// The booking it was picked for (an artist's footage, or one picked in the editor); null = none of its own.
+  final String? bookingId;
+
+  /// The day of a multi-day work it is from ('YYYY-MM-DD').
+  final String workDay;
+
+  /// The work it came from — its own booking, else its shoot's — with the client's review; null = it belongs to no work.
+  final AssetWork? work;
   factory Asset.fromJson(Map<String, dynamic> j) => Asset(
         id: _s(j['id']),
         title: _s(j['title']),
@@ -259,6 +271,9 @@ class Asset {
         owner: _s(j['owner']).isEmpty ? _s(j['ownerName']) : _s(j['owner']),
         approvedAt: _dt(j['approvedAt']),
         createdAt: _dt(j['createdAt']),
+        bookingId: _s(j['bookingId']).isEmpty ? null : _s(j['bookingId']),
+        workDay: _s(j['workDay']),
+        work: j['work'] is Map ? AssetWork.fromJson(_m(j['work'])) : null,
       );
 }
 

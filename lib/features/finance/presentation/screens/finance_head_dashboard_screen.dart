@@ -13,6 +13,7 @@ import 'package:nizan_crm/features/finance/presentation/widgets/month_year_picke
 import 'package:nizan_crm/features/finance/services/bank_account_service.dart';
 import 'package:nizan_crm/features/finance/services/month_end_service.dart';
 import 'package:nizan_crm/features/finance/services/tax_filing_service.dart';
+import 'package:nizan_crm/features/finance/data/bank_account.dart';
 
 String _money(num v) =>
     NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0).format(v);
@@ -197,8 +198,9 @@ class _FinanceHeadDashboardScreenState
       _Kpi('Net profit', _compact(r.netProfit), profitSub, Icons.account_balance_wallet_outlined,
           r.netProfit >= 0 ? crm.success : crm.destructive,
           route: '/company-finance/profit-loss'),
+      // the same accounts and balances as Bank balances below (and the Bank & Cash Balance screen)
       _Kpi('Cash & bank', _compact(r.totalLiquid),
-          'Bank ${_compact(r.bankBalance)} · Cash ${_compact(r.cashBalance)}',
+          'Bank ${_compact(r.bankBalance)} · Cash ${_compact(r.cashBalance)}${r.cashMissing > 0 ? ' · ${r.cashMissing} account${r.cashMissing == 1 ? '' : 's'} had no balance then' : ''}',
           Icons.savings_outlined, crm.primary,
           route: '/company-finance/bank-balance'),
       _Kpi('To collect', _compact(r.arOutstanding), 'Overdue ${_compact(r.arOverdue)}',
@@ -207,10 +209,11 @@ class _FinanceHeadDashboardScreenState
       _Kpi('To pay', _compact(r.apOutstanding), 'Overdue ${_compact(r.apOverdue)}',
           Icons.call_made_rounded, r.apOverdue > 0 ? _orange : crm.success,
           route: '/accounts/bills'),
+      // no burn = the month earned more than it spent: the runway is not running down
       _Kpi(
           'Cash runway',
-          r.cashRunwayMonths == null ? '—' : '${r.cashRunwayMonths!.toStringAsFixed(1)} mo',
-          'Burn ${_compact(r.burnRate)} / month',
+          r.cashRunwayMonths != null ? '${r.cashRunwayMonths!.toStringAsFixed(1)} mo' : (r.burnRate <= 0 ? 'No burn' : '—'),
+          r.burnRate > 0 ? 'Burn ${_compact(r.burnRate)} / month' : 'Earning more than spending this month',
           Icons.hourglass_bottom_rounded,
           (r.cashRunwayMonths ?? 99) < 3 ? crm.destructive : crm.primary,
           route: '/company-finance/cash-flow'),
@@ -368,18 +371,19 @@ class _FinanceHeadDashboardScreenState
         data: (b) {
           final active = b.accounts.where((a) => a.active).toList();
           if (active.isEmpty) return _Empty('No bank accounts added yet.');
+          // each account's balance NOW (the one the total adds up): the balance entered from the statement plus the ledger's
+          // receipts and payments since — the same figure as the Bank & Cash Balance screen
           return Column(
             children: [
               for (final a in active)
                 _Row(
+                  key: Key('fh_bank_${a.id}'),
                   left: a.name,
-                  sub: [
-                    if (a.bankName.isNotEmpty) a.bankName,
-                    if (a.asOf != null) 'as of ${DateFormat('d MMM').format(a.asOf!)}',
-                  ].join(' · '),
-                  right: _money(a.balance),
+                  sub: bankRowNote(a),
+                  subColor: bankRowStale(a) ? _amber : null,
+                  right: _money(a.currentBalance),
                 ),
-              _Row(left: 'Total', right: _money(b.totalBalance), bold: true),
+              _Row(key: const Key('fh_bank_total'), left: 'Total', right: _money(b.totalBalance), bold: true),
             ],
           );
         },
@@ -759,13 +763,29 @@ class _Card extends StatelessWidget {
   }
 }
 
+/// What a bank row's balance is made of, under its name: "AXIS BANK · 1 Oct balance + 24 entries since" for an account linked to its
+/// ledger (it moves by itself), "as of 1 Oct · not linked to a ledger — update the balance" for one that only moves when someone types
+/// a new balance.
+String bankRowNote(BankAccount a, {DateTime? now}) {
+  final day = a.asOf == null ? null : DateFormat('d MMM').format(a.asOf!);
+  final n = a.movement?.count ?? 0;
+  final how = a.isLinked
+      ? (day == null ? (n > 0 ? '$n entr${n == 1 ? 'y' : 'ies'} in its ledger' : '') : (n > 0 ? '$day balance + $n entr${n == 1 ? 'y' : 'ies'} since' : 'as of $day, no entries since'))
+      : [if (day != null) 'as of $day', 'not linked to a ledger${bankRowStale(a, now: now) ? ' — update the balance' : ''}'].join(' · ');
+  return [if (a.bankName.isNotEmpty) a.bankName, if (how.isNotEmpty) how].join(' · ');
+}
+
+/// A balance that cannot be trusted as today's: an account not linked to a ledger whose balance was typed over a week ago (or never).
+bool bankRowStale(BankAccount a, {DateTime? now}) =>
+    !a.isLinked && (a.asOf == null || (now ?? DateTime.now()).difference(a.asOf!).inDays > 7);
+
 class _Row extends StatelessWidget {
   final String left;
   final String? sub, right;
-  final Color? rightColor;
+  final Color? rightColor, subColor;
   final bool bold;
   final Widget? trailing;
-  const _Row({required this.left, this.sub, this.right, this.rightColor, this.bold = false, this.trailing});
+  const _Row({super.key, required this.left, this.sub, this.right, this.rightColor, this.subColor, this.bold = false, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -786,7 +806,7 @@ class _Row extends StatelessWidget {
                       color: crm.textPrimary,
                     )),
                 if (sub != null && sub!.isNotEmpty)
-                  Text(sub!, style: TextStyle(fontSize: 12, color: crm.textSecondary)),
+                  Text(sub!, style: TextStyle(fontSize: 12, color: subColor ?? crm.textSecondary)),
               ],
             ),
           ),

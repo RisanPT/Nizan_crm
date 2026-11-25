@@ -7,6 +7,10 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:nizan_crm/core/extensions/space_extension.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/add_booking_mode_sheet.dart';
 import 'package:nizan_crm/features/bookings/presentation/widgets/month_kpi_strip.dart';
+import 'package:nizan_crm/features/bookings/presentation/widgets/calendar_extras.dart';
+import 'package:nizan_crm/core/models/trial.dart';
+import 'package:nizan_crm/core/providers/trial_provider.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/presentation/common_widgets/reference_images.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/data/assignment_rules.dart';
@@ -206,9 +210,13 @@ class CalendarScreen extends HookConsumerWidget {
           label = fallbackAssignment?.artistName.trim() ?? 'Not Assigned';
         }
 
-        final key = assignedArtist != null
-            ? 'artist:${assignedArtist.employeeId.isNotEmpty ? assignedArtist.employeeId : assignedArtist.artistName.trim().toLowerCase()}'
-            : 'entry:${entry.id}';
+        // An influencer work gets its own pill (its own colour), even when
+        // the same artist has other works that day.
+        final key =
+            (entry.booking.isInfluencerWork ? 'inf|' : '') +
+            (assignedArtist != null
+                ? 'artist:${assignedArtist.employeeId.isNotEmpty ? assignedArtist.employeeId : assignedArtist.artistName.trim().toLowerCase()}'
+                : 'entry:${entry.id}');
         grouped.putIfAbsent(key, () => <BookingDisplayEntry>[]).add(entry);
         groupLabels[key] = label;
         groupTypes[key] = assignedArtist != null;
@@ -252,6 +260,7 @@ class CalendarScreen extends HookConsumerWidget {
     WidgetRef ref,
     CrmTheme crm,
     List<Booking> bookings,
+    List<Trial> trials,
     DateTime selectedDay,
     void Function(DateTime) onSelectDay,
   ) {
@@ -274,6 +283,7 @@ class CalendarScreen extends HookConsumerWidget {
                   ref,
                   crm,
                   bookings,
+                  trials,
                   d,
                   selected: d == sel,
                   onSelectDay: onSelectDay,
@@ -290,6 +300,7 @@ class CalendarScreen extends HookConsumerWidget {
     WidgetRef ref,
     CrmTheme crm,
     List<Booking> bookings,
+    List<Trial> trials,
     DateTime day, {
     required bool selected,
     required void Function(DateTime) onSelectDay,
@@ -310,6 +321,13 @@ class CalendarScreen extends HookConsumerWidget {
       'Dec',
     ];
     final entries = _entriesForDay(bookings, day);
+    final dayTrials = trialsOnDay(trials, day);
+    final countLine = [
+      if (entries.isNotEmpty || dayTrials.isEmpty)
+        '${entries.length} work${entries.length == 1 ? '' : 's'}',
+      if (dayTrials.isNotEmpty)
+        '${dayTrials.length} trial${dayTrials.length == 1 ? '' : 's'}',
+    ].join(' · ');
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
@@ -372,7 +390,7 @@ class CalendarScreen extends HookConsumerWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${entries.length} work${entries.length == 1 ? '' : 's'}',
+                    countLine,
                     style: TextStyle(
                       fontSize: 10.5,
                       color: selected ? Colors.white70 : crm.textSecondary,
@@ -382,7 +400,7 @@ class CalendarScreen extends HookConsumerWidget {
               ),
             ),
           ),
-          if (entries.isEmpty)
+          if (entries.isEmpty && dayTrials.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
               child: Center(
@@ -398,14 +416,25 @@ class CalendarScreen extends HookConsumerWidget {
                 // Collapse an artist's multiple works into ONE chip; unassigned
                 // works stay individual. Groups keep their first-work time order.
                 final groups = _groupEntriesForChips(entries);
+                final chips = _withTrials(
+                  [
+                    for (final g in groups)
+                      (
+                        minutes: _minutesOf(g.entries.first.serviceStart),
+                        child: _workChip(context, ref, crm, g),
+                      ),
+                  ],
+                  dayTrials,
+                  (t) => TrialCalendarChip(trial: t),
+                );
                 return Padding(
                   padding: const EdgeInsets.all(8),
                   child: Column(
                     children: [
-                      for (final g in groups)
+                      for (final c in chips)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 6),
-                          child: _workChip(context, ref, crm, g),
+                          child: c,
                         ),
                     ],
                   ),
@@ -425,7 +454,11 @@ class CalendarScreen extends HookConsumerWidget {
     final groups = <_DayChipGroup>[];
     final byArtist = <String, _DayChipGroup>{};
     for (final e in entries) {
-      final key = _artistKeyForEntry(e);
+      // An influencer work stays its own chip (its own colour).
+      final artistKey = _artistKeyForEntry(e);
+      final key = artistKey == null
+          ? null
+          : (e.booking.isInfluencerWork ? 'inf|$artistKey' : artistKey);
       if (key == null) {
         groups.add(_DayChipGroup(label: _artistLabelForEntry(e), entries: [e]));
       } else {
@@ -445,10 +478,43 @@ class CalendarScreen extends HookConsumerWidget {
   // Representative colour for a chip: the shared status if all works agree,
   // else slate (mixed). Completed shows green via _statusColor.
   static Color _groupColor(List<BookingDisplayEntry> entries) {
+    if (entries.isNotEmpty && entries.every(_isLiveInfluencer)) {
+      return kInfluencerColor;
+    }
     final statuses = entries.map((e) => e.status.toLowerCase()).toSet();
     if (statuses.length == 1) return _statusColor(statuses.first);
     return const Color(0xFF7C8E9A); // soft slate (mixed)
   }
+
+  // An influencer work that is still on (not cancelled / postponed) shows in
+  // the influencer colour; a cancelled or postponed one keeps its status colour.
+  static bool _isLiveInfluencer(BookingDisplayEntry e) {
+    final s = e.status.toLowerCase();
+    return e.booking.isInfluencerWork && s != 'cancelled' && s != 'postponed';
+  }
+
+  // Works and trials of one day in time order: [works] keep their own order,
+  // each trial goes in before the first work that starts after it.
+  static List<Widget> _withTrials(
+    List<({int minutes, Widget child})> works,
+    List<Trial> trials,
+    Widget Function(Trial) trialChild,
+  ) {
+    final out = <Widget>[];
+    var i = 0;
+    for (final w in works) {
+      while (i < trials.length && trialStartMinutes(trials[i]) < w.minutes) {
+        out.add(trialChild(trials[i++]));
+      }
+      out.add(w.child);
+    }
+    while (i < trials.length) {
+      out.add(trialChild(trials[i++]));
+    }
+    return out;
+  }
+
+  static int _minutesOf(DateTime d) => d.hour * 60 + d.minute;
 
   // One chip per artist (or per unassigned work). When the artist has several
   // works they merge into this single chip with a count; tap lists them in
@@ -521,6 +587,8 @@ class CalendarScreen extends HookConsumerWidget {
                   children: [
                     Row(
                       children: [
+                        if (entries.any((e) => e.booking.isInfluencerWork))
+                          const InfluencerMark(size: 13),
                         Expanded(
                           child: Text(
                             label,
@@ -991,6 +1059,33 @@ class CalendarScreen extends HookConsumerWidget {
       );
     }).toList();
 
+    // ── Trials on the calendar (Show: Works only / Works + trials / Trials only)
+    // Only for people who can see trials; an artist sees just their own. Trials
+    // have no place, so a place filter hides them. Works are hidden in
+    // "Trials only".
+    final canSeeTrials = ref.watch(effectiveAccessProvider).canSeeTrials;
+    final show = canSeeTrials
+        ? ref.watch(calendarShowProvider)
+        : CalendarShow.works;
+    final asyncTrials = show.showsTrials
+        ? ref.watch(isSoloArtist ? artistTrialsProvider : allTrialsProvider)
+        : null;
+    final trialsHiddenByPlace = show.showsTrials && activeGeoCount > 0;
+    final calendarTrials = show.showsTrials && !trialsHiddenByPlace
+        ? (asyncTrials?.value ?? const <Trial>[])
+              .where(
+                (t) => trialMatchesStaffFilter(
+                  t,
+                  selectedArtistFilter.value,
+                  associateIds,
+                ),
+              )
+              .toList()
+        : const <Trial>[];
+    final shownBookings = show.showsWorks
+        ? filteredCalendarBookings
+        : const <Booking>[];
+
     // ── Monthly works report ─────────────────────────────────────────────
     // Month view → the month on screen; Day/Week view → the selected day's
     // month. Uses the same artist / location filters as the calendar. With an
@@ -1235,6 +1330,19 @@ class CalendarScreen extends HookConsumerWidget {
                   error: asyncBookings.error,
                   compact: true,
                   onRetry: () => ref.invalidate(bookingProvider),
+                ),
+              ),
+            if (asyncTrials != null &&
+                asyncTrials.hasError &&
+                !asyncTrials.isLoading)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AppErrorView(
+                  error: asyncTrials.error,
+                  compact: true,
+                  onRetry: () => ref.invalidate(
+                    isSoloArtist ? artistTrialsProvider : allTrialsProvider,
+                  ),
                 ),
               ),
             // ── Page header ──────────────────────────────────────────────────
@@ -1532,6 +1640,12 @@ class CalendarScreen extends HookConsumerWidget {
                                         onTap: openGeoFilters,
                                       ),
                                     ],
+                                    if (canSeeTrials) ...[
+                                      12.w,
+                                      CalendarShowButton(
+                                        placeFilterOn: activeGeoCount > 0,
+                                      ),
+                                    ],
                                     16.w,
                                     SegmentedButton<String>(
                                       segments: const [
@@ -1567,7 +1681,8 @@ class CalendarScreen extends HookConsumerWidget {
                     ),
                     // Month KPIs (follow the artist / location filters).
                     // Money figures are management-only, so artists skip them.
-                    if (!isSoloArtist)
+                    // (Not in "Trials only" — the figures are the works'.)
+                    if (!isSoloArtist && show.showsWorks)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                         child: MonthKpiStrip(
@@ -1576,13 +1691,35 @@ class CalendarScreen extends HookConsumerWidget {
                           compact: isMobile,
                         ),
                       ),
+                    // Colour key: influencer works, and trials when shown. On a
+                    // phone the Show button sits here (the filter row is full).
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: CalendarColorKey(
+                              showsTrials: show.showsTrials,
+                              trialsHidden: trialsHiddenByPlace,
+                            ),
+                          ),
+                          if (isMobile && canSeeTrials) ...[
+                            8.w,
+                            CalendarShowButton(
+                              placeFilterOn: activeGeoCount > 0,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     Expanded(
                       child: SingleChildScrollView(
                         child: viewMode.value == 'Month'
                             ? _monthView(
                                 context,
                                 crmColors,
-                                filteredCalendarBookings,
+                                shownBookings,
+                                calendarTrials,
                                 monthFocus.value,
                                 now,
                                 onOpenDay: (day, _) async => openDayView(day),
@@ -1599,13 +1736,15 @@ class CalendarScreen extends HookConsumerWidget {
                                           weekDays,
                                           selectedDayIndex.value,
                                           selectedDayIndex,
-                                          filteredCalendarBookings,
+                                          shownBookings,
+                                          calendarTrials,
                                         ),
                                         _dayWorksColumn(
                                           context,
                                           ref,
                                           crmColors,
-                                          filteredCalendarBookings,
+                                          shownBookings,
+                                          calendarTrials,
                                           selectedDay,
                                           selected: true,
                                           onSelectDay: goToDay,
@@ -1616,7 +1755,8 @@ class CalendarScreen extends HookConsumerWidget {
                                       context,
                                       ref,
                                       crmColors,
-                                      filteredCalendarBookings,
+                                      shownBookings,
+                                      calendarTrials,
                                       selectedDay,
                                       goToDay,
                                     ))
@@ -1624,7 +1764,8 @@ class CalendarScreen extends HookConsumerWidget {
                             ? _weekView(
                                 context,
                                 crmColors,
-                                filteredCalendarBookings,
+                                shownBookings,
+                                calendarTrials,
                                 weekDays,
                                 now,
                               )
@@ -1637,14 +1778,15 @@ class CalendarScreen extends HookConsumerWidget {
                                     weekDays,
                                     selectedDayIndex.value,
                                     selectedDayIndex,
-                                    filteredCalendarBookings,
+                                    shownBookings,
+                                    calendarTrials,
                                   ),
                                   _mobileDay(
                                     context,
                                     crmColors,
                                     isSoloArtist,
                                     [
-                                      ...filteredCalendarBookings.where(
+                                      ...shownBookings.where(
                                         (b) => b.isOnDate(selectedDay),
                                       ),
                                     ]..sort(
@@ -1652,6 +1794,7 @@ class CalendarScreen extends HookConsumerWidget {
                                         b.serviceStart,
                                       ),
                                     ),
+                                    calendarTrials,
                                     selectedDay,
                                   ),
                                 ],
@@ -1674,11 +1817,24 @@ class CalendarScreen extends HookConsumerWidget {
     CrmTheme crmColors,
     bool isSoloArtist,
     List<Booking> bookings,
+    List<Trial> trials,
     DateTime day,
   ) {
     final entries = _entriesForDay(bookings, day);
+    final dayTrials = trialsOnDay(trials, day);
+    // Works and trials in time order (a trial before the first work after it).
+    final rows = <Object>[];
+    var ti = 0;
+    for (final e in entries) {
+      while (ti < dayTrials.length &&
+          trialStartMinutes(dayTrials[ti]) < _minutesOf(e.serviceStart)) {
+        rows.add(dayTrials[ti++]);
+      }
+      rows.add(e);
+    }
+    rows.addAll(dayTrials.skip(ti));
 
-    if (entries.isEmpty) {
+    if (rows.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
@@ -1715,16 +1871,21 @@ class CalendarScreen extends HookConsumerWidget {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      itemCount: entries.length,
+      itemCount: rows.length,
       separatorBuilder: (context, index) => 12.h,
       itemBuilder: (ctx, i) {
-        final entry = entries[i];
+        final row = rows[i];
+        if (row is Trial) return TrialCalendarCard(trial: row);
+        final entry = row as BookingDisplayEntry;
         final b = entry.booking;
         final isAssigned = entry.assignedStaff.cast<BookingAssignment?>().any(
           (assignment) =>
               assignment != null && assignment.artistName.trim().isNotEmpty,
         );
-        final serviceColor = _colorForService(entry.service);
+        final influencer = b.isInfluencerWork;
+        final serviceColor = influencer
+            ? kInfluencerColor
+            : _colorForService(entry.service);
         final borderColor = isAssigned
             ? serviceColor
             : Color.lerp(serviceColor, Colors.white, 0.55)!;
@@ -1831,13 +1992,29 @@ class CalendarScreen extends HookConsumerWidget {
                         color: borderColor.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        entry.service.toUpperCase(),
-                        style: TextStyle(
-                          color: borderColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      constraints: BoxConstraints(
+                        maxWidth: influencer ? 150 : double.infinity,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (influencer)
+                            InfluencerMark(color: borderColor, size: 12),
+                          Flexible(
+                            child: Text(
+                              influencer
+                                  ? 'INFLUENCER · ${entry.service.toUpperCase()}'
+                                  : entry.service.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: borderColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1879,6 +2056,7 @@ class CalendarScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     List<Booking> bookings,
+    List<Trial> trials,
     DateTime month,
     DateTime now, {
     required Future<void> Function(
@@ -1960,6 +2138,33 @@ class CalendarScreen extends HookConsumerWidget {
                         ? _entriesForDay(bookings, day)
                         : <BookingDisplayEntry>[];
                     final artistGroups = _groupBookingsByArtist(dayBookings);
+                    final dayTrials = isCurrentMonth
+                        ? trialsOnDay(trials, day)
+                        : <Trial>[];
+                    final pills = isMobile
+                        ? const <Widget>[]
+                        : _withTrials(
+                            [
+                              for (final g in artistGroups)
+                                (
+                                  minutes: _minutesOf(
+                                    g.bookings.first.serviceStart,
+                                  ),
+                                  child: _buildMonthBookingPill(context, g),
+                                ),
+                            ],
+                            dayTrials,
+                            (t) => TrialCalendarPill(trial: t),
+                          );
+                    // Phone: up to 3 work dots (violet for an influencer
+                    // work) and one teal dot when the day has a trial.
+                    final dots = <Color>[
+                      for (final e in dayBookings.take(3))
+                        e.booking.isInfluencerWork
+                            ? kInfluencerColor
+                            : _colorForService(e.service),
+                      if (dayTrials.isNotEmpty) kTrialColor,
+                    ];
 
                     return Container(
                       padding: EdgeInsets.all(isMobile ? 2 : 4),
@@ -1977,7 +2182,7 @@ class CalendarScreen extends HookConsumerWidget {
                           : Material(
                               color: Colors.transparent,
                               child: InkWell(
-                                onTap: dayBookings.isEmpty
+                                onTap: dayBookings.isEmpty && dayTrials.isEmpty
                                     ? null
                                     : () => onOpenDay(day, dayBookings),
                                 borderRadius: BorderRadius.circular(
@@ -2015,17 +2220,12 @@ class CalendarScreen extends HookConsumerWidget {
                                         ),
                                       ),
                                       if (isMobile) ...[
-                                        if (dayBookings.isNotEmpty) ...[
+                                        if (dots.isNotEmpty) ...[
                                           4.h,
                                           Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
-                                            children: dayBookings.take(3).map((
-                                              entry,
-                                            ) {
-                                              final color = _colorForService(
-                                                entry.service,
-                                              );
+                                            children: dots.map((color) {
                                               return Container(
                                                 width: 5,
                                                 height: 5,
@@ -2043,21 +2243,17 @@ class CalendarScreen extends HookConsumerWidget {
                                         ],
                                       ] else ...[
                                         6.h,
-                                        ...artistGroups
+                                        ...pills
                                             .take(maxVisibleGroups)
                                             .map(
-                                              (group) => Padding(
+                                              (pill) => Padding(
                                                 padding: const EdgeInsets.only(
                                                   bottom: 4,
                                                 ),
-                                                child: _buildMonthBookingPill(
-                                                  context,
-                                                  group,
-                                                ),
+                                                child: pill,
                                               ),
                                             ),
-                                        if (artistGroups.length >
-                                            maxVisibleGroups)
+                                        if (pills.length > maxVisibleGroups)
                                           Container(
                                             width: double.infinity,
                                             padding: const EdgeInsets.symmetric(
@@ -2071,7 +2267,7 @@ class CalendarScreen extends HookConsumerWidget {
                                                   BorderRadius.circular(999),
                                             ),
                                             child: Text(
-                                              'View all (${artistGroups.length})',
+                                              'View all (${pills.length})',
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
@@ -2105,6 +2301,7 @@ class CalendarScreen extends HookConsumerWidget {
     int selectedIndex,
     ValueNotifier<int> selectedDayIndex,
     List<Booking> bookings,
+    List<Trial> trials,
   ) {
     const dayNames = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -2126,6 +2323,7 @@ class CalendarScreen extends HookConsumerWidget {
 
           final dayName = dayNames[day.weekday % 7];
           final dayBookings = _entriesForDay(bookings, day);
+          final hasTrial = trialsOnDay(trials, day).isNotEmpty;
 
           return InkWell(
             onTap: () {
@@ -2173,15 +2371,37 @@ class CalendarScreen extends HookConsumerWidget {
                       color: isSelected ? Colors.white : crmColors.textPrimary,
                     ),
                   ),
-                  if (dayBookings.isNotEmpty) ...[
+                  if (dayBookings.isNotEmpty || hasTrial) ...[
                     4.h,
-                    Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected ? Colors.white : crmColors.primary,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (dayBookings.isNotEmpty)
+                          Container(
+                            width: 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isSelected
+                                  ? Colors.white
+                                  : crmColors.primary,
+                            ),
+                          ),
+                        if (dayBookings.isNotEmpty && hasTrial)
+                          const SizedBox(width: 3),
+                        // a day with a trial gets a teal dot
+                        if (hasTrial)
+                          Container(
+                            width: 4,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isSelected
+                                  ? Colors.white70
+                                  : kTrialColor,
+                            ),
+                          ),
+                      ],
                     ),
                   ] else ...[
                     4.h,
@@ -2587,6 +2807,7 @@ class CalendarScreen extends HookConsumerWidget {
     BuildContext context,
     CrmTheme crmColors,
     List<Booking> bookings,
+    List<Trial> trials,
     List<DateTime> weekDays,
     DateTime now,
   ) {
@@ -2682,6 +2903,21 @@ class CalendarScreen extends HookConsumerWidget {
                   ...weekDays.map((day) {
                     final dayBookings = _entriesForDay(bookings, day);
                     final artistGroups = _groupBookingsByArtist(dayBookings);
+                    final pills = _withTrials(
+                      [
+                        for (final g in artistGroups)
+                          (
+                            minutes: _minutesOf(g.bookings.first.serviceStart),
+                            child: _buildReferencePill(
+                              context,
+                              g,
+                              compact: true,
+                            ),
+                          ),
+                      ],
+                      trialsOnDay(trials, day),
+                      (t) => TrialCalendarPill(trial: t),
+                    );
 
                     return Expanded(
                       child: Column(
@@ -2702,23 +2938,19 @@ class CalendarScreen extends HookConsumerWidget {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  ...artistGroups
+                                  ...pills
                                       .take(2)
                                       .map(
-                                        (group) => Padding(
+                                        (pill) => Padding(
                                           padding: const EdgeInsets.only(
                                             bottom: 6,
                                           ),
-                                          child: _buildReferencePill(
-                                            context,
-                                            group,
-                                            compact: true,
-                                          ),
+                                          child: pill,
                                         ),
                                       ),
-                                  if (artistGroups.length > 2)
+                                  if (pills.length > 2)
                                     Text(
-                                      '+${artistGroups.length - 2} more',
+                                      '+${pills.length - 2} more',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -2774,11 +3006,21 @@ class CalendarScreen extends HookConsumerWidget {
     final isCancelled = booking.status.toLowerCase() == 'cancelled';
     final isPostponed = booking.status.toLowerCase() == 'postponed';
     final isCompleted = booking.status.toLowerCase() == 'completed';
+    final isInfluencer = group.bookings.any((e) => e.booking.isInfluencerWork);
 
     Color pillBg;
     Color pillTextColor;
 
-    if (isCancelled) {
+    if (isInfluencer && !isCancelled && !isPostponed) {
+      // Influencer works: their own colour (pale when no artist is on yet).
+      final isAssigned = bookingEntry.assignedStaff.any(
+        (a) => a.artistName.trim().isNotEmpty,
+      );
+      pillBg = isAssigned
+          ? kInfluencerColor
+          : Color.lerp(kInfluencerColor, Colors.white, 0.8)!;
+      pillTextColor = isAssigned ? Colors.white : kInfluencerColor;
+    } else if (isCancelled) {
       pillBg = const Color(0xFFEF4444); // Red
       pillTextColor = Colors.white;
     } else if (isPostponed) {
@@ -2829,6 +3071,8 @@ class CalendarScreen extends HookConsumerWidget {
         ),
         child: Row(
           children: [
+            if (isInfluencer)
+              InfluencerMark(color: pillTextColor, size: compact ? 11 : 12),
             Flexible(
               child: Text(
                 label,
@@ -2841,6 +3085,18 @@ class CalendarScreen extends HookConsumerWidget {
                 ),
               ),
             ),
+            if (isInfluencer && isCompleted)
+              Padding(
+                padding: const EdgeInsets.only(left: 3),
+                child: Tooltip(
+                  message: 'Completed',
+                  child: Icon(
+                    Icons.check_circle,
+                    size: compact ? 11 : 12,
+                    color: pillTextColor,
+                  ),
+                ),
+              ),
             _AssociateBadge(entries: group.bookings, compact: true),
           ],
         ),
@@ -3310,12 +3566,16 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   @override
   Widget build(BuildContext context) {
     final crm = widget.crm;
+    // (an influencer work that is still on shows in the influencer colour)
     final head = single
-        ? CalendarScreen._statusColor(forms.first.entry.status)
+        ? CalendarScreen._groupColor([forms.first.entry])
         : crm.primary;
     final headerTitle = single ? forms.first.entry.summaryLabel : widget.title;
     final headerSub = single
-        ? CalendarScreen._fmtFullDate(forms.first.entry.serviceStart)
+        ? [
+            if (forms.first.entry.booking.isInfluencerWork) '★ Influencer work',
+            CalendarScreen._fmtFullDate(forms.first.entry.serviceStart),
+          ].join(' · ')
         : '${forms.length} works · ${CalendarScreen._fmtFullDate(forms.first.entry.serviceStart)}';
 
     return Dialog(
@@ -3426,12 +3686,13 @@ class _WorkDetailsDialogState extends ConsumerState<_WorkDetailsDialog> {
   Widget _workCard(int index, _WorkForm f) {
     final crm = widget.crm;
     final e = f.entry;
-    final c = CalendarScreen._statusColor(e.status);
+    final c = CalendarScreen._groupColor([e]);
     final slot = e.eventSlot.trim();
     final sub = [
       '${CalendarScreen._fmtTime(e.serviceStart)} – ${CalendarScreen._fmtTime(e.serviceEnd)}',
       if (slot.isNotEmpty) slot,
       if (e.service.trim().isNotEmpty) e.service.trim(),
+      if (e.booking.isInfluencerWork) '★ Influencer work',
     ].join('  ·  ');
 
     return Container(

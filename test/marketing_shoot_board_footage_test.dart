@@ -37,9 +37,14 @@ Map<String, dynamic> _detail({List<Map<String, dynamic>>? refs, Map<String, dyna
       ],
       'logistics': logistics ?? {'callTime': '06:30', 'mapUrl': 'https://maps.app.goo.gl/x', 'notes': 'Gate 2', 'checklist': [{'text': 'Ring light', 'done': false}, {'text': 'Steamer', 'done': true, 'byName': 'Faies'}]},
       'milestones': [for (final k in ['brief', 'pre_production', 'production', 'post_production', 'distribution']) {'key': k, 'label': k, 'date': '2026-11-20', 'doneAt': null}],
+      'cameraRefs': [
+        {'url': 'https://res.cloudinary.com/x/image/upload/v1/dolly.jpg', 'label': 'Dolly in', 'kind': 'image', 'addedByName': 'Ashique'},
+        {'url': 'https://www.instagram.com/reel/Cx9/', 'label': 'Gimbal orbit', 'kind': 'video', 'addedByName': 'Ashique'},
+      ],
       'documents': [
         {'key': 'd1', 'part': 'moodboard', 'name': 'Lookbook Nov.pdf', 'label': 'Bridal lookbook', 'sizeBytes': 1258291, 'pages': 3, 'addedByName': 'Shahala', 'addedAt': '2026-11-18T05:00:00Z'},
         {'key': 'd2', 'part': 'storyboard', 'name': 'storyboard-v2.pdf', 'sizeBytes': 40960, 'pages': 12, 'addedByName': 'Salmaan'},
+        {'key': 'd3', 'part': 'camera', 'name': 'camera-moves.pdf', 'label': 'Gimbal + dolly moves', 'sizeBytes': 81920, 'pages': 4, 'addedByName': 'Ashique'},
       ],
       'storyboard': [
         {'key': 'fk1', 'shotNo': '1', 'description': 'Bride walks in', 'shotType': 'Wide', 'durationSec': 8, 'imageUrl': 'https://res.cloudinary.com/x/image/upload/v1/sketch1.jpg', 'shotAt': '2026-11-20T04:10:00Z', 'shotByName': 'Ashique'},
@@ -71,6 +76,20 @@ class _FakePortfolio extends MarketingPortfolioService {
   Future<void> renameMoodboardItem(String shootId, String url, String label) async => renamed.add((url, label));
   @override
   Future<void> removeMoodboardItem(String shootId, String url) async => removed.add(url);
+  // Camera Movement's own pictures and video links
+  final camAdded = <List<Map<String, dynamic>>>[];
+  final camRenamed = <(String, String)>[];
+  final camRemoved = <String>[];
+  @override
+  Future<int> addCameraRefs(String shootId, List<Map<String, dynamic>> items) async {
+    camAdded.add(items);
+    return items.length;
+  }
+
+  @override
+  Future<void> renameCameraRef(String shootId, String url, String label) async => camRenamed.add((url, label));
+  @override
+  Future<void> removeCameraRef(String shootId, String url) async => camRemoved.add(url);
   @override
   Future<void> saveLogistics(String shootId, Map<String, dynamic> body) async => logistics.add(body);
   final ticks = <(String, bool)>[];
@@ -407,6 +426,79 @@ void main() {
       expect(r.p.docRemovals.single, 'd2');
     });
 
+    testWidgets('the views in order: Brief, Content Plan second, then Moodboard, Storyboard, Camera Movement, Crew & Logistics, Approvals', (t) async {
+      await _pump(t, const ShootDetailCard(id: 's1'));
+      final keys = ['brief', 'plan', 'moodboard', 'storyboard', 'camera', 'crew', 'approvals'];
+      final xs = [for (final k in keys) t.getTopLeft(_k('pf_part_$k'))];
+      for (var i = 1; i < xs.length; i++) {
+        final before = xs[i - 1], here = xs[i];
+        expect(here.dy > before.dy || (here.dy == before.dy && here.dx > before.dx), isTrue, reason: '${keys[i]} comes after ${keys[i - 1]}');
+      }
+      expect(find.descendant(of: _k('pf_part_camera'), matching: find.text('Camera Movement')), findsOneWidget);
+    });
+
+    testWidgets('Camera Movement: its own PDFs (read like the moodboard\'s); Upload PDF puts one there; removing asks in its words', (t) async {
+      final r = await _pump(t, const ShootDetailCard(id: 's1'));
+      await t.tap(_k('pf_part_camera'));
+      await t.pumpAndSettle();
+      expect(_k('pf_camera'), findsOneWidget);
+      expect(_k('pf_pdf_d3'), findsOneWidget);
+      expect([_k('pf_pdf_d1').evaluate().isEmpty, _k('pf_pdf_d2').evaluate().isEmpty], [true, true], reason: 'the moodboard\'s and the storyboard\'s PDFs stay there');
+      expect(find.text('Gimbal + dolly moves'), findsOneWidget);
+      expect(find.textContaining('4 pages · 80 KB · Ashique'), findsOneWidget);
+      await t.tap(_k('pf_pdf_upload_camera'));
+      await t.pumpAndSettle();
+      expect(r.p.uploads.single.$1, 'camera');
+      await t.tap(_k('pf_pdf_menu_d3'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Remove'));
+      await t.pumpAndSettle();
+      expect(find.text('"Gimbal + dolly moves" comes off the camera movement plan for everyone.'), findsOneWidget);
+    });
+
+    testWidgets('Camera Movement: its own pictures and video links (a reel shows as a video) — never the moodboard\'s', (t) async {
+      await _pump(t, const ShootDetailCard(id: 's1'));
+      await t.tap(_k('pf_part_camera'));
+      await t.pumpAndSettle();
+      expect(t.widget<Text>(_k('pf_camera_count')).data, '2 items · 1 picture · 1 video');
+      expect([_k('pf_cam_0').evaluate().length, _k('pf_cam_1').evaluate().length, _k('pf_mood_0').evaluate().length], [1, 1, 0]);
+      expect(find.descendant(of: _k('pf_cam_1'), matching: find.byIcon(Icons.play_circle_outline_rounded)), findsOneWidget, reason: 'the reel is a video');
+      expect(find.text('Gimbal orbit'), findsWidgets);
+    });
+
+    testWidgets('Camera Movement: pictures uploaded and a video link added go to its board; named and removed there; no "cover" from here', (t) async {
+      final r = await _pump(t, const ShootDetailCard(id: 's1'));
+      await t.tap(_k('pf_part_camera'));
+      await t.pumpAndSettle();
+      await t.tap(_k('pf_camera_add_pictures'));
+      await t.pumpAndSettle();
+      expect(r.p.camAdded.single.map((x) => x['url']), ['https://res.cloudinary.com/x/image/upload/v1/look1.jpg', 'https://res.cloudinary.com/x/image/upload/v1/look2.jpg']);
+      expect(r.p.added, isEmpty, reason: 'nothing on the moodboard');
+      await t.tap(_k('pf_camera_add_link'));
+      await t.pumpAndSettle();
+      expect(find.text('Add a video link'), findsWidgets);
+      await t.enterText(_k('pf_mood_link_url'), 'https://youtu.be/gimbal1');
+      await t.enterText(_k('pf_mood_link_label'), 'Gimbal orbit 2');
+      await t.tap(_k('pf_mood_link_ok'));
+      await t.pumpAndSettle();
+      expect(r.p.camAdded.last, [{'url': 'https://youtu.be/gimbal1', 'label': 'Gimbal orbit 2'}]);
+      await t.tap(_k('pf_cam_menu_0'));
+      await t.pumpAndSettle();
+      expect(find.text('Use as the cover'), findsNothing);
+      await t.tap(find.text('Name it'));
+      await t.pumpAndSettle();
+      await t.enterText(_k('pf_mood_label'), 'Slow dolly in');
+      await t.tap(_k('pf_mood_label_ok'));
+      await t.pumpAndSettle();
+      expect(r.p.camRenamed.single, ('https://res.cloudinary.com/x/image/upload/v1/dolly.jpg', 'Slow dolly in'));
+      await t.tap(_k('pf_cam_menu_1'));
+      await t.pumpAndSettle();
+      await t.tap(find.text('Remove'));
+      await t.pumpAndSettle();
+      expect(r.p.camRemoved.single, 'https://www.instagram.com/reel/Cx9/');
+      expect([r.p.renamed, r.p.removed], [isEmpty, isEmpty]);
+    });
+
     testWidgets('a PDF over 25 MB is refused before it is sent', (t) async {
       _pickedPdf = Uint8List(25 * 1024 * 1024 + 1);
       addTearDown(() => _pickedPdf = Uint8List.fromList([37, 80, 68, 70, 45, 49, 46, 52]));
@@ -419,9 +511,13 @@ void main() {
       expect(find.textContaining('over 25 MB'), findsOneWidget);
     });
 
-    testWidgets('a phone (390 wide): the PDFs fit on the moodboard and the storyboard, and the reader opens full screen', (t) async {
+    testWidgets('a phone (390 wide): the PDFs fit on the moodboard, the storyboard and Camera Movement, and the reader opens full screen', (t) async {
       await _pump(t, const ShootDetailCard(id: 's1'), size: const Size(390, 1800));
+      expect(t.takeException(), isNull, reason: 'the seven view chips wrap');
       await t.tap(_k('pf_part_moodboard'));
+      await t.pumpAndSettle();
+      expect(t.takeException(), isNull);
+      await t.tap(_k('pf_part_camera'));
       await t.pumpAndSettle();
       expect(t.takeException(), isNull);
       await t.tap(_k('pf_part_storyboard'));

@@ -37,6 +37,7 @@ const kMarketingNav = <MktNavItem>[
     MktNavItem('portfolio.reports', 'Shoot Reports', Icons.bar_chart_rounded, '/marketing/portfolio?tab=reports'),
     MktNavItem('portfolio.gallery', 'Gallery', Icons.photo_library_outlined, '/marketing/portfolio?tab=gallery'),
     MktNavItem('portfolio.footage', 'Footage', Icons.video_library_outlined, '/marketing/portfolio?tab=footage'),
+    MktNavItem('portfolio.quality', 'Artist Quality', Icons.star_half_rounded, '/marketing/portfolio?tab=quality'),
   ]),
   MktNavItem('socials', 'Socials', Icons.share_outlined, '/marketing/socials', children: [
     MktNavItem('socials.overview', 'Overview', Icons.home_outlined, '/marketing/socials?tab=overview'),
