@@ -35,7 +35,13 @@ class _Bookings extends BookingNotifier {
   @override
   FutureOr<List<Booking>> build() => const [];
   @override
-  Future<Booking> updateBooking(Booking booking, {bool confirmFleetConflict = false, bool confirmArtistConflict = false, Map<String, dynamic>? extraBody}) async {
+  Future<Booking> updateBooking(
+    Booking booking, {
+    bool confirmFleetConflict = false,
+    bool confirmDriverDay = false,
+    bool confirmArtistConflict = false,
+    Map<String, dynamic>? extraBody,
+  }) async {
     saved.add(booking.status);
     return booking;
   }
