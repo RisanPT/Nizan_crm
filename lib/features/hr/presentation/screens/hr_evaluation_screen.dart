@@ -692,6 +692,9 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
   // ─── 5-PILLAR EXISTING ROW & HELPERS ─────────────────────────────────────
   Widget _row(BuildContext context, WidgetRef ref, CrmTheme crm, Employee e,
       EmployeeEvaluation? ev, EvalPeriod period, bool canManage) {
+    // Nobody evaluates themselves (the backend refuses it too).
+    final myEmployeeId = ref.watch(authSessionProvider)?.employeeId ?? '';
+    final isSelf = myEmployeeId.isNotEmpty && e.id == myEmployeeId;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -735,7 +738,7 @@ class _HrEvaluationScreenState extends ConsumerState<HrEvaluationScreen> with Si
                 )
               else
                 Text('Not evaluated', style: TextStyle(fontSize: 11, color: crm.textSecondary)),
-              if (canManage) ...[
+              if (canManage && !isSelf) ...[
                 6.wg,
                 TextButton(
                   onPressed: () => _openEditor(context, ref, e, ev, period),

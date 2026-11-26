@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/routing/app_router.dart' show isRouteAllowed;
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
@@ -309,11 +310,11 @@ class _HrServicesLauncherDialogState extends ConsumerState<_HrServicesLauncherDi
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
 
-    // Filter services by user permissions
+    // Filter services by user permissions: only tiles the router will open.
     final allowedServices = kHrServices.where((s) {
       if (!kShowHrPreviewScreens && (s.route == '/hr/policies' || s.route == '/hr/department-scoring')) return false;
+      if (!isRouteAllowed(s.route, access)) return false;
       if (s.isAllowed != null) return s.isAllowed!(access);
-      // Fallback: everyone can see ESS / leave / approvals, manager gates handled on page
       return true;
     }).toList();
 

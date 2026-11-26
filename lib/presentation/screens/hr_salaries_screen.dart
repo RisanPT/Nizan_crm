@@ -16,6 +16,7 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
 
 const _monthNames = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -40,9 +41,6 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
   final TextEditingController _searchCtrl = TextEditingController();
   bool _isGenerating = false;
   bool _isTimeboxGenerating = false;
-  /// Lookup: crmEmployeeId → PayrollRow for the current month.
-  /// Populated when the administrative tab is visible.
-  Map<String, PayrollRow> _payrollRowByCrmId = {};
 
   @override
   void initState() {
@@ -138,7 +136,8 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
             to: tbMonth.to,
           );
       ref.refreshData.salaries();
-      ref.refreshData.hr(); // payroll preview
+      ref.refreshData.hr(); // attendance screens' payroll preview
+      ref.invalidate(payrollPreviewForMonthProvider); // this screen's preview
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -163,7 +162,9 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Submit to Accounts'),
-        content: Text('Are you sure you want to submit $draftCount draft payroll records to Accounts for payment?'),
+        // The cards follow the filters, but Submit sends every draft of the month.
+        content: Text('Submit every draft salary slip for ${_monthNames[month - 1]} $year '
+            '(all departments; $draftCount in the current view) to Accounts for payment?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Submit')),
@@ -348,15 +349,20 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     final employees = (ref.read(employeesProvider).value ?? const <Employee>[])
         .where((e) => e.isActive)
         .toList();
-    String? selectedEmpId = employees.isNotEmpty ? employees.first.id : null;
+    final first = employees.isNotEmpty ? employees.first : null;
+    String? selectedEmpId = first?.id;
     final filter = ref.read(salaryFilterProvider);
 
-    final baseCtrl = TextEditingController(text: '0');
+    // Prefill from the pre-selected employee (same as picking them).
+    final baseCtrl = TextEditingController(
+        text: (first?.baseSalary ?? 0).toStringAsFixed(0));
     final incentivesCtrl = TextEditingController(text: '0');
     final roomRentCtrl = TextEditingController(text: '0');
-    final allowCtrl = TextEditingController(text: '0');
+    final allowCtrl = TextEditingController(
+        text: (first?.allowances ?? 0).toStringAsFixed(0));
     final bonusCtrl = TextEditingController(text: '0');
-    final dedCtrl = TextEditingController(text: '0');
+    final dedCtrl = TextEditingController(
+        text: (first?.deductions ?? 0).toStringAsFixed(0));
     final notesCtrl = TextEditingController();
 
     showDialog(
@@ -689,19 +695,39 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     final isMobile = ResponsiveBuilder.isMobile(context);
     final filter = ref.watch(salaryFilterProvider);
     final salariesAsync = ref.watch(salariesProvider);
-    // Watch Timebox payroll preview to get attendance data for admin salary cards.
-    final payrollPreviewAsync = ref.watch(payrollPreviewProvider);
-    payrollPreviewAsync.whenData((preview) {
-      final map = <String, PayrollRow>{};
-      for (final row in preview.rows) {
-        if (row.crmEmployeeId != null) {
-          map[row.crmEmployeeId!] = row;
-        }
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _payrollRowByCrmId = map);
-      });
-    });
+    // Timebox payroll preview for THIS screen's month / year (not the
+    // attendance screens' month), for the attendance badges on admin cards.
+    final previewKey = (year: filter.year, month: filter.month);
+    final payrollPreviewAsync = ref.watch(payrollPreviewForMonthProvider(previewKey));
+    // Derived in build: no setState here (that re-built every frame).
+    final payrollRowByCrmId = <String, PayrollRow>{
+      for (final row in payrollPreviewAsync.value?.rows ?? const <PayrollRow>[])
+        if (row.crmEmployeeId != null) row.crmEmployeeId!: row,
+    };
+    final session = ref.watch(authSessionProvider);
+    final isAdminUser = session?.role == 'admin';
+    final myEmployeeId = session?.employeeId ?? '';
+    final nowYear = DateTime.now().year;
+    final yearOptions = <int>{
+      for (var y = nowYear - 3; y <= nowYear + 1; y++) y,
+      filter.year,
+    }.toList()
+      ..sort();
+    final departmentNames = ref
+            .watch(departmentsProvider)
+            .value
+            ?.where((d) => d.active)
+            .map((d) => d.name)
+            .toList() ??
+        const <String>[];
+    // Operations slips are always filed under "Operations"; keep the current
+    // choice listed even if that department was renamed / deactivated.
+    final deptOptions = {
+      ...departmentNames,
+      'Operations',
+      if (filter.department != 'All') filter.department,
+    }.toList()
+      ..sort();
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -877,7 +903,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                           DropdownButton<int>(
                             value: filter.year,
                             underline: const SizedBox(),
-                            items: [2024, 2025, 2026, 2027]
+                            items: yearOptions
                                 .map((y) => DropdownMenuItem(
                                       value: y,
                                       child: Text('$y'),
@@ -892,7 +918,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                           ),
                           const Spacer(),
                           Text(
-                            '${stats.count} Employees in Period',
+                            '${stats.count} slips match the filters',
                             style: TextStyle(
                                 fontSize: 12, color: crm.textSecondary),
                           ),
@@ -995,7 +1021,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     error: e,
                     compact: true,
                     title: 'Timebox attendance could not be loaded',
-                    onRetry: () => ref.invalidate(payrollPreviewProvider),
+                    onRetry: () => ref.invalidate(payrollPreviewForMonthProvider(previewKey)),
                   ),
                 ),
                 data: (preview) {
@@ -1030,7 +1056,7 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                             foregroundColor: const Color(0xFF6366F1),
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           ),
-                          onPressed: () => ref.invalidate(payrollPreviewProvider),
+                          onPressed: () => ref.invalidate(payrollPreviewForMonthProvider(previewKey)),
                           child: const Text('Refresh', style: TextStyle(fontSize: 12)),
                         ),
                       ],
@@ -1064,14 +1090,10 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                 DropdownButton<String>(
                   value: filter.department,
                   underline: const SizedBox(),
-                  items: const [
-                    DropdownMenuItem(value: 'All', child: Text('All Departments')),
-                    DropdownMenuItem(value: 'HR', child: Text('HR')),
-                    DropdownMenuItem(value: 'IT', child: Text('IT')),
-                    DropdownMenuItem(value: 'Marketing', child: Text('Marketing')),
-                    DropdownMenuItem(value: 'Sales', child: Text('Sales')),
-                    DropdownMenuItem(value: 'Accounts', child: Text('Accounts')),
-                    DropdownMenuItem(value: 'Operations', child: Text('Operations')),
+                  items: [
+                    const DropdownMenuItem(value: 'All', child: Text('All Departments')),
+                    for (final d in deptOptions)
+                      DropdownMenuItem(value: d, child: Text(d)),
                   ],
                   onChanged: (val) {
                     if (val != null) {
@@ -1158,8 +1180,11 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     separatorBuilder: (context, index) => 8.h,
                     itemBuilder: (ctx, idx) {
                       final s = list[idx];
-                      final payrollRow = _payrollRowByCrmId[s.employeeId];
-                      return _buildSalaryCard(crm, s, payrollRow: payrollRow);
+                      final payrollRow = payrollRowByCrmId[s.employeeId];
+                      return _buildSalaryCard(crm, s,
+                          payrollRow: payrollRow,
+                          isAdminUser: isAdminUser,
+                          myEmployeeId: myEmployeeId);
                     },
                   );
                 },
@@ -1226,7 +1251,14 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
     );
   }
 
-  Widget _buildSalaryCard(CrmTheme crm, Salary s, {PayrollRow? payrollRow}) {
+  Widget _buildSalaryCard(CrmTheme crm, Salary s,
+      {PayrollRow? payrollRow,
+      bool isAdminUser = false,
+      String myEmployeeId = ''}) {
+    // Nobody approves their own slip (the backend refuses it too).
+    final isOwnSlip = !isAdminUser &&
+        myEmployeeId.isNotEmpty &&
+        s.employeeId == myEmployeeId;
     final statusColor = s.isPaid
         ? Colors.green
         : (s.status == 'approved_by_hr' ? Colors.blue : Colors.orange);
@@ -1413,12 +1445,14 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                 icon: const Icon(Icons.visibility_outlined, size: 18),
                 onPressed: () => _showViewPayslipDialog(s),
               ),
-              IconButton(
-                tooltip: 'Adjust / Edit',
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                onPressed: () => _showEditSalaryDialog(s),
-              ),
-              if (s.status == 'draft')
+              // A paid slip is final; only an admin may correct it.
+              if (!s.isPaid || isAdminUser)
+                IconButton(
+                  tooltip: 'Adjust / Edit',
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  onPressed: () => _showEditSalaryDialog(s),
+                ),
+              if (s.status == 'draft' && !isOwnSlip)
                 IconButton(
                   tooltip: 'HR Approve',
                   icon: const Icon(Icons.check_circle_outline,
@@ -1434,12 +1468,48 @@ class _HRSalariesScreenState extends ConsumerState<HRSalariesScreen>
                     }
                   },
                 ),
+              // An approved (not yet paid) slip can go back to draft to be
+              // corrected and approved again.
+              if (s.status == 'approved_by_hr')
+                IconButton(
+                  tooltip: 'Back to draft',
+                  icon: const Icon(Icons.undo_rounded, size: 18, color: Colors.orange),
+                  onPressed: () async {
+                    try {
+                      await ref.read(salaryServiceProvider).moveSalaryToDraft(s.id);
+                      ref.refreshData.salaries();
+                    } catch (e) {
+                      if (mounted) showErrorSnackBar(context, e);
+                    }
+                  },
+                ),
               if (!s.isPaid)
                 IconButton(
                   tooltip: 'Delete Slip',
                   icon: const Icon(Icons.delete_outline,
                       size: 18, color: Colors.red),
                   onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete salary slip?'),
+                        content: Text(
+                            'Delete the ${_monthNames[s.month - 1]} ${s.year} slip of '
+                            '${s.employeeName} (${_formatCurrency(s.netAmount)})? '
+                            'This cannot be undone.'),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel')),
+                          FilledButton(
+                              style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Delete')),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
                     try {
                       await ref
                           .read(salaryServiceProvider)

@@ -26,8 +26,15 @@ void main() {
     });
 
     test('500 → server problem', () {
-      expect(friendlyErrorMessage(_resp(503)).toLowerCase(),
+      expect(friendlyErrorMessage(_resp(500)).toLowerCase(),
           contains('server ran into a problem'));
+    });
+
+    test('502/503/504 → server temporarily unavailable', () {
+      for (final code in [502, 503, 504]) {
+        expect(friendlyErrorMessage(_resp(code)).toLowerCase(),
+            contains('temporarily unavailable'), reason: '$code');
+      }
     });
 
     test('401 → session expired', () {
@@ -56,13 +63,24 @@ void main() {
           'Please fill all fields');
     });
 
-    test('a leaked Dio/technical dump falls back to the generic line', () {
+    test('a leaked Dio status dump is humanised from the status it names, never shown raw', () {
       final dump = Exception(
           'This exception was thrown because the response has a status code of 404 and RequestOptions.validateStatus was configured to throw');
       final msg = friendlyErrorMessage(dump);
       expect(msg, isNot(contains('status code')));
       expect(msg, isNot(contains('RequestOptions')));
-      expect(msg, 'Something went wrong. Please try again.');
+      expect(msg, "This isn't available right now. It may have been moved or removed.");
+      expect(friendlyErrorTitle(dump), 'Not found');
+    });
+
+    test('a leaked technical dump with no status falls back to the generic line', () {
+      for (final dump in [
+        Exception("type 'Null' is not a subtype of type 'String' in type cast"),
+        Exception('DioException [unknown]: null RequestOptions(path: /x)'),
+        Exception('NoSuchMethodError: The getter \'length\' was called on null.'),
+      ]) {
+        expect(friendlyErrorMessage(dump), 'Something went wrong. Please try again.', reason: '$dump');
+      }
     });
 
     test('uses the provided fallback for unrecognised errors', () {

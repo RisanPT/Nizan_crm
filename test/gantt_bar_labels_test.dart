@@ -141,10 +141,13 @@ void main() {
   });
 
   testWidgets('a bar near the end of the timeline puts its label on the LEFT when it would not fit on the right', (tester) async {
+    // The timeline always runs 14–20 days past the last date (+14, then to the Sunday). At week zoom that is
+    // ~220–314px — sometimes room for the 300px-capped label, depending on today's weekday. At month zoom
+    // (~5.3px a day) it is never room, so the left placement is tested on every day of the week.
     await _pump(tester, [
       _task('first', 'Kick-off', from: 0, days: 3),
       _task('last', 'Final brand guidelines review, sign-off and handover', from: 60, days: 2),
-    ]);
+    ], zoom: GanttZoomScale.month);
     final bar = tester.getRect(_bar('last'));
     final label = tester.getRect(_label('last'));
     expect(label.right, lessThanOrEqualTo(bar.left - 6));

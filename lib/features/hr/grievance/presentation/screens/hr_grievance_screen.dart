@@ -24,6 +24,8 @@ Color _statusColor(String s, CrmTheme crm) {
       return const Color(0xFF0D9488); // Teal
     case 'in_review':
       return const Color(0xFFD97706); // Amber
+    case 'withdrawn':
+      return const Color(0xFF6B7280); // Grey
     default:
       return const Color(0xFF601A29); // Open - Maroon
   }
@@ -66,7 +68,7 @@ class _HrGrievanceScreenState extends ConsumerState<HrGrievanceScreen> {
     final isManager = access.isFullAccess ||
         access.isDepartmentHead ||
         access.has('grievance', false) ||
-        access.has('staff', false);
+        access.canSeeStaff;
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Raised Cases'),
@@ -578,7 +580,9 @@ class _HrGrievanceScreenState extends ConsumerState<HrGrievanceScreen> {
                   label: const Text('Withdraw Case'),
                   style: TextButton.styleFrom(foregroundColor: Colors.red),
                 ),
-              if (!isMine && g.status != 'resolved' && g.status != 'closed')
+              // HR keeps an action on resolved / closed cases too (close or
+              // reopen); a withdrawn case is the employee's call and stays as is.
+              if (!isMine && g.status != 'withdrawn')
                 FilledButton.tonalIcon(
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF601A29).withValues(alpha: 0.1),
@@ -587,7 +591,10 @@ class _HrGrievanceScreenState extends ConsumerState<HrGrievanceScreen> {
                   ),
                   onPressed: () => _updateCase(g),
                   icon: const Icon(Icons.rate_review_outlined, size: 15),
-                  label: const Text('Investigate / Resolve', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                  label: Text(
+                    (g.status == 'resolved' || g.status == 'closed') ? 'Close / Reopen' : 'Investigate / Resolve',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
                 ),
             ],
           ),
@@ -640,7 +647,11 @@ class _HrGrievanceScreenState extends ConsumerState<HrGrievanceScreen> {
                   initialValue: status,
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: 'Case Status'),
-                  items: grievanceStatuses.map((s) => DropdownMenuItem(value: s, child: Text(grievanceLabel(s)))).toList(),
+                  // Withdrawing is the employee's action, not an HR status.
+                  items: grievanceStatuses
+                      .where((s) => s != 'withdrawn')
+                      .map((s) => DropdownMenuItem(value: s, child: Text(grievanceLabel(s))))
+                      .toList(),
                   onChanged: (v) => setStateDlg(() => status = v ?? status),
                 ),
                 const SizedBox(height: 12),

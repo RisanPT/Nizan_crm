@@ -10,6 +10,9 @@ import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/onboarding/service/onboarding_service.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 import 'package:nizan_crm/features/hr/data/timebox_models.dart';
+import 'package:nizan_crm/features/hr/designations/data/designation_models.dart';
+import 'package:nizan_crm/features/hr/designations/service/designation_service.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
 
 /// Shows the complete employee onboarding & profile editor modal dialog.
 /// Captures identity, hierarchy, dates, compensation, statutory (EPF/ESI/UAN),
@@ -18,6 +21,9 @@ Future<Employee?> showCompleteOnboardingDialog(
   BuildContext context, {
   Employee? employee,
   bool startOnboardingChecklist = true,
+  /// New hires only: 'administrative' leaves Department unselected (HR must
+  /// pick one); anything else keeps the Operations default.
+  String? defaultCategory,
 }) {
   return showDialog<Employee>(
     context: context,
@@ -25,6 +31,7 @@ Future<Employee?> showCompleteOnboardingDialog(
     builder: (ctx) => _CompleteOnboardingDialog(
       employee: employee,
       startOnboardingChecklist: startOnboardingChecklist,
+      defaultCategory: defaultCategory,
     ),
   );
 }
@@ -32,10 +39,12 @@ Future<Employee?> showCompleteOnboardingDialog(
 class _CompleteOnboardingDialog extends ConsumerStatefulWidget {
   final Employee? employee;
   final bool startOnboardingChecklist;
+  final String? defaultCategory;
 
   const _CompleteOnboardingDialog({
     this.employee,
     this.startOnboardingChecklist = true,
+    this.defaultCategory,
   });
 
   @override
@@ -98,19 +107,106 @@ class _CompleteOnboardingDialogState
   List<TimeboxEmployee> _timeboxEmployees = [];
   bool _loadingTimebox = true;
 
-  final List<String> _departments = const [
+  /// Designations-master id the title was picked from (null = free text kept from before).
+  String? _designationId;
+
+  /// Only used while the Departments master is loading or unreachable.
+  static const List<String> _fallbackDepartments = [
     'Operations',
     'HR',
     'Sales',
     'IT',
     'Finance',
-    'Logistics',
-    'Creative',
     'Marketing',
     'Management',
-    'Administration',
-    'General',
   ];
+
+  /// Department options: the active Departments master, plus the employee's
+  /// current department if it is not in it, so opening the form never changes it.
+  List<String> _departmentOptions(List<String> master) {
+    final list = master.isEmpty ? [..._fallbackDepartments] : [...master];
+    if (_department.isNotEmpty && !list.contains(_department)) list.insert(0, _department);
+    return list;
+  }
+
+  /// Employee.category accepts only these values (backend enum).
+  static const Set<String> _validCategories = {
+    'operations', 'administrative', 'creative', 'it', 'marketing', 'sales', 'admin',
+  };
+
+  /// Category to save. An edit that keeps the department keeps the stored
+  /// category; otherwise it is derived from the department, and any department
+  /// without its own category (HR, Finance, CRM…) is 'administrative'.
+  String _categoryToSave() {
+    final e = widget.employee;
+    if (e != null && e.department == _department && _validCategories.contains(e.category)) {
+      return e.category;
+    }
+    switch (_department.trim().toLowerCase()) {
+      case 'operations':
+      case 'artist':
+      case 'fleet':
+        return 'operations';
+      case 'it':
+        return 'it';
+      case 'marketing':
+        return 'marketing';
+      case 'sales':
+        return 'sales';
+      default:
+        return 'administrative';
+    }
+  }
+
+  /// artistRole to save. Edits keep the stored value (it drives artist/driver
+  /// assignment elsewhere); new hires get one from the department.
+  String _artistRoleToSave() {
+    final e = widget.employee;
+    if (e != null && e.artistRole.isNotEmpty) return e.artistRole;
+    switch (_department.trim().toLowerCase()) {
+      case 'operations':
+      case 'artist':
+        return 'artist';
+      case 'fleet':
+        return 'driver';
+      default:
+        return 'staff';
+    }
+  }
+
+  /// Every Employee.type the backend stores (enum), so a stored value always
+  /// has a matching dropdown item and is saved back unchanged.
+  static const Map<String, String> _typeLabels = {
+    'in-house': 'Permanent (In-House)',
+    'full-time': 'Full-Time',
+    'outsource': 'Outsource / Vendor',
+    'contract': 'Fixed Term Contract',
+  };
+
+  /// The calendar day a stored date stands for. New saves are UTC midnight of
+  /// the day; older ones were the browser's local midnight, read back locally.
+  static DateTime? _calendarDay(DateTime? d) {
+    if (d == null) return null;
+    final u = d.toUtc();
+    if (u.hour == 0 && u.minute == 0 && u.second == 0 && u.millisecond == 0) {
+      return DateTime(u.year, u.month, u.day);
+    }
+    final l = d.toLocal();
+    return DateTime(l.year, l.month, l.day);
+  }
+
+  static DateTime _today() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  /// Date picker whose initial day always sits inside [first, last].
+  Future<DateTime?> _pickDay(DateTime? initial, DateTime first, DateTime last) {
+    var init = initial ?? _today();
+    if (init.isBefore(first)) init = first;
+    final end = init.isAfter(last) ? init : last;
+    return showDatePicker(context: context, initialDate: init, firstDate: first, lastDate: end);
+  }
 
   @override
   void initState() {
@@ -125,7 +221,7 @@ class _CompleteOnboardingDialogState
     _codeCtrl = TextEditingController(text: e?.employeeCode ?? '');
     _emailCtrl = TextEditingController(text: e?.email ?? '');
     _phoneCtrl = TextEditingController(text: e?.phone ?? '');
-    _dateOfBirth = e?.dateOfBirth?.toLocal();
+    _dateOfBirth = _calendarDay(e?.dateOfBirth);
     _emergencyNameCtrl = TextEditingController(text: e?.emergencyContactName ?? '');
     _emergencyRelCtrl =
         TextEditingController(text: e?.emergencyContactRelation ?? '');
@@ -133,11 +229,14 @@ class _CompleteOnboardingDialogState
         TextEditingController(text: e?.emergencyContactPhone ?? '');
 
     // Tab 2
-    if (e?.department != null && e!.department!.isNotEmpty) {
-      _department = _departments.contains(e.department)
-          ? e.department!
-          : 'Operations';
+    // Keep the stored department exactly as it is (it used to be reset to
+    // Operations when it was not in a hard-coded list).
+    if (e?.department != null && e!.department!.trim().isNotEmpty) {
+      _department = e.department!.trim();
+    } else if (e == null && widget.defaultCategory == 'administrative') {
+      _department = ''; // an administrative hire: HR picks the department
     }
+    _designationId = e?.designationId;
     _roleCtrl = TextEditingController(
       text: e?.role?.isNotEmpty == true
           ? e!.role!
@@ -145,14 +244,20 @@ class _CompleteOnboardingDialogState
     );
     _reportingManagerId = e?.reportingManagerId;
     _currentGrade = e?.currentGrade ?? 'B';
+    // Keep the stored contract type exactly (it used to be rewritten on open).
     _type = e?.type ?? 'in-house';
-    if (_type == 'full-time') _type = 'in-house';
-    if (_type == 'contract') _type = 'outsource';
+    if (!_typeLabels.containsKey(_type)) _type = 'in-house';
     _employmentStatus = e?.employmentStatus ?? 'probation';
-    _status = e?.status ?? 'active';
-    _dateOfJoining = e?.dateOfJoining?.toLocal() ?? DateTime.now();
-    _probationEndDate = e?.probationEndDate?.toLocal() ??
-        DateTime.now().add(const Duration(days: 90));
+    if (!const {'probation', 'confirmed', 'notice_period', 'exited'}.contains(_employmentStatus)) {
+      _employmentStatus = 'probation';
+    }
+    _status = e?.status == 'inactive' ? 'inactive' : 'active';
+    // New hires default to joining today with a 90-day probation; an edit keeps
+    // what is stored (an empty probation end stays empty until HR sets it).
+    _dateOfJoining = e == null ? _today() : _calendarDay(e.dateOfJoining);
+    _probationEndDate = e == null
+        ? _today().add(const Duration(days: 90))
+        : _calendarDay(e.probationEndDate);
 
     // Tab 3
     _salaryType = e?.salaryType ?? 'fixed_monthly';
@@ -226,21 +331,34 @@ class _CompleteOnboardingDialogState
     super.dispose();
   }
 
+  /// Timebox ids already linked to OTHER employees → that employee's name.
+  Map<int, String> _takenTimeboxIds(List<Employee> staff) => {
+        for (final s in staff)
+          if (s.timeboxEmployeeId != null && s.id != widget.employee?.id) s.timeboxEmployeeId!: s.name,
+      };
+
   Future<void> _loadTimeboxStaff() async {
     try {
       final list = await ref.read(timeboxServiceProvider).getEmployees();
+      Map<int, String> taken = const {};
+      try {
+        taken = _takenTimeboxIds(await ref.read(employeesProvider.future));
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _timeboxEmployees = list;
           _loadingTimebox = false;
 
-          // If new employee has email or name, auto-detect match
-          if (_timeboxEmployeeId == null && _nameCtrl.text.isNotEmpty) {
+          // New hires only: suggest a Timebox profile matching the email or
+          // name, skipping profiles already linked to someone else. Edits
+          // never change the link unless HR picks one.
+          if (widget.employee == null && _timeboxEmployeeId == null && _nameCtrl.text.isNotEmpty) {
             final matches = list.where(
               (tb) =>
-                  (tb.email.isNotEmpty &&
-                      tb.email.toLowerCase() == _emailCtrl.text.trim().toLowerCase()) ||
-                  tb.fullName.toLowerCase() == _nameCtrl.text.trim().toLowerCase(),
+                  !taken.containsKey(tb.id) &&
+                  ((tb.email.isNotEmpty &&
+                          tb.email.toLowerCase() == _emailCtrl.text.trim().toLowerCase()) ||
+                      tb.fullName.toLowerCase() == _nameCtrl.text.trim().toLowerCase()),
             );
             if (matches.isNotEmpty) {
               _timeboxEmployeeId = matches.first.id;
@@ -264,14 +382,36 @@ class _CompleteOnboardingDialogState
       return;
     }
 
+    // Email is optional (the server does not need it; Timebox-imported staff
+    // often have none, and requiring it blocked editing them).
     final email = _emailCtrl.text.trim();
-    if (email.isEmpty) {
-      _tabController.animateTo(0);
+
+    if (_department.trim().isEmpty) {
+      _tabController.animateTo(1);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter employee email address')),
+        const SnackBar(content: Text('Please select a department')),
       );
       return;
     }
+
+    // Departments-master id for the chosen name, so the org chart, member
+    // counts and dept-head scoping follow a department change.
+    String? departmentId;
+    final depts = ref.read(departmentsProvider).maybeWhen(data: (l) => l, orElse: () => const []);
+    for (final d in depts) {
+      if (d.name.trim().toLowerCase() == _department.trim().toLowerCase()) {
+        departmentId = d.id;
+        break;
+      }
+    }
+
+    final title = _roleCtrl.text.trim().isNotEmpty ? _roleCtrl.text.trim() : 'Staff';
+    final existing = widget.employee;
+    // An artist's specialization drives booking assignment: an edit keeps it
+    // and only fills it from the title when it is empty.
+    final specialization = (existing == null || existing.specialization.trim().isEmpty)
+        ? title
+        : existing.specialization;
 
     setState(() => _isSaving = true);
     try {
@@ -288,20 +428,18 @@ class _CompleteOnboardingDialogState
             dateOfJoining: _dateOfJoining,
             probationEndDate: _probationEndDate,
             type: _type,
-            artistRole: _department.toLowerCase() == 'operations' ? 'artist' : 'staff',
-            specialization: _roleCtrl.text.trim().isNotEmpty
-                ? _roleCtrl.text.trim()
-                : 'Staff',
-            role: _roleCtrl.text.trim().isNotEmpty
-                ? _roleCtrl.text.trim()
-                : 'Staff',
+            artistRole: _artistRoleToSave(),
+            specialization: specialization,
+            role: title,
             department: _department,
+            departmentId: departmentId,
             reportingManagerId: _reportingManagerId,
             currentGrade: _currentGrade,
             employmentStatus: _employmentStatus,
             status: _status,
             regionId: widget.employee?.regionId ?? '',
-            category: _department.toLowerCase(),
+            category: _categoryToSave(),
+            designationId: _designationId,
             salaryType: _salaryType,
             baseSalary: double.tryParse(_baseSalaryCtrl.text.trim()) ?? 0,
             allowances: double.tryParse(_allowancesCtrl.text.trim()) ?? 0,
@@ -323,6 +461,8 @@ class _CompleteOnboardingDialogState
             esiNumber: _esiNumberCtrl.text.trim(),
             timeboxEmployeeId: _timeboxEmployeeId,
             timeboxName: _timeboxName,
+            // "None" manager / no designation / Unlink Timebox must clear on save.
+            sendClearableLinks: true,
           );
 
       // If user opted to seed onboarding tasks/documents
@@ -589,7 +729,7 @@ class _CompleteOnboardingDialogState
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
-                    labelText: 'Official Email *',
+                    labelText: 'Official Email',
                     hintText: 'name@company.com',
                     prefixIcon: Icon(Icons.email_outlined, size: 18),
                   ),
@@ -613,12 +753,7 @@ class _CompleteOnboardingDialogState
           // Date of Birth
           InkWell(
             onTap: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _dateOfBirth ?? DateTime(1995, 1, 1),
-                firstDate: DateTime(1950),
-                lastDate: DateTime.now(),
-              );
+              final picked = await _pickDay(_dateOfBirth ?? DateTime(1995, 1, 1), DateTime(1950), _today());
               if (picked != null) setState(() => _dateOfBirth = picked);
             },
             borderRadius: BorderRadius.circular(8),
@@ -709,6 +844,138 @@ class _CompleteOnboardingDialogState
     );
   }
 
+  // ── Tab 2 fields: Department (Departments master) and Designation (Designations master)
+  Widget _buildDepartmentField() {
+    final master = ref.watch(departmentsProvider).maybeWhen(
+          data: (list) => [for (final d in list) if (d.active && d.name.trim().isNotEmpty) d.name.trim()],
+          orElse: () => const <String>[],
+        );
+    final options = _departmentOptions(master);
+    return DropdownButtonFormField<String>(
+      key: ValueKey('dept_${options.length}'),
+      initialValue: options.contains(_department) ? _department : null,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        labelText: 'Department *',
+        prefixIcon: Icon(Icons.corporate_fare_outlined, size: 18),
+      ),
+      items: options.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+      onChanged: (v) => setState(() => _department = v ?? _department),
+    );
+  }
+
+  static const String _addDesignationValue = '__add_new__';
+
+  Widget _buildDesignationField(CrmTheme crm) {
+    final async = ref.watch(designationsProvider);
+    final list = async.maybeWhen(
+      data: (l) => [for (final d in l) if (d.active && d.name.trim().isNotEmpty) d]
+        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase())),
+      orElse: () => const <Designation>[],
+    );
+    final ids = {for (final d in list) d.id};
+    final value = (_designationId != null && ids.contains(_designationId)) ? _designationId : null;
+    final oldTitle = _roleCtrl.text.trim();
+    // A title typed before the dropdown existed: shown so HR knows to pick a proper one.
+    final helper = value == null && oldTitle.isNotEmpty
+        ? 'Current title "$oldTitle" is not from the list. Pick one to replace it.'
+        : null;
+
+    return DropdownButtonFormField<String>(
+      key: ValueKey('desig_${list.length}_$value'),
+      initialValue: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Designation / Job Role',
+        hintText: async.isLoading ? 'Loading designations…' : 'Select a designation',
+        helperText: helper,
+        helperMaxLines: 2,
+        prefixIcon: const Icon(Icons.work_outline, size: 18),
+      ),
+      items: [
+        for (final d in list)
+          DropdownMenuItem(
+            value: d.id,
+            child: Text(
+              d.departmentName.isNotEmpty ? '${d.name}  ·  ${d.departmentName}' : d.name,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        DropdownMenuItem(
+          value: _addDesignationValue,
+          child: Text('+ Add new designation', style: TextStyle(color: crm.primary, fontWeight: FontWeight.w600)),
+        ),
+      ],
+      onChanged: (v) async {
+        if (v == null) return;
+        if (v == _addDesignationValue) {
+          final created = await _addDesignation();
+          if (!mounted) return;
+          setState(() {
+            if (created != null) {
+              _designationId = created.id;
+              _roleCtrl.text = created.name;
+            }
+          });
+          return;
+        }
+        final picked = list.firstWhere((d) => d.id == v);
+        setState(() {
+          _designationId = picked.id;
+          _roleCtrl.text = picked.name;
+        });
+      },
+    );
+  }
+
+  /// Creates a designation in the Designations master (under the selected
+  /// department when it is in the master) and returns it.
+  Future<Designation?> _addDesignation() async {
+    final nameCtrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add designation'),
+        content: TextField(
+          controller: nameCtrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            labelText: 'Designation name',
+            helperText: 'Saved to HRMS → Designations under $_department',
+          ),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()), child: const Text('Add')),
+        ],
+      ),
+    );
+    nameCtrl.dispose();
+    if (name == null || name.isEmpty) return null;
+
+    final existing = ref.read(designationsProvider).maybeWhen(data: (l) => l, orElse: () => const <Designation>[]);
+    for (final d in existing) {
+      if (d.name.trim().toLowerCase() == name.toLowerCase()) return d; // reuse, never duplicate
+    }
+    final depts = ref.read(departmentsProvider).maybeWhen(data: (l) => l, orElse: () => const []);
+    String? deptId;
+    for (final d in depts) {
+      if (d.name.trim().toLowerCase() == _department.trim().toLowerCase()) deptId = d.id;
+    }
+    try {
+      final created = await ref.read(designationServiceProvider).create(name: name, departmentId: deptId);
+      ref.invalidate(designationsProvider);
+      return created;
+    } catch (e) {
+      if (mounted) {
+        showErrorSnackBar(context, e, fallback: 'Could not add the designation');
+      }
+      return null;
+    }
+  }
+
   // ── Tab 2: Job & Hierarchy ──────────────────────────────────────────────────
   Widget _buildTabJob(CrmTheme crm, AsyncValue<List<Employee>> allStaffAsync) {
     return SingleChildScrollView(
@@ -718,31 +985,9 @@ class _CompleteOnboardingDialogState
         children: [
           Row(
             children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _department,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Department *',
-                    prefixIcon: Icon(Icons.corporate_fare_outlined, size: 18),
-                  ),
-                  items: _departments
-                      .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-                      .toList(),
-                  onChanged: (v) => setState(() => _department = v ?? _department),
-                ),
-              ),
+              Expanded(child: _buildDepartmentField()),
               const SizedBox(width: 14),
-              Expanded(
-                child: TextField(
-                  controller: _roleCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Designation / Job Role',
-                    hintText: 'e.g. Senior Frontend Engineer',
-                    prefixIcon: Icon(Icons.work_outline, size: 18),
-                  ),
-                ),
-              ),
+              Expanded(child: _buildDesignationField(crm)),
             ],
           ),
           const SizedBox(height: 16),
@@ -751,7 +996,14 @@ class _CompleteOnboardingDialogState
             loading: () => const LinearProgressIndicator(),
             error: (_, _) => const SizedBox.shrink(),
             data: (staff) {
-              final activeStaff = staff.where((s) => s.id != widget.employee?.id).toList();
+              // Active, not-exited staff only — plus the current manager, so an
+              // existing (now inactive) manager still shows and is not dropped.
+              final activeStaff = staff
+                  .where((s) =>
+                      s.id != widget.employee?.id &&
+                      ((s.status == 'active' && s.employmentStatus != 'exited') ||
+                          s.id == _reportingManagerId))
+                  .toList();
               return DropdownButtonFormField<String?>(
                 initialValue: activeStaff.any((s) => s.id == _reportingManagerId)
                     ? _reportingManagerId
@@ -800,10 +1052,9 @@ class _CompleteOnboardingDialogState
                     labelText: 'Employment Contract',
                     prefixIcon: Icon(Icons.assignment_ind_outlined, size: 18),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'in-house', child: Text('Permanent (In-House)')),
-                    DropdownMenuItem(value: 'outsource', child: Text('Outsource / Vendor')),
-                    DropdownMenuItem(value: 'contract', child: Text('Fixed Term Contract')),
+                  items: [
+                    for (final t in _typeLabels.entries)
+                      DropdownMenuItem(value: t.key, child: Text(t.value)),
                   ],
                   onChanged: (v) => setState(() => _type = v ?? 'in-house'),
                 ),
@@ -820,10 +1071,17 @@ class _CompleteOnboardingDialogState
                     labelText: 'Probation / Confirmation Status',
                     prefixIcon: Icon(Icons.verified_user_outlined, size: 18),
                   ),
-                  items: const [
-                    DropdownMenuItem(value: 'probation', child: Text('Under Probation')),
-                    DropdownMenuItem(value: 'confirmed', child: Text('Confirmed Staff')),
-                    DropdownMenuItem(value: 'notice_period', child: Text('Serving Notice')),
+                  items: [
+                    const DropdownMenuItem(value: 'probation', child: Text('Under Probation')),
+                    const DropdownMenuItem(value: 'confirmed', child: Text('Confirmed Staff')),
+                    const DropdownMenuItem(value: 'notice_period', child: Text('Serving Notice')),
+                    // Set by Offboarding; shown so exited staff open correctly,
+                    // never picked here.
+                    DropdownMenuItem(
+                      value: 'exited',
+                      enabled: widget.employee?.employmentStatus == 'exited',
+                      child: const Text('Exited (via Offboarding)'),
+                    ),
                   ],
                   onChanged: (v) => setState(() => _employmentStatus = v ?? 'probation'),
                 ),
@@ -852,16 +1110,19 @@ class _CompleteOnboardingDialogState
               Expanded(
                 child: InkWell(
                   onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _dateOfJoining ?? DateTime.now(),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    final picked = await _pickDay(
+                      _dateOfJoining,
+                      DateTime(1990),
+                      _today().add(const Duration(days: 365)),
                     );
                     if (picked != null) {
                       setState(() {
+                        // Suggest a 90-day probation for new hires (or when none
+                        // is set); never overwrite a date HR already has.
+                        if (widget.employee == null || _probationEndDate == null) {
+                          _probationEndDate = picked.add(const Duration(days: 90));
+                        }
                         _dateOfJoining = picked;
-                        _probationEndDate = picked.add(const Duration(days: 90));
                       });
                     }
                   },
@@ -886,12 +1147,10 @@ class _CompleteOnboardingDialogState
               Expanded(
                 child: InkWell(
                   onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: _probationEndDate ??
-                          (_dateOfJoining?.add(const Duration(days: 90)) ?? DateTime.now()),
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime.now().add(const Duration(days: 730)),
+                    final picked = await _pickDay(
+                      _probationEndDate ?? _dateOfJoining?.add(const Duration(days: 90)),
+                      DateTime(1990),
+                      _today().add(const Duration(days: 730)),
                     );
                     if (picked != null) setState(() => _probationEndDate = picked);
                   },
@@ -1207,6 +1466,9 @@ class _CompleteOnboardingDialogState
 
   // ── Tab 5: Timebox Linking ──────────────────────────────────────────────────
   Widget _buildTabTimebox(CrmTheme crm) {
+    // One Timebox profile per employee: profiles linked to someone else are
+    // shown as taken and cannot be picked (the server refuses them too).
+    final taken = _takenTimeboxIds(ref.watch(employeesProvider).value ?? const <Employee>[]);
     final query = _tbSearchCtrl.text.trim().toLowerCase();
     final filtered = _timeboxEmployees.where((tb) {
       if (query.isEmpty) return true;
@@ -1333,6 +1595,7 @@ class _CompleteOnboardingDialogState
                 itemBuilder: (ctx, i) {
                   final tb = filtered[i];
                   final isSelected = _timeboxEmployeeId == tb.id;
+                  final takenBy = taken[tb.id];
 
                   return Material(
                     color: Colors.transparent,
@@ -1363,6 +1626,11 @@ class _CompleteOnboardingDialogState
                       ),
                       trailing: isSelected
                           ? const Icon(Icons.check_circle, color: Color(0xFF059669), size: 20)
+                          : takenBy != null
+                          ? Text(
+                              'Linked to $takenBy',
+                              style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
+                            )
                           : OutlinedButton(
                               onPressed: () => setState(() {
                                 _timeboxEmployeeId = tb.id;

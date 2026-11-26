@@ -30,6 +30,9 @@ class SlotManagementScreen extends HookConsumerWidget {
     final selectedTime = useState<TimeOfDay?>(null);
     final selectedTimeframe = useState<String>('Monthly');
     final selectedDate = useState<DateTime>(DateTime.now());
+    // Bumped by "Clear Filters": the dropdowns read initialValue only once, so
+    // a new key rebuilds them showing the cleared selection.
+    final filterResetKey = useState<int>(0);
 
     // Extract bookings and artists
     final bookings = asyncBookings.value ?? [];
@@ -355,6 +358,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                 SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey('slot_region_${filterResetKey.value}'),
                     isExpanded: true,
                     initialValue: selectedRegion.value,
                     decoration: const InputDecoration(
@@ -372,6 +376,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                 SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey('slot_district_${filterResetKey.value}'),
                     isExpanded: true,
                     initialValue: selectedDistrict.value,
                     decoration: const InputDecoration(
@@ -389,6 +394,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                 SizedBox(
                   width: 200,
                   child: DropdownButtonFormField<String>(
+                    key: ValueKey('slot_timeframe_${filterResetKey.value}'),
                     isExpanded: true,
                     initialValue: selectedTimeframe.value,
                     decoration: const InputDecoration(
@@ -438,6 +444,7 @@ class SlotManagementScreen extends HookConsumerWidget {
                       selectedTime.value = null;
                       selectedTimeframe.value = 'Monthly';
                       selectedDate.value = DateTime.now();
+                      filterResetKey.value++;
                     },
                     icon: const Icon(Icons.clear),
                     label: const Text('Clear Filters'),

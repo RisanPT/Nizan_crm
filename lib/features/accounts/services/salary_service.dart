@@ -112,6 +112,17 @@ class SalaryService {
     }
   }
 
+  /// Send an HR-approved slip back to draft to correct it (not for paid slips
+  /// or locked months — the server refuses those).
+  Future<Salary> moveSalaryToDraft(String id) async {
+    try {
+      final response = await _dio.put('/salaries/$id/draft');
+      return Salary.fromJson(response.data as Map<String, dynamic>);
+    } catch (e) {
+      throw AppException(e, action: 'move salary back to draft');
+    }
+  }
+
   Future<Salary> paySalary(
     String id, {
     required String paymentMethod,

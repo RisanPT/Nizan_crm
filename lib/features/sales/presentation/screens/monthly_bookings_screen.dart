@@ -172,11 +172,16 @@ class MonthlyBookingsScreen extends HookConsumerWidget {
                       12.h,
                       Row(
                         children: [
-                          Text(
-                            eventBasis.value ? 'By event date' : 'By booking (created) date',
-                            style: TextStyle(fontSize: 12.5, color: crm.textSecondary, fontWeight: FontWeight.w600),
+                          // Expanded + ellipsis so the label gives way on narrow
+                          // screens instead of pushing Export CSV off the edge.
+                          Expanded(
+                            child: Text(
+                              eventBasis.value ? 'By event date' : 'By booking (created) date',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 12.5, color: crm.textSecondary, fontWeight: FontWeight.w600),
+                            ),
                           ),
-                          const Spacer(),
                           Text('${visible.length} shown', style: TextStyle(fontSize: 12, color: crm.textSecondary)),
                           8.w,
                           OutlinedButton.icon(

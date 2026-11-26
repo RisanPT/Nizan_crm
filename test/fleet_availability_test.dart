@@ -1011,6 +1011,18 @@ void main() {
       _size(t, h: 3200);
       await t.pumpWidget(screen(store, availabilityFails: availabilityFails));
       await t.pumpAndSettle();
+      // The screen opens on the current month; step to the fixture booking's
+      // month (Oct 2026) so the test does not depend on today's date.
+      final now = DateTime.now();
+      final start = DateTime.parse(_start1).toLocal();
+      final steps =
+          (now.year * 12 + now.month) - (start.year * 12 + start.month);
+      for (var i = 0; i < steps.abs(); i++) {
+        await t.tap(
+          find.byTooltip(steps > 0 ? 'Previous Month' : 'Next Month'),
+        );
+        await t.pumpAndSettle();
+      }
     }
 
     testWidgets(

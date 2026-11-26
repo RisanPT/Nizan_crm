@@ -223,7 +223,8 @@ void main() {
         await _pumpSettings(tester, size);
         expect(tester.takeException(), isNull, reason: 'users list');
         await _openEditUser(tester);
-        expect(find.textContaining('Edit user'), findsWidgets);
+        // Dialog header was redesigned (24 Nov): title is "Edit User · <name>".
+        expect(find.text('Edit User · Yadhu Krishna'), findsOneWidget);
         expect(tester.takeException(), isNull, reason: 'Edit user dialog');
 
         // Open the role menu too: items there keep the "N features" hint.

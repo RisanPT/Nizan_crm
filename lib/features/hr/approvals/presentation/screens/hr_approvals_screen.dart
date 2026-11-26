@@ -6,6 +6,9 @@ import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/approvals/data/approval_models.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
+import 'package:nizan_crm/features/hr/approvals/presentation/widgets/hr_reason_dialog.dart';
+import 'package:nizan_crm/features/hr/regularization/service/regularization_service.dart';
+import 'package:nizan_crm/features/hr/timesheet/service/timesheet_service.dart';
 
 String _fmt(DateTime? d) {
   if (d == null) return '';
@@ -170,6 +173,11 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
       }
       ref.invalidate(approvalInboxProvider);
       ref.invalidate(myApprovalsProvider);
+      // The decision also changes the request's own lists.
+      ref.invalidate(regularizationRequestsProvider);
+      ref.invalidate(myRegularizationsProvider);
+      ref.invalidate(timesheetRequestsProvider);
+      ref.invalidate(myTimesheetsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(approve ? 'Approved' : 'Rejected')));
@@ -182,32 +190,14 @@ class _ApprovalCardState extends ConsumerState<_ApprovalCard> {
     }
   }
 
-  Future<String?> _askNote(bool approve) {
-    final ctl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(approve ? 'Approve request' : 'Reject request'),
-        content: TextField(
-          controller: ctl,
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: approve ? 'Note (optional)' : 'Reason',
-            border: const OutlineInputBorder(),
-          ),
-          minLines: 2,
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(ctl.text.trim()),
-            child: Text(approve ? 'Approve' : 'Reject'),
-          ),
-        ],
-      ),
-    );
-  }
+  /// A rejection must carry a reason; an approval note is optional.
+  Future<String?> _askNote(bool approve) => askHrReason(
+        context,
+        title: approve ? 'Approve request' : 'Reject request',
+        label: approve ? 'Note (optional)' : 'Reason',
+        confirmLabel: approve ? 'Approve' : 'Reject',
+        required: !approve,
+      );
 
   @override
   Widget build(BuildContext context) {

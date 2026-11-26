@@ -2,6 +2,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -379,6 +380,7 @@ class _HrRecruitmentScreenState extends ConsumerState<HrRecruitmentScreen> with 
                   onCreateOffer: (c) => _openOfferDialog(context, c),
                   onEditCandidate: (c) => _openCandidateDialog(context, c),
                   onNewPlan: () => _openHiringPlanDialog(context),
+                  onEditPlan: (plan) => _openHiringPlanDialog(context, existing: plan),
                   onPlanToPost: (plan) => _openJobPostDialog(
                     context,
                     null,
@@ -685,6 +687,7 @@ class _PipelineKanbanTab extends ConsumerWidget {
     required this.onCreateOffer,
     required this.onEditCandidate,
     required this.onNewPlan,
+    required this.onEditPlan,
     required this.onPlanToPost,
   });
 
@@ -694,7 +697,36 @@ class _PipelineKanbanTab extends ConsumerWidget {
   final ValueChanged<Candidate> onCreateOffer;
   final ValueChanged<Candidate> onEditCandidate;
   final VoidCallback onNewPlan;
+  final ValueChanged<HiringPlan> onEditPlan;
   final ValueChanged<HiringPlan> onPlanToPost;
+
+  // Runs a hiring-plan action, showing the server's message if it fails.
+  Future<void> _runPlanAction(BuildContext context, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      if (context.mounted) showErrorSnackBar(context, e);
+    }
+  }
+
+  Future<void> _confirmDeletePlan(BuildContext context, WidgetRef ref, HiringPlan p) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete hiring plan?'),
+        content: Text('The ${p.status} plan "${p.designation}" (${p.department}) will be removed.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    await _runPlanAction(context, () async {
+      await ref.read(recruitmentServiceProvider).deleteHiringPlan(p.id);
+      ref.invalidate(hiringPlansProvider);
+    });
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -772,7 +804,7 @@ class _PipelineKanbanTab extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            '${candidates.length} active in pipeline',
+                            '${candidates.where((c) => c.stage.toLowerCase() != 'rejected').length} active in pipeline',
                             style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: crm.primary),
                           ),
                         ),
@@ -896,16 +928,20 @@ class _PipelineKanbanTab extends ConsumerWidget {
                                     ),
                                   )
                                 else
+                                  // Every plan is listed so older ones can still be
+                                  // edited. No inner scroll: on phones a nested
+                                  // list would trap the page's own scrolling.
                                   ListView.separated(
                                     shrinkWrap: true,
                                     physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: plans.length > 4 ? 4 : plans.length,
+                                    itemCount: plans.length,
                                     separatorBuilder: (context, index) => Divider(color: crm.border.faded(0.5), height: 16),
                                     itemBuilder: (context, idx) {
                                       final p = plans[idx];
                                       final isApproved = p.status == 'approved';
                                       final isRaised = p.status == 'raised';
                                       final isDraft = p.status == 'draft';
+                                      final canDelete = isDraft || p.status == 'rejected';
 
                                       return Row(
                                         children: [
@@ -928,26 +964,42 @@ class _PipelineKanbanTab extends ConsumerWidget {
                                           _planStatusChip(p.status, crm),
                                           const SizedBox(width: 8),
                                           if (isDraft)
+                                            IconButton(
+                                              tooltip: 'Edit plan',
+                                              icon: Icon(Icons.edit_outlined, size: 16, color: crm.textSecondary),
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: () => onEditPlan(p),
+                                            ),
+                                          if (canDelete)
+                                            IconButton(
+                                              tooltip: 'Delete plan',
+                                              icon: Icon(Icons.delete_outline, size: 16, color: crm.destructive),
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: () => _confirmDeletePlan(context, ref, p),
+                                            ),
+                                          if (isDraft)
                                             OutlinedButton(
-                                              onPressed: () async {
+                                              onPressed: () => _runPlanAction(context, () async {
                                                 await ref.read(recruitmentServiceProvider).raiseHiringPlan(p.id);
                                                 ref.invalidate(hiringPlansProvider);
-                                              },
+                                              }),
                                               style: OutlinedButton.styleFrom(
                                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                                 minimumSize: Size.zero,
                                               ),
                                               child: const Text('Raise', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                                             ),
-                                          if (isRaised) ...[
+                                          // Approving / rejecting a plan is HR's
+                                          // decision; a department head only raises.
+                                          if (isRaised && ref.watch(effectiveAccessProvider).isHrWideFor('recruitment')) ...[
                                             OutlinedButton(
-                                              onPressed: () async {
+                                              onPressed: () => _runPlanAction(context, () async {
                                                 final sentOn = await ref.read(recruitmentServiceProvider).approveHiringPlan(p.id);
                                                 ref.invalidate(hiringPlansProvider);
                                                 if (sentOn && context.mounted) {
                                                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vetted. The CEO / Executive Director will decide on this plan.')));
                                                 }
-                                              },
+                                              }),
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: crm.success,
                                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -957,10 +1009,10 @@ class _PipelineKanbanTab extends ConsumerWidget {
                                             ),
                                             const SizedBox(width: 4),
                                             OutlinedButton(
-                                              onPressed: () async {
+                                              onPressed: () => _runPlanAction(context, () async {
                                                 await ref.read(recruitmentServiceProvider).rejectHiringPlan(p.id);
                                                 ref.invalidate(hiringPlansProvider);
-                                              },
+                                              }),
                                               style: OutlinedButton.styleFrom(
                                                 foregroundColor: crm.destructive,
                                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1342,9 +1394,31 @@ class _PipelineKanbanTab extends ConsumerWidget {
                   } else if (action == 'delete') {
                     _confirmDeleteCandidate(context, ref, c);
                   } else {
+                    // Moving to Hired creates the employee and onboarding,
+                    // so confirm first.
+                    if (action == 'hired') {
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Mark as hired?'),
+                          content: Text(
+                            'Moving ${c.name} to Hired creates their employee record and starts onboarding.',
+                          ),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Hire')),
+                          ],
+                        ),
+                      );
+                      if (ok != true) return;
+                    }
                     // Update stage
-                    await ref.read(recruitmentServiceProvider).saveCandidate({'stage': action}, id: c.id);
-                    ref.invalidate(candidatesProvider);
+                    try {
+                      await ref.read(recruitmentServiceProvider).saveCandidate({'stage': action}, id: c.id);
+                      ref.invalidate(candidatesProvider);
+                    } catch (e) {
+                      if (context.mounted) showErrorSnackBar(context, e);
+                    }
                   }
                 },
                 itemBuilder: (ctx) => [
@@ -1371,9 +1445,20 @@ class _PipelineKanbanTab extends ConsumerWidget {
                       ],
                     ),
                   ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(enabled: false, child: Text('Move Stage: ', style: TextStyle(fontWeight: FontWeight.bold))),
-                  ...kCandidateStages.where((s) => s != c.stage).map((s) => PopupMenuItem(value: s, child: Text('→ ${titleCase(s)}'))),
+                  // Hired is reached only through an accepted offer (Offers →
+                  // Accept & Hire), and a hired candidate stays hired — the
+                  // server refuses both moves since 2026-11-26.
+                  if (c.stage != 'hired') ...[
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(enabled: false, child: Text('Move Stage: ', style: TextStyle(fontWeight: FontWeight.bold))),
+                    ...kCandidateStages
+                        .where((s) => s != c.stage && s != 'hired')
+                        .map((s) => PopupMenuItem(value: s, child: Text('→ ${titleCase(s)}'))),
+                    const PopupMenuItem(
+                      enabled: false,
+                      child: Text('To hire: make an offer, then Accept & Hire', style: TextStyle(fontSize: 11.5)),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -4408,8 +4493,13 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
               if (isPending) ...[
                 OutlinedButton(
                   onPressed: () async {
-                    await ref.read(recruitmentServiceProvider).declineOffer(o.id);
-                    ref.invalidate(offersProvider);
+                    try {
+                      await ref.read(recruitmentServiceProvider).declineOffer(o.id);
+                      ref.invalidate(offersProvider);
+                      ref.invalidate(candidatesProvider);
+                    } catch (e) {
+                      if (mounted) showErrorSnackBar(context, e);
+                    }
                   },
                   style: OutlinedButton.styleFrom(foregroundColor: widget.crm.destructive),
                   child: const Text('Decline'),
@@ -4417,7 +4507,13 @@ class _OffersTabState extends ConsumerState<_OffersTab> {
                 const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: () async {
-                    await ref.read(recruitmentServiceProvider).acceptOffer(o.id);
+                    try {
+                      await ref.read(recruitmentServiceProvider).acceptOffer(o.id);
+                    } catch (e) {
+                      ref.invalidate(offersProvider);
+                      if (mounted) showErrorSnackBar(context, e);
+                      return;
+                    }
                     ref.invalidate(offersProvider);
                     ref.invalidate(candidatesProvider);
                     if (mounted) {
@@ -5287,6 +5383,8 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
     final crm = context.crmColors;
     final roles = ref.watch(jobRolesProvider).asData?.value ?? [];
     final plans = ref.watch(hiringPlansProvider).asData?.value ?? [];
+    // Only approved plans are offered as job-post titles (drafts / rejected are not).
+    final approvedPlans = plans.where((p) => p.status == 'approved').toList();
 
     if (!_deptInitialized && _title.text.trim().isNotEmpty) {
       final guess = resolveDepartmentForRole(
@@ -5358,21 +5456,21 @@ class _JobPostDialogState extends ConsumerState<_JobPostDialog> {
                       controller: _title,
                       decoration: InputDecoration(
                         labelText: 'Job Title *',
-                        hintText: 'e.g. Senior Dev-ops engineer',
+                        hintText: 'e.g. Bridal Makeup Artist',
                         border: const OutlineInputBorder(),
                         isDense: true,
-                        suffixIcon: (plans.isNotEmpty || roles.isNotEmpty)
+                        suffixIcon: (approvedPlans.isNotEmpty || roles.isNotEmpty)
                             ? PopupMenuButton<String>(
                                 tooltip: 'Select from Roles or Approved Plans',
                                 icon: const Icon(Icons.arrow_drop_down, size: 22),
                                 onSelected: onRoleSelected,
                                 itemBuilder: (_) => [
-                                  if (plans.isNotEmpty) ...[
+                                  if (approvedPlans.isNotEmpty) ...[
                                     const PopupMenuItem(
                                       enabled: false,
                                       child: Text('APPROVED HIRING PLANS', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.grey)),
                                     ),
-                                    ...plans.map((p) => PopupMenuItem(
+                                    ...approvedPlans.map((p) => PopupMenuItem(
                                           value: p.designation,
                                           child: Text('${p.designation} (${p.department})', style: const TextStyle(fontSize: 13)),
                                         )),
@@ -5532,7 +5630,11 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
     _selectedJobPostId = (c != null && c.jobPostId.isNotEmpty) ? c.jobPostId : null;
     if (c != null) {
       _source = c.source;
-      _stage = c.stage;
+      // A stored stage the server no longer accepts (e.g. the old 'archived'
+      // set when an onboarding was deleted) would make every save fail, so
+      // start from a valid one instead.
+      final stored = c.stage.toLowerCase();
+      _stage = kCandidateStages.contains(stored) ? stored : (stored == 'archived' ? 'rejected' : 'applied');
     }
   }
 
@@ -5733,7 +5835,7 @@ class _CandidateDialogState extends ConsumerState<_CandidateDialog> {
                     Builder(
                       builder: (context) {
                         final sourceSet = <String>{...kCandidateSources, if (_source.isNotEmpty) _source};
-                        final stageSet = <String>{...kCandidateStages, if (_stage.isNotEmpty) _stage};
+                        final stageSet = <String>{...kCandidateStages};
 
                         return Row(
                           children: [

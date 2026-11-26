@@ -15,6 +15,9 @@ class Announcement {
   final String audience;
   final bool pinned;
   final String postedByName;
+
+  /// User id of the poster ('' on old posts created before it was stored).
+  final String postedBy;
   final DateTime? createdAt;
 
   const Announcement({
@@ -26,6 +29,7 @@ class Announcement {
     this.audience = 'all',
     this.pinned = false,
     this.postedByName = '',
+    this.postedBy = '',
     this.createdAt,
   });
 
@@ -38,6 +42,9 @@ class Announcement {
         audience: j['audience'] as String? ?? 'all',
         pinned: j['pinned'] as bool? ?? false,
         postedByName: j['postedByName'] as String? ?? '',
+        postedBy: j['postedBy'] is Map
+            ? ((j['postedBy'] as Map)['_id']?.toString() ?? '')
+            : (j['postedBy']?.toString() ?? ''),
         createdAt: _date(j['createdAt']),
       );
 }

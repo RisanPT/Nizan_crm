@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/employee.dart';
+import '../theme/crm_theme.dart';
 
 /// Opens a searchable / filterable employee picker sheet or centered dialog.
 ///
@@ -207,11 +208,16 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
   Widget _buildContent(BuildContext context, ScrollController? scrollCtrl) {
     final groups = _groups;
     final results = _filtered;
+    final crm = context.crmColors;
 
+    // Rows are ListTiles on this Material (theme surface), so the selected tint
+    // and tap ink paint correctly in light and dark mode.
     return Material(
-      color: Colors.white,
+      color: crm.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: widget.isDialog
+            ? BorderRadius.circular(24)
+            : const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -415,64 +421,48 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
                       ];
                       final subtitle = subtitleParts.join(' · ');
 
-                      return InkWell(
+                      return ListTile(
                         onTap: () => Navigator.pop(ctx, e),
+                        selected: isSel,
+                        selectedTileColor: crm.primary.withValues(alpha: 0.06),
                         hoverColor: const Color(0xFFFCE4EC).withValues(alpha: 0.3),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 10,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+                        // 2-Letter Initials Circular Avatar
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFCE4EC),
+                            shape: BoxShape.circle,
                           ),
-                          child: Row(
+                          alignment: Alignment.center,
+                          child: Text(
+                            _getInitials(e.name),
+                            style: const TextStyle(
+                              color: Color(0xFF7B1E3B),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        // Name + Role · Department
+                        title: Text(
+                          e.name,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13.5,
+                            color: crm.textPrimary,
+                          ),
+                        ),
+                        subtitle: Text(
+                          subtitle.isEmpty ? 'Staff' : subtitle,
+                          style: TextStyle(color: crm.textSecondary, fontSize: 11.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // 2-Letter Initials Circular Avatar
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFCE4EC),
-                                  shape: BoxShape.circle,
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  _getInitials(e.name),
-                                  style: const TextStyle(
-                                    color: Color(0xFF7B1E3B),
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12.5,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-
-                              // Name + Role · Department
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      e.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13.5,
-                                        color: Color(0xFF1E1B1D),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      subtitle.isEmpty ? 'Staff' : subtitle,
-                                      style: const TextStyle(
-                                        color: Color(0xFF6B7280),
-                                        fontSize: 11.5,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-
                               // Department Badge with Icon
                               if (dept.isNotEmpty)
                                 Container(
@@ -512,7 +502,6 @@ class _EmployeePickerSheetState extends State<_EmployeePickerSheet> {
                               ),
                             ],
                           ),
-                        ),
                       );
                     },
                   ),

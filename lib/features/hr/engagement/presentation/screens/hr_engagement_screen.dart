@@ -10,6 +10,7 @@ import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/features/hr/engagement/data/announcement_models.dart';
 import 'package:nizan_crm/features/hr/engagement/service/engagement_service.dart';
 import 'package:nizan_crm/services/employee_service.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
 import 'package:nizan_crm/features/hr/engagement/presentation/widgets/celebration_popup_dialog.dart';
 
 String _fmt(DateTime? d) {
@@ -69,11 +70,21 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
   @override
   Widget build(BuildContext context) {
     final crm = context.crmColors;
-    final access = Access.of(ref.watch(authSessionProvider));
+    final session = ref.watch(authSessionProvider);
+    final access = Access.of(session);
     final canPost = access.isFullAccess ||
         access.isDepartmentHead ||
         access.has('engagement', false) ||
-        access.has('staff', false);
+        access.canSeeStaff;
+    // The server lets HR-wide callers change any post and everyone else only
+    // their own (old posts without a poster: HR-wide only).
+    final hrWide = access.isFullAccess ||
+        access.isHrRole ||
+        access.canSeeStaff ||
+        access.has('engagement', false);
+    final myId = session?.userId ?? '';
+    bool canChange(Announcement a) =>
+        canPost && (hrWide || (myId.isNotEmpty && a.postedBy == myId));
     final feedAsync = ref.watch(announcementsProvider);
     final employeesAsync = ref.watch(employeesProvider);
 
@@ -98,7 +109,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
           CelebrationPopupDialog.show(
             context,
             milestones: urgentMilestones,
-            onWish: (milestone) {
+            onWish: !canPost ? null : (milestone) {
               _edit(
                 context,
                 ref,
@@ -199,7 +210,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
                             onPressed: () => CelebrationPopupDialog.show(
                               context,
                               milestones: upcomingMilestones,
-                              onWish: (milestone) {
+                              onWish: !canPost ? null : (milestone) {
                                 _edit(
                                   context,
                                   ref,
@@ -334,7 +345,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
                                   onPressed: () => CelebrationPopupDialog.show(
                                     context,
                                     milestones: upcomingMilestones.isNotEmpty ? upcomingMilestones : anyMonthMilestones,
-                                    onWish: (milestone) {
+                                    onWish: !canPost ? null : (milestone) {
                                       _edit(
                                         context,
                                         ref,
@@ -374,7 +385,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
                               onTap: () => CelebrationPopupDialog.show(
                                 context,
                                 milestones: [m],
-                                onWish: (milestone) {
+                                onWish: !canPost ? null : (milestone) {
                                   _edit(
                                     context,
                                     ref,
@@ -551,7 +562,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
                     ),
                   )
                 else
-                  ...filtered.map((post) => _postCard(context, ref, post, canPost, crm)),
+                  ...filtered.map((post) => _postCard(context, ref, post, canChange(post), crm)),
               ],
             );
           },
@@ -623,7 +634,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
     );
   }
 
-  Widget _postCard(BuildContext context, WidgetRef ref, Announcement a, bool canPost, CrmTheme crm) {
+  Widget _postCard(BuildContext context, WidgetRef ref, Announcement a, bool canChange, CrmTheme crm) {
     final hasDate = a.eventDate != null;
     final badgeColor = _badgeColorFor(a.category, crm);
 
@@ -699,7 +710,7 @@ class _HrEngagementScreenState extends ConsumerState<HrEngagementScreen> {
                   ),
                 ],
                 const Spacer(),
-                if (canPost)
+                if (canChange)
                   PopupMenuButton<String>(
                     icon: Icon(Icons.more_horiz_rounded, size: 20, color: crm.textSecondary),
                     onSelected: (v) {
@@ -902,7 +913,7 @@ class _PostEditorDialog extends ConsumerStatefulWidget {
 class _PostEditorDialogState extends ConsumerState<_PostEditorDialog> {
   late final TextEditingController _title;
   late final TextEditingController _body;
-  late final TextEditingController _audience;
+  String _audience = 'all'; // 'all' or a department name
   String _category = 'announcement';
   DateTime? _eventDate;
   bool _pinned = false;
@@ -914,7 +925,8 @@ class _PostEditorDialogState extends ConsumerState<_PostEditorDialog> {
     final e = widget.existing;
     _title = TextEditingController(text: e?.title ?? widget.initialTitle ?? '');
     _body = TextEditingController(text: e?.body ?? widget.initialBody ?? '');
-    _audience = TextEditingController(text: e?.audience == 'all' ? '' : (e?.audience ?? ''));
+    final aud = (e?.audience ?? '').trim();
+    _audience = (aud.isEmpty || aud.toLowerCase() == 'all') ? 'all' : aud;
     _category = e?.category ?? widget.initialCategory ?? 'announcement';
     _eventDate = e?.eventDate ?? widget.initialEventDate;
     _pinned = e?.pinned ?? false;
@@ -924,7 +936,6 @@ class _PostEditorDialogState extends ConsumerState<_PostEditorDialog> {
   void dispose() {
     _title.dispose();
     _body.dispose();
-    _audience.dispose();
     super.dispose();
   }
 
@@ -939,9 +950,10 @@ class _PostEditorDialogState extends ConsumerState<_PostEditorDialog> {
         'title': _title.text.trim(),
         'body': _body.text.trim(),
         'category': _category,
-        'audience': _audience.text.trim().isEmpty ? 'all' : _audience.text.trim(),
+        'audience': _audience,
         'pinned': _pinned,
-        if (_eventDate != null) 'eventDate': _eventDate!.toIso8601String(),
+        // Always sent: null clears a date removed while editing.
+        'eventDate': _eventDate?.toIso8601String(),
       }, id: widget.existing?.id);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -993,21 +1005,38 @@ class _PostEditorDialogState extends ConsumerState<_PostEditorDialog> {
                 onChanged: (v) => setState(() => _category = v ?? 'announcement'),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: _audience,
-                decoration: const InputDecoration(
-                  labelText: 'Target Department (optional)',
-                  hintText: 'Leave empty for all company',
-                ),
-              ),
+              Builder(builder: (context) {
+                final depts = ref.watch(departmentsProvider).maybeWhen(
+                      data: (l) => l.where((d) => d.active).map((d) => d.name.trim()).where((n) => n.isNotEmpty),
+                      orElse: () => const <String>[],
+                    );
+                final names = <String>{...depts};
+                // Keep an older free-text audience selectable so editing never drops it.
+                if (_audience != 'all') names.add(_audience);
+                final sorted = names.toList()..sort();
+                return DropdownButtonFormField<String>(
+                  key: ValueKey('aud-${sorted.length}'),
+                  initialValue: _audience,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Target Department'),
+                  items: [
+                    const DropdownMenuItem(value: 'all', child: Text('All (whole company)')),
+                    ...sorted.map((n) => DropdownMenuItem(value: n, child: Text(n, overflow: TextOverflow.ellipsis))),
+                  ],
+                  onChanged: (v) => setState(() => _audience = v ?? 'all'),
+                );
+              }),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () async {
                   final now = DateTime.now();
+                  // An older event keeps its own date pickable.
+                  final yearAgo = DateTime(now.year - 1);
+                  final first = (_eventDate != null && _eventDate!.isBefore(yearAgo)) ? _eventDate! : yearAgo;
                   final d = await showDatePicker(
                     context: context,
                     initialDate: _eventDate ?? now,
-                    firstDate: DateTime(now.year - 1),
+                    firstDate: first,
                     lastDate: DateTime(now.year + 2),
                   );
                   if (d != null) setState(() => _eventDate = d);

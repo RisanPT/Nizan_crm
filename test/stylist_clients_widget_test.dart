@@ -147,7 +147,7 @@ void main() {
         testWidgets('phone keeps company and sort behind Filters', (tester) async {
           await _pump(tester, const StylistClientsScreen(), entry.value);
           expect(find.text('Sort: Event soonest'), findsNothing);
-          expect(find.text('Done'), findsOneWidget); // short label for Completed
+          expect(find.text('Completed'), findsOneWidget); // same label as on desktop
           await tester.tap(find.byTooltip('Filters'));
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
@@ -171,13 +171,9 @@ void main() {
         // Calls 1 and 2 are booked, so the main button books call 3.
         expect(find.widgetWithText(FilledButton, 'Schedule call 3'), findsOneWidget);
         expect(find.text(desktop ? 'Report PDF' : 'Report'), findsOneWidget);
-        if (desktop) {
-          expect(find.text('Call'), findsOneWidget);
-          expect(find.text('WhatsApp'), findsOneWidget);
-        } else {
-          expect(find.byTooltip('Call'), findsOneWidget);
-          expect(find.byTooltip('WhatsApp'), findsOneWidget);
-        }
+        // Labelled Call / WhatsApp buttons at every width.
+        expect(find.widgetWithText(OutlinedButton, 'Call'), findsOneWidget);
+        expect(find.widgetWithText(OutlinedButton, 'WhatsApp'), findsOneWidget);
 
         // Call series.
         expect(find.text('1 of 4 done'), findsOneWidget);

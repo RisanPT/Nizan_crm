@@ -293,6 +293,7 @@ class RoyalBooking {
   final String venue;
   final String status;
   final String packageName;
+  final String eventSlot; // Morning / Evening…, '' when the booking has none
   final List<DateTime> eventDates;
   final DateTime? nextEventDay;
   final List<String> artistNames;
@@ -312,6 +313,7 @@ class RoyalBooking {
     this.venue = '',
     this.status = '',
     this.packageName = '',
+    this.eventSlot = '',
     this.eventDates = const [],
     this.nextEventDay,
     this.artistNames = const [],
@@ -351,6 +353,7 @@ class RoyalBooking {
         venue: json['venue'] as String? ?? '',
         status: json['status'] as String? ?? '',
         packageName: json['packageName'] as String? ?? '',
+        eventSlot: json['eventSlot'] as String? ?? '',
         eventDates: ((json['eventDates'] as List?) ?? const [])
             .map(_day)
             .whereType<DateTime>()

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/routing/app_router.dart' show isRouteAllowed;
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
 import 'package:nizan_crm/features/hr/leave/service/leave_service.dart';
@@ -23,7 +24,7 @@ class HrHomeScreen extends ConsumerWidget {
     final access = Access.of(session);
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
     final isManager = access.isFullAccess || access.isDepartmentHead;
-    final isOrg = access.isFullAccess || access.has('staff', false);
+    final isOrg = access.isFullAccess || access.isHrRole || access.canSeeStaff;
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'Me'),
@@ -168,7 +169,12 @@ Widget _tileCard(BuildContext context, CrmTheme crm, _Tile t) {
   );
 }
 
+/// Only the tiles whose screen the router will open for this login.
+List<_Tile> _allowedTiles(Access access, List<_Tile> tiles) =>
+    tiles.where((t) => isRouteAllowed(t.route, access)).toList();
+
 Widget _tileGridView(BuildContext context, CrmTheme crm, List<_Tile> tiles) {
+  if (tiles.isEmpty) return const SizedBox.shrink();
   return LayoutBuilder(builder: (context, c) {
     final cols = c.maxWidth > 680 ? 4 : (c.maxWidth > 460 ? 3 : 2);
     return GridView.count(
@@ -191,6 +197,7 @@ class _MeScope extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
     final balances = ref.watch(myBalancesProvider);
+    final access = Access.of(ref.watch(authSessionProvider));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
       children: [
@@ -229,7 +236,9 @@ class _MeScope extends ConsumerWidget {
           },
         ),
         const HrSectionLabel('Quick actions'),
-        _tileGridView(context, crm, const [
+        // "My requests" (approvals) shows only for logins the router lets
+        // into Approvals; everyone else tracks each request on its own screen.
+        _tileGridView(context, crm, _allowedTiles(access, const [
           _Tile(Icons.event_busy_outlined, 'My leave', 'Balance and history', '/hr/leave'),
           _Tile(Icons.receipt_long, 'My payslips', 'Download salary slips', '/hr/my-payslips'),
           _Tile(Icons.timer_outlined, 'My timesheet', 'Log & submit hours', '/hr/timesheet'),
@@ -241,7 +250,7 @@ class _MeScope extends ConsumerWidget {
           _Tile(Icons.report_gmailerrorred_outlined, 'Raise a concern', 'Grievance', '/hr/grievance'),
           _Tile(Icons.folder_shared_outlined, 'My documents', 'Files & letters', '/hr/files'),
           _Tile(Icons.fact_check_outlined, 'My requests', 'Track approvals', '/hr/approvals'),
-        ]),
+        ])),
       ],
     );
   }
@@ -256,6 +265,7 @@ class _TeamScope extends ConsumerWidget {
     final crm = context.crmColors;
     final inbox = ref.watch(approvalInboxProvider);
     final pending = inbox.maybeWhen(data: (l) => l.length, orElse: () => 0);
+    final access = Access.of(ref.watch(authSessionProvider));
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),
       children: [
@@ -264,31 +274,37 @@ class _TeamScope extends ConsumerWidget {
         Text('Approve requests and keep an eye on your team',
             style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
         const SizedBox(height: 18),
-        _tileGridView(context, crm, [
+        _tileGridView(context, crm, _allowedTiles(access, [
           _Tile(Icons.fact_check_outlined, 'Approvals inbox', pending > 0 ? '$pending awaiting you' : 'Up to date', '/hr/approvals'),
           const _Tile(Icons.event_note_outlined, 'Team leave', 'Requests & calendar', '/hr/leave'),
           const _Tile(Icons.account_tree_outlined, 'Organization', 'Reporting structure', '/hr/org'),
           const _Tile(Icons.timer_outlined, 'Timesheets', 'Review submissions', '/hr/timesheet'),
-        ]),
+        ])),
       ],
     );
   }
 }
 
 // ─── Organization (HR / admin) ──────────────────────────────────────────────
-class _OrgScope extends StatelessWidget {
+class _OrgScope extends ConsumerWidget {
   const _OrgScope();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final crm = context.crmColors;
-    Widget section(String label, List<_Tile> tiles) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [HrSectionLabel(label), _tileGridView(context, crm, tiles)],
-          ),
-        );
+    final access = Access.of(ref.watch(authSessionProvider));
+    // Sections with no tile this login may open are left out entirely.
+    Widget section(String label, List<_Tile> tiles) {
+      final allowed = _allowedTiles(access, tiles);
+      if (allowed.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [HrSectionLabel(label), _tileGridView(context, crm, allowed)],
+        ),
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 32),

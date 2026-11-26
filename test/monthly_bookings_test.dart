@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:nizan_crm/core/config/sales_rules.dart';
 import 'package:nizan_crm/core/theme/app_theme.dart';
 import 'package:nizan_crm/features/bookings/data/booking.dart';
 import 'package:nizan_crm/features/bookings/controllers/booking_provider.dart';
@@ -25,6 +26,9 @@ void main() {
       ProviderScope(
         overrides: [
           bookingProvider.overrideWith(() => _EmptyBookingNotifier()),
+          // The screen also loads the sales-excluded creators list over the
+          // network; stub it so no Dio request/timer outlives the test.
+          salesExcludedCreatorsProvider.overrideWith((ref) async => <String>{}),
         ],
         child: MaterialApp(
           theme: ThemeData(extensions: [AppTheme.crmThemeExtension]),
@@ -54,6 +58,9 @@ void main() {
       ProviderScope(
         overrides: [
           bookingProvider.overrideWith(() => _EmptyBookingNotifier()),
+          // The screen also loads the sales-excluded creators list over the
+          // network; stub it so no Dio request/timer outlives the test.
+          salesExcludedCreatorsProvider.overrideWith((ref) async => <String>{}),
         ],
         child: MaterialApp(
           theme: ThemeData(extensions: [AppTheme.crmThemeExtension]),

@@ -42,7 +42,8 @@ class HrTravelScreen extends ConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
-    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('travel', false) || access.has('staff', false);
+    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('travel', false) || access.canSeeStaff ||
+        access.isHrRole; // the hr role runs the travel desk (as the backend allows)
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Requests'),
@@ -194,7 +195,8 @@ class _TravelDialogState extends ConsumerState<_TravelDialog> {
             toDate: _to,
             estimatedCost: double.tryParse(_cost.text.trim()) ?? 0,
             advanceRequested: _advanceRequested,
-            advanceAmount: double.tryParse(_advance.text.trim()) ?? 0,
+            // Toggled off → no advance, even if an amount was typed earlier.
+            advanceAmount: _advanceRequested ? double.tryParse(_advance.text.trim()) ?? 0 : 0,
           );
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -233,7 +235,13 @@ class _TravelDialogState extends ConsumerState<_TravelDialog> {
                     onPressed: () async {
                       final now = DateTime.now();
                       final d = await showDatePicker(context: context, initialDate: _from ?? now, firstDate: now, lastDate: DateTime(now.year + 2));
-                      if (d != null) setState(() => _from = d);
+                      if (d != null) {
+                        setState(() {
+                          _from = d;
+                          // A return date before the new start is no longer valid.
+                          if (_to != null && _to!.isBefore(d)) _to = null;
+                        });
+                      }
                     },
                     child: Text(_from == null ? 'From' : 'From ${_fmt(_from)}'),
                   ),
@@ -243,7 +251,7 @@ class _TravelDialogState extends ConsumerState<_TravelDialog> {
                   child: OutlinedButton(
                     onPressed: () async {
                       final base = _from ?? DateTime.now();
-                      final d = await showDatePicker(context: context, initialDate: _to ?? base, firstDate: base, lastDate: DateTime(base.year + 2));
+                      final d = await showDatePicker(context: context, initialDate: (_to == null || _to!.isBefore(base)) ? base : _to!, firstDate: base, lastDate: DateTime(base.year + 2));
                       if (d != null) setState(() => _to = d);
                     },
                     child: Text(_to == null ? 'To' : 'To ${_fmt(_to)}'),

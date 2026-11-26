@@ -26,8 +26,16 @@ void main() {
 
     // Catalog renders (wide rail layout).
     expect(find.text('Profit and Loss'), findsOneWidget);
-    expect(find.text('Bank Reconciliation'), findsOneWidget);
     expect(find.text('All Reports'), findsWidgets);
+    // The catalog has grown (departmental reviews, GSTR-3B, TDS…) so the lazy
+    // list no longer builds the Banking entry on first paint — scroll to it.
+    final reportList = find.byType(Scrollable).last;
+    await tester.scrollUntilVisible(find.text('Bank Reconciliation'), 300,
+        scrollable: reportList);
+    expect(find.text('Bank Reconciliation'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Month-End Review'), -300,
+        scrollable: reportList);
+    await tester.pumpAndSettle();
 
     // Category filter: Taxes → only the GST report. (Rail item is first in the
     // tree; the word also appears as a row's category column.)

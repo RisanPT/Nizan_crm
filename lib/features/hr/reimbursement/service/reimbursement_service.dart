@@ -62,7 +62,8 @@ class ReimbursementService {
     }
   }
 
-  Future<void> pay(String id, {String paymentMethod = 'bank'}) async {
+  /// [paymentMethod] is 'cash' or 'bank' (what the backend accepts).
+  Future<void> pay(String id, {required String paymentMethod}) async {
     try {
       await _dio.post('/reimbursements/$id/pay', data: {'paymentMethod': paymentMethod});
     } catch (e) {
@@ -76,5 +77,6 @@ final reimbursementServiceProvider =
 
 final myClaimsProvider = FutureProvider<List<ExpenseClaim>>((ref) => ref.watch(reimbursementServiceProvider).getMine());
 
-final claimRequestsProvider =
-    FutureProvider<List<ExpenseClaim>>((ref) => ref.watch(reimbursementServiceProvider).getRequests());
+/// All claims (HR), keyed by status filter: 'all' or a claim status.
+final claimRequestsProvider = FutureProvider.family<List<ExpenseClaim>, String>((ref, status) =>
+    ref.watch(reimbursementServiceProvider).getRequests(status: status == 'all' ? null : status));

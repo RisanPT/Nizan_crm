@@ -28,12 +28,14 @@ class LeaveOverviewTab extends ConsumerWidget {
       child: reqs.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => ref.invalidate(leaveRequestsProvider))]),
-        data: (list) => _body(context, list, holidays),
+        data: (list) => _body(context, list, holidays, ref.watch(leaveYearProvider) == DateTime.now().year),
       ),
     );
   }
 
-  Widget _body(BuildContext context, List<LeaveRequest> list, List<Holiday> holidays) {
+  /// [isThisYear]: the list holds the selected year only, so today / this week
+  /// counts are shown only when the current year is selected.
+  Widget _body(BuildContext context, List<LeaveRequest> list, List<Holiday> holidays, bool isThisYear) {
     final crm = context.crmColors;
     final today = leaveDay(DateTime.now());
     final weekEnd = today.add(Duration(days: 7 - today.weekday)); // Sunday
@@ -53,8 +55,8 @@ class LeaveOverviewTab extends ConsumerWidget {
 
     final kpis = [
       _Kpi(Icons.hourglass_top_rounded, '${pending.length}', 'Pending decision', pending.isEmpty ? crm.success : crm.warning),
-      _Kpi(Icons.person_off_outlined, '${outToday.map((r) => r.employeeId).toSet().length}', 'On leave today', crm.primary),
-      _Kpi(Icons.date_range_outlined, '${weekPeople.length}', 'Out this week', crm.primary),
+      _Kpi(Icons.person_off_outlined, isThisYear ? '${outToday.map((r) => r.employeeId).toSet().length}' : '—', 'On leave today', crm.primary),
+      _Kpi(Icons.date_range_outlined, isThisYear ? '${weekPeople.length}' : '—', 'Out this week', crm.primary),
       _Kpi(
         Icons.celebration_outlined,
         nextHolidays.isEmpty ? '—' : leaveFmtShort(nextHolidays.first.date),
@@ -83,11 +85,13 @@ class LeaveOverviewTab extends ConsumerWidget {
       LeaveSection(
         title: "Who's out",
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (!isThisYear) _muted(crm, 'Select the current year to see who is out today.') else ...[
           _subLabel(crm, 'Today · ${leaveWeekday(today)} ${leaveFmtShort(today)}'),
           if (outToday.isEmpty) _muted(crm, 'Everyone is in.') else ...outToday.map((r) => _OutRow(r, today: today)),
           const SizedBox(height: 10),
           _subLabel(crm, 'Rest of this week'),
           if (laterThisWeek.isEmpty) _muted(crm, 'No one else is off.') else ...laterThisWeek.map((r) => _OutRow(r, today: today)),
+          ],
           const SizedBox(height: 6),
         ]),
       ),

@@ -9,6 +9,7 @@ import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/ess/service/ess_service.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/services/role_service.dart';
 import 'package:nizan_crm/features/hr/recruitment/data/recruitment_models.dart';
 import 'package:nizan_crm/features/hr/recruitment/service/recruitment_service.dart';
@@ -30,6 +31,9 @@ class _HrLoginsScreenState extends ConsumerState<HrLoginsScreen> {
   Widget build(BuildContext context) {
     final crm = context.crmColors;
     final employees = ref.watch(employeesProvider);
+    // Bulk invite is admin / manager / HR only on the server.
+    final access = Access.of(ref.watch(authSessionProvider));
+    final canInviteAll = access.isFullAccess || access.isHrRole;
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -57,7 +61,8 @@ class _HrLoginsScreenState extends ConsumerState<HrLoginsScreen> {
                         style: TextStyle(fontSize: 11.5, color: crm.textSecondary),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    if (canInviteAll) const SizedBox(width: 8),
+                    if (canInviteAll)
                     OutlinedButton.icon(
                       onPressed: _inviteAll,
                       icon: const Icon(Icons.group_add_outlined, size: 18),

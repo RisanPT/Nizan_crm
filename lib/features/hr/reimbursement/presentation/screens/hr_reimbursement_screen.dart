@@ -44,7 +44,8 @@ class HrReimbursementScreen extends ConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
-    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('reimbursement', false) || access.has('staff', false);
+    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('reimbursement', false) || access.canSeeStaff ||
+        access.isHrRole; // the hr role manages claims (as the backend allows)
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Claims'),
@@ -251,13 +252,68 @@ class _ClaimDialogState extends ConsumerState<_ClaimDialog> {
   }
 }
 
-class _RequestsTab extends ConsumerWidget {
+class _RequestsTab extends ConsumerStatefulWidget {
   const _RequestsTab({required this.crm});
   final CrmTheme crm;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final reqs = ref.watch(claimRequestsProvider);
+  ConsumerState<_RequestsTab> createState() => _RequestsTabState();
+}
+
+const _kClaimStatusFilters = ['all', 'pending', 'approved', 'paid', 'rejected', 'cancelled'];
+
+class _RequestsTabState extends ConsumerState<_RequestsTab> {
+  String _status = 'all';
+
+  CrmTheme get crm => widget.crm;
+
+  /// Asks how the claim was paid (cash / bank) and confirms before posting.
+  Future<void> _pay(ExpenseClaim c) async {
+    String method = 'bank';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Mark claim as paid?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${c.employeeName} · ${c.title} · ₹${c.amount.toStringAsFixed(0)}'),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'bank', label: Text('Bank'), icon: Icon(Icons.account_balance_outlined)),
+                  ButtonSegment(value: 'cash', label: Text('Cash'), icon: Icon(Icons.payments_outlined)),
+                ],
+                selected: {method},
+                onSelectionChanged: (v) => setLocal(() => method = v.first),
+              ),
+              const SizedBox(height: 12),
+              Text('This records the payment and posts it to the ledger.',
+                  style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Mark paid')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(reimbursementServiceProvider).pay(c.id, paymentMethod: method);
+      ref.invalidate(claimRequestsProvider);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked paid')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reqs = ref.watch(claimRequestsProvider(_status));
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(claimRequestsProvider),
       child: reqs.when(
@@ -266,8 +322,30 @@ class _RequestsTab extends ConsumerWidget {
         data: (list) => ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
-            Text('All claims', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: crm.textPrimary)),
-            Text('Approve/decline from the Approvals inbox; pay approved claims here', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('All claims', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: crm.textPrimary)),
+                      Text('Approve/decline from the Approvals inbox; pay approved claims here', style: TextStyle(fontSize: 11.5, color: crm.textSecondary)),
+                    ],
+                  ),
+                ),
+                DropdownButton<String>(
+                  value: _status,
+                  underline: const SizedBox(),
+                  items: _kClaimStatusFilters
+                      .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(s == 'all' ? 'All statuses' : s[0].toUpperCase() + s.substring(1)),
+                          ))
+                      .toList(),
+                  onChanged: (v) => setState(() => _status = v ?? 'all'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             if (list.isEmpty)
               Padding(padding: const EdgeInsets.all(24), child: Center(child: Text('No claims.', style: TextStyle(color: crm.textSecondary))))
@@ -308,17 +386,11 @@ class _RequestsTab extends ConsumerWidget {
                           ),
                         ),
                         _chip(c.status, crm),
-                        if (c.status == 'approved')
+                        // Paying posts money to the ledger: Finance / HR / admin
+                        // only (department heads see the claims but can't pay).
+                        if (c.status == 'approved' && Access.of(ref.watch(authSessionProvider)).canPayClaims)
                           TextButton(
-                            onPressed: () async {
-                              try {
-                                await ref.read(reimbursementServiceProvider).pay(c.id);
-                                ref.invalidate(claimRequestsProvider);
-                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked paid')));
-                              } catch (e) {
-                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
-                              }
-                            },
+                            onPressed: () => _pay(c),
                             child: const Text('Pay'),
                           ),
                       ],

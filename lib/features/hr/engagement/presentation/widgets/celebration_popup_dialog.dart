@@ -568,10 +568,13 @@ class _CelebrationPopupDialogState extends State<CelebrationPopupDialog>
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                    widget.onWish?.call(current);
-                                  },
+                                  // Only logins that may post get the "Post Wishes" action.
+                                  onPressed: widget.onWish == null
+                                      ? null
+                                      : () {
+                                          Navigator.of(context).pop();
+                                          widget.onWish?.call(current);
+                                        },
                                   icon: const Icon(Icons.celebration_rounded, size: 18),
                                   label: const Text(
                                     'Post Wishes 🎉',

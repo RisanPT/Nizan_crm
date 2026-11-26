@@ -1,7 +1,8 @@
 // Grievance model — mirrors backend/models/Grievance.js.
 
 const kGrievanceCategories = <String>['workplace', 'harassment', 'payroll', 'facilities', 'management', 'other'];
-const kGrievanceStatuses = <String>['open', 'in_review', 'resolved', 'closed'];
+// 'withdrawn' — the employee pulled back an open case (kept on record).
+const kGrievanceStatuses = <String>['open', 'in_review', 'resolved', 'closed', 'withdrawn'];
 
 String grievanceLabel(String s) => s.isEmpty ? '' : s[0].toUpperCase() + s.substring(1).replaceAll('_', ' ');
 

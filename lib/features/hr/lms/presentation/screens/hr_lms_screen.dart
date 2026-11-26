@@ -82,7 +82,11 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
     final canManage = access.isFullAccess ||
         access.isDepartmentHead ||
         access.has('lms', false) ||
-        access.has('staff', false);
+        access.canSeeStaff;
+    // Course catalogue and orientation PLAN documents are company master data:
+    // HR only (the server refuses department heads). Heads still assign
+    // orientation and sign off days for their own team.
+    final canEditCatalogue = access.isHrWideFor('lms');
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -98,13 +102,13 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
             IndexedStack(
               index: _activeTabIndex,
               children: [
-                _OrientationTab(crm: crm, canManage: canManage),
+                _OrientationTab(crm: crm, canManage: canManage, canEditPlans: canEditCatalogue),
                 SyllabusTutorialsTab(crm: crm, canManage: canManage),
                 MentorTrainerFlowTab(crm: crm, canManage: canManage),
                 EvaluationScoringTab(crm: crm, canManage: canManage),
                 QualityIndexTab(crm: crm),
                 GalpAmoBundleTab(crm: crm, canManage: canManage),
-                _CoursesTab(crm: crm, canManage: canManage),
+                _CoursesTab(crm: crm, canManage: canEditCatalogue),
                 _SkillsMatrixTab(crm: crm),
               ],
             ),
@@ -340,7 +344,10 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                   hint: const Text('Choose employee'),
-                  items: employees.map((e) => DropdownMenuItem(value: e.id, child: Text('${e.name} (${e.role ?? 'Staff'})'))).toList(),
+                  items: employees
+                      .where((e) => e.status == 'active')
+                      .map((e) => DropdownMenuItem(value: e.id, child: Text('${e.name} (${e.role ?? 'Staff'})')))
+                      .toList(),
                   onChanged: (v) => setDlg(() => selectedEmpId = v),
                 ),
                 const SizedBox(height: 14),
@@ -402,9 +409,10 @@ class _HrLmsScreenState extends ConsumerState<HrLmsScreen> with SingleTickerProv
 // TAB 1: ORIENTATION (1-WEEK PLAN AS DOC & REAL-TIME PROGRESS TRACKER)
 // =============================================================================
 class _OrientationTab extends ConsumerStatefulWidget {
-  const _OrientationTab({required this.crm, required this.canManage});
+  const _OrientationTab({required this.crm, required this.canManage, this.canEditPlans = false});
   final CrmTheme crm;
   final bool canManage;
+  final bool canEditPlans; // plan documents are HR master data
 
   @override
   ConsumerState<_OrientationTab> createState() => _OrientationTabState();
@@ -995,7 +1003,7 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                   ),
                 ],
               ),
-              if (widget.canManage)
+              if (widget.canEditPlans)
                 OutlinedButton.icon(
                   onPressed: () => _editPlanDialog(context, ref, null),
                   icon: const Icon(Icons.create_new_folder_outlined, size: 15),
@@ -1110,7 +1118,7 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                             visualDensity: VisualDensity.compact,
                           ),
                         ),
-                        if (widget.canManage) ...[
+                        if (widget.canEditPlans) ...[
                           const SizedBox(width: 6),
                           IconButton(
                             icon: Icon(Icons.edit_outlined, size: 16, color: crm.textSecondary),
@@ -1171,7 +1179,10 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                   hint: const Text('Choose employee to enroll'),
-                  items: employees.map((e) => DropdownMenuItem(value: e.id, child: Text('${e.name} (${e.role ?? 'Staff'})'))).toList(),
+                  items: employees
+                      .where((e) => e.status == 'active')
+                      .map((e) => DropdownMenuItem(value: e.id, child: Text('${e.name} (${e.role ?? 'Staff'})')))
+                      .toList(),
                   onChanged: (v) => setDlg(() => selectedEmpId = v),
                 ),
                 const SizedBox(height: 14),
@@ -1550,7 +1561,7 @@ class _OrientationTabState extends ConsumerState<_OrientationTab> {
                 children: [
                   Text('Job Role Title:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: crm.textPrimary)),
                   const SizedBox(height: 6),
-                  TextField(controller: roleCtrl, decoration: InputDecoration(hintText: 'e.g. Senior Dev-ops engineer', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
+                  TextField(controller: roleCtrl, decoration: InputDecoration(hintText: 'e.g. Bridal Makeup Artist', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)))),
                   const SizedBox(height: 12),
                   Text('Department (Hierarchy):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: crm.textPrimary)),
                   const SizedBox(height: 6),
@@ -1874,8 +1885,24 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
                                                       icon: const Icon(Icons.delete_outline, size: 16),
                                                       tooltip: "Delete Course",
                                                       onPressed: () async {
-                                                        await ref.read(lmsServiceProvider).deleteCourse(c.id);
-                                                        ref.invalidate(coursesProvider);
+                                                        final ok = await showDialog<bool>(
+                                                          context: context,
+                                                          builder: (ctx) => AlertDialog(
+                                                            title: const Text("Delete course?"),
+                                                            content: Text('"${c.title}" will be removed from the course catalogue.'),
+                                                            actions: [
+                                                              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Cancel")),
+                                                              FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text("Delete")),
+                                                            ],
+                                                          ),
+                                                        );
+                                                        if (ok != true || !context.mounted) return;
+                                                        try {
+                                                          await ref.read(lmsServiceProvider).deleteCourse(c.id);
+                                                          ref.invalidate(coursesProvider);
+                                                        } catch (e) {
+                                                          if (context.mounted) showErrorSnackBar(context, e);
+                                                        }
                                                       },
                                                     ),
                                                   ],
@@ -1937,7 +1964,7 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
                     onChanged: (v) => setDlg(() => selectedDept = v ?? selectedDept),
                   ),
                   const SizedBox(height: 12),
-                  TextField(controller: roleCtrl, decoration: const InputDecoration(labelText: "Target Job Role (e.g. Senior Dev-ops engineer)")),
+                  TextField(controller: roleCtrl, decoration: const InputDecoration(labelText: "Target Job Role (e.g. Bridal Makeup Artist)")),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: cat,
@@ -1980,8 +2007,12 @@ class _CoursesTabState extends ConsumerState<_CoursesTab> {
         "targetRole": roleCtrl.text.trim(),
         "durationHours": double.tryParse(durCtrl.text) ?? 4,
       };
-      await ref.read(lmsServiceProvider).saveCourse(body, id: c?.id);
-      ref.invalidate(coursesProvider);
+      try {
+        await ref.read(lmsServiceProvider).saveCourse(body, id: c?.id);
+        ref.invalidate(coursesProvider);
+      } catch (e) {
+        if (context.mounted) showErrorSnackBar(context, e);
+      }
     }
   }
 }

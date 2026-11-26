@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/approvals/data/approval_models.dart';
 
@@ -65,7 +66,12 @@ class ApprovalService {
 }
 
 final approvalServiceProvider =
-    Provider<ApprovalService>((ref) => ApprovalService(ref.watch(dioProvider)));
+    // Watches the signed-in user, so every list below reloads after a logout /
+    // login as someone else instead of showing the last user's data.
+    Provider<ApprovalService>((ref) {
+  ref.watch(authSessionProvider.select((s) => s?.userId));
+  return ApprovalService(ref.watch(dioProvider));
+});
 
 final approvalInboxProvider =
     FutureProvider<List<ApprovalRequest>>((ref) => ref.watch(approvalServiceProvider).inbox());

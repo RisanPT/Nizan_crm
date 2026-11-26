@@ -476,9 +476,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                           : role == AppRole.stylist
                           ? const [
                               NavigationDestination(
-                                icon: Icon(Icons.today_outlined),
-                                selectedIcon: Icon(Icons.today),
-                                label: 'Today',
+                                icon: Icon(Icons.dashboard_outlined),
+                                selectedIcon: Icon(Icons.dashboard),
+                                label: 'Dashboard',
                               ),
                               NavigationDestination(
                                 icon: Icon(Icons.people_alt_outlined),

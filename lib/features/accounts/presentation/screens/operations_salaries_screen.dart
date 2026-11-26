@@ -819,7 +819,8 @@ class _OperationsSalariesScreenState
                 icon: const Icon(Icons.receipt_long_outlined, size: 18),
                 onPressed: () => _showViewPayslipDialog(s),
               ),
-              if (!s.isPaid)
+              // Only an HR-approved slip can be paid (the server refuses drafts).
+              if (s.status == 'approved_by_hr')
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -830,6 +831,11 @@ class _OperationsSalariesScreenState
                   onPressed: () => _showRecordPaymentDialog(s),
                   icon: const Icon(Icons.payment, size: 14),
                   label: const Text('Disburse', style: TextStyle(fontSize: 12)),
+                )
+              else if (!s.isPaid)
+                Text(
+                  s.status == 'draft' ? 'Awaiting HR approval' : 'Not payable',
+                  style: TextStyle(color: Colors.orange.shade800, fontSize: 12),
                 )
               else
                 Text(

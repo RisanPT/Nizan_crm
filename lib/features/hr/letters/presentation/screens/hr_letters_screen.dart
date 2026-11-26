@@ -11,6 +11,22 @@ import 'package:nizan_crm/features/hr/letters/data/letter_models.dart';
 import 'package:nizan_crm/features/hr/letters/service/letter_service.dart';
 import 'package:nizan_crm/features/hr/letters/utils/nizan_hr_document_pdf.dart';
 
+// Asks before a one-tap delete; true only when the user confirms.
+Future<bool> _confirmLetterDelete(BuildContext context, String title, String message) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+      ],
+    ),
+  );
+  return ok == true && context.mounted;
+}
+
 String _fmt(DateTime? d) {
   if (d == null) return '';
   const m = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -97,6 +113,7 @@ class _TemplatesTab extends ConsumerWidget {
           IconButton(
             icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
             onPressed: () async {
+              if (!await _confirmLetterDelete(context, 'Delete template?', 'The template "${t.name}" will be removed. Letters already issued from it are kept.')) return;
               try {
                 await ref.read(letterServiceProvider).deleteTemplate(t.id);
                 ref.invalidate(letterTemplatesProvider);
@@ -270,6 +287,7 @@ class _GeneratedTab extends ConsumerWidget {
             icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
             tooltip: 'Delete letter',
             onPressed: () async {
+              if (!await _confirmLetterDelete(context, 'Delete letter?', 'This issued letter for ${g.employeeName} will be removed permanently.')) return;
               try {
                 await ref.read(letterServiceProvider).deleteGenerated(g.id);
                 ref.invalidate(generatedLettersProvider);

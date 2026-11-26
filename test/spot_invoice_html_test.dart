@@ -55,9 +55,17 @@ void main() {
       expect(html, isNot(contains('<Co>')));
     });
 
+    // The quotation deliberately reuses the Team N GST invoice layout (gst-* CSS classes, the company GSTIN in
+    // "Company Details"), so the word GST appears — but it is labelled NO GST and charges no tax at all.
     test('is explicitly not a tax invoice (no GST)', () {
       expect(html.toLowerCase(), contains('not a tax invoice'));
-      expect(html.toUpperCase(), isNot(contains('GST')));
+      expect(html, contains('QUOTATION (NO GST)'));
+      final upper = html.replaceAll(RegExp(r'data:image/[^"]+'), '').toUpperCase(); // not the logo's base64
+      for (final tax in ['CGST', 'SGST', 'IGST', 'GST @', 'GST AMOUNT', 'TAXABLE', 'TAX AMOUNT', 'HSN', 'SAC']) {
+        expect(upper, isNot(contains(tax)), reason: tax);
+      }
+      // the total is the plain sum of the lines: nothing is added on top
+      expect(RegExp('₹42000').allMatches(html).length, 2, reason: 'subtotal and total are the same amount');
     });
   });
 }

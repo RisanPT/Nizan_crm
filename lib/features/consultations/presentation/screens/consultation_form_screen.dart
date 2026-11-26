@@ -62,6 +62,7 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
   final _link = TextEditingController();
   final _location = TextEditingController();
   bool _saving = false;
+  bool _showAllDay = false; // the "other calls that day" list, when long
 
   static DateTime _defaultStart() {
     final t = DateTime.now().add(const Duration(days: 1));
@@ -470,6 +471,40 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
           onSelected: _saving ? null : (_) => onTap(),
         );
 
+    // Calls already booked over a quick start time (for the chosen length).
+    List<Consultation> busyAt(int h, int m) {
+      final start = DateTime(_when.year, _when.month, _when.day, h, m);
+      final end = start.add(Duration(minutes: _duration));
+      return dayCalls.where((c) => c.scheduledAt.isBefore(end) && c.endsAt.isAfter(start)).toList();
+    }
+
+    // Busy times stay pickable (booking over a clash asks first), but are
+    // marked so the stylist can see free slots at a glance.
+    Widget timeChip((int, int) t) {
+      final busy = busyAt(t.$1, t.$2);
+      final selected = _when.hour == t.$1 && _when.minute == t.$2;
+      final c = ChoiceChip(
+        avatar: busy.isEmpty || selected ? null : Icon(Icons.event_busy, size: 16, color: crm.destructive),
+        label: Text(fmtTime(DateTime(2000, 1, 1, t.$1, t.$2)),
+            style: busy.isEmpty ? null : TextStyle(color: crm.destructive)),
+        side: busy.isEmpty ? null : BorderSide(color: crm.destructive.withValues(alpha: 0.4)),
+        selected: selected,
+        onSelected: _saving
+            ? null
+            : (_) => setState(() => _when = DateTime(_when.year, _when.month, _when.day, t.$1, t.$2)),
+      );
+      if (busy.isEmpty) return c;
+      return Tooltip(
+        message: 'Busy: ${busy.map((b) => b.clientName.isEmpty ? 'Client' : b.clientName).join(', ')}',
+        child: c,
+      );
+    }
+
+    // Long days: show the clashing calls, the rest behind "Show all".
+    final collapse = dayCalls.length > 3 && !_showAllDay;
+    final listed = collapse ? clashes : dayCalls;
+    final hidden = dayCalls.length - listed.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -508,12 +543,7 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
           spacing: 6,
           runSpacing: 6,
           children: [
-            for (final t in _quickTimes)
-              chip(
-                fmtTime(DateTime(2000, 1, 1, t.$1, t.$2)),
-                _when.hour == t.$1 && _when.minute == t.$2,
-                () => setState(() => _when = DateTime(_when.year, _when.month, _when.day, t.$1, t.$2)),
-              ),
+            for (final t in _quickTimes) timeChip(t),
             ActionChip(
               avatar: const Icon(Icons.access_time, size: 16),
               label: Text(timeQuick ? 'Other time' : fmtTime(_when)),
@@ -556,10 +586,11 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
               Text(
                 dayCalls.isEmpty
                     ? 'No other calls on ${fmtDay(_when)} — free all day'
-                    : 'Other calls on ${fmtDay(_when)}',
+                    : '${dayCalls.length} other ${dayCalls.length == 1 ? 'call' : 'calls'} on ${fmtDay(_when)}'
+                        '${clashes.isEmpty ? ' — no clash at this time' : ''}',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: crm.textPrimary),
               ),
-              for (final c in dayCalls)
+              for (final c in listed)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Row(
@@ -576,6 +607,15 @@ class _ConsultationFormScreenState extends ConsumerState<ConsultationFormScreen>
                         ),
                       ),
                     ],
+                  ),
+                ),
+              if (collapse && hidden > 0)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact, padding: EdgeInsets.zero),
+                    onPressed: () => setState(() => _showAllDay = true),
+                    child: Text('Show all ${dayCalls.length} calls'),
                   ),
                 ),
             ],

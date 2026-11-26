@@ -100,6 +100,32 @@ class _HrLeaveScreenState extends ConsumerState<HrLeaveScreen> with TickerProvid
       );
     }
 
+    // A department head (not on the leave desk) sees their own leave plus a
+    // READ-ONLY team calendar; the server returns only their team's leave and
+    // only HR / admin can decide (owner 2026-11-26).
+    if (!isDesk && (session?.isDepartmentHead ?? false)) {
+      final headTabs = <(String, IconData, Widget)>[
+        if (hasEmployee) ('My leave', Icons.person_outline, const LeaveMyTab()),
+        ('Team calendar', Icons.calendar_month_outlined, const LeaveCalendarTab()),
+      ];
+      final controller = _controllerFor(headTabs.length);
+      return Scaffold(
+        backgroundColor: crm.background,
+        body: Column(children: [
+          header,
+          Material(
+            color: crm.surface,
+            child: TabBar(
+              controller: controller,
+              isScrollable: true,
+              tabs: [for (final t in headTabs) Tab(icon: Icon(t.$2, size: 18), text: t.$1)],
+            ),
+          ),
+          Expanded(child: TabBarView(controller: controller, children: [for (final t in headTabs) t.$3])),
+        ]),
+      );
+    }
+
     if (!isDesk) {
       return Scaffold(
         backgroundColor: crm.background,

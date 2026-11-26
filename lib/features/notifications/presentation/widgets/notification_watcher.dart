@@ -185,6 +185,19 @@ class _NotificationWatcherState extends ConsumerState<NotificationWatcher> {
         return Icons.event_repeat_rounded;
       case 'consultation_reminder':
         return Icons.alarm_on_rounded;
+      // HRMS workflow (2026-11-26).
+      case 'payslip_ready':
+        return Icons.receipt_long_rounded;
+      case 'payroll_submitted':
+        return Icons.account_balance_wallet_rounded;
+      case 'new_hire':
+        return Icons.person_add_alt_1_rounded;
+      case 'hiring_plan_raised':
+        return Icons.work_outline_rounded;
+      case 'offboarding_started':
+        return Icons.logout_rounded;
+      case 'probation_ending':
+        return Icons.hourglass_bottom_rounded;
       default:
         return Icons.notifications_active_rounded;
     }

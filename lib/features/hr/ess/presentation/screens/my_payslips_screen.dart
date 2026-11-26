@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/accounts/services/salary_service.dart';
 import 'package:nizan_crm/features/accounts/utils/payslip_pdf.dart';
 
 /// ESS: the signed-in employee's own payslips (approved / paid only).
+/// Approved-but-unpaid slips are shown as "Provisional": HR can still edit them.
 /// Tap a slip to download (web) or share (mobile) its PDF.
 class MyPayslipsScreen extends ConsumerStatefulWidget {
   const MyPayslipsScreen({super.key});
@@ -99,7 +100,10 @@ class _MyPayslipsScreenState extends ConsumerState<MyPayslipsScreen> {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         leading: const Icon(Icons.receipt_long),
         title: Text(payslipMonthLabel(s), style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text('Net pay ${_money(s.netAmount)}'),
+        // An approved slip can still be adjusted by HR until it is paid.
+        subtitle: Text(paid
+            ? 'Net pay ${_money(s.netAmount)}'
+            : 'Net pay ${_money(s.netAmount)} · may change until paid'),
         trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -107,7 +111,7 @@ class _MyPayslipsScreenState extends ConsumerState<MyPayslipsScreen> {
               color: (paid ? Colors.green : Colors.orange).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Text(paid ? 'Paid' : 'Approved',
+            child: Text(paid ? 'Paid' : 'Provisional',
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,

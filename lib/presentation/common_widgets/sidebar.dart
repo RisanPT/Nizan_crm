@@ -5,6 +5,7 @@ import '../../core/auth/app_role.dart';
 import '../../core/auth/workspace.dart';
 import '../../core/extensions/space_extension.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/routing/app_router.dart' show isRouteAllowed;
 import '../../core/theme/crm_theme.dart';
 import '../../core/utils/responsive_builder.dart';
 import 'workspace_switcher.dart';
@@ -15,7 +16,6 @@ import 'package:nizan_crm/features/sales/services/goal_service.dart';
 import 'package:nizan_crm/features/sales/services/sales_target_service.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
 import 'package:nizan_crm/features/hr/shared/hr_services_launcher.dart';
-import 'package:nizan_crm/features/hr/shared/hr_feature_flags.dart';
 
 class Sidebar extends ConsumerWidget {
   final bool fleetExpanded;
@@ -133,9 +133,16 @@ class Sidebar extends ConsumerWidget {
     final isMarketingRoute = currentPath.startsWith('/marketing');
     final isContentRoute = currentPath.startsWith('/marketing/content');
     final isSalesRoute = currentPath.startsWith('/sales');
-    // Leave is a standalone item for ESS employees who lack full HRMS access.
+    // The HRMS group: full HR (staff module) or a department head (team scope —
+    // each item below is filtered by the router rule, so they see only what
+    // they can open).
+    final showHrGroup = access.canSeeHrmsMenu;
+    bool hrOk(String route) => isRouteAllowed(route, access);
+    // Leave and HR Home are standalone items (HR Home for everyone, Leave for
+    // ESS employees who don't get the HRMS group).
     final isHrRoute = (currentPath.startsWith('/staff') || currentPath.startsWith('/hr')) &&
-        (!access.canSeeStaff ? currentPath != '/hr/leave' : true);
+        currentPath != '/hr/home' &&
+        (!showHrGroup ? currentPath != '/hr/leave' : true);
     final isCollapsed = isTablet && !isMobile && !ResponsiveBuilder.isTwoPane(context);
     final effectiveFleetExpanded =
         !isCollapsed && (fleetExpanded || (isFleetRoute && !fleetUserCollapsed));
@@ -171,6 +178,35 @@ class Sidebar extends ConsumerWidget {
     // Company Projects permission), the finance head's Project budgets and HR's Manpower requests (the server decides who may
     // see and do what). [core] is false for menus that have no portfolio of their own, [header] false to sit under a heading
     // the menu already has. The CEO only looks at objectives: budgets and manpower are not his screens.
+    // MY HR — self-service for every staff member (owner 2026-11-26), in the
+    // artist, inventory and driver menus too: HR Home (leave balance, claims,
+    // documents, learning…), my leave and my payslips. The server returns only
+    // the caller's own records.
+    List<Widget> selfServiceGroup() => [
+      _buildSectionTitle('MY HR', isCollapsed: isCollapsed, theme: theme),
+      _SidebarItem(
+        icon: Icons.home_work_outlined,
+        title: 'HR Home',
+        isCollapsed: isCollapsed,
+        isSelected: currentPath == '/hr/home',
+        onTap: () => context.go('/hr/home'),
+      ),
+      _SidebarItem(
+        icon: Icons.event_busy_outlined,
+        title: 'My Leave',
+        isCollapsed: isCollapsed,
+        isSelected: currentPath == '/hr/leave',
+        onTap: () => context.go('/hr/leave'),
+      ),
+      _SidebarItem(
+        icon: Icons.receipt_long,
+        title: 'My Payslips',
+        isCollapsed: isCollapsed,
+        isSelected: currentPath == '/hr/my-payslips',
+        onTap: () => context.go('/hr/my-payslips'),
+      ),
+    ];
+
     List<Widget> projectGroup({bool core = true, bool header = true}) => [
       if (header) _buildSectionTitle('PROJECTS', isCollapsed: isCollapsed, theme: theme),
       if (core && access.canSeePlanning) ...[
@@ -321,6 +357,7 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/inventory/kits'),
                     ),
                   ],
+                  ...selfServiceGroup(),
                   ...projectGroup(core: false),
                 ] else if (role == AppRole.inventoryManager) ...[
                   // ── INVENTORY MANAGER VIEW ────────────────────────────────
@@ -418,6 +455,7 @@ class Sidebar extends ConsumerWidget {
                         onTap: () => context.go('/trials'),
                       ),
                   ],
+                  ...selfServiceGroup(),
                   ...projectGroup(core: false),
                 ] else if (role == AppRole.ceo) ...[
                   // ── CEO VIEW ──────────────────────────────────────────────
@@ -575,6 +613,7 @@ class Sidebar extends ConsumerWidget {
                     isSelected: currentPath == '/driver/expenses',
                     onTap: () => context.go('/driver/expenses'),
                   ),
+                  ...selfServiceGroup(),
                   ...projectGroup(core: false),
                 ] else ...[
                   // ── STANDARD/ADMIN VIEW ────────────────────────────────────
@@ -706,8 +745,17 @@ class Sidebar extends ConsumerWidget {
                       onTap: () => context.go('/services/regions'),
                     ),
                   ],
-                  // Leave — every employee (ESS) without full HRMS access
-                  if (!access.canSeeStaff)
+                  // HR Home — the ESS / HR landing page, for everyone it admits.
+                  if (hrOk('/hr/home'))
+                    _SidebarItem(
+                      icon: Icons.home_work_outlined,
+                      title: 'HR Home',
+                      isCollapsed: isCollapsed,
+                      isSelected: currentPath == '/hr/home',
+                      onTap: () => context.go('/hr/home'),
+                    ),
+                  // Leave — every employee (ESS) without the HRMS group
+                  if (!showHrGroup)
                     _SidebarItem(
                       icon: Icons.event_busy_outlined,
                       title: 'Leave',
@@ -736,7 +784,7 @@ class Sidebar extends ConsumerWidget {
                       trailing: _approvalsBadge(ref, crmColors, isCollapsed),
                       onTap: () => context.go('/hr/approvals'),
                     ),
-                  if (access.canSeeStaff) ...[
+                  if (showHrGroup) ...[
                     _SidebarItem(
                       icon: Icons.groups_outlined,
                       title: 'HRMS',
@@ -805,10 +853,10 @@ class Sidebar extends ConsumerWidget {
                           '/hr/recruitment', '/hr/onboarding', '/hr/offboarding', '/hr/assets',
                         ]),
                         children: [
-                          _HrNavItem(icon: Icons.work_outline, title: 'Recruitment', route: '/hr/recruitment', selected: currentPath == '/hr/recruitment'),
-                          _HrNavItem(icon: Icons.assignment_turned_in_outlined, title: 'Onboarding', route: '/hr/onboarding', selected: currentPath == '/hr/onboarding'),
-                          _HrNavItem(icon: Icons.logout_outlined, title: 'Offboarding', route: '/hr/offboarding', selected: currentPath == '/hr/offboarding'),
-                          _HrNavItem(icon: Icons.devices_other_rounded, title: 'Employee Assets', route: '/hr/assets', selected: currentPath == '/hr/assets'),
+                          if (hrOk('/hr/recruitment')) _HrNavItem(icon: Icons.work_outline, title: 'Recruitment', route: '/hr/recruitment', selected: currentPath == '/hr/recruitment'),
+                          if (hrOk('/hr/onboarding')) _HrNavItem(icon: Icons.assignment_turned_in_outlined, title: 'Onboarding', route: '/hr/onboarding', selected: currentPath == '/hr/onboarding'),
+                          if (hrOk('/hr/offboarding')) _HrNavItem(icon: Icons.logout_outlined, title: 'Offboarding', route: '/hr/offboarding', selected: currentPath == '/hr/offboarding'),
+                          if (hrOk('/hr/assets')) _HrNavItem(icon: Icons.devices_other_rounded, title: 'Employee Assets', route: '/hr/assets', selected: currentPath == '/hr/assets'),
                         ],
                       ),
                       // 2. People & Organization
@@ -818,13 +866,11 @@ class Sidebar extends ConsumerWidget {
                           '/staff', '/hr/org', '/hr/designations', '/hr/files', '/hr/logins',
                         ]),
                         children: [
-                          if (access.canSeeSub('staff.employees'))
-                            _HrNavItem(icon: Icons.badge_outlined, title: 'Staff Directory', route: '/staff', selected: currentPath.startsWith('/staff')),
-                          _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization Chart', route: '/hr/org', selected: currentPath == '/hr/org'),
-                          _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
-                          _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
-                          if (access.isFullAccess || access.isDepartmentHead || access.isHrRole)
-                            _HrNavItem(icon: Icons.key_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
+                          if (hrOk('/staff')) _HrNavItem(icon: Icons.badge_outlined, title: 'Staff Directory', route: '/staff', selected: currentPath.startsWith('/staff')),
+                          if (hrOk('/hr/org')) _HrNavItem(icon: Icons.account_tree_outlined, title: 'Organization Chart', route: '/hr/org', selected: currentPath == '/hr/org'),
+                          if (hrOk('/hr/designations')) _HrNavItem(icon: Icons.workspace_premium_outlined, title: 'Designations', route: '/hr/designations', selected: currentPath == '/hr/designations'),
+                          if (hrOk('/hr/files')) _HrNavItem(icon: Icons.folder_shared_outlined, title: 'Employee Files', route: '/hr/files', selected: currentPath == '/hr/files'),
+                          if (hrOk('/hr/logins')) _HrNavItem(icon: Icons.key_outlined, title: 'Employee Logins', route: '/hr/logins', selected: currentPath == '/hr/logins'),
                         ],
                       ),
                       // 3. Time & Attendance
@@ -834,16 +880,13 @@ class Sidebar extends ConsumerWidget {
                           '/hr/attendance', '/hr/leave', '/hr/regularization', '/hr/shift', '/hr/timesheet', '/hr/slots', '/hr/slot-capacity',
                         ]),
                         children: [
-                          if (access.canSeeSub('staff.attendance'))
-                            _HrNavItem(icon: Icons.fingerprint_outlined, title: 'Attendance', route: '/hr/attendance', selected: currentPath.startsWith('/hr/attendance')),
-                          _HrNavItem(icon: Icons.event_busy_outlined, title: 'Leave Management', route: '/hr/leave', selected: currentPath == '/hr/leave'),
-                          _HrNavItem(icon: Icons.event_available_outlined, title: 'Regularization', route: '/hr/regularization', selected: currentPath == '/hr/regularization'),
-                          _HrNavItem(icon: Icons.schedule_outlined, title: 'Shifts & Roster', route: '/hr/shift', selected: currentPath == '/hr/shift'),
-                          _HrNavItem(icon: Icons.timer_outlined, title: 'Time Tracker', route: '/hr/timesheet', selected: currentPath == '/hr/timesheet'),
-                          if (access.canSeeSub('staff.slots'))
-                            _HrNavItem(icon: Icons.event_seat_outlined, title: 'Slot Management', route: '/hr/slots', selected: currentPath == '/hr/slots'),
-                          if (access.canSeeSub('staff.slots'))
-                            _HrNavItem(icon: Icons.tune_outlined, title: 'Slot Capacity', route: '/hr/slot-capacity', selected: currentPath.startsWith('/hr/slot-capacity')),
+                          if (hrOk('/hr/attendance')) _HrNavItem(icon: Icons.fingerprint_outlined, title: 'Attendance', route: '/hr/attendance', selected: currentPath.startsWith('/hr/attendance')),
+                          if (hrOk('/hr/leave')) _HrNavItem(icon: Icons.event_busy_outlined, title: 'Leave Management', route: '/hr/leave', selected: currentPath == '/hr/leave'),
+                          if (hrOk('/hr/regularization')) _HrNavItem(icon: Icons.event_available_outlined, title: 'Regularization', route: '/hr/regularization', selected: currentPath == '/hr/regularization'),
+                          if (hrOk('/hr/shift')) _HrNavItem(icon: Icons.schedule_outlined, title: 'Shifts & Roster', route: '/hr/shift', selected: currentPath == '/hr/shift'),
+                          if (hrOk('/hr/timesheet')) _HrNavItem(icon: Icons.timer_outlined, title: 'Time Tracker', route: '/hr/timesheet', selected: currentPath == '/hr/timesheet'),
+                          if (hrOk('/hr/slots')) _HrNavItem(icon: Icons.event_seat_outlined, title: 'Slot Management', route: '/hr/slots', selected: currentPath == '/hr/slots'),
+                          if (hrOk('/hr/slot-capacity')) _HrNavItem(icon: Icons.tune_outlined, title: 'Slot Capacity', route: '/hr/slot-capacity', selected: currentPath.startsWith('/hr/slot-capacity')),
                         ],
                       ),
                       // 4. Payroll & Compensation
@@ -853,11 +896,10 @@ class Sidebar extends ConsumerWidget {
                           '/hr/salaries', '/hr/compensation', '/hr/reimbursements', '/hr/travel',
                         ]),
                         children: [
-                          if (access.canSeeSub('staff.salaries'))
-                            _HrNavItem(icon: Icons.payments_outlined, title: 'Salaries & Payroll', route: '/hr/salaries', selected: currentPath.startsWith('/hr/salaries')),
-                          _HrNavItem(icon: Icons.account_balance_wallet_outlined, title: 'Compensation', route: '/hr/compensation', selected: currentPath == '/hr/compensation'),
-                          _HrNavItem(icon: Icons.receipt_long_outlined, title: 'Reimbursements', route: '/hr/reimbursements', selected: currentPath == '/hr/reimbursements'),
-                          _HrNavItem(icon: Icons.flight_takeoff_outlined, title: 'Travel Expenses', route: '/hr/travel', selected: currentPath == '/hr/travel'),
+                          if (hrOk('/hr/salaries')) _HrNavItem(icon: Icons.payments_outlined, title: 'Salaries & Payroll', route: '/hr/salaries', selected: currentPath.startsWith('/hr/salaries')),
+                          if (hrOk('/hr/compensation')) _HrNavItem(icon: Icons.account_balance_wallet_outlined, title: 'Compensation', route: '/hr/compensation', selected: currentPath == '/hr/compensation'),
+                          if (hrOk('/hr/reimbursements')) _HrNavItem(icon: Icons.receipt_long_outlined, title: 'Reimbursements', route: '/hr/reimbursements', selected: currentPath == '/hr/reimbursements'),
+                          if (hrOk('/hr/travel')) _HrNavItem(icon: Icons.flight_takeoff_outlined, title: 'Travel Expenses', route: '/hr/travel', selected: currentPath == '/hr/travel'),
                         ],
                       ),
                       // 5. Growth & Performance
@@ -867,10 +909,9 @@ class Sidebar extends ConsumerWidget {
                           '/hr/evaluation', '/hr/department-scoring', '/hr/lms',
                         ]),
                         children: [
-                          if (access.canSeeSub('staff.evaluation'))
-                            _HrNavItem(icon: Icons.star_outline, title: '5-Pillar Evaluation', route: '/hr/evaluation', selected: currentPath.startsWith('/hr/evaluation')),
-                          if (kShowHrPreviewScreens) _HrNavItem(icon: Icons.leaderboard_outlined, title: 'Department Scoring', route: '/hr/department-scoring', selected: currentPath == '/hr/department-scoring'),
-                          _HrNavItem(icon: Icons.school_outlined, title: 'Training & LMS', route: '/hr/lms', selected: currentPath == '/hr/lms'),
+                          if (hrOk('/hr/evaluation')) _HrNavItem(icon: Icons.star_outline, title: '5-Pillar Evaluation', route: '/hr/evaluation', selected: currentPath.startsWith('/hr/evaluation')),
+                          if (hrOk('/hr/department-scoring')) _HrNavItem(icon: Icons.leaderboard_outlined, title: 'Department Scoring', route: '/hr/department-scoring', selected: currentPath == '/hr/department-scoring'),
+                          if (hrOk('/hr/lms')) _HrNavItem(icon: Icons.school_outlined, title: 'Training & LMS', route: '/hr/lms', selected: currentPath == '/hr/lms'),
                         ],
                       ),
                       // 6. Workplace & Culture
@@ -880,10 +921,10 @@ class Sidebar extends ConsumerWidget {
                           '/hr/engagement', '/hr/policies', '/hr/grievance', '/hr/letters',
                         ]),
                         children: [
-                          _HrNavItem(icon: Icons.campaign_outlined, title: 'Engagement', route: '/hr/engagement', selected: currentPath == '/hr/engagement'),
-                          if (kShowHrPreviewScreens) _HrNavItem(icon: Icons.policy_outlined, title: 'Policies & Handbook', route: '/hr/policies', selected: currentPath == '/hr/policies'),
-                          _HrNavItem(icon: Icons.report_gmailerrorred_outlined, title: 'Grievances', route: '/hr/grievance', selected: currentPath == '/hr/grievance'),
-                          _HrNavItem(icon: Icons.description_outlined, title: 'HR Letters', route: '/hr/letters', selected: currentPath == '/hr/letters'),
+                          if (hrOk('/hr/engagement')) _HrNavItem(icon: Icons.campaign_outlined, title: 'Engagement', route: '/hr/engagement', selected: currentPath == '/hr/engagement'),
+                          if (hrOk('/hr/policies')) _HrNavItem(icon: Icons.policy_outlined, title: 'Policies & Handbook', route: '/hr/policies', selected: currentPath == '/hr/policies'),
+                          if (hrOk('/hr/grievance')) _HrNavItem(icon: Icons.report_gmailerrorred_outlined, title: 'Grievances', route: '/hr/grievance', selected: currentPath == '/hr/grievance'),
+                          if (hrOk('/hr/letters')) _HrNavItem(icon: Icons.description_outlined, title: 'HR Letters', route: '/hr/letters', selected: currentPath == '/hr/letters'),
                         ],
                       ),
                       // 7. Insights & Analytics
@@ -891,7 +932,7 @@ class Sidebar extends ConsumerWidget {
                         title: 'Insights & Analytics',
                         hasActive: currentPath == '/hr/analytics',
                         children: [
-                          _HrNavItem(icon: Icons.insights_outlined, title: 'HR Analytics', route: '/hr/analytics', selected: currentPath == '/hr/analytics'),
+                          if (hrOk('/hr/analytics')) _HrNavItem(icon: Icons.insights_outlined, title: 'HR Analytics', route: '/hr/analytics', selected: currentPath == '/hr/analytics'),
                         ],
                       ),
                     ],
@@ -1041,8 +1082,8 @@ class Sidebar extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(left: 14),
                         child: _SidebarItem(
-                          icon: Icons.today_outlined,
-                          title: 'Today',
+                          icon: Icons.dashboard_outlined,
+                          title: 'Dashboard',
                           isCollapsed: false,
                           isSelected: currentPath == '/consultations/dashboard',
                           onTap: () => context.go('/consultations/dashboard'),

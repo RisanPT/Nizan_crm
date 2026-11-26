@@ -6,6 +6,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_person_picker.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/onboarding/data/onboarding_models.dart';
 import 'package:nizan_crm/features/hr/onboarding/service/onboarding_service.dart';
@@ -936,14 +937,15 @@ class _HrOnboardingScreenState extends ConsumerState<HrOnboardingScreen> {
 
   // ── Document Collection (Bottom Card) ───────────────────────────────────────
   Widget _buildDocumentCollectionCard(CrmTheme crm, Onboarding o) {
-    // If onboarding documents list is empty, supply standard document items
+    // If onboarding documents list is empty, supply standard document items.
+    // All start Pending: nothing is shown (or saved) as received until HR marks it.
     final docs = o.documents.isNotEmpty
         ? o.documents
         : [
-            OnboardingDocument(name: 'Signed offer letter', owner: o.employeeName, required: true, status: 'Received'),
-            OnboardingDocument(name: 'Aadhaar & PAN', owner: o.employeeName, required: true, status: 'Received'),
+            OnboardingDocument(name: 'Signed offer letter', owner: o.employeeName, required: true, status: 'Pending'),
+            OnboardingDocument(name: 'Aadhaar & PAN', owner: o.employeeName, required: true, status: 'Pending'),
             OnboardingDocument(name: 'Bank account proof', owner: o.employeeName, required: true, status: 'Pending'),
-            OnboardingDocument(name: 'Previous experience letter', owner: o.employeeName, required: false, status: 'Not required'),
+            OnboardingDocument(name: 'Previous experience letter', owner: o.employeeName, required: false, status: 'Pending'),
             OnboardingDocument(name: 'Education certificates', owner: o.employeeName, required: true, status: 'Pending'),
           ];
 
@@ -1151,10 +1153,11 @@ class _HrOnboardingScreenState extends ConsumerState<HrOnboardingScreen> {
     final nextTasks = [...o.tasks];
     nextTasks[taskIdx] = nextTasks[taskIdx].copyWith(done: done);
     try {
+      // No status: the server derives it from the checklist (completes when
+      // every task is ticked, reopens when one is un-ticked).
       await ref.read(onboardingServiceProvider).update(
             o.id,
             tasks: nextTasks,
-            status: 'in_progress',
           );
       ref.invalidate(onboardingsProvider);
     } catch (e) {
@@ -1260,7 +1263,13 @@ class _HrOnboardingScreenState extends ConsumerState<HrOnboardingScreen> {
   }
 
   Future<void> _startOnboarding(BuildContext context, WidgetRef ref) async {
-    final employees = await ref.read(employeesProvider.future);
+    final List<Employee> employees;
+    try {
+      employees = await ref.read(employeesProvider.future);
+    } catch (e) {
+      if (context.mounted) showErrorSnackBar(context, e);
+      return;
+    }
     if (!context.mounted) return;
     final active = employees.where((e) => e.status == 'active').toList();
     String? selected;

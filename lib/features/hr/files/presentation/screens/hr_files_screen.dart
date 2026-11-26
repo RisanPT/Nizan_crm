@@ -49,7 +49,7 @@ class _HrFilesScreenState extends ConsumerState<HrFilesScreen> {
   String _selectedEmployeeId = '';
 
   bool _isHrManager(Access access) =>
-      access.isFullAccess || access.has('staff', false) || access.has('hr_files', false);
+      access.isFullAccess || access.canSeeStaff || access.has('hr_files', false);
 
   @override
   Widget build(BuildContext context) {

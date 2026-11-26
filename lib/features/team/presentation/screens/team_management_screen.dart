@@ -13,6 +13,75 @@ import '../../../../services/employee_service.dart';
 import '../../../../core/models/employee.dart';
 import '../../../../core/widgets/employee_picker.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/providers/my_department_provider.dart';
+import 'package:nizan_crm/features/org/data/department.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
+
+/// The department a role naturally belongs to, for heads whose login has no
+/// department set (e.g. the Marketing Admin logins).
+const _roleDepartmentKey = {
+  'marketing_admin': 'marketing',
+  'marketingadmin': 'marketing',
+  'marketing_manager': 'marketing',
+  'sales_manager': 'sales',
+  'crm_manager': 'crm',
+  'accounts_manager': 'accounts',
+  'fleet_manager': 'fleet',
+};
+
+/// Everyone in the head's team (2026-11-26 — it used to show only people the
+/// head created or a fixed list of three marketing roles, so most of the team
+/// was missing). A user is in the team when, apart from the head themself:
+///  • the head created them (managedBy), or
+///  • their role is one the head may give (creatable roles), or
+///  • their role belongs to the head's department — listed on the department
+///    in Settings → Departments, or carrying the department key in its name
+///    (any "marketing_*" role for Marketing), or
+///  • their login is set to the head's department.
+List<CrmUser> myTeamMembers({
+  required List<CrmUser> users,
+  required String myId,
+  required String myRoleKey,
+  required String myDepartmentId,
+  required String myDepartmentName,
+  required Set<String> creatableRoles,
+  required List<Department> departments,
+}) {
+  if (myId.isEmpty) return <CrmUser>[];
+  final roleKey = myRoleKey.trim().toLowerCase();
+  final deptName = myDepartmentName.trim().toLowerCase();
+  final fallbackKey = _roleDepartmentKey[roleKey];
+  final myDepts = departments.where((d) =>
+      (myDepartmentId.isNotEmpty && d.id == myDepartmentId) ||
+      (deptName.isNotEmpty && d.name.trim().toLowerCase() == deptName) ||
+      (fallbackKey != null && d.key == fallbackKey));
+  final deptIds = {for (final d in myDepts) d.id};
+  final deptKeys = {
+    for (final d in myDepts) d.key.toLowerCase(),
+    ?fallbackKey,
+  }..removeWhere((k) => k.isEmpty);
+  final teamRoles = {
+    ...creatableRoles.map((r) => r.toLowerCase()),
+    for (final d in myDepts) ...d.allowedRoleKeys.map((r) => r.toLowerCase()),
+  };
+  bool roleInTeam(String role) {
+    final r = role.trim().toLowerCase();
+    if (r.isEmpty) return false;
+    if (teamRoles.contains(r)) return true;
+    // Any role whose key has the department as one of its words, e.g.
+    // marketing_executive or digital_marketing_executive for Marketing.
+    final words = r.split(RegExp(r'[_\s-]+'));
+    return deptKeys.any(words.contains);
+  }
+
+  return users
+      .where((u) =>
+          u.id != myId &&
+          (u.managedBy == myId ||
+              roleInTeam(u.role) ||
+              (u.departmentId.isNotEmpty && deptIds.contains(u.departmentId))))
+      .toList();
+}
 
 /// Scoped user-management screen for Department Heads.
 ///
@@ -31,24 +100,21 @@ class TeamManagementScreen extends HookConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
 
-    // All users — filtered client-side to those managed by this head.
+    // All users — filtered client-side to this head's team.
     final asyncUsers = ref.watch(crmUsersProvider);
+    final departments = ref.watch(departmentsProvider).value ?? const <Department>[];
+    final myDeptName = ref.watch(myDepartmentNameProvider);
 
     final myTeam = asyncUsers.when(
-      // Filter to users whose managedBy matches the current department head's ID.
-      // Guard against null: managedBy is null for admin-created users and must
-      // not accidentally match a blank userId string.
-      data: (users) {
-        final myId = session?.userId ?? '';
-        final allowedRoles = access.creatableRoles;
-        return myId.isEmpty
-            ? <CrmUser>[]
-            : users
-                .where((u) =>
-                    u.id != myId &&
-                    (u.managedBy == myId || allowedRoles.contains(u.role)))
-                .toList();
-      },
+      data: (users) => myTeamMembers(
+        users: users,
+        myId: session?.userId ?? '',
+        myRoleKey: session?.role ?? '',
+        myDepartmentId: session?.departmentId ?? '',
+        myDepartmentName: myDeptName,
+        creatableRoles: access.creatableRoles,
+        departments: departments,
+      ),
       loading: () => <CrmUser>[],
       error: (e, _) => <CrmUser>[], // body's .when shows the error state
     );

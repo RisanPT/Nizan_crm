@@ -7,6 +7,7 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_person_picker.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/models/employee.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/offboarding/data/offboarding_models.dart';
 import 'package:nizan_crm/features/hr/offboarding/service/offboarding_service.dart';
@@ -235,7 +236,13 @@ class _HrOffboardingScreenState extends ConsumerState<HrOffboardingScreen> {
   }
 
   Future<void> _startExit(BuildContext context, WidgetRef ref) async {
-    final employees = await ref.read(employeesProvider.future);
+    final List<Employee> employees;
+    try {
+      employees = await ref.read(employeesProvider.future);
+    } catch (e) {
+      if (context.mounted) showErrorSnackBar(context, e);
+      return;
+    }
     if (!context.mounted) return;
     final active = employees.where((e) => e.status == 'active').toList();
     String? selected;

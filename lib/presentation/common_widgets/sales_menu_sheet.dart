@@ -62,7 +62,7 @@ List<_Group> _groupsFor(Access access) {
     ]),
     _Group('Stylist', [
       if (access.canSeeConsultations) ...[
-        const _Item('Today', Icons.today_outlined, '/consultations/dashboard'),
+        const _Item('Dashboard', Icons.dashboard_outlined, '/consultations/dashboard'),
         const _Item('Clients', Icons.people_alt_outlined, '/stylist/clients'),
         const _Item('Royal Clients', Icons.workspace_premium_outlined, '/stylist/royal'),
         const _Item('Calendar', Icons.calendar_month_outlined, '/consultations'),

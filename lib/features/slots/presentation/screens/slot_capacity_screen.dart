@@ -8,6 +8,8 @@ import 'package:nizan_crm/services/blocked_date_service.dart';
 import 'package:nizan_crm/features/slots/data/slot_models.dart';
 import 'package:nizan_crm/features/slots/services/slot_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 
 const _monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
@@ -25,6 +27,10 @@ class SlotCapacityScreen extends ConsumerStatefulWidget {
 
 class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
   late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+
+  /// The server lets only admin / manager / HR change capacity
+  /// (slotController MANAGE_ROLES); everyone else sees it read-only.
+  bool get _canEdit => Access.of(ref.read(authSessionProvider)).canManageSlotCapacity;
 
   void _shift(int delta) =>
       setState(() => _month = DateTime(_month.year, _month.month + delta));
@@ -63,6 +69,7 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
     final monthAsync = ref.watch(monthAvailabilityProvider(_key));
     final now = DateTime.now();
     final isCurrentMonth = _month.year == now.year && _month.month == now.month;
+    final canEdit = Access.of(ref.watch(authSessionProvider)).canManageSlotCapacity;
 
     return Scaffold(
       backgroundColor: crm.background,
@@ -155,7 +162,9 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
             children: [
               monthNav,
               const SizedBox(height: 4),
-              Text('Tap a day to set a custom limit for that date.',
+              Text(canEdit
+                      ? 'Tap a day to set a custom limit for that date.'
+                      : 'View only — HR manages slot capacity.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: crm.textSecondary)),
               const SizedBox(height: 14),
@@ -189,7 +198,7 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
                   error: e,
                   compact: true,
                   onRetry: () => ref.invalidate(slotDefaultsProvider))),
-          data: (d) => _DefaultsCard(defaults: d, onSaved: _reload),
+          data: (d) => _DefaultsCard(defaults: d, onSaved: _reload, readOnly: !canEdit),
         );
 
         return RefreshIndicator(
@@ -223,6 +232,7 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
     );
   }
   Future<void> _editDay(DaySlot d) async {
+    if (!_canEdit) return;
     var morning = d.morning.capacity;
     var evening = d.evening.capacity;
     final saved = await showModalBottomSheet<bool>(
@@ -304,9 +314,10 @@ class _SlotCapacityScreenState extends ConsumerState<SlotCapacityScreen> {
 
 /// Company-wide default capacity editor.
 class _DefaultsCard extends ConsumerStatefulWidget {
-  const _DefaultsCard({required this.defaults, required this.onSaved});
+  const _DefaultsCard({required this.defaults, required this.onSaved, this.readOnly = false});
   final SlotDefaults defaults;
   final Future<void> Function() onSaved;
+  final bool readOnly;
 
   @override
   ConsumerState<_DefaultsCard> createState() => _DefaultsCardState();
@@ -364,11 +375,11 @@ class _DefaultsCardState extends ConsumerState<_DefaultsCard> {
           ]),
           const SizedBox(height: 16),
           _stepper(context, 'Morning', _morning,
-              (v) => setState(() => _morning = v),
+              widget.readOnly ? null : (v) => setState(() => _morning = v),
               icon: Icons.wb_sunny_outlined, color: const Color(0xFFD97706)),
           const SizedBox(height: 10),
           _stepper(context, 'Evening', _evening,
-              (v) => setState(() => _evening = v),
+              widget.readOnly ? null : (v) => setState(() => _evening = v),
               icon: Icons.nights_stay_outlined, color: const Color(0xFF6E1423)),
           const SizedBox(height: 14),
           Container(
@@ -403,7 +414,8 @@ class _DefaultsCardState extends ConsumerState<_DefaultsCard> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          if (!widget.readOnly) const SizedBox(height: 14),
+          if (!widget.readOnly)
           Row(
             children: [
               if (dirty)
@@ -462,7 +474,7 @@ Widget _stepper(
   BuildContext context,
   String label,
   int value,
-  ValueChanged<int> onChanged, {
+  ValueChanged<int>? onChanged, {
   IconData icon = Icons.schedule_rounded,
   Color? color,
 }) {
@@ -501,7 +513,7 @@ Widget _stepper(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: crm.textPrimary))),
-        btn(Icons.remove_rounded, value <= 0 ? null : () => onChanged(value - 1)),
+        btn(Icons.remove_rounded, (onChanged == null || value <= 0) ? null : () => onChanged(value - 1)),
         SizedBox(
           width: 40,
           child: Text('$value',
@@ -511,7 +523,7 @@ Widget _stepper(
                   fontWeight: FontWeight.w800,
                   color: crm.textPrimary)),
         ),
-        btn(Icons.add_rounded, value >= 99 ? null : () => onChanged(value + 1)),
+        btn(Icons.add_rounded, (onChanged == null || value >= 99) ? null : () => onChanged(value + 1)),
       ],
     ),
   );

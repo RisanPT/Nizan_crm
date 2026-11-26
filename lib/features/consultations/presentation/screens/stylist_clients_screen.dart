@@ -132,7 +132,8 @@ class _StylistClientsScreenState extends ConsumerState<StylistClientsScreen> {
         for (final e in _statuses.entries)
           ButtonSegment(
             value: e.key,
-            label: Text(!wide && e.key == 'Completed' ? 'Done' : e.value, maxLines: 1, softWrap: false),
+            // Same label at every width ("Done" on phones used to differ).
+            label: Text(e.value, maxLines: 1, softWrap: false, overflow: TextOverflow.fade),
           ),
       ],
       selected: {_status},
@@ -170,19 +171,21 @@ class _StylistClientsScreenState extends ConsumerState<StylistClientsScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              if (wide)
+              if (wide) ...[
+                // Search gets its own line so its hint isn't cut off.
+                ConstrainedBox(constraints: const BoxConstraints(maxWidth: 520), child: searchField),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    SizedBox(width: 280, child: searchField),
                     status,
                     _companySwitch(),
                     _sortMenu(crm),
                   ],
-                )
-              else ...[
+                ),
+              ] else ...[
                 // Phone: search with Filters beside it, then the status switch full width.
                 Row(
                   children: [

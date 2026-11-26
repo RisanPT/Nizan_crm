@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/shift/data/shift_models.dart';
 
@@ -82,7 +83,12 @@ class ShiftService {
   }
 }
 
-final shiftServiceProvider = Provider<ShiftService>((ref) => ShiftService(ref.watch(dioProvider)));
+/// Watches the signed-in user, so every list below reloads after a logout /
+/// login as someone else instead of showing the last user's data.
+final shiftServiceProvider = Provider<ShiftService>((ref) {
+  ref.watch(authSessionProvider.select((s) => s?.userId));
+  return ShiftService(ref.watch(dioProvider));
+});
 
 final shiftsProvider = FutureProvider<List<Shift>>((ref) => ref.watch(shiftServiceProvider).getShifts());
 

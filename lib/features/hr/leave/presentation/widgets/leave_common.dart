@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/features/hr/approvals/presentation/widgets/hr_reason_dialog.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
 import 'package:nizan_crm/features/hr/leave/data/leave_models.dart';
 import 'package:nizan_crm/features/hr/leave/service/leave_service.dart';
@@ -221,42 +222,20 @@ Future<bool> decideLeave(BuildContext context, WidgetRef ref, LeaveRequest r, {r
 
   var note = '';
   if (!approve) {
-    final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Reject ${r.employeeName.isEmpty ? 'leave' : '${r.employeeName}\'s leave'}?'),
-        content: SizedBox(
-          width: 380,
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${r.leaveTypeName.isEmpty ? 'Leave' : r.leaveTypeName} · ${leaveRange(r.fromDate, r.toDate)} · ${leaveDays(r.days)}',
-                style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Reason (sent to the employee)',
-                hintText: 'Studio short-staffed that week',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Keep pending')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: crm.destructive),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
+    // A reason is required; the dialog owns (and disposes) its controller.
+    final reason = await askHrReason(
+      context,
+      title: 'Reject ${r.employeeName.isEmpty ? 'leave' : '${r.employeeName}\'s leave'}?',
+      header: Text('${r.leaveTypeName.isEmpty ? 'Leave' : r.leaveTypeName} · ${leaveRange(r.fromDate, r.toDate)} · ${leaveDays(r.days)}',
+          style: TextStyle(fontSize: 12.5, color: crm.textSecondary)),
+      label: 'Reason (sent to the employee)',
+      hint: 'Studio short-staffed that week',
+      cancelLabel: 'Keep pending',
+      confirmLabel: 'Reject',
+      confirmColor: crm.destructive,
     );
-    note = ctrl.text.trim();
-    ctrl.dispose();
-    if (ok != true) return false;
+    if (reason == null) return false;
+    note = reason;
   }
 
   try {

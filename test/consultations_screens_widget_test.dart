@@ -407,7 +407,7 @@ void main() {
         expect(find.text('Call 2 of 4'), findsWidgets);
         expect(find.text('Change'), findsNothing); // fixed from the client page
         // The stylist's other calls that day are listed for clashes.
-        expect(find.textContaining('Other calls on'), findsOneWidget);
+        expect(find.textContaining('other calls on'), findsOneWidget); // "3 other calls on …"
       });
 
       testWidgets('booking form without a client lists your clients', (tester) async {

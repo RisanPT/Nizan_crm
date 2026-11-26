@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
+import 'package:nizan_crm/core/utils/responsive_builder.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -284,8 +285,10 @@ class _Body extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = client;
-    final details = _DetailsCard(client: c, collapsible: !wide);
-    final images = _ImagesCard(client: c, collapsible: !wide);
+    // Folded only on phones; from tablet width there is room to show them.
+    final fold = MediaQuery.sizeOf(context).width < ResponsiveBreakpoints.mobile;
+    final details = _DetailsCard(client: c, collapsible: fold);
+    final images = _ImagesCard(client: c, collapsible: fold);
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -295,6 +298,10 @@ class _Body extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
           children: [
             _HeaderCard(client: c, wide: wide),
+            if (c.status == 'Active' && c.requiredCalls > 0 && c.progress.done >= c.requiredCalls) ...[
+              const SizedBox(height: 12),
+              _AllDoneBanner(client: c),
+            ],
             const SizedBox(height: 16),
             _CallsCard(client: c, wide: wide),
             const SizedBox(height: 16),
@@ -314,6 +321,43 @@ class _Body extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Every required call is done but the client is still Active: offer to close
+/// it, so it leaves the Active list (it can be reopened from More).
+class _AllDoneBanner extends ConsumerWidget {
+  const _AllDoneBanner({required this.client});
+
+  final StylistClient client;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final crm = context.crmColors;
+    final c = client;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: crm.success.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: crm.success.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.task_alt, color: crm.success, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('All ${c.requiredCalls} calls are done.',
+                style: TextStyle(fontWeight: FontWeight.w600, color: crm.textPrimary)),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            onPressed: () => _setStatus(context, ref, c, 'Completed'),
+            child: const Text('Mark completed'),
+          ),
+        ],
       ),
     );
   }
@@ -400,12 +444,13 @@ class _HeaderCard extends StatelessWidget {
     ].join('  ·  ');
     void call() => launchUrl(Uri.parse('tel:${c.phone}'));
     void chat() => launchUrl(Uri.https('wa.me', '/${whatsAppNumber(c.phone)}'), mode: LaunchMode.externalApplication);
-    final iconStyle = IconButton.styleFrom(
-      foregroundColor: crm.primary,
-      backgroundColor: crm.surface,
-      side: BorderSide(color: crm.border),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    );
+    // Phones: tighter padding so Call · WhatsApp · Report fit on one line.
+    final labelStyle = wide
+        ? null
+        : OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            visualDensity: VisualDensity.compact,
+          );
     final primary = wide ? _primaryButton(context, c) : null;
 
     return Container(
@@ -454,20 +499,18 @@ class _HeaderCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               ?primary,
-              if (c.phone.isNotEmpty && wide) ...[
+              // Labelled buttons (icon-only ones were unclear).
+              if (c.phone.isNotEmpty) ...[
                 OutlinedButton.icon(
-                    onPressed: call, icon: const Icon(Icons.call_outlined, size: 18), label: const Text('Call')),
+                    style: labelStyle,
+                    onPressed: call,
+                    icon: const Icon(Icons.call_outlined, size: 18),
+                    label: const Text('Call')),
                 OutlinedButton.icon(
-                    onPressed: chat, icon: const Icon(Icons.chat_outlined, size: 18), label: const Text('WhatsApp')),
-              ],
-              if (c.phone.isNotEmpty && !wide) ...[
-                IconButton.outlined(
-                    tooltip: 'Call', style: iconStyle, onPressed: call, icon: const Icon(Icons.call_outlined, size: 20)),
-                IconButton.outlined(
-                    tooltip: 'WhatsApp',
-                    style: iconStyle,
+                    style: labelStyle,
                     onPressed: chat,
-                    icon: const Icon(Icons.chat_outlined, size: 20)),
+                    icon: const Icon(Icons.chat_outlined, size: 18),
+                    label: const Text('WhatsApp')),
               ],
               _ReportButton(client: c, label: wide ? 'Report PDF' : 'Report'),
               if (wide) _MoreButton(client: c),

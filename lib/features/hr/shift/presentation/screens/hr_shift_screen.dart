@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:nizan_crm/core/models/auth_session.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_person_picker.dart';
@@ -21,6 +23,39 @@ String _fmt(DateTime? d) {
   if (d == null) return '—';
   const m = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return '${d.day.toString().padLeft(2, '0')} ${m[d.month]} ${d.year}';
+}
+
+/// Mirrors the backend `guardMaster` (controllers/shiftController.js): shift
+/// definitions may be created / edited / deleted only by a manager
+/// (admin / manager role, a department head, or the exact 'staff' / 'shift'
+/// permission) who is also HR-wide (admin / manager, any staff.* or shift.*
+/// permission, or the head of the HR department).
+bool canEditShiftMasters(AuthSession? session) {
+  if (session == null) return false;
+  final role = session.role.trim().toLowerCase();
+  if (role == 'admin' || role == 'manager') return true;
+  final perms = session.permissions.map((p) => p.toString()).toList();
+  final canManage = session.isDepartmentHead || perms.contains('staff') || perms.contains('shift');
+  if (!canManage) return false;
+  bool hasModule(String m) => perms.any((p) => p == m || p.startsWith('$m.'));
+  if (hasModule('staff') || hasModule('shift')) return true;
+  final dept = session.departmentName.trim().toLowerCase();
+  return session.isDepartmentHead && (dept == 'hr' || dept == 'human resources');
+}
+
+Future<bool> _confirmDelete(BuildContext context, String title, String body) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+      ],
+    ),
+  );
+  return ok == true;
 }
 
 /// HR Shift — define work shifts (window + grace + working days) and assign
@@ -61,13 +96,16 @@ class _ShiftsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shifts = ref.watch(shiftsProvider);
+    final canEdit = canEditShiftMasters(ref.watch(authSessionProvider));
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _editShift(context, ref, null),
-        icon: const Icon(Icons.add),
-        label: const Text('Shift'),
-      ),
+      floatingActionButton: canEdit
+          ? FloatingActionButton.extended(
+              onPressed: () => _editShift(context, ref, null),
+              icon: const Icon(Icons.add),
+              label: const Text('Shift'),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(shiftsProvider),
         child: shifts.when(
@@ -82,14 +120,14 @@ class _ShiftsTab extends ConsumerWidget {
                 ])
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
-                  children: list.map((s) => _shiftRow(context, ref, s)).toList(),
+                  children: list.map((s) => _shiftRow(context, ref, s, canEdit)).toList(),
                 ),
         ),
       ),
     );
   }
 
-  Widget _shiftRow(BuildContext context, WidgetRef ref, Shift s) {
+  Widget _shiftRow(BuildContext context, WidgetRef ref, Shift s, bool canEdit) {
     final days = s.workingDays.map((d) => _dayNames[d % 7]).join(', ');
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -110,20 +148,24 @@ class _ShiftsTab extends ConsumerWidget {
               ],
             ),
           ),
-          IconButton(icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary), onPressed: () => _editShift(context, ref, s)),
-          IconButton(
-            icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
-            onPressed: () async {
-              try {
-                await ref.read(shiftServiceProvider).deleteShift(s.id);
-                ref.invalidate(shiftsProvider);
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+          if (canEdit) ...[
+            IconButton(icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary), onPressed: () => _editShift(context, ref, s)),
+            IconButton(
+              icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
+              onPressed: () async {
+                if (!await _confirmDelete(context, 'Delete shift?', 'Delete "${s.name}"? This cannot be undone.')) return;
+                if (!context.mounted) return;
+                try {
+                  await ref.read(shiftServiceProvider).deleteShift(s.id);
+                  ref.invalidate(shiftsProvider);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                  }
                 }
-              }
-            },
-          ),
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -278,7 +320,7 @@ class _ShiftEditorState extends ConsumerState<_ShiftEditor> {
       children: [
         Text(label, style: TextStyle(fontSize: 11.5, color: context.crmColors.textSecondary)),
         Row(children: [
-          IconButton(icon: const Icon(Icons.remove_circle_outline, size: 20), onPressed: value > 0 ? () => onChanged(value - 5) : null),
+          IconButton(icon: const Icon(Icons.remove_circle_outline, size: 20), onPressed: value > 0 ? () => onChanged((value - 5).clamp(0, 1000)) : null),
           Text('$value', style: const TextStyle(fontWeight: FontWeight.w700)),
           IconButton(icon: const Icon(Icons.add_circle_outline, size: 20), onPressed: () => onChanged(value + 5)),
         ]),
@@ -343,6 +385,11 @@ class _RosterTab extends ConsumerWidget {
           IconButton(
             icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
             onPressed: () async {
+              if (!await _confirmDelete(
+                  context, 'Remove assignment?', 'Remove ${a.employeeName} from ${a.shiftName}? This cannot be undone.')) {
+                return;
+              }
+              if (!context.mounted) return;
               try {
                 await ref.read(shiftServiceProvider).deleteAssignment(a.id);
                 ref.invalidate(shiftAssignmentsProvider);
@@ -377,9 +424,15 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
   DateTime? _to;
   bool _busy = false;
 
+  static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+
   Future<void> _save() async {
     if (_employeeId == null || _shiftId == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pick an employee and a shift')));
+      return;
+    }
+    if (_to != null && _day(_to!).isBefore(_day(_from))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('The To date cannot be before the From date')));
       return;
     }
     setState(() => _busy = true);
@@ -430,10 +483,12 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
               loading: () => const LinearProgressIndicator(),
               error: (e, _) => Text(friendlyErrorMessage(e)),
               data: (list) {
-                final curId = _shiftId ?? (list.isNotEmpty ? list.first.id : null);
+                // No preselected shift: what the field shows is what is saved.
+                final curId = list.any((s) => s.id == _shiftId) ? _shiftId : null;
                 return DropdownButtonFormField<String>(
                   key: ValueKey('shift_assign_$curId'),
-                  initialValue: list.any((s) => s.id == curId) ? curId : (list.isNotEmpty ? list.first.id : null),
+                  initialValue: curId,
+                  hint: const Text('Pick a shift'),
                   isExpanded: true,
                   dropdownColor: crm.surface,
                   style: TextStyle(color: crm.textPrimary, fontSize: 13.5),
@@ -450,7 +505,13 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
                   onPressed: () async {
                     final d = await showDatePicker(
                         context: context, initialDate: _from, firstDate: DateTime(2023), lastDate: DateTime(2030));
-                    if (d != null) setState(() => _from = d);
+                    if (d != null) {
+                      setState(() {
+                        _from = d;
+                        // Keep To valid for its picker (firstDate = From).
+                        if (_to != null && _day(_to!).isBefore(_day(d))) _to = null;
+                      });
+                    }
                   },
                   child: Text('From ${_fmt(_from)}'),
                 ),
@@ -460,7 +521,10 @@ class _AssignDialogState extends ConsumerState<_AssignDialog> {
                 child: OutlinedButton(
                   onPressed: () async {
                     final d = await showDatePicker(
-                        context: context, initialDate: _to ?? _from, firstDate: _from, lastDate: DateTime(2031));
+                        context: context,
+                        initialDate: _to != null && !_day(_to!).isBefore(_day(_from)) ? _to! : _day(_from),
+                        firstDate: _day(_from),
+                        lastDate: DateTime(2031));
                     if (d != null) setState(() => _to = d);
                   },
                   child: Text(_to == null ? 'To (ongoing)' : 'To ${_fmt(_to)}'),

@@ -331,11 +331,29 @@ class _FormState extends ConsumerState<_Form> {
     );
   }
 
+  static const _twoColumns = 880.0;
+
+  /// The fields: one column on phones / iPad portrait, two side by side on
+  /// wider screens so the form isn't one long scroll.
+  Widget _fields(CrmTheme crm) => LayoutBuilder(builder: (context, box) {
+        if (box.maxWidth < _twoColumns) {
+          return Column(children: [
+            for (final f in kAfterCallFields) ...[_field(crm, f), const SizedBox(height: 14)],
+          ]);
+        }
+        final w = (box.maxWidth - 16) / 2;
+        return Wrap(
+          spacing: 16,
+          runSpacing: 14,
+          children: [for (final f in kAfterCallFields) SizedBox(width: w, child: _field(crm, f))],
+        );
+      });
+
   Widget _body(CrmTheme crm, Consultation c) {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
+        constraints: const BoxConstraints(maxWidth: 1100),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
@@ -377,10 +395,8 @@ class _FormState extends ConsumerState<_Form> {
               ),
             ),
             const SizedBox(height: 16),
-            for (final f in kAfterCallFields) ...[
-              _field(crm, f),
-              const SizedBox(height: 14),
-            ],
+            _fields(crm),
+            const SizedBox(height: 14),
             _imagesSection(crm, c),
           ],
         ),
@@ -511,24 +527,34 @@ class _FormState extends ConsumerState<_Form> {
           color: crm.surface,
           border: Border(top: BorderSide(color: crm.border)),
         ),
-        child: Row(
-          children: [
-            if (widget.complete)
-              Flexible(
-                child: TextButton(
-                  onPressed: _saving ? null : _markNoShow,
-                  child: const Text("Client didn't join"),
+        // Both buttons together on the right, lined up with the form above.
+        child: Align(
+          alignment: Alignment.topCenter,
+          heightFactor: 1, // only as tall as the buttons (it sits in the bottom bar)
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1100),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (widget.complete) ...[
+                  Flexible(
+                    child: TextButton(
+                      onPressed: _saving ? null : _markNoShow,
+                      child: const Text("Client didn't join", maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                FilledButton.icon(
+                  onPressed: _saving ? null : _save,
+                  icon: _saving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Icon(widget.complete ? Icons.check_circle_outline : Icons.save_outlined, size: 18),
+                  label: Text(widget.complete ? 'Complete call' : 'Save'),
                 ),
-              ),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: _saving ? null : _save,
-              icon: _saving
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(widget.complete ? Icons.check_circle_outline : Icons.save_outlined, size: 18),
-              label: Text(widget.complete ? 'Complete call' : 'Save'),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

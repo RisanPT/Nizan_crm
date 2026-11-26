@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/hr/data/evaluation_models.dart';
 import 'package:nizan_crm/features/hr/service/evaluation_service.dart';
 import 'package:nizan_crm/core/state/data_refresh.dart';
+import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
 import 'package:nizan_crm/features/hr/presentation/screens/attendance_detail_screen.dart';
 import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
@@ -824,7 +825,9 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
             const SizedBox(height: 32),
             _scorecardCard(theme, crmColors),
             const SizedBox(height: 32),
-            if (isAdmin)
+            // Salary history + Add Increment: only for people who may see and
+            // change pay (HR / payroll / finance). The server refuses others.
+            if (isAdmin && ref.watch(effectiveAccessProvider).canManagePay)
               Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1015,13 +1018,19 @@ class _StaffDetailsScreenState extends ConsumerState<StaffDetailsScreen> {
                         ),
                       );
                       if (confirm == true) {
-                        final updated = await ref
-                            .read(employeeServiceProvider)
-                            .linkTimebox(_employee.id, timeboxEmployeeId: null, timeboxName: '');
-                        ref.invalidate(paginatedEmployeesProvider);
-                        ref.invalidate(employeesProvider);
-                        ref.invalidate(employeeByIdProvider(_employee.id));
-                        if (mounted) setState(() => _employee = updated);
+                        try {
+                          final updated = await ref
+                              .read(employeeServiceProvider)
+                              .linkTimebox(_employee.id, timeboxEmployeeId: null, timeboxName: '');
+                          ref.invalidate(paginatedEmployeesProvider);
+                          ref.invalidate(employeesProvider);
+                          ref.invalidate(employeeByIdProvider(_employee.id));
+                          if (mounted) setState(() => _employee = updated);
+                        } catch (e) {
+                          if (mounted) {
+                            showErrorSnackBar(context, e, fallback: 'Could not unlink the Timebox account');
+                          }
+                        }
                       }
                     },
                     icon: const Icon(Icons.link_off, size: 16),

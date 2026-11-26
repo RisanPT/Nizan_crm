@@ -52,6 +52,28 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
   static const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   static const _wide = 900.0;
 
+  /// Month grid shows client names in the cells (not just dots) from here up —
+  /// covers iPad portrait, where the sidebar leaves ~560px.
+  static const _names = 520.0;
+
+  /// The day agenda sits beside the month grid only from here up; below it
+  /// goes under the grid at full width so the grid stays readable (iPad
+  /// landscape leaves ~920px, too tight for grid + a 340px side panel).
+  static const _sideAgenda = 1100.0;
+
+  final _agendaKey = GlobalKey();
+
+  /// Stacked layouts: bring the day agenda into view after picking a day.
+  void _revealAgenda() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _agendaKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 300), curve: Curves.easeOut, alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd);
+      }
+    });
+  }
+
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   DateTime _weekStart(DateTime d) => _dateOnly(d).subtract(Duration(days: d.weekday - 1));
 
@@ -143,7 +165,7 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
                   data: (_) => RefreshIndicator(
                     onRefresh: () async => ref.invalidate(consultationsProvider(query)),
                     child: switch (_view) {
-                      _CalendarView.month => _monthBody(crm, visible, wide, isLead),
+                      _CalendarView.month => _monthBody(crm, visible, box.maxWidth, isLead),
                       _CalendarView.week => _weekBody(crm, visible, wide, isLead),
                       _CalendarView.list => _listBody(crm, visible, wide, isLead),
                     },
@@ -483,7 +505,9 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
   }
 
   // ── Month ────────────────────────────────────────────────────────────────
-  Widget _monthBody(CrmTheme crm, List<Consultation> items, bool wide, bool isLead) {
+  Widget _monthBody(CrmTheme crm, List<Consultation> items, double width, bool isLead) {
+    final side = width >= _sideAgenda;
+    final names = width >= _names;
     final (start, end) = _range;
     final byDay = _byDay(items);
     final weeks = end.difference(start).inDays ~/ 7 + 1;
@@ -513,27 +537,33 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
             ],
           ),
           for (var w = 0; w < weeks; w++)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var d = 0; d < 7; d++)
-                  Expanded(
-                    child: _dayCell(crm, start.add(Duration(days: w * 7 + d)), byDay, today, detailed: wide),
-                  ),
-              ],
+            // Each week row is as tall as its busiest day: quiet weeks stay
+            // short, so the day agenda below the grid stays in reach.
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var d = 0; d < 7; d++)
+                    Expanded(
+                      child: _dayCell(crm, start.add(Duration(days: w * 7 + d)), byDay, today,
+                          detailed: names, revealAgenda: !side),
+                    ),
+                ],
+              ),
             ),
         ],
       ),
     );
 
     final agenda = _DayAgenda(
+      key: _agendaKey,
       day: _selected,
       calls: dayItems,
       showStylist: isLead,
       onSchedule: () => _schedule(_selected),
     );
 
-    if (wide) {
+    if (side) {
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -546,12 +576,26 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
         ),
       );
     }
-    return ListView(
+    // A plain scroll view (not a lazy ListView) so the agenda is always built
+    // and can be scrolled into view when a day is tapped.
+    return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
-      children: [grid, const SizedBox(height: 16), agenda],
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [grid, const SizedBox(height: 16), agenda],
+          ),
+        ),
+      ),
     );
   }
+
+  static const _namesShown = 3;
+  static const _dotsShown = 4;
 
   Widget _dayCell(
     CrmTheme crm,
@@ -559,18 +603,22 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
     Map<String, List<Consultation>> byDay,
     DateTime today, {
     required bool detailed,
+    bool revealAgenda = false,
   }) {
     final inMonth = day.month == _focused.month;
     final selected = sameDay(day, _selected);
     final isToday = sameDay(day, today);
     final list = byDay[ConsultationService.day(day)] ?? const <Consultation>[];
-    final shown = detailed ? 3 : 4;
+    final shown = detailed ? _namesShown : _dotsShown;
 
     return InkWell(
-      onTap: () => setState(() => _selected = day),
+      onTap: () {
+        setState(() => _selected = day);
+        if (revealAgenda) _revealAgenda();
+      },
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        height: detailed ? 104 : 58,
+        constraints: const BoxConstraints(minHeight: 44),
         margin: const EdgeInsets.all(2),
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
@@ -617,14 +665,17 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
                       width: 7,
                       height: 7,
                       decoration: BoxDecoration(
-                        color: c.status == 'Cancelled' ? crm.textSecondary : companyColor(c.client.company),
+                        color: c.status == 'Cancelled'
+                            ? crm.textSecondary
+                            : companyColor(c.client.company).withValues(alpha: _isDone(c) ? 0.4 : 1),
                         shape: BoxShape.circle,
                       ),
                     ),
                 ],
               ),
             if (list.length > shown)
-              Text('+${list.length - shown} more', style: TextStyle(fontSize: 10, color: crm.textSecondary)),
+              Text('+${list.length - shown} more',
+                  maxLines: 1, overflow: TextOverflow.clip, style: TextStyle(fontSize: 10, color: crm.textSecondary)),
           ],
         ),
       ),
@@ -727,7 +778,18 @@ class _ConsultationsCalendarScreenState extends ConsumerState<ConsultationsCalen
   }
 }
 
-/// One call inside a month cell: time and first name on a company-coloured strip.
+/// Completed, no-show, or simply over.
+bool _isDone(Consultation c) =>
+    c.status == 'Completed' || c.status == 'No-show' || c.endsAt.isBefore(DateTime.now());
+
+/// 11:00 → "11a", 13:30 → "1:30p".
+String _shortTime(DateTime t) {
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final m = t.minute == 0 ? '' : ':${t.minute.toString().padLeft(2, '0')}';
+  return '$h$m${t.hour < 12 ? 'a' : 'p'}';
+}
+
+/// One call inside a month cell: first name and time on a company-coloured strip.
 class _MiniCall extends StatelessWidget {
   const _MiniCall({required this.call});
 
@@ -738,7 +800,12 @@ class _MiniCall extends StatelessWidget {
     final crm = context.crmColors;
     final c = call;
     final cancelled = c.status == 'Cancelled';
-    final color = cancelled ? crm.textSecondary : companyColor(c.client.company);
+    // Done / past calls are faded so the coming ones stand out.
+    final color = cancelled
+        ? crm.textSecondary
+        : _isDone(c)
+            ? companyColor(c.client.company).withValues(alpha: 0.5)
+            : companyColor(c.client.company);
     final first = c.clientName.trim().split(RegExp(r'\s+')).first;
     return Tooltip(
       message: '${fmtTime(c.scheduledAt)} · ${c.clientName}${c.callLabel.isEmpty ? '' : ' · ${c.callLabel}'}',
@@ -749,8 +816,15 @@ class _MiniCall extends StatelessWidget {
           color: color.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Text(
-          '${DateFormat('h:mm').format(c.scheduledAt)} ${first.isEmpty ? 'Client' : first}',
+        // Name first (it's what people scan for), then a short time like 11a / 1:30p.
+        child: Text.rich(
+          TextSpan(children: [
+            TextSpan(text: first.isEmpty ? 'Client' : first),
+            TextSpan(
+              text: ' ${_shortTime(c.scheduledAt)}',
+              style: const TextStyle(fontWeight: FontWeight.w400),
+            ),
+          ]),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -885,7 +959,7 @@ class _CallCard extends StatelessWidget {
 
 /// The chosen day's calls, with a button to book on that day.
 class _DayAgenda extends StatelessWidget {
-  const _DayAgenda({required this.day, required this.calls, required this.showStylist, required this.onSchedule});
+  const _DayAgenda({super.key, required this.day, required this.calls, required this.showStylist, required this.onSchedule});
 
   final DateTime day;
   final List<Consultation> calls;

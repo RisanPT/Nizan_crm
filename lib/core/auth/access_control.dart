@@ -36,16 +36,14 @@ class Access {
 
   factory Access.of(AuthSession? session) {
     final role = AppRole.fromString(session?.role);
-    final isManager = session != null &&
-        (session.role.endsWith('_manager') ||
-         session.role.endsWith('manager') ||
-         session.role.endsWith('_admin') ||
-         session.role.endsWith('admin'));
     return Access(
       role,
       (session?.permissions ?? const []).toSet(),
       configuredHomeRoute: session?.homeRoute ?? '',
-      isDepartmentHead: (session?.isDepartmentHead ?? false) || isManager,
+      // The real "department head" flag only (2026-11-26). It used to be
+      // guessed from the role name (anything ending in manager/admin), which
+      // opened HRMS to e.g. fleet / inventory / marketing logins by name.
+      isDepartmentHead: session?.isDepartmentHead ?? false,
       artistHead: session?.artistHead ?? false,
       roleKey: session?.role.trim().toLowerCase() ?? '',
     );
@@ -168,7 +166,48 @@ class Access {
   bool get canSeeConsultationReports =>
       canSeeSub('consultations.reports') || canSeeSub('stylist.reports');
   bool get canSeeServices => has('services', role.canSeeServices);
-  bool get canSeeStaff => has('staff', role.canSeeStaff);
+  /// Company-wide HR (2026-11-26): admin/manager, the `hr` role, or the WHOLE
+  /// `staff` module. A lone sub-key such as `staff.slots` no longer counts — it
+  /// opens only its own screen (see canSeeSub) — matching the server rule in
+  /// utils/hrDeptScope.js.
+  bool get canSeeStaff {
+    if (isFullAccess || isHrRole) return true;
+    if (_usesFallback) return role.canSeeStaff;
+    return granted.contains('staff');
+  }
+
+  /// Company-wide HR for one module (mirrors the server's getHrScope "wide"):
+  /// admin/manager, the hr role, the whole staff module, or the module's own
+  /// key. Department heads are NOT this — they act on their own team only.
+  bool isHrWideFor(String moduleKey) =>
+      canSeeStaff || (!_usesFallback && granted.contains(moduleKey));
+
+  /// May see / change pay company-wide (server canSeeAllEmployeePay): HR,
+  /// payroll and finance — never a department head on their own.
+  bool get canManagePay =>
+      isFullAccess ||
+      isHrRole ||
+      roleKey == 'accounts' ||
+      roleKey == 'finance_head' ||
+      canSeeSub('staff.salaries') ||
+      canSeeSub('payables.admin_salaries') ||
+      canSeeSub('payables.operations_salaries');
+
+  /// May mark expense claims paid (server reimbursement canPay): Finance / HR
+  /// / admin, or the staff / reimbursement / payables keys.
+  bool get canPayClaims =>
+      isFullAccess ||
+      isHrRole ||
+      roleKey == 'accounts' ||
+      roleKey == 'finance_head' ||
+      (!_usesFallback &&
+          (granted.contains('staff') || granted.contains('reimbursement') || granted.contains('payables')));
+
+  /// Show the HRMS menu group at all: company-wide HR, a department head (team
+  /// view), or anyone holding at least one staff.* screen (its item is then
+  /// filtered by the route guard).
+  bool get canSeeHrmsMenu =>
+      canSeeStaff || isDepartmentHead || has('staff', role.canSeeStaff);
   bool get canSeeSales => has('sales', role.canSeeSales);
   bool get canSeeFinance => isFullAccess || isCeo || has('finance', role.canSeeFinance);
   // isFullAccess bypass so a brand-new section is never invisible to admin /
@@ -183,6 +222,11 @@ class Access {
   /// The HR role (owner decision 2026-11-16): manages staff logins, approvals
   /// and the leave desk on top of its Staff / HR module.
   bool get isHrRole => roleKey == 'hr';
+
+  /// May change booking slot capacity — mirrors backend slotController
+  /// MANAGE_ROLES exactly (admin / manager / hr role); others read only.
+  bool get canManageSlotCapacity =>
+      roleKey == 'admin' || roleKey == 'manager' || roleKey == 'hr';
 
   /// Finance Head dashboard — the finance_head role, or full-access management.
   bool get canSeeFinanceHeadDashboard =>

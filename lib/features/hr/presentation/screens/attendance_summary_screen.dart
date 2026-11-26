@@ -21,8 +21,9 @@ Color attendanceColor(int percent, CrmTheme crm) {
   return crm.destructive;
 }
 
-/// An employee who never clocked into Timebox for the whole period.
-bool isOnLeave(AttendanceSummaryRow r) =>
+/// An employee who never clocked into Timebox for the whole period (shown as
+/// "No attendance": it is not known to be leave).
+bool hasNoAttendance(AttendanceSummaryRow r) =>
     r.daysPresent <= 0 && r.hoursWorked <= 0;
 
 String _initials(String name) {
@@ -46,7 +47,7 @@ class _Row {
   final AttendanceSummaryRow s;
   final String designation;
   const _Row(this.s, this.designation);
-  bool get leave => isOnLeave(s);
+  bool get leave => hasNoAttendance(s);
 }
 
 /// HR Attendance dashboard: KPIs, charts, a filterable staff table, and export.
@@ -104,8 +105,8 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
           }
 
           // ── Global overview stats ────────────────────────────────────────
-          final present = rows.where((r) => !isOnLeave(r)).toList();
-          final leave = rows.where(isOnLeave).toList();
+          final present = rows.where((r) => !hasNoAttendance(r)).toList();
+          final leave = rows.where(hasNoAttendance).toList();
           final avg = present.isEmpty
               ? 0
               : (present.map((r) => r.attendancePercent).reduce((a, b) => a + b) / present.length).round();
@@ -113,11 +114,20 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
           final depts = rows.map((r) => r.department).toSet().toList()..sort();
           final newHires = _newHiresInMonth(empById.values, month);
 
+          // A department picked in another month that this month doesn't have
+          // is dropped, so the table matches the dropdown ("All").
+          final deptSel = depts.contains(deptFilter.value) ? deptFilter.value : null;
+          if (deptSel != deptFilter.value) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) deptFilter.value = null;
+            });
+          }
+
           // ── Filtered table rows ──────────────────────────────────────────
           final combined = rows.map((s) => _Row(s, empById[s.employeeId]?.designation ?? '')).toList();
           final q = query.value.trim().toLowerCase();
           var visible = combined.where((r) {
-            if (deptFilter.value != null && r.s.department != deptFilter.value) return false;
+            if (deptSel != null && r.s.department != deptSel) return false;
             if (statusFilter.value == _Filter.present && r.leave) return false;
             if (statusFilter.value == _Filter.leave && !r.leave) return false;
             if (q.isNotEmpty &&
@@ -198,7 +208,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
                 _FilterRow(
                   crm: crm,
                   depts: depts,
-                  deptValue: deptFilter.value,
+                  deptValue: deptSel,
                   status: statusFilter.value,
                   onDept: (d) => deptFilter.value = d,
                   onStatus: (s) => statusFilter.value = s,
@@ -273,6 +283,7 @@ class AttendanceSummaryScreen extends HookConsumerWidget {
                 name: r.s.employeeName,
                 department: r.s.department,
                 designation: r.designation,
+                // 'On Leave' is the export's status key (attendance_report_html).
                 status: r.leave ? 'On Leave' : 'Present',
                 daysPresent: r.s.daysPresent,
                 expectedDays: r.s.expectedDays,
@@ -404,7 +415,7 @@ class _KpiCards extends StatelessWidget {
     final tiles = <Widget>[
       _Kpi(label: 'Total Staff', value: '$totalStaff', icon: Icons.groups_rounded, color: crm.accent),
       _Kpi(label: 'Present', value: '$present', icon: Icons.how_to_reg_rounded, color: crm.success, sub: totalStaff > 0 ? '${(present / totalStaff * 100).round()}% of total' : null),
-      _Kpi(label: 'On Leave', value: '$leave', icon: Icons.beach_access_rounded, color: crm.warning, sub: totalStaff > 0 ? '${(leave / totalStaff * 100).round()}% of total' : null),
+      _Kpi(label: 'No attendance', value: '$leave', icon: Icons.event_busy_rounded, color: crm.warning, sub: totalStaff > 0 ? '${(leave / totalStaff * 100).round()}% of total' : null),
       _Kpi(label: 'Avg Attendance', value: '$avg%', icon: Icons.percent_rounded, color: attendanceColor(avg, crm)),
       _Kpi(label: 'Total Hours', value: totalHours.toStringAsFixed(0), icon: Icons.schedule_rounded, color: crm.primary),
       _Kpi(label: 'New Hires', value: '$newHires', icon: Icons.person_add_alt_1_rounded, color: const Color(0xFF6366F1)),
@@ -484,7 +495,7 @@ class _ChartsRow extends StatelessWidget {
       _Slice('Good (75%+)', good.toDouble(), crm.success),
       _Slice('Moderate (50-74%)', moderate.toDouble(), crm.warning),
       _Slice('Low (<50%)', low.toDouble(), crm.destructive),
-      _Slice('On Leave', leave.length.toDouble(), crm.textSecondary),
+      _Slice('No attendance', leave.length.toDouble(), crm.textSecondary),
     ].where((s) => s.value > 0).toList();
 
     // Department distribution.
@@ -781,7 +792,7 @@ class _StatusSegments extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         seg(_Filter.all, 'All', crm.accent),
         seg(_Filter.present, 'Present', crm.success),
-        seg(_Filter.leave, 'On Leave', crm.warning),
+        seg(_Filter.leave, 'No attendance', crm.warning),
       ]),
     );
   }
@@ -850,7 +861,7 @@ class _EmployeeTable extends StatelessWidget {
                   Expanded(
                     flex: 2,
                     child: r.leave
-                        ? _Tag(label: 'On Leave', color: crm.warning)
+                        ? _Tag(label: 'No attendance', color: crm.warning)
                         : Row(children: [
                             Text('${r.s.attendancePercent}%', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
                           ]),
@@ -903,7 +914,7 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final leave = isOnLeave(row);
+    final leave = hasNoAttendance(row);
     final color = leave ? crm.warning : attendanceColor(row.attendancePercent, crm);
     return Container(
       decoration: BoxDecoration(
@@ -939,7 +950,7 @@ class _SummaryCard extends StatelessWidget {
                   ),
                   10.w,
                   if (leave)
-                    _Tag(label: 'On Leave', color: crm.warning)
+                    _Tag(label: 'No attendance', color: crm.warning)
                   else
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

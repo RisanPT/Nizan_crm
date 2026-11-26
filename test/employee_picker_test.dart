@@ -58,8 +58,8 @@ void main() {
       expect(material.color, AppTheme.lightTheme.extension<CrmTheme>()!.surface);
       expect(material.clipBehavior, Clip.antiAlias);
       expect(material.shape, isA<RoundedRectangleBorder>());
-      expect((material.shape! as RoundedRectangleBorder).borderRadius,
-          const BorderRadius.vertical(top: Radius.circular(18)));
+      // The default 800px test window opens the centred dialog (sheet = top corners only).
+      expect((material.shape! as RoundedRectangleBorder).borderRadius, BorderRadius.circular(24));
     });
 
     testWidgets('tapping a row picks that employee', (tester) async {

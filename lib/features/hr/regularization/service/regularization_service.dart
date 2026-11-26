@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/regularization/data/regularization_models.dart';
 
@@ -64,7 +65,12 @@ class RegularizationService {
 }
 
 final regularizationServiceProvider =
-    Provider<RegularizationService>((ref) => RegularizationService(ref.watch(dioProvider)));
+    // Watches the signed-in user, so every list below reloads after a logout /
+    // login as someone else instead of showing the last user's data.
+    Provider<RegularizationService>((ref) {
+  ref.watch(authSessionProvider.select((s) => s?.userId));
+  return RegularizationService(ref.watch(dioProvider));
+});
 
 final myRegularizationsProvider =
     FutureProvider<List<Regularization>>((ref) => ref.watch(regularizationServiceProvider).getMine());

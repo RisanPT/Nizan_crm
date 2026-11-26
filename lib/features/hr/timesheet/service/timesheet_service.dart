@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:nizan_crm/providers/dio_provider.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/core/error/errors.dart';
 import 'package:nizan_crm/features/hr/timesheet/data/timesheet_models.dart';
 
@@ -34,7 +35,10 @@ class TimesheetService {
     }
   }
 
+  /// [id]: the sheet being edited, so changing its week moves it instead of
+  /// creating a second sheet.
   Future<Timesheet> save({
+    String? id,
     required DateTime periodStart,
     required String periodLabel,
     String periodType = 'weekly',
@@ -42,6 +46,7 @@ class TimesheetService {
   }) async {
     try {
       final res = await _dio.post('/timesheets', data: {
+        if (id != null && id.isNotEmpty) 'id': id,
         'periodStart': periodStart.toIso8601String(),
         'periodLabel': periodLabel,
         'periodType': periodType,
@@ -71,7 +76,12 @@ class TimesheetService {
 }
 
 final timesheetServiceProvider =
-    Provider<TimesheetService>((ref) => TimesheetService(ref.watch(dioProvider)));
+    // Watches the signed-in user, so every list below reloads after a logout /
+    // login as someone else instead of showing the last user's data.
+    Provider<TimesheetService>((ref) {
+  ref.watch(authSessionProvider.select((s) => s?.userId));
+  return TimesheetService(ref.watch(dioProvider));
+});
 
 final myTimesheetsProvider =
     FutureProvider<List<Timesheet>>((ref) => ref.watch(timesheetServiceProvider).getMine());

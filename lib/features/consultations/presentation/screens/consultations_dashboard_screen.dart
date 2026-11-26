@@ -64,13 +64,8 @@ class _ConsultationsDashboardScreenState extends ConsumerState<ConsultationsDash
       final wide = box.maxWidth >= _wideBreakpoint;
       return Scaffold(
         backgroundColor: crm.background,
-        floatingActionButton: wide
-            ? null
-            : FloatingActionButton.extended(
-                onPressed: () => context.push('/consultations/new'),
-                icon: const Icon(Icons.add),
-                label: const Text('Schedule call'),
-              ),
+        // The Schedule button lives in the header at every width (a floating
+        // button used to cover the last rows of the cards on phone / iPad).
         body: Column(
           children: [
             _header(crm, async.value, wide),
@@ -132,12 +127,12 @@ class _ConsultationsDashboardScreenState extends ConsumerState<ConsultationsDash
                   ],
                 ),
               ),
-              if (wide)
-                FilledButton.icon(
-                  onPressed: () => context.push('/consultations/new'),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Schedule call'),
-                ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => context.push('/consultations/new'),
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(wide ? 'Schedule call' : 'Schedule'),
+              ),
             ],
           ),
         ),
@@ -191,7 +186,7 @@ class _ConsultationsDashboardScreenState extends ConsumerState<ConsultationsDash
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             // Room under the last card for the phone's Schedule button.
-            padding: EdgeInsets.fromLTRB(16, 16, 16, wide ? 32 : 96),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
               if (items.isNotEmpty) ...[
                 _filterChips(crm, items),

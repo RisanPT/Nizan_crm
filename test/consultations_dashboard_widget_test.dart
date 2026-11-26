@@ -202,8 +202,9 @@ void main() {
     await _pump(tester, _summary(scope: 'all'), size: _phone);
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(FloatingActionButton), findsOneWidget);
-    expect(find.text('Schedule call'), findsOneWidget); // the floating button only
+    // No floating button (it covered the cards); a short Schedule in the header.
+    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Schedule'), findsOneWidget);
     // Short button label on a phone.
     expect(find.widgetWithText(FilledButton, 'Record'), findsOneWidget);
     expect(find.text('Needs you now'), findsOneWidget);

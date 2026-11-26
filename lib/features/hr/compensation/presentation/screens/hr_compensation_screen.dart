@@ -5,6 +5,9 @@ import 'package:nizan_crm/core/theme/crm_theme.dart';
 import 'package:nizan_crm/features/hr/shared/hr_ui.dart';
 import 'package:nizan_crm/features/hr/shared/hr_person_picker.dart';
 import 'package:nizan_crm/core/error/errors.dart';
+import 'package:nizan_crm/core/auth/access_control.dart';
+import 'package:nizan_crm/core/models/auth_session.dart';
+import 'package:nizan_crm/core/providers/auth_provider.dart';
 import 'package:nizan_crm/services/employee_service.dart';
 import 'package:nizan_crm/features/hr/compensation/data/compensation_models.dart';
 import 'package:nizan_crm/features/hr/compensation/service/compensation_service.dart';
@@ -59,6 +62,20 @@ class HrCompensationScreen extends ConsumerWidget {
   }
 }
 
+/// Mirrors the backend band guard (compensationController guardMaster):
+/// bands are company master data, changed only by HR-wide users. Plain
+/// department heads read them.
+bool _canEditBands(AuthSession? session) {
+  final access = Access.of(session);
+  final dept = (session?.departmentName ?? '').trim().toLowerCase();
+  final isHrDeptHead = (session?.isDepartmentHead ?? false) && (dept == 'hr' || dept == 'human resources');
+  return access.isFullAccess ||
+      access.isHrRole ||
+      access.has('compensation', false) ||
+      access.canSeeStaff ||
+      isHrDeptHead;
+}
+
 class _BandsTab extends ConsumerWidget {
   const _BandsTab({required this.crm});
   final CrmTheme crm;
@@ -66,13 +83,16 @@ class _BandsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bands = ref.watch(salaryBandsProvider);
+    final canEdit = _canEditBands(ref.watch(authSessionProvider));
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(context, ref, null),
-        icon: const Icon(Icons.add),
-        label: const Text('Band'),
-      ),
+      floatingActionButton: canEdit
+          ? FloatingActionButton.extended(
+              onPressed: () => _edit(context, ref, null),
+              icon: const Icon(Icons.add),
+              label: const Text('Band'),
+            )
+          : null,
       body: RefreshIndicator(
         onRefresh: () async => ref.invalidate(salaryBandsProvider),
         child: bands.when(
@@ -80,13 +100,13 @@ class _BandsTab extends ConsumerWidget {
           error: (e, _) => ListView(children: [AppErrorView(error: e, onRetry: () => ref.invalidate(salaryBandsProvider))]),
           data: (list) => list.isEmpty
               ? ListView(children: [Padding(padding: const EdgeInsets.all(40), child: Center(child: Text('No salary bands yet.', style: TextStyle(color: crm.textSecondary))))])
-              : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 90), children: list.map((b) => _row(context, ref, b)).toList()),
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 90), children: list.map((b) => _row(context, ref, b, canEdit)).toList()),
         ),
       ),
     );
   }
 
-  Widget _row(BuildContext context, WidgetRef ref, SalaryBand b) {
+  Widget _row(BuildContext context, WidgetRef ref, SalaryBand b, bool canEdit) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -104,10 +124,27 @@ class _BandsTab extends ConsumerWidget {
               ],
             ),
           ),
+          if (canEdit) ...[
           IconButton(icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary), onPressed: () => _edit(context, ref, b)),
           IconButton(
             icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
             onPressed: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Delete salary band?'),
+                  content: Text('Delete the band "${b.name}"? This cannot be undone.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: crm.destructive),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+              if (ok != true) return;
               try {
                 await ref.read(compensationServiceProvider).deleteBand(b.id);
                 ref.invalidate(salaryBandsProvider);
@@ -116,6 +153,7 @@ class _BandsTab extends ConsumerWidget {
               }
             },
           ),
+          ],
         ],
       ),
     );
@@ -164,13 +202,20 @@ class _BandEditorState extends ConsumerState<_BandEditor> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name is required')));
       return;
     }
+    final minSalary = double.tryParse(_min.text.trim()) ?? 0;
+    final maxSalary = double.tryParse(_max.text.trim()) ?? 0;
+    if (minSalary < 0 || maxSalary < 0 || minSalary > maxSalary) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Minimum salary cannot be more than the maximum')));
+      return;
+    }
     setState(() => _busy = true);
     try {
       await ref.read(compensationServiceProvider).saveBand({
         'name': _name.text.trim(),
         'level': _level,
-        'minSalary': double.tryParse(_min.text.trim()) ?? 0,
-        'maxSalary': double.tryParse(_max.text.trim()) ?? 0,
+        'minSalary': minSalary,
+        'maxSalary': maxSalary,
       }, id: widget.existing?.id);
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

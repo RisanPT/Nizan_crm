@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:nizan_crm/core/auth/access_control.dart';
 import 'package:nizan_crm/core/auth/app_role.dart';
 import 'package:nizan_crm/core/auth/workspace.dart';
 import 'package:nizan_crm/core/providers/auth_provider.dart';
@@ -72,6 +73,39 @@ String? marketingNavTab(String route) => Uri.tryParse(route)?.queryParameters['t
 
 /// The sidebar for the Marketing ERP: deep maroon, the modules from the document, then **My Department** and the account strip.
 /// Shown for the Marketing role everywhere and for anyone else while they are inside `/marketing` (with a way back to their own menu).
+/// A main-menu feature an admin granted to the Marketing role.
+typedef GrantedExtra = ({String label, IconData icon, String route});
+
+/// The main-menu features this login's role is granted in Settings, each
+/// checked the same way the main menu checks it, plus the route guard
+/// ([allowed]). Only what is ticked shows.
+List<GrantedExtra> grantedExtras(Access access, bool Function(String route) allowed) {
+  final all = <(GrantedExtra, bool)>[
+    ((label: 'Calendar', icon: Icons.calendar_month_outlined, route: '/calendar'), access.canSeeCalendar),
+    ((label: 'Clients', icon: Icons.people_alt_outlined, route: '/clients'), access.canSeeClients),
+    ((label: 'Booking', icon: Icons.receipt_long_outlined, route: '/booking/requests'), access.canSeeBookings),
+    ((label: 'Trials', icon: Icons.event_available_outlined, route: '/trials'), access.canSeeTrials),
+    ((label: 'Services', icon: Icons.design_services_outlined, route: '/services'), access.canSeeServices),
+    ((label: 'Stylist', icon: Icons.face_retouching_natural_outlined, route: '/consultations/dashboard'), access.canSeeConsultations),
+    ((label: 'Sales Dashboard', icon: Icons.trending_up_rounded, route: '/sales/dashboard'), access.canSeeSub('sales.dashboard')),
+    ((label: 'Invoices & Bookings', icon: Icons.request_quote_outlined, route: '/sales'), access.canSeeSub('sales.invoices')),
+    ((label: 'Leads', icon: Icons.person_add_alt_outlined, route: '/sales/leads'), access.canSeeSub('sales.leads')),
+    ((label: 'Monthly Bookings', icon: Icons.calendar_view_month_outlined, route: '/sales/monthly'), access.canSeeSub('sales.monthly')),
+    ((label: 'Cancelled Works', icon: Icons.event_busy_outlined, route: '/sales/cancelled'), access.canSeeSub('sales.cancelled')),
+    ((label: 'Booking Map', icon: Icons.map_outlined, route: '/sales/booking-map'), access.canSeeSub('sales.booking_map')),
+    ((label: 'Sales Targets', icon: Icons.flag_outlined, route: '/sales/targets'), access.canSeeSub('sales.targets')),
+    ((label: 'Report & Goals', icon: Icons.assessment_outlined, route: '/sales/report'), access.canSeeSub('sales.report')),
+    ((label: 'Sales Calendar', icon: Icons.event_note_outlined, route: '/sales/calendar'), access.canSeeSub('sales.calendar')),
+    ((label: 'Company Reports', icon: Icons.folder_copy_outlined, route: '/company-reports'), access.canSeeCompanyReports),
+    ((label: 'Artist Finance', icon: Icons.account_balance_wallet_outlined, route: '/finance'), access.canSeeFinance),
+    ((label: 'Finance', icon: Icons.account_balance_outlined, route: '/company-finance'), access.canSeeCompanyFinance),
+    ((label: 'Accounts', icon: Icons.receipt_outlined, route: '/accounts/dashboard'), access.canSeePayables),
+    ((label: 'Inventory', icon: Icons.inventory_2_outlined, route: '/inventory'), access.canManageInventory),
+    ((label: 'Fleet', icon: Icons.local_shipping_outlined, route: '/fleet/vehicles'), access.canSeeFleet),
+  ];
+  return [for (final (g, ok) in all) if (ok && allowed(g.route)) g];
+}
+
 class MarketingSidebar extends ConsumerStatefulWidget {
   const MarketingSidebar({super.key});
 
@@ -173,12 +207,39 @@ class _MarketingSidebarState extends ConsumerState<MarketingSidebar> {
               item(it),
               if (it.children.isNotEmpty && isOpen(it)) for (final c in it.children) item(c, parent: it),
             ],
+            // Team N Website (public-site CMS) — the Marketing login has no main menu, so its link lives here.
+            if (access.canSeeWebsite)
+              _NavTile(key: const Key('mkt_nav_website'), icon: Icons.language_outlined, label: 'Team N Website', selected: path.startsWith('/website'), lit: path.startsWith('/website'), collapsed: collapsed, onTap: () => _go(context, '/website')),
             if (hasDepartment) ...[
               const SizedBox(height: 18),
               if (!collapsed) Padding(padding: const EdgeInsets.fromLTRB(10, 0, 10, 6), child: Text('MY DEPARTMENT', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white54, spacing: 1.2))),
               _NavTile(key: const Key('mkt_nav_my_team'), icon: Icons.group_outlined, label: 'My Team', selected: path.startsWith('/team'), lit: path.startsWith('/team'), collapsed: collapsed, onTap: () => _go(context, '/team/manage')),
               _NavTile(key: const Key('mkt_nav_dept_expenses'), icon: Icons.receipt_long_outlined, label: 'Department Expenses', selected: path == '/accounts/admin-expenses', lit: path == '/accounts/admin-expenses', collapsed: collapsed, onTap: () => _go(context, '/accounts/admin-expenses')),
             ],
+            // MORE ACCESS — only the features an admin has ticked for this
+            // role in Settings → Roles (Calendar, Sales sections, Services…).
+            // The Marketing login has no main menu, so without this those
+            // grants were invisible (2026-11-26). Nothing un-ticked shows here.
+            if (role == AppRole.marketingAdmin && grantedExtras(access, allowed).isNotEmpty) ...[
+              const SizedBox(height: 18),
+              if (!collapsed) Padding(padding: const EdgeInsets.fromLTRB(10, 0, 10, 6), child: Text('MORE ACCESS', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white54, spacing: 1.2))),
+              for (final g in grantedExtras(access, allowed))
+                _NavTile(
+                  key: Key('mkt_nav_extra_${g.route}'),
+                  icon: g.icon,
+                  label: g.label,
+                  selected: path == g.route,
+                  lit: path == g.route || (g.route != '/sales' && path.startsWith('${g.route}/')),
+                  collapsed: collapsed,
+                  onTap: () => _go(context, g.route),
+                ),
+            ],
+            // MY HR — self-service for every staff member (2026-11-26).
+            const SizedBox(height: 18),
+            if (!collapsed) Padding(padding: const EdgeInsets.fromLTRB(10, 0, 10, 6), child: Text('MY HR', style: mktText(10.5, weight: FontWeight.w800, color: Colors.white54, spacing: 1.2))),
+            _NavTile(key: const Key('mkt_nav_hr_home'), icon: Icons.home_work_outlined, label: 'HR Home', selected: path == '/hr/home', lit: path == '/hr/home', collapsed: collapsed, onTap: () => _go(context, '/hr/home')),
+            _NavTile(key: const Key('mkt_nav_my_leave'), icon: Icons.event_busy_outlined, label: 'My Leave', selected: path == '/hr/leave', lit: path == '/hr/leave', collapsed: collapsed, onTap: () => _go(context, '/hr/leave')),
+            _NavTile(key: const Key('mkt_nav_my_payslips'), icon: Icons.receipt_long, label: 'My Payslips', selected: path == '/hr/my-payslips', lit: path == '/hr/my-payslips', collapsed: collapsed, onTap: () => _go(context, '/hr/my-payslips')),
           ]),
         ),
         Container(height: 1, color: Colors.white12),

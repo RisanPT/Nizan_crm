@@ -75,7 +75,7 @@ class AttendancePayrollScreen extends HookConsumerWidget {
             '• Total net payable: ${_money(preview.totalNetPayable)}\n\n'
             'Paid and cancelled slips are never changed. On existing slips only the '
             'attendance deduction is recalculated — manual deductions, bonus, '
-            'incentives, notes and status are kept. A locked month cannot be regenerated.\n'
+            'incentives, notes and status are kept. New slips start as DRAFTS for you to review; an approved slip whose amount changes goes back to draft. A locked month cannot be regenerated.\n'
             'Tip: Run "Sync Timebox → CRM" first to maximise matched employees.',
           ),
           actions: [
@@ -94,7 +94,13 @@ class AttendancePayrollScreen extends HookConsumerWidget {
         ref.invalidate(payrollPreviewProvider);
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(msg), backgroundColor: crm.success),
+            SnackBar(
+              content: Text(msg),
+              // Some staff got no slip: keep it up long enough to read the names.
+              backgroundColor: msg.contains('not in Timebox') ? crm.warning : crm.success,
+              duration: Duration(seconds: msg.contains('not in Timebox') ? 12 : 6),
+              showCloseIcon: true,
+            ),
           );
         }
       } catch (e) {

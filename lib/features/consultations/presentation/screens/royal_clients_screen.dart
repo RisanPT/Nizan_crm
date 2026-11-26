@@ -151,13 +151,14 @@ class _RoyalClientsScreenState extends ConsumerState<RoyalClientsScreen> {
                     selected: {_showTaken},
                     onSelectionChanged: (s) => setState(() => _showTaken = s.first),
                   ),
-                  SizedBox(
-                    width: 280,
+                  ConstrainedBox(
+                    // Fills the line on phones; capped on wide screens.
+                    constraints: const BoxConstraints(maxWidth: 420),
                     child: TextField(
                       controller: _search,
                       onChanged: (v) => setState(() => _q = v.trim()),
                       decoration: InputDecoration(
-                        hintText: 'Search name, phone or booking',
+                        hintText: 'Name, phone or booking no.',
                         prefixIcon: const Icon(Icons.search),
                         isDense: true,
                         filled: true,
@@ -180,18 +181,40 @@ class _RoyalClientsScreenState extends ConsumerState<RoyalClientsScreen> {
               child: rows.isEmpty
                   ? ListView(children: [
                       const SizedBox(height: 70),
-                      Icon(Icons.workspace_premium_outlined, size: 48, color: crm.textSecondary),
+                      Icon(
+                          _q.isNotEmpty
+                              ? Icons.search_off
+                              : (!_showTaken && taken > 0 ? Icons.task_alt : Icons.workspace_premium_outlined),
+                          size: 48,
+                          color: !_showTaken && taken > 0 && _q.isEmpty ? crm.success : crm.textSecondary),
                       const SizedBox(height: 10),
                       Text(
-                        _showTaken
-                            ? 'No Royal clients taken yet'
-                            : 'No Royal package clients waiting',
+                        _q.isNotEmpty
+                            ? 'No match for "$_q"'
+                            : _showTaken
+                                ? 'No Royal clients taken yet'
+                                : taken > 0
+                                    ? 'All caught up — every Royal client has a stylist'
+                                    : 'No upcoming Royal bookings',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: crm.textPrimary, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 4),
-                      Text('New Royal bookings appear here automatically.',
-                          textAlign: TextAlign.center, style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+                      Text(
+                          _q.isNotEmpty
+                              ? 'Try a name, phone or booking number.'
+                              : 'New Royal bookings appear here automatically.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: crm.textSecondary, fontSize: 12.5)),
+                      if (!_showTaken && taken > 0 && _q.isEmpty) ...[
+                        const SizedBox(height: 12),
+                        Center(
+                          child: TextButton(
+                            onPressed: () => setState(() => _showTaken = true),
+                            child: Text('See the $taken taken'),
+                          ),
+                        ),
+                      ],
                     ])
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
@@ -221,6 +244,8 @@ class _RoyalClientsScreenState extends ConsumerState<RoyalClientsScreen> {
     final busy = _busy.contains(b.bookingId);
     final meta = [
       if (b.eventDates.isNotEmpty) fmtEventDays(b.eventDates),
+      if (b.eventSlot.isNotEmpty) b.eventSlot,
+      if (b.venue.isNotEmpty) b.venue,
       if (b.district.isNotEmpty) b.district,
       if (b.bookingNumber.isNotEmpty) '#${b.bookingNumber}',
       if (b.phone.isNotEmpty) b.phone,

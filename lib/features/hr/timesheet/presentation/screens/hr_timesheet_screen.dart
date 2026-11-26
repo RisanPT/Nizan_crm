@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/hr/timesheet/data/timesheet_models.dart';
 import 'package:nizan_crm/features/hr/timesheet/service/timesheet_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
+import 'package:nizan_crm/features/hr/approvals/presentation/widgets/hr_reason_dialog.dart';
 
 const _wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -52,7 +53,7 @@ class HrTimesheetScreen extends ConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
-    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('timesheet', false) || access.has('staff', false);
+    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('timesheet', false) || access.canSeeStaff;
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Timesheet'),
@@ -128,6 +129,8 @@ class _MyTab extends ConsumerWidget {
 
   Widget _row(BuildContext context, WidgetRef ref, Timesheet t) {
     final isDraft = t.status == 'draft';
+    // A rejected week can be fixed: saving it turns it back into a draft.
+    final isRejected = t.status == 'rejected';
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
@@ -148,8 +151,40 @@ class _MyTab extends ConsumerWidget {
             ),
           ),
           _statusChip(t.status, crm),
+          if (isRejected)
+            IconButton(
+              tooltip: 'Fix and resubmit',
+              icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary),
+              onPressed: () => _openEditor(context, ref, t),
+            ),
           if (isDraft) ...[
             IconButton(icon: Icon(Icons.edit_outlined, size: 18, color: crm.textSecondary), onPressed: () => _openEditor(context, ref, t)),
+            IconButton(
+              tooltip: 'Delete draft',
+              icon: Icon(Icons.delete_outline, size: 18, color: crm.textSecondary),
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Delete this draft?'),
+                    content: Text('${t.periodLabel.isEmpty ? _fmt(t.periodStart) : t.periodLabel} will be removed.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Keep')),
+                      FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Delete')),
+                    ],
+                  ),
+                );
+                if (ok != true || !context.mounted) return;
+                try {
+                  await ref.read(timesheetServiceProvider).remove(t.id);
+                  ref.invalidate(myTimesheetsProvider);
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(friendlyErrorMessage(e))));
+                  }
+                }
+              },
+            ),
             IconButton(
               tooltip: 'Submit',
               icon: Icon(Icons.send_outlined, size: 18, color: crm.primary),
@@ -232,11 +267,28 @@ class _WeekEditorState extends ConsumerState<_WeekEditor> {
     return out;
   }
 
+  /// Hours must be a number from 0 to 24 for each day.
+  String? _hoursError() {
+    for (var i = 0; i < 7; i++) {
+      final raw = _hours[i].text.trim();
+      if (raw.isEmpty) continue;
+      final h = double.tryParse(raw);
+      if (h == null || h < 0 || h > 24) return '${_wd[i]}: hours must be between 0 and 24';
+    }
+    return null;
+  }
+
   Future<void> _save({required bool submit}) async {
+    final err = _hoursError();
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
     setState(() => _busy = true);
     try {
       final svc = ref.read(timesheetServiceProvider);
       final ts = await svc.save(
+        id: widget.existing?.id,
         periodStart: _monday,
         periodLabel: 'Week of ${_fmt(_monday)}',
         entries: _buildEntries(),
@@ -342,33 +394,15 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
   Future<void> _handleDecision(String approvalId, bool approve) async {
     String note = '';
     if (!approve) {
-      final ctrl = TextEditingController();
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Reject Timesheet'),
-          content: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(
-              labelText: 'Reason for rejection',
-              hintText: 'e.g. Mismatched hours on bridal session',
-            ),
-            maxLines: 2,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Reject'),
-            ),
-          ],
-        ),
+      final reason = await askHrReason(
+        context,
+        title: 'Reject Timesheet',
+        label: 'Reason for rejection',
+        hint: 'e.g. Mismatched hours on bridal session',
+        confirmLabel: 'Reject',
       );
-      if (ok != true) return;
-      note = ctrl.text.trim();
+      if (reason == null) return;
+      note = reason;
     }
 
     setState(() => _actingId = approvalId);
@@ -404,6 +438,7 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
     final crm = widget.crm;
     final reqs = ref.watch(timesheetRequestsProvider);
     final inbox = ref.watch(approvalInboxProvider).value ?? const [];
+    final ownEmployeeId = ref.watch(authSessionProvider)?.employeeId ?? '';
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -449,7 +484,9 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                   if (m != null) approvalId = m.id;
                 }
                 final isPending = t.status == 'pending';
-                final canAct = isPending && approvalId.isNotEmpty;
+                // No deciding your own timesheet.
+                final isOwn = ownEmployeeId.isNotEmpty && t.employeeId == ownEmployeeId;
+                final canAct = isPending && approvalId.isNotEmpty && !isOwn;
                 final isActing = _actingId == approvalId;
 
                 return Container(

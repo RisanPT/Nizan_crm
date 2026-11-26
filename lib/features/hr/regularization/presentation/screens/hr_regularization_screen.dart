@@ -10,6 +10,7 @@ import 'package:nizan_crm/features/hr/regularization/data/regularization_models.
 import 'package:nizan_crm/features/hr/regularization/service/regularization_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nizan_crm/features/hr/approvals/service/approval_service.dart';
+import 'package:nizan_crm/features/hr/approvals/presentation/widgets/hr_reason_dialog.dart';
 
 String _fmt(DateTime? d) {
   if (d == null) return '';
@@ -45,7 +46,7 @@ class HrRegularizationScreen extends ConsumerWidget {
     final session = ref.watch(authSessionProvider);
     final access = Access.of(session);
     final hasEmployee = (session?.employeeId ?? '').isNotEmpty;
-    final isManager = access.isFullAccess || access.isDepartmentHead || access.has('staff', false) || access.has('regularization', false);
+    final isManager = access.isFullAccess || access.isDepartmentHead || access.canSeeStaff || access.has('regularization', false);
 
     final tabs = <Tab>[
       if (hasEmployee) const Tab(text: 'My Requests'),
@@ -146,7 +147,20 @@ class _MineTab extends ConsumerWidget {
           if (cancellable && r.status == 'pending')
             IconButton(
               icon: Icon(Icons.close, size: 18, color: crm.textSecondary),
+              tooltip: 'Cancel request',
               onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Cancel this request?'),
+                    content: Text('${regularizationTypeLabel(r.type)} · ${_fmt(r.date)} will be withdrawn from approval.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Keep')),
+                      FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Cancel request')),
+                    ],
+                  ),
+                );
+                if (ok != true || !context.mounted) return;
                 try {
                   await ref.read(regularizationServiceProvider).cancel(r.id);
                   ref.invalidate(myRegularizationsProvider);
@@ -226,7 +240,7 @@ class _RegularizeDialogState extends ConsumerState<_RegularizeDialog> {
             OutlinedButton.icon(
               onPressed: () async {
                 final d = await showDatePicker(
-                    context: context, initialDate: _date, firstDate: DateTime(2023), lastDate: DateTime.now().add(const Duration(days: 1)));
+                    context: context, initialDate: _date, firstDate: DateTime(2023), lastDate: DateTime.now());
                 if (d != null) setState(() => _date = d);
               },
               icon: const Icon(Icons.event_outlined, size: 18),
@@ -299,33 +313,15 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
   Future<void> _handleDecision(String approvalId, bool approve) async {
     String note = '';
     if (!approve) {
-      final ctrl = TextEditingController();
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Reject Regularization'),
-          content: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(
-              labelText: 'Reason for rejection',
-              hintText: 'e.g. Unverified punch record',
-            ),
-            maxLines: 2,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Reject'),
-            ),
-          ],
-        ),
+      final reason = await askHrReason(
+        context,
+        title: 'Reject Regularization',
+        label: 'Reason for rejection',
+        hint: 'e.g. Unverified punch record',
+        confirmLabel: 'Reject',
       );
-      if (ok != true) return;
-      note = ctrl.text.trim();
+      if (reason == null) return;
+      note = reason;
     }
 
     setState(() => _actingId = approvalId);
@@ -361,6 +357,7 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
     final crm = widget.crm;
     final reqs = ref.watch(regularizationRequestsProvider);
     final inbox = ref.watch(approvalInboxProvider).value ?? const [];
+    final ownEmployeeId = ref.watch(authSessionProvider)?.employeeId ?? '';
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -406,7 +403,9 @@ class _RequestsTabState extends ConsumerState<_RequestsTab> {
                   if (m != null) approvalId = m.id;
                 }
                 final isPending = r.status == 'pending';
-                final canAct = isPending && approvalId.isNotEmpty;
+                // No deciding your own request (the backend refuses it).
+                final isOwn = ownEmployeeId.isNotEmpty && r.employeeId == ownEmployeeId;
+                final canAct = isPending && approvalId.isNotEmpty && !isOwn;
                 final isActing = _actingId == approvalId;
 
                 return Container(

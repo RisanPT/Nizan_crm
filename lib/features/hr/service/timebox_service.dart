@@ -107,7 +107,19 @@ class TimeboxService {
         'to': to,
         'dryRun': dryRun,
       });
-      return (res.data as Map)['message'] as String? ?? 'Done';
+      final data = res.data as Map;
+      final message = data['message'] as String? ?? 'Done';
+      // Office staff Timebox doesn't know get NO slip — name them so HR can
+      // link them or add their slip by hand (2026-11-26).
+      final missing = ((data['notInTimebox'] as List?) ?? const []).map((e) => e.toString()).toList();
+      final parts = <String>[
+        message,
+        if (!dryRun) 'New slips are drafts: review them, then Submit to Accounts.',
+        if (missing.isNotEmpty)
+          'No slip for ${missing.length} (not in Timebox): ${missing.take(8).join(', ')}'
+              '${missing.length > 8 ? ' and ${missing.length - 8} more' : ''}.',
+      ];
+      return parts.join('\n');
     } catch (e) {
       throw AppException(e, action: 'generate payroll');
     }
@@ -167,6 +179,14 @@ final attendanceSummaryProvider =
 final payrollPreviewProvider =
     FutureProvider.autoDispose<PayrollPreview>((ref) {
   final m = ref.watch(timeboxMonthProvider);
+  return ref.watch(timeboxServiceProvider).getPayrollPreview(m.from, m.to);
+});
+
+/// Payroll preview for an explicit month: the Salaries screen passes its own
+/// month / year filter, so it never follows the attendance screens' month.
+final payrollPreviewForMonthProvider = FutureProvider.autoDispose
+    .family<PayrollPreview, ({int year, int month})>((ref, key) {
+  final m = TimeboxMonth(key.year, key.month);
   return ref.watch(timeboxServiceProvider).getPayrollPreview(m.from, m.to);
 });
 

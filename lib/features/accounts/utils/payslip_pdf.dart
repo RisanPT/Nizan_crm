@@ -264,7 +264,7 @@ Future<Uint8List> buildPayslipPdfBytes(Salary s) async {
           child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
             pw.Text('Team N Makeovers',
                 style: pw.TextStyle(fontSize: 19, fontWeight: pw.FontWeight.bold, color: kPdfBrand)),
-            pw.Text('+91 9645424283  |  www.nizanmakeovers.com',
+            pw.Text('+91 9645424283  |  www.teamnmakeovers.com',
                 style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
           ]),
         ),
@@ -300,7 +300,7 @@ Future<Uint8List> buildPayslipPdfBytes(Salary s) async {
               _kv('Pay period', period),
               _kv('Bank', bankLine),
               if (s.upiId.isNotEmpty) _kv('UPI', s.upiId),
-              _kv('Status', s.isPaid ? 'Paid' : 'Approved'),
+              _kv('Status', s.isPaid ? 'Paid' : 'Provisional (not yet paid)'),
             ]),
           ),
         ]),

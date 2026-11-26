@@ -176,7 +176,7 @@ class NizanHrDocumentBuilder {
                               else
                                 pw.Text('NIZAN BEAUTY VENTURES',
                                     style: pw.TextStyle(color: PdfColors.white, fontSize: 15, fontWeight: pw.FontWeight.bold)),
-                              pw.Text('+91 9645424283  |  www.nizanmakeovers.com',
+                              pw.Text('+91 9645424283  |  www.teamnmakeovers.com',
                                   style: const pw.TextStyle(color: PdfColors.white, fontSize: 9.5)),
                             ],
                           ),
@@ -784,7 +784,7 @@ pw.Widget _buildOfferPageBackground({required bool isFirstPage, required double 
                     else
                       pw.Text('NIZAN BEAUTY VENTURES',
                           style: pw.TextStyle(color: PdfColors.white, fontSize: 15, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('+91 9645424283  |  www.nizanmakeovers.com',
+                    pw.Text('+91 9645424283  |  www.teamnmakeovers.com',
                         style: const pw.TextStyle(color: PdfColors.white, fontSize: 9.5)),
                   ],
                 ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -26,6 +28,7 @@ import 'package:nizan_crm/core/state/data_refresh.dart';
 import 'package:nizan_crm/features/hr/presentation/widgets/timebox_link_dialog.dart';
 import 'package:nizan_crm/features/hr/service/timebox_service.dart';
 import 'package:nizan_crm/features/hr/onboarding/presentation/widgets/complete_onboarding_dialog.dart';
+import 'package:nizan_crm/features/org/services/department_service.dart';
 
 class StaffManagementScreen extends HookConsumerWidget {
   const StaffManagementScreen({super.key});
@@ -85,6 +88,8 @@ class StaffManagementScreen extends HookConsumerWidget {
     final activeTab = useState('all');
 
     final mainSearchQuery = useState('');
+    final searchDebounce = useRef<Timer?>(null);
+    useEffect(() => () => searchDebounce.value?.cancel(), const []);
     final selectedDepartment = useState('All');
     final selectedOperationsRole = useState('All');
     final selectedTimeboxStatus = useState('All'); // 'All', 'linked', 'unlinked'
@@ -119,6 +124,18 @@ class StaffManagementScreen extends HookConsumerWidget {
     final mainAvailablePincodes = pincodes
         .where((p) => p.districtId == mainSelectedDistrictId.value)
         .toList();
+
+    // Department filter chips: the active Departments master (the fixed list
+    // is only used while it loads or if it can't be reached).
+    final masterDepartments = ref.watch(departmentsProvider).maybeWhen(
+          data: (list) => [
+            for (final d in list)
+              if (d.active && d.name.trim().isNotEmpty) d.name.trim(),
+          ],
+          orElse: () => const <String>[],
+        );
+    final departmentChips =
+        masterDepartments.isEmpty ? adminDepartments : masterDepartments;
 
     final queryCategory =
         activeTab.value == 'all' ? 'all' : activeTab.value;
@@ -190,6 +207,7 @@ class StaffManagementScreen extends HookConsumerWidget {
         context,
         employee: employee,
         startOnboardingChecklist: false,
+        defaultCategory: defaultCategory,
       );
       if (saved != null) {
         ref.invalidate(paginatedEmployeesProvider);
@@ -373,8 +391,12 @@ class StaffManagementScreen extends HookConsumerWidget {
                               borderRadius: BorderRadius.circular(8)),
                         ),
                         onChanged: (val) {
-                          mainSearchQuery.value = val;
-                          pageState.value = 1;
+                          // Debounced: one server search after typing pauses.
+                          searchDebounce.value?.cancel();
+                          searchDebounce.value = Timer(const Duration(milliseconds: 300), () {
+                            mainSearchQuery.value = val;
+                            pageState.value = 1;
+                          });
                         },
                       ),
                     ),
@@ -390,6 +412,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                       12.w,
                       TextButton.icon(
                         onPressed: () {
+                          searchDebounce.value?.cancel();
                           mainSearchQuery.value = '';
                           selectedDepartment.value = 'All';
                           selectedOperationsRole.value = 'All';
@@ -493,7 +516,7 @@ class StaffManagementScreen extends HookConsumerWidget {
                           },
                         ),
                         8.w,
-                        ...adminDepartments.map((dept) {
+                        ...departmentChips.map((dept) {
                           final isSel = selectedDepartment.value == dept;
                           final color = getDepartmentColor(dept, context);
                           return Padding(
@@ -1236,7 +1259,9 @@ class StaffManagementScreen extends HookConsumerWidget {
                           builder: (ctx) => AlertDialog(
                             title: const Text('Delete Staff'),
                             content: Text(
-                                'Are you sure you want to delete ${employee.name}?'),
+                                'Delete ${employee.name}? Only use this for a record entered by mistake.\n\n'
+                                'Anyone who has a CRM login, has staff reporting to them or heads a '
+                                'department cannot be deleted - mark them Inactive or use Offboarding instead.'),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.of(ctx).pop(false),

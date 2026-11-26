@@ -190,7 +190,14 @@ class EmployeeService {
     String? esiNumber,
     int? timeboxEmployeeId,
     String? timeboxName,
+    // true (the full employee form): reportingManagerId, designationId and the
+    // Timebox link are always sent, so null / '' clears them on the server.
+    // Other callers leave it false so fields they don't edit stay untouched.
+    bool sendClearableLinks = false,
   }) async {
+    // Date-only fields go as UTC midnight of the picked calendar day, so the
+    // day never shifts with the browser's time zone.
+    String dayIso(DateTime d) => DateTime.utc(d.year, d.month, d.day).toIso8601String();
     try {
       final payload = {
         'name': name,
@@ -205,8 +212,14 @@ class EmployeeService {
         if (department != null && department.isNotEmpty) 'department': department,
         if (departmentId != null && departmentId.isNotEmpty) 'departmentId': departmentId,
         if (role != null && role.isNotEmpty) 'role': role,
-        if (reportingManagerId != null && reportingManagerId.isNotEmpty) 'reportingManagerId': reportingManagerId,
-        if (designationId != null && designationId.isNotEmpty) 'designationId': designationId,
+        if (sendClearableLinks)
+          'reportingManagerId': (reportingManagerId != null && reportingManagerId.isNotEmpty) ? reportingManagerId : null
+        else if (reportingManagerId != null && reportingManagerId.isNotEmpty)
+          'reportingManagerId': reportingManagerId,
+        if (sendClearableLinks)
+          'designationId': (designationId != null && designationId.isNotEmpty) ? designationId : null
+        else if (designationId != null && designationId.isNotEmpty)
+          'designationId': designationId,
         'works': ?works,
         if (zoneId != null && zoneId.isNotEmpty) 'zoneId': zoneId,
         if (stateId != null && stateId.isNotEmpty) 'stateId': stateId,
@@ -224,9 +237,9 @@ class EmployeeService {
         'upiId': ?upiId,
         'panNumber': ?panNumber,
         if (employeeCode != null && employeeCode.isNotEmpty) 'employeeCode': employeeCode,
-        if (dateOfBirth != null) 'dateOfBirth': dateOfBirth.toIso8601String(),
-        if (dateOfJoining != null) 'dateOfJoining': dateOfJoining.toIso8601String(),
-        if (probationEndDate != null) 'probationEndDate': probationEndDate.toIso8601String(),
+        if (dateOfBirth != null) 'dateOfBirth': dayIso(dateOfBirth),
+        if (dateOfJoining != null) 'dateOfJoining': dayIso(dateOfJoining),
+        if (probationEndDate != null) 'probationEndDate': dayIso(probationEndDate),
         if (employmentStatus != null && employmentStatus.isNotEmpty) 'employmentStatus': employmentStatus,
         if (currentGrade != null && currentGrade.isNotEmpty) 'currentGrade': currentGrade,
         'overtimeRate': ?overtimeRate,
@@ -243,8 +256,8 @@ class EmployeeService {
             'uan': uan ?? '',
             'esiNumber': esiNumber ?? '',
           },
-        'timeboxEmployeeId': ?timeboxEmployeeId,
-        'timeboxName': ?timeboxName,
+        if (sendClearableLinks) 'timeboxEmployeeId': timeboxEmployeeId else 'timeboxEmployeeId': ?timeboxEmployeeId,
+        if (sendClearableLinks) 'timeboxName': timeboxName ?? '' else 'timeboxName': ?timeboxName,
       };
 
       if (profileImage != null) {

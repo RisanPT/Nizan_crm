@@ -393,6 +393,8 @@ bool isRouteAllowed(String path, Access access,
   // can trim it, an older login may carry only part of it, and a leader must never be bounced silently to the home screen from a
   // menu item that is offered to them. (What they may read is decided by the server: it refuses every pay and bank route and every
   // change — backend utils/ceoAccess.js.)
+  // Mock preview screens stay hidden for everyone, the CEO included.
+  if (!kShowHrPreviewScreens && (path == '/hr/department-scoring' || path == '/hr/policies')) return false;
   if (access.isCeo) return _ceoMayOpen(path);
   if (path.startsWith('/artist-head')) {
     return access.canSeeArtistHead;
@@ -409,6 +411,9 @@ bool isRouteAllowed(String path, Access access,
   if (path.startsWith('/booking')) return access.canSeeBookings;
   if (path.startsWith('/services')) return access.canSeeServices;
   if (path == '/hr/slots') return access.canSeeSub('staff.slots');
+  // Same keys as the HRMS menu items (and subKeyForPath above).
+  if (path == '/hr/slot-capacity') return access.canSeeSub('staff.slots');
+  if (path == '/hr/salaries') return access.canSeeSub('staff.salaries');
   if (path == '/hr/attendance') return access.canSeeSub('staff.attendance');
   if (path == '/hr/evaluation') return access.canSeeSub('staff.evaluation');
   // Leave is open to every signed-in user. The server decides what they see:
@@ -422,12 +427,9 @@ bool isRouteAllowed(String path, Access access,
     return access.isFullAccess || access.isDepartmentHead || access.isHrRole || access.has('approvals', false);
   }
   // HR Home (ESS landing) — anyone with an employee self-service footing.
-  if (path == '/hr/home') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('leave', false) ||
-        access.has('org', false);
-  }
+  // Self-service screens (owner 2026-11-26: every staff member, in every view).
+  // The server returns only the caller's own records; HR / heads get more.
+  if (path == '/hr/home') return true;
   if (path == '/hr/designations') {
     return access.isFullAccess ||
         access.canSeeStaff ||
@@ -438,76 +440,53 @@ bool isRouteAllowed(String path, Access access,
     return access.canSeeStaff || access.isDepartmentHead || access.has('org', false);
   }
   // Files: HR manages everyone's; an ESS employee sees their own.
-  if (path == '/hr/files') {
-    return access.canSeeStaff || access.has('hr_files', false) || access.has('leave', false);
-  }
-  if (path == '/hr/logins') return access.isFullAccess || access.isDepartmentHead || access.isHrRole;
+  if (path == '/hr/files') return true;
+  // Issuing logins is HR's job (not department heads — it lists every employee).
+  if (path == '/hr/logins') return access.isFullAccess || access.isHrRole;
   // Shift management — HR/managers.
   if (path == '/hr/shift') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('shift', false);
   }
   // Time tracker — every employee (ESS) files their own; HR/managers review.
-  if (path == '/hr/timesheet') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('timesheet', false) ||
-        access.has('leave', false);
-  }
+  if (path == '/hr/timesheet') return true;
   // Attendance regularization — ESS + HR/managers.
-  if (path == '/hr/regularization') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('leave', false) ||
-        access.has('regularization', false);
-  }
+  if (path == '/hr/regularization') return true;
   // Recruitment / onboarding / offboarding — HR/managers only.
   if (path == '/hr/recruitment') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('recruitment', false);
   }
+  // Onboarding, assets, exits and letters are HR's work (not department heads).
   if (path == '/hr/onboarding') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('onboarding', false) ||
-        access.has('recruitment', false);
+    return access.canSeeStaff || access.has('onboarding', false) || access.has('recruitment', false);
   }
   // Employee assets — HR, and dept heads for their own team (server-scoped).
   if (path == '/hr/assets') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('offboarding', false);
+    return access.canSeeStaff || access.has('offboarding', false);
   }
   if (path == '/hr/offboarding') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('offboarding', false);
+    return access.canSeeStaff || access.has('offboarding', false);
   }
   // Reimbursements & travel — ESS files their own; HR/managers review.
-  if (path == '/hr/reimbursements') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('reimbursement', false) ||
-        access.has('leave', false);
-  }
-  if (path == '/hr/travel') {
-    return access.canSeeStaff ||
-        access.isDepartmentHead ||
-        access.has('travel', false) ||
-        access.has('leave', false);
-  }
+  if (path == '/hr/reimbursements') return true;
+  if (path == '/hr/travel') return true;
   // Compensation — HR/managers only.
   if (path == '/hr/compensation') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('compensation', false);
   }
   // Engagement feed + Learning — everyone (ESS) reads/enrols.
   if (path == '/hr/engagement') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('engagement', false) || access.has('leave', false);
+    return true;
   }
   if (path == '/hr/lms') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('lms', false) || access.has('leave', false);
+    return true;
   }
   // Grievance — ESS raises; HR works the queue.
   if (path == '/hr/grievance') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('grievance', false) || access.has('leave', false);
+    return true;
   }
   // HR Letters + Analytics — HR/managers only.
   if (path == '/hr/letters') {
-    return access.canSeeStaff || access.isDepartmentHead || access.has('hr_letters', false);
+    return access.canSeeStaff || access.has('hr_letters', false);
   }
   if (path == '/hr/analytics') {
     return access.canSeeStaff || access.isDepartmentHead || access.has('hr_analytics', false);
@@ -520,7 +499,7 @@ bool isRouteAllowed(String path, Access access,
   // Department & Employee Scoring — evaluation & staff performance.
   if (path == '/hr/department-scoring') {
     if (!kShowHrPreviewScreens) return false; // mock screen — hidden for now
-    return access.canSeeStaff || access.isDepartmentHead || access.canSeeSub('staff.evaluation') || access.has('staff', false);
+    return access.canSeeStaff || access.isDepartmentHead || access.canSeeSub('staff.evaluation');
   }
   if (path.startsWith('/staff')) return access.canSeeSub('staff.employees');
   if (path.startsWith('/sales')) {
@@ -1047,7 +1026,7 @@ final goRouterProvider = Provider<GoRouter>((ref) {
           } else if (state.uri.path == '/consultations/list') {
             title = 'Calendar';
           } else if (state.uri.path == '/consultations/dashboard') {
-            title = 'Today';
+            title = 'Dashboard';
           } else if (state.uri.path == '/consultations/new') {
             title = 'Schedule Call';
           } else if (state.uri.path.startsWith('/consultations/')) {
